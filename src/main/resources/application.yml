@@ -1,0 +1,10 @@
+spring:
+  ai:
+    mcp:
+      server:
+        name: security-testing-mcp-server
+        version: 1.0.0
+
+logging:
+  level:
+    mcp.server.zap.service.ZapService: DEBUG

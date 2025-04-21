@@ -23,3 +23,28 @@ flowchart LR
   MCP -->|ZAP REST API| ZAP
   ZAP -->|scan, alerts, reports| MCP
 ```
+
+## Build
+
+```bash
+./gradlew clean build
+```
+
+## Usage with Claude Desktop, Cursor, Windsurf or any MCP‑compatible AI agent
+
+```json
+{
+  "mcpServers": {
+    "security-testing-mcp-server": {
+        "command": "java",
+        "args": [
+          "-Dspring.ai.mcp.server.stdio=true",
+          "-Dspring.main.web-application-type=none",
+          "-Dlogging.pattern.console=",
+          "-jar",
+          "/PROJECT_PATH/mcp-zap-server/build/libs/mcp-zap-server-0.0.1-SNAPSHOT.jar"
+        ]
+    }
+  }
+}
+```

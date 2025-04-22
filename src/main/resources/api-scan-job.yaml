@@ -1,0 +1,28 @@
+env:
+  contexts:
+    - name: petstore
+      urls:
+        - https://petstore3.swagger.io/api/v3
+
+jobs:
+  - type: openapi
+    parameters:
+      context: petstore
+      apiUrl: https://raw.githubusercontent.com/swagger-api/swagger-petstore/refs/heads/master/src/main/resources/openapi.yaml
+
+  - type: spider
+    parameters:
+      context: petstore
+      maxDepth: 5
+
+  - type: activeScan
+    parameters:
+      context: petstore
+      policy: Default Policy
+      maxScanDurationInMins: 10
+
+  - type: report
+    parameters:
+      template:     traditional-html
+      reportFile:   api-scan.html
+      reportDir:    /zap/wrk

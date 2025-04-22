@@ -6,6 +6,7 @@ import org.springframework.ai.tool.ToolCallbacks;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -18,5 +19,10 @@ public class McpServerApplication {
     @Bean
     public List<ToolCallback> toolCallbacks(ZapService zapService) {
         return List.of(ToolCallbacks.from(zapService));
+    }
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 }

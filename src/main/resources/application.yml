@@ -3,8 +3,20 @@ spring:
     mcp:
       server:
         name: security-testing-mcp-server
-        version: 1.0.0
+        version: 0.0.2
+        stdio: true
+#  main:
+#    web-application-type: reactive
 
 logging:
   level:
     mcp.server.zap.service.ZapService: DEBUG
+server:
+  port: 7456
+
+
+zap:
+  server:
+    url: ${ZAP_API_URL:localhost}
+    port: ${ZAP_API_PORT:8090}
+    apiKey: ${ZAP_API_KEY:}

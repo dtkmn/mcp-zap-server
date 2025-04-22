@@ -12,6 +12,7 @@ import io.swagger.v3.parser.core.models.SwaggerParseResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -33,9 +34,13 @@ public class ZapService {
 
     private final ClientApi zap;
 
-    public ZapService() {
+    public ZapService(
+            @Value("${zap.server.url:localhost}") String zapApiUrl,
+            @Value("${zap.server.port:8090}") int zapApiPort,
+            @Value("${zap.server.apiKey:}") String zapApiKey
+    ) {
         // Initialize ZAP client
-        this.zap = new ClientApi("localhost", 8090, "");
+        this.zap = new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
     }
 
     @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")

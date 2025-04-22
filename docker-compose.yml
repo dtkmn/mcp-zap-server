@@ -1,0 +1,41 @@
+services:
+  zap:
+    image: zaproxy/zap-stable
+    container_name: zap
+    command:
+#    "zap.sh", "-daemon", "-host", "0.0.0.0", "-port", "8090", "-config api.disablekey=true", "-config 'api.addrs.addr.name=.*'", "-config 'api.addrs.addr.regex=true'"]
+      - zap.sh
+      - -daemon
+      - -host
+      - 0.0.0.0
+      - -port
+      - "8090"
+      - -config
+      - api.disablekey=true
+      - -config
+      - api.addrs.addr.name=.*
+      - -config
+      - api.addrs.addr.regex=true
+    ports:
+      - "8090:8090"
+    environment:
+      ZAP_API_KEY: ""
+    volumes:
+      - reports-volume:/zap/reports
+
+#  mcp-server:
+##    build: ./server
+##    container_name: mcp-zap-server
+#    image: mcp-zap-server:latest
+#    depends_on:
+#      - zap
+#    ports:
+#      - "7456:7456"   # HTTP transport (SSE) endpoint
+#    environment:
+#      ZAP_API_URL: zap
+#      ZAP_API_PORT: 8090
+#    volumes:
+#      - reports-volume:/tmp
+
+volumes:
+  reports-volume:

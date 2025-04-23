@@ -21,7 +21,18 @@ services:
     environment:
       ZAP_API_KEY: ""
     volumes:
-      - reports-volume:/zap/reports
+      - /Users/xxx/Downloads:/zap/wrk
+
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - open-webui:/app/backend/data
+
+volumes:
+    open-webui:
 
 #  mcp-server:
 ##    build: ./server
@@ -36,6 +47,3 @@ services:
 #      ZAP_API_PORT: 8090
 #    volumes:
 #      - reports-volume:/tmp
-
-volumes:
-  reports-volume:

@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -330,64 +332,73 @@ public class ZapService {
         return "Spec is valid (no errors found).";
     }
 
-    /**
-     * Runs a full OpenAPI scan using ZAP's Automation Framework.
-     *
-     * @param specUrl URL to the OpenAPI specification (JSON or YAML)
-     * @return The HTML report content
-     * @throws IllegalArgumentException if the spec URL is invalid
-     * @throws Exception if there are issues with ZAP operations
-     */
     @Tool(
-            name        = "zap_run_automation_api_scan",
-            description = "Run a full OpenAPI scan via ZAP's Automation Framework"
+            name        = "zap_run_dynamic_plan",
+            description = "Run a full OpenAPI scan with dynamic spec URL, context and timestamped report"
     )
-    public String runAutomationApiScan(
-            @ToolParam(description="URL to your OpenAPI spec (JSON or YAML)") String specUrl
+    public String runDynamicPlan(
+            @ToolParam(description = "Name of the ZAP context (e.g. petstore)") String contextName,
+            @ToolParam(description = "Base API URL to include in the context") String baseUrl,
+            @ToolParam(description = "OpenAPI spec URL (JSON or YAML)") String specUrl,
+            @ToolParam(description = "Directory inside ZAP to write the report (e.g. /tmp)") String reportDir
     ) throws Exception {
-        Objects.requireNonNull(specUrl, "specUrl cannot be null");
-        
-        try {
-            // Validate the URL is accessible
-            String specContent = restTemplate.getForObject(specUrl, String.class);
-            if (specContent == null || specContent.isBlank()) {
-                throw new IllegalArgumentException("Failed to fetch spec from URL: " + specUrl);
-            }
+        // 1) Build a timestamped reportFile name
+        String timestamp = LocalDateTime.now()
+                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String reportFile = contextName + "-api-scan-" + timestamp + ".html";
 
-            // Build the YAML content
-            String yamlJob = String.format("""
-                - openapi:
-                    targetUrl: %s
-                - activeScan:
-                    recurse: true
-                - report:
-                    template: traditional-html
-                    reportFileName: api-scan.html
-                    reportDir: %s
-                """, specUrl, reportDirectory);
+        // 2) Construct the YAML plan string
+        String yamlPlan = String.format("""
+          env:
+            contexts:
+              - name: %s
+                urls:
+                  - %s
 
-            log.info("Starting automation job with spec URL: {}", specUrl);
+          jobs:
+            - type: openapi
+              parameters:
+                context: %s
+                apiUrl: %s
 
-            // Invoke the Automation API
-            ApiResponseElement resp = (ApiResponseElement) zap.callApi(
-                "automation", "action", "run",
-                Map.of("inline", yamlJob)
-            );
+            - type: spider
+              parameters:
+                context: %s
+                maxDepth: 5
 
-            String result = resp.getValue();
-            log.info("Automation job completed with result: {}", result);
+            - type: activeScan
+              parameters:
+                context: %s
+                policy: Default Policy
+                maxScanDurationInMins: 10
 
-            // Read the generated report
-            Path report = Path.of(reportDirectory, "api-scan.html");
-            if (!Files.exists(report)) {
-                throw new IllegalStateException("Report file was not generated at: " + report);
-            }
+            - type: report
+              parameters:
+                template: traditional-html
+                reportFile: %s
+                reportDir: %s
+          """,
+                contextName, baseUrl,
+                contextName, specUrl,
+                contextName,
+                contextName,
+                reportFile, reportDir
+        );
 
-            return Files.readString(report, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            log.error("Failed to run automation API scan", e);
-            throw new Exception("Failed to run automation API scan: " + e.getMessage(), e);
-        }
+        // 3) Write the plan to a timestamped file under /zap/wrk
+        Path saveZapWorkPath = Path.of("/Users/geoge/Downloads");
+        Path planFile = Files.createTempFile(saveZapWorkPath, "zap-auto-job-", ".yaml");
+        log.info("saving plan file {}", planFile);
+        Files.writeString(planFile, yamlPlan, StandardCharsets.UTF_8);
+
+        // 4) Tell ZAP to run that plan via runPlan (filePath must be visible to ZAP)
+        ApiResponseElement resp = (ApiResponseElement) zap.callApi(
+                "automation", "action", "runPlan",
+                Map.of("filePath", "/zap/wrk/" + planFile.getFileName())
+        );
+
+        // 5) Return whatever ZAP returns (status/summary)
+        return resp.getValue();
     }
 
 }

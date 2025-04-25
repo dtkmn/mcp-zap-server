@@ -28,7 +28,7 @@ ext {
 }
 
 dependencies {
-    implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webmvc'
+    implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webflux'
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
     implementation 'io.swagger.parser.v3:swagger-parser:2.0.31'
     compileOnly 'org.projectlombok:lombok'

@@ -1,8 +1,8 @@
-# MCP ZAP Spring Boot Server
+# ZAP MCP Server
 
-A Dockerized Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
+A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
 
----
+>**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
 ## Features
 - **MCP server**: Exposes ZAP actions as MCP tools
@@ -17,14 +17,15 @@ flowchart LR
   subgraph "Docker Compose"
     ZAP["OWASP ZAP (container)"]
     MCP["MCP Server (Spring Boot)"]
+    Client["MCP Client (Open Web-UI)"]
   end
-  Client["MCP Client (Claude, Cursor)"]
+  OtherClient["MCP Clients (Claude, Cursor)"] --> |HTTP/SSE + Bearer| MCP
   Client -->|HTTP/SSE + Bearer| MCP
   MCP -->|ZAP REST API| ZAP
   ZAP -->|scan, alerts, reports| MCP
 ```
 
-## Build
+## Manual build
 
 ```bash
 ./gradlew clean build

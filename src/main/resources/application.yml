@@ -4,9 +4,6 @@ spring:
       server:
         name: security-testing-mcp-server
         version: 0.0.2
-        stdio: true
-#  main:
-#    web-application-type: reactive
 
 logging:
   level:

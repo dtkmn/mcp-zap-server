@@ -63,19 +63,19 @@ flowchart LR
 
 #### `mcpo`
 - **Image:** ghcr.io/open-webui/mcpo:main
-- **Purpose:** Depends on `open-webui` and `mcp-server` to operate as a client for the MCP server.
+- **Purpose:** Expose any MCP tool as an OpenAPI-compatible HTTP server. Required by open-webui only. https://github.com/open-webui/mcpo
 - **Configuration:**
     - Runs on port 8000.
     - Connects to the MCP server using SSE via the URL `http://mcp-server:7456/sse`.
 
 #### `mcp-server`
 - **Image:** mcp-zap-server:latest
-- **Purpose:** Acts as the MCP server exposing ZAP actions.
+- **Purpose:** This repo. Acts as the MCP server exposing ZAP actions.
 - **Configuration:**
     - Depends on the `zap` service.
     - Exposes port 7456 for HTTP SSE connections.
-    - Maps the host directory `/Users/dant/Downloads` to `/tmp` to allow file access.
-
+    - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/tmp` to allow file access.
+    
 ### Stopping the Services
 
 To stop and remove all the containers, run:

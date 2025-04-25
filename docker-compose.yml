@@ -1,7 +1,6 @@
 services:
   zap:
     image: zaproxy/zap-stable
-    container_name: zap
     command:
       - zap.sh
       - -daemon
@@ -20,7 +19,7 @@ services:
     environment:
       ZAP_API_KEY: ""
     volumes:
-      - //YOUR_LOCAL_CUSTOM_FOLDER:/zap/wrk
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 
   open-webui:
     image: ghcr.io/open-webui/open-webui
@@ -28,6 +27,21 @@ services:
       - "3000:8080"
     volumes:
       - open-webui:/app/backend/data
+
+  mcpo:
+    image: ghcr.io/open-webui/mcpo:main
+    depends_on:
+      - open-webui
+      - mcp-server
+    ports:
+      - "8000:8000"
+    command:
+      - --port
+      - "8000"
+      - --server-type
+      - "sse"
+      - --
+      - "http://mcp-server:7456/sse"
 
   mcp-server:
     image: mcp-zap-server:latest
@@ -39,7 +53,7 @@ services:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
     volumes:
-      - /YOUR_LOCAL_CUSTOM_FOLDER:/tmp
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/tmp
 
 volumes:
   open-webui:

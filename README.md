@@ -25,15 +25,73 @@ flowchart LR
   ZAP -->|scan, alerts, reports| MCP
 ```
 
+## Quick Start With Docker Compose
+
+### Prerequisites
+
+- Docker installed
+- Docker Compose installed
+
+### Running the Services
+
+1. Open a terminal.
+2. Navigate to the project directory that contains the `docker-compose.yml` file.
+3. Run the following command to launch the containers in detached mode:
+```bash
+   docker-compose up -d
+```
+4. To view logs for a specific service, run:
+```bash
+   docker-compose logs <service_name>
+```
+### Services Overview
+
+#### `zap`
+- **Image:** zaproxy/zap-stable
+- **Purpose:** Runs the OWASP ZAP daemon on port 8090.
+- **Configuration:**
+    - Disables the API key.
+    - Accepts requests from all addresses.
+    - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to the container path `/zap/wrk`.
+
+#### `open-webui`
+- **Image:** ghcr.io/open-webui/open-webui
+- **Purpose:** Provides a web interface for managing ZAP and the MCP server.
+- **Configuration:**
+    - Exposes port 3000.
+    - Uses a named volume to persist backend data.
+
+#### `mcpo`
+- **Image:** ghcr.io/open-webui/mcpo:main
+- **Purpose:** Depends on `open-webui` and `mcp-server` to operate as a client for the MCP server.
+- **Configuration:**
+    - Runs on port 8000.
+    - Connects to the MCP server using SSE via the URL `http://mcp-server:7456/sse`.
+
+#### `mcp-server`
+- **Image:** mcp-zap-server:latest
+- **Purpose:** Acts as the MCP server exposing ZAP actions.
+- **Configuration:**
+    - Depends on the `zap` service.
+    - Exposes port 7456 for HTTP SSE connections.
+    - Maps the host directory `/Users/dant/Downloads` to `/tmp` to allow file access.
+
+### Stopping the Services
+
+To stop and remove all the containers, run:
+```bash
+docker-compose down
+```
+
 ## Manual build
 
 ```bash
 ./gradlew clean build
 ```
 
-## Usage with Claude Desktop, Cursor, Windsurf or any MCP‑compatible AI agent
+### Usage with Claude Desktop, Cursor, Windsurf or any MCP‑compatible AI agent
 
-### STDIO mode
+#### STDIO mode
 
 ```json
 {
@@ -52,7 +110,7 @@ flowchart LR
 }
 ```
 
-### SSE mode
+#### SSE mode
 
 ```json
 {

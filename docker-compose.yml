@@ -1,6 +1,7 @@
 services:
   zap:
     image: zaproxy/zap-stable
+    restart: always
     command:
       - zap.sh
       - -daemon
@@ -43,8 +44,26 @@ services:
       - --
       - "http://mcp-server:7456/sse"
 
+  mcpo-filesystem:
+    image: ghcr.io/open-webui/mcpo:main
+    depends_on:
+      - open-webui
+    ports:
+      - "8001:8001"        # Expose the HTTP OpenAPI endpoint
+    command:
+      - --port
+      - "8001"
+      - --                  # End of mcpo flags; what follows is the MCP server command
+      - "npx"
+      - "-y"
+      - "@modelcontextprotocol/server-filesystem"
+      - "${LOCAL_ZAP_WORKPLACE_FOLDER}"         # Allowed directory inside the container
+    volumes:
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:${LOCAL_ZAP_WORKPLACE_FOLDER}:ro  # Mount your host folder read-only
+
   mcp-server:
     image: mcp-zap-server:latest
+    restart: always
     depends_on:
       - zap
     ports:
@@ -53,7 +72,7 @@ services:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
     volumes:
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/tmp
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 
 volumes:
   open-webui:

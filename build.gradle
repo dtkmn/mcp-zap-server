@@ -31,6 +31,8 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webflux'
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
     implementation 'io.swagger.parser.v3:swagger-parser:2.0.31'
+    implementation 'io.apicurio:apicurio-data-models:2.2.2'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

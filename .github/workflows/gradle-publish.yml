@@ -49,7 +49,7 @@ jobs:
       with:
         file: Dockerfile
         push: true
-        tags: ${{ env.DOCKER_REGISTRY }}/zap-mcp-server:${{ steps.build-tag.outputs.build_number }}
+        tags: ${{ env.DOCKER_REGISTRY }}/zap-mcp-server${{ steps.build-tag.outputs.build_number }}
 
     # The USERNAME and TOKEN need to correspond to the credentials environment variables used in
     # the publishing section of your build.gradle

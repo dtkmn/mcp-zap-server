@@ -1,7 +1,7 @@
 name: Building zap-mcp-server image
 env:
   DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  IMAGE_NAME: zap-mcp-server
+  IMAGE_NAME: mcp-zap-server
 on:
   push:
     branches: [ "main" ]

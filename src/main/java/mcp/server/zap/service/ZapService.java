@@ -288,7 +288,7 @@ public class ZapService {
 
             - type: report
               parameters:
-                template: traditional-html
+                template: traditional-html-plus
                 reportFile: %s
                 reportDir: %s
           """,

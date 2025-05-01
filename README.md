@@ -17,14 +17,16 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 ```mermaid
 flowchart LR
   subgraph "Docker Compose"
+    direction LR
     ZAP["OWASP ZAP (container)"]
-    MCP["MCP Server (Spring Boot)"]
+    MCPZAP["MCP ZAP Server"]
+    MCPFile["MCP File System Server"]
     Client["MCP Client (Open Web-UI)"]
   end
-  OtherClient["MCP Clients (Claude, Cursor)"] --> |HTTP/SSE + Bearer| MCP
-  Client -->|HTTP/SSE + Bearer| MCP
-  MCP -->|ZAP REST API| ZAP
-  ZAP -->|scan, alerts, reports| MCP
+  MCPZAP <-->|HTTP/SSE + MCPO| Client
+  MCPFile <-->|STDIO + MCPO| Client
+  MCPZAP -->|ZAP REST API| ZAP
+  ZAP -->|scan, alerts, reports| MCPZAP
 ```
 
 ## Quick Start With Docker Compose
@@ -120,7 +122,7 @@ docker-compose down
     "zap-mcp-server": {
       "protocol": "mcp",
       "transport": "http",
-      "serverUrl": "http://localhost:7456/sse"
+      "url": "http://localhost:7456/sse"
     }
   }
 }

@@ -17,3 +17,12 @@ zap:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}
     apiKey: ${ZAP_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

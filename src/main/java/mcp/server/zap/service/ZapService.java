@@ -1,12 +1,7 @@
 package mcp.server.zap.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
-import io.apicurio.datamodels.Library;
-import io.apicurio.datamodels.models.Document;
-import io.apicurio.datamodels.validation.ValidationProblem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -19,21 +14,13 @@ import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -69,8 +56,22 @@ public class ZapService {
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException("Invalid URL format: " + targetUrl);
         }
+        String sessionName = "scan-" + System.currentTimeMillis();
+//        zap.network.setConnectionTimeout("60");
+        zap.core.setOptionTimeoutInSecs(60);
+        zap.core.newSession(sessionName, "true");
+        // (Optionally) clear the Site-Tree and alerts
+//        zap.core.deleteAllAlerts("");
+
+        // Include the target in context
+        String contextName = "ctx-" + sessionName;
+        zap.context.newContext(contextName);
+        zap.context.includeInContext(contextName, targetUrl + ".*");
+
+        // Force-fetch the root so it appears in the tree
+        zap.core.accessUrl(targetUrl, "true");
         // Set spider options
-        zap.spider.setOptionThreadCount(2);  // Limits the spider to 2 thread for a slower crawl
+        zap.spider.setOptionThreadCount(5);  // Limits the spider to 5 thread for a slower crawl
         ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
         String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement)resp).getValue();
         return "Spider scan started with ID: " + scanId;
@@ -111,22 +112,6 @@ public class ZapService {
     @Tool(name="zap_get_html_report",
             description="Generate the full session ZAP scan report in HTML format, return the path to the file")
     public String getHtmlReport() throws Exception {
-//        Map<String, String> params = Map.of(
-//                "title",           "My ZAP Scan Report",
-//                "template",        reportTemplate,
-//                "reportFileName",  "zap-scan-report-" + System.currentTimeMillis() + ".html",
-//                "reportDir",       reportDirectory,
-//                "display",         "false"
-//        );
-//        ApiResponse raw = zap.callApi(
-//                "reports",    // component
-//                "action",     // type
-//                "generate",   // endpoint
-//                params
-//        );
-//        ApiResponseElement elem = (ApiResponseElement) raw;
-//        Path path = Path.of(elem.getValue());
-//        return path.toString();
         ApiResponse raw = zap.reports.generate(
             "My ZAP Scan Report",          // title
             "traditional-html-plus",       // template ID
@@ -424,29 +409,49 @@ public class ZapService {
 //        }
 //    }
 //
-//    // ─── Active Scan ─────────────────────────────────────────────────────────────
-//    @Tool(
-//            name        = "zap_active_scan",
-//            description = "Start an active scan against the given URL and return the scanId"
-//    )
-//    public String activeScan(
-//            @ToolParam(description = "Target URL to scan") String targetUrl,
-//            @ToolParam(description = "Recurse into sub-paths? (true/false)") String recurse,
-//            @ToolParam(description = "Scan policy name (e.g. Default Policy, API-High+Auth)") String policy
-//    ) throws Exception {
-//        ApiResponseElement resp = (ApiResponseElement) zap.ascan.scan(
-//                targetUrl,
-//                recurse,
-//                policy,
-//                null,   // method
-//                null,   // postData
-//                null    // contextId
-//        );
-//        String scanId = resp.getValue();
-//        return "scanId=" + scanId;
-//    }
-//
-//    // ─── Generate HTML Report ────────────────────────────────────────────────────
+    // ─── Active Scan ─────────────────────────────────────────────────────────────
+    @Tool(
+            name        = "zap_active_scan",
+            description = "Start an active scan against the given URL and return the scanId"
+    )
+    public String activeScan(
+            @ToolParam(description = "Target URL to scan") String targetUrl,
+            @ToolParam(description = "Recurse into sub-paths? (true/false)") String recurse,
+            @ToolParam(description = "Scan policy name (e.g. Default Policy, API-High+Auth)") String policy
+    ) throws Exception {
+        // Configure active scanner
+        zap.ascan.enableAllScanners(null);  // Enable all scanners
+        
+        // Configure global timeouts and scan settings
+        zap.ascan.setOptionMaxScanDurationInMins(0);    // No duration limit
+//        zap.ascan.setOptionTimeoutInSecs(60);           // 60 seconds per rule
+        zap.ascan.setOptionHostPerScan(0);              // No limit on hosts
+        zap.ascan.setOptionThreadPerHost(5);           // Parallel scanning
+        zap.ascan.setOptionDelayInMs(0);               // No delay between requests
+//        zap.selenium.setOptionBrowserWithoutProxyTimeout(60);  // Browser timeout
+
+        ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scan(
+               targetUrl,
+               "true",
+               "true",
+               null,   // method
+               null,   // postData
+               null    // contextId
+        );
+
+        if (!(scanResp instanceof ApiResponseElement)) {
+            throw new IllegalStateException("Failed to start scan on " + targetUrl + ": " + scanResp);
+        }
+
+        String scanId = ((ApiResponseElement) scanResp).getValue();
+        log.info("Started active scan with ID {} on {}", scanId, targetUrl);
+
+        return "Active scan started with ID: " + scanId;
+    }
+
+
+
+    // ─── Generate HTML Report ────────────────────────────────────────────────────
 //    @Tool(
 //            name        = "zap_generate_report",
 //            description = "Generate an HTML report from the current ZAP session and return the file path"
@@ -468,4 +473,5 @@ public class ZapService {
 //        String path = resp.getValue();
 //        return "reportPath=" + path;
 //    }
+
 }

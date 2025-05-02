@@ -96,5 +96,12 @@ services:
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 
+  juice-shop:
+    image: bkimminich/juice-shop
+    restart: always
+    ports:
+      - "3001:3000"
+
+
 volumes:
   open-webui:

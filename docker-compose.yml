@@ -102,6 +102,11 @@ services:
     ports:
       - "3001:3000"
 
+  petstore:
+    image: swaggerapi/petstore3:unstable
+    restart: always
+    ports:
+      - "3002:8080"
 
 volumes:
   open-webui:

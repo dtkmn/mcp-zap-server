@@ -1,4 +1,4 @@
-![MCP-ZAP Logo](./brand.png)
+[//]: # (![MCP-ZAP Logo]&#40;./brand.png&#41;)
 
 # ZAP MCP Server
 
@@ -7,8 +7,8 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
 ## Features
-- **MCP server**: Exposes ZAP actions as MCP tools
-- **OpenAPI integration**: Import remote or uploaded OpenAPI specs into ZAP and kick off active scans
+- **MCP ZAP server**: Exposes ZAP actions as MCP tools. Eliminates manual CLI calls and brittle scripts.
+- **OpenAPI integration**: Import remote OpenAPI specs into ZAP and kick off active scans
 - **Report generation**: Generate HTML/JSON reports and fetch contents programmatically
 - **Dockerized**: Runs ZAP and the MCP server in containers, orchestrated via docker-compose
 - **Secure**: Configure API keys for both ZAP (ZAP_API_KEY) and the MCP server (MCP_API_KEY)

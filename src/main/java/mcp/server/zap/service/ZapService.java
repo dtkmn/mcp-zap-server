@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -257,158 +258,69 @@ public class ZapService {
 //        String raw = restTemplate.getForObject(url, String.class);
 //        return validateOpenApiSpec(raw);
 //    }
-//
-////    @Tool(
-////            name        = "zap_run_dynamic_plan",
-////            description = "Run a full OpenAPI scan with dynamic spec URL, context and timestamped report"
-////    )
-////    public String runDynamicPlan(
-////            @ToolParam(description = "Name of the ZAP context (e.g. petstore)") String contextName,
-////            @ToolParam(description = "Base API URL to include in the context") String baseUrl,
-////            @ToolParam(description = "OpenAPI spec URL (JSON or YAML)") String specUrl,
-////            @ToolParam(description = "Directory inside ZAP to write the report (e.g. /zap/wrk)") String reportDir
-////    ) throws Exception {
-////        // 1) Build a timestamped reportFile name
-////        String timestamp = LocalDateTime.now()
-////                .format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-////        String reportFile = contextName + "-api-scan-" + timestamp + ".html";
-////
-////        // 2) Construct the YAML plan string
-////        String yamlPlan = String.format("""
-////          env:
-////            parameters:
-////                failOnError: false
-////            contexts:
-////              - name: %s
-////                urls:
-////                  - %s
-////
-////          jobs:
-////            - type: openapi
-////              parameters:
-////                context: %s
-////                apiUrl: %s
-////                failOnError: false
-////
-////            - type: spider
-////              parameters:
-////                context: %s
-////                maxDepth: 5
-////
-////            - type: activeScan
-////              parameters:
-////                context: %s
-////                policy: Default Policy
-////                maxScanDurationInMins: 10
-////
-////            - type: report
-////              parameters:
-////                template: traditional-html-plus
-////                reportFile: %s
-////                reportDir: %s
-////          """,
-////                contextName, baseUrl,
-////                contextName, specUrl,
-////                contextName,
-////                contextName,
-////                reportFile, reportDir
-////        );
-////
-////        // 3) Write the plan to a timestamped file under /zap/wrk
-////        Path saveZapWorkPath = Path.of("/zap/wrk");
-////        Path planFile = Files.createTempFile(saveZapWorkPath, "zap-auto-job-", ".yaml");
-////        log.info("saving plan file {}", planFile);
-////        Files.writeString(planFile, yamlPlan, StandardCharsets.UTF_8);
-////
-////        // 4) Tell ZAP to run that plan via runPlan (filePath must be visible to ZAP)
-////        ApiResponseElement resp = (ApiResponseElement) zap.callApi(
-////                "automation", "action", "runPlan",
-////                Map.of("filePath", "/zap/wrk/" + planFile.getFileName())
-////        );
-////
-////        // 5) Return whatever ZAP returns (status/summary)
-////        return resp.getValue();
-////    }
-//
-//    @Tool(
-//        name        = "zap_get_plan_progress",
-//        description = "Get the current progress of an Automation plan by planId"
-//    )
-//    public String getPlanProgress(
-//        @ToolParam(description = "The planId returned by zap_run_dynamic_plan or zap_run_plan") String planId
-//    ) throws Exception {
-//        // 1) Call the view endpoint
-//        ApiResponseSet resp = (ApiResponseSet) zap.callApi(
-//                "automation", "view", "planProgress",
-//                Map.of("planId", planId)
-//        );
-//        // 2) Prepare a JSON-friendly map
-//        Map<String, Object> progress = new LinkedHashMap<>();
-//
-//        for (Map.Entry<String, ApiResponse> e : resp.getValuesMap().entrySet()) {
-//            String key = e.getKey();
-//            ApiResponse value = e.getValue();
-//
-//            if (value instanceof ApiResponseElement elt) {
-//                // Single scalar
-//                progress.put(key, elt.getValue());
-//
-//            } else if (value instanceof ApiResponseList list) {
-//                // A list of things
-//                List<Object> items = new ArrayList<>();
-//                for (ApiResponse item : list.getItems()) {
-//                    if (item instanceof ApiResponseElement ie) {
-//                        items.add(ie.getValue());
-//                    } else if (item instanceof ApiResponseSet is) {
-//                        items.add(is.getValuesMap());  // a nested map
-//                    } else {
-//                        items.add(item.toString());
-//                    }
-//                }
-//                progress.put(key, items);
-//
-//            } else {
-//                // Fallback for anything else
-//                progress.put(key, value.toString());
-//            }
-//        }
-//
-//        // 3) Serialize to JSON
-//        return new ObjectMapper()
-//                .writerWithDefaultPrettyPrinter()
-//                .writeValueAsString(progress);
-//    }
-//
-//    @Tool(
-//            name        = "zap_import_openapi_spec",
-//            description = "Import an OpenAPI/Swagger spec by URL into ZAP and return the importId"
-//    )
-//    public String importOpenApiSpec(
-//            @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl
-//    ) throws Exception {
-//        ApiResponse resp = zap.callApi(
-//            "openapi", "action", "importUrl",
-//            Map.of("url", apiUrl)
-//        );
-//
-//        if (resp instanceof ApiResponseElement elt) {
-//            // single ID returned
-//            return "importId=" + elt.getValue();
-//        }
-//        else if (resp instanceof ApiResponseList list) {
-//            // multiple IDs or messages returned
-//            List<String> ids = list.getItems().stream()
-//                .filter(item -> item instanceof ApiResponseElement)
-//                .map(item -> ((ApiResponseElement) item).getValue())
-//                .collect(Collectors.toList());
-//            return "importIds=" + String.join(",", ids);
-//        }
-//        else {
-//            // fallback: dump whatever it is
-//            return resp.toString();
-//        }
-//    }
-//
+
+
+    @Tool(
+        name        = "zap_import_openapi_spec",
+        description = "Import an OpenAPI/Swagger spec by URL into ZAP and return the importId"
+    )
+    public String importOpenApiSpec(
+        @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl
+    ) throws Exception {
+        // 1. Validate the URL
+        try {
+            new URL(apiUrl);
+        } catch (MalformedURLException e) {
+            throw new IllegalArgumentException("Invalid URL: " + apiUrl, e);
+        }
+
+        // 2. Import OpenAPI spec
+        ApiResponse importResp = zap.callApi(
+                "openapi", "action", "importUrl", Map.of("url", apiUrl)
+        );
+
+        List<String> importIds = new ArrayList<>();
+        if (importResp instanceof ApiResponseList list) {
+            for (ApiResponse item : list.getItems()) {
+                if (item instanceof ApiResponseElement elt) {
+                    importIds.add(elt.getValue());
+                }
+            }
+        }
+
+        // 3. If import IDs exist, poll their status
+        for (String id : importIds) {
+            int status;
+            do {
+                Thread.sleep(500);
+                ApiResponse statusResp = zap.callApi("openapi", "action", "status", Map.of("importId", id));
+                if (!(statusResp instanceof ApiResponseElement elt)) {
+                    throw new IllegalStateException("Unexpected status response: " + statusResp);
+                }
+                status = Integer.parseInt(elt.getValue());
+            } while (status != 1); // wait until status is completed (1)
+        }
+
+        // 4. Confirm import succeeded by checking Site-Tree
+        ApiResponseList sitesResp = (ApiResponseList) zap.core.sites();
+        boolean found = false;
+        for (ApiResponse siteItem : sitesResp.getItems()) {
+            String site = ((ApiResponseElement) siteItem).getValue();
+            if (apiUrl.startsWith(site) || site.startsWith(apiUrl)) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            throw new IllegalStateException("Spec imported but no URLs found under site-tree for: " + apiUrl);
+        }
+
+        return importIds.isEmpty()
+                ? "Import completed synchronously and is ready to scan."
+                : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
+    }
+
     // ─── Active Scan ─────────────────────────────────────────────────────────────
     @Tool(
             name        = "zap_active_scan",
@@ -417,7 +329,7 @@ public class ZapService {
     public String activeScan(
             @ToolParam(description = "Target URL to scan") String targetUrl,
             @ToolParam(description = "Recurse into sub-paths? (true/false)") String recurse,
-            @ToolParam(description = "Scan policy name (e.g. Default Policy, API-High+Auth)") String policy
+            @ToolParam(description = "Scan policy name (e.g. Default Policy, API Policy)") String policy
     ) throws Exception {
         // Configure active scanner
         zap.ascan.enableAllScanners(null);  // Enable all scanners
@@ -426,15 +338,15 @@ public class ZapService {
         zap.ascan.setOptionMaxScanDurationInMins(0);    // No duration limit
 //        zap.ascan.setOptionTimeoutInSecs(60);           // 60 seconds per rule
         zap.ascan.setOptionHostPerScan(0);              // No limit on hosts
-        zap.ascan.setOptionThreadPerHost(5);           // Parallel scanning
-        zap.ascan.setOptionDelayInMs(0);               // No delay between requests
+        zap.ascan.setOptionThreadPerHost(2);           // Parallel scanning
+        zap.ascan.setOptionDelayInMs(500);               // No delay between requests
 //        zap.selenium.setOptionBrowserWithoutProxyTimeout(60);  // Browser timeout
 
         ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scan(
                targetUrl,
-               "true",
-               "true",
-               null,   // method
+               recurse,
+               "false",
+               policy,   // method
                null,   // postData
                null    // contextId
         );
@@ -449,29 +361,24 @@ public class ZapService {
         return "Active scan started with ID: " + scanId;
     }
 
+    @Tool(
+            name        = "zap_active_scan_status",
+            description = "Get the current progress (0–100%) of a ZAP Active Scan job"
+    )
+    public String getActiveScanStatus(
+            @ToolParam(description = "The scan ID returned when you started the Active Scan") String scanId
+    ) throws Exception {
+        // 1) Call the typed status wrapper
+        ApiResponse resp = zap.ascan.status(scanId);
 
+        // 2) Validate & extract
+        if (!(resp instanceof ApiResponseElement)) {
+            throw new IllegalStateException("Unexpected response from ascan.status(): " + resp);
+        }
+        String pct = ((ApiResponseElement) resp).getValue();
 
-    // ─── Generate HTML Report ────────────────────────────────────────────────────
-//    @Tool(
-//            name        = "zap_generate_report",
-//            description = "Generate an HTML report from the current ZAP session and return the file path"
-//    )
-//    public String generateReport(
-//            @ToolParam(description = "Report template (e.g. traditional-html, traditional-html-plus)") String template,
-//            @ToolParam(description = "Output directory inside ZAP") String reportDir
-//    ) throws Exception {
-//        String fileName = "zap-report-" + System.currentTimeMillis() + ".html";
-//        ApiResponseElement resp = (ApiResponseElement) zap.callApi(
-//                "reports","action","generate",
-//                Map.of(
-//                        "template",       template,
-//                        "reportDir",      reportDir,
-//                        "reportFileName", fileName,
-//                        "display",        "false"
-//                )
-//        );
-//        String path = resp.getValue();
-//        return "reportPath=" + path;
-//    }
+        // 3) Return a human-friendly message
+        return "Active Scan [" + scanId + "] is " + pct + "% complete";
+    }
 
 }

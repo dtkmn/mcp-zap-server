@@ -35,12 +35,22 @@ flowchart LR
   ZAP -->|Import API/active-scan| Petstore
 ```
 
-## Quick Start With Docker Compose
+## Quick Start
+
+```bash
+git clone https://github.com/dtkmn/mcp-zap-server.git
+cd mcp-zap-server
+export LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace # or any other folder you want to use as ZAP's workspace
+docker-compose up --build
+```
+Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
+
 
 ### Prerequisites
 
-- Docker installed
-- Docker Compose installed
+- Docker ≥ 20.10
+- Docker Compose ≥ 1.29
+- Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
 
 ### Running the Services
 

@@ -50,7 +50,7 @@ docker-compose up -d
 ```
 Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
 
-### Set Up Custom OpenAI API and Ollama API Connection
+### Set Up Custom OpenAI / Ollama API Connection
 ![Admin-Panel-Open-WebUI](./Admin-Panel-Open-WebUI.png)
 
 ### Set Up MCP Servers Connection

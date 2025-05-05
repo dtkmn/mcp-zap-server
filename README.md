@@ -1,6 +1,6 @@
 [//]: # (![MCP-ZAP Logo]&#40;./brand.png&#41;)
 
-# ZAP MCP Server
+# MCP ZAP Server
 
 A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
 

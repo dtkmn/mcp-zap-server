@@ -53,6 +53,9 @@ Open http://localhost:3000 in your browser, and you should see the Open Web-UI i
 ### Set Up Custom OpenAI API and Ollama API Connection
 ![Admin-Panel-Open-WebUI](./Admin-Panel-Open-WebUI.png)
 
+### Set Up MCP Servers Connection
+![MCP-Tools-Config-Open-WebUI](./MCP-Tools-Config-Open-WebUI.png)
+
 ### To view logs for a specific service, run:
 ```bash
    docker-compose logs -f <service_name>

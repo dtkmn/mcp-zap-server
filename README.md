@@ -34,6 +34,11 @@ flowchart LR
   ZAP -->|spider/active-scan| Juice
   ZAP -->|Import API/active-scan| Petstore
 ```
+## Prerequisites
+
+- Docker ≥ 20.10
+- Docker Compose ≥ 1.29
+- Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
 
 ## Quick Start
 
@@ -41,28 +46,16 @@ flowchart LR
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 export LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace # or any other folder you want to use as ZAP's workspace
-docker-compose up --build
+docker-compose up -d
 ```
 Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
 
+### Set Up Custom OpenAI API and Ollama API Connection
+![Admin-Panel-Open-WebUI](./Admin-Panel-Open-WebUI.png)
 
-### Prerequisites
-
-- Docker ≥ 20.10
-- Docker Compose ≥ 1.29
-- Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
-
-### Running the Services
-
-1. Open a terminal.
-2. Navigate to the project directory that contains the `docker-compose.yml` file.
-3. Run the following command to launch the containers in detached mode:
+### To view logs for a specific service, run:
 ```bash
-   docker-compose up -d
-```
-4. To view logs for a specific service, run:
-```bash
-   docker-compose logs <service_name>
+   docker-compose logs -f <service_name>
 ```
 ### Services Overview
 

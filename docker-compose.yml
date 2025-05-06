@@ -27,10 +27,12 @@ services:
       retries: 3
       start_period: 30s
     volumes:
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk:/zap/wrk
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-home:/home/zap/.ZAP
+
 
   open-webui:
-    image: ghcr.io/open-webui/open-webui
+    image: ghcr.io/open-webui/open-webui:main
     ports:
       - "3000:8080"
     healthcheck:

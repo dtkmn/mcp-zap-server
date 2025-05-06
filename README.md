@@ -6,6 +6,23 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
+## Table of Contents
+- [Features](#features)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+  - [Set Up Custom OpenAI / Ollama API Connection](#set-up-custom-openai--ollama-api-connection)
+  - [Set Up MCP Servers Connection](#set-up-mcp-servers-connection)
+- [To view logs for a specific service, run:](#to-view-logs-for-a-specific-service-run)
+- [Services Overview](#services-overview)
+- [Stopping the Services](#stopping-the-services)
+- [Manual build](#manual-build)
+- [Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent](#usage-with-claude-desktop-cursor-windsurf-or-any-mcp-compatible-ai-agent)
+  - [STDIO mode](#stdio-mode)
+  - [SSE mode](#sse-mode)
+- [Prompt Examples](#prompt-examples)
+
+
 ## Features
 - **MCP ZAP server**: Exposes ZAP actions as MCP tools. Eliminates manual CLI calls and brittle scripts.
 - **OpenAPI integration**: Import remote OpenAPI specs into ZAP and kick off active scans
@@ -165,3 +182,12 @@ docker-compose down
 
 
 ## Prompt Examples
+
+### Asking for the tools available
+![mcp-zap-server-prompt-1](./images/mcp-zap-server-prompt-1.png)
+
+### Start the spider scan with provided URL
+![mcp-zap-server-prompt-2](./images/mcp-zap-server-prompt-2.png)
+
+### Check the alerts found from the spider scan
+![mcp-zap-server-prompt-3](./images/mcp-zap-server-prompt-3.png)

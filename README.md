@@ -36,6 +36,7 @@ flowchart LR
 ```
 ## Prerequisites
 
+- LLM support Tool calling (e.g. gpt-4o, Claude 3, Llama 3, mistral, phi3)
 - Docker ≥ 20.10
 - Docker Compose ≥ 1.29
 - Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
@@ -48,6 +49,8 @@ cd mcp-zap-server
 export LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace # or any other folder you want to use as ZAP's workspace
 docker-compose up -d
 ```
+![Docker-Compose](./mcp-zap-server-docker-compose.png)
+
 Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
 
 ### Set Up Custom OpenAI / Ollama API Connection
@@ -159,3 +162,6 @@ docker-compose down
   }
 }
 ```
+
+
+## Prompt Examples

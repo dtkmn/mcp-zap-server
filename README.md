@@ -91,6 +91,26 @@ Open http://localhost:3000 in your browser, and you should see the Open Web-UI i
     - Depends on the `zap` service.
     - Exposes port 7456 for HTTP SSE connections.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/tmp` to allow file access.
+
+#### `mcpo-filesystem`
+- **Image:** ghcr.io/open-webui/mcpo:main
+- **Purpose:** Exposes the MCP File System Server as an OpenAPI-compatible HTTP endpoint.
+- **Configuration:**
+  - Depends on `open-webui`
+  - Exposes port 8001.
+
+#### `juice-shop`
+- **Image:** bkimminich/juice-shop
+- **Purpose:** Provides a deliberately insecure web application for testing ZAP’s scanning capabilities.
+- **Configuration:**
+  - Runs on port 3001.
+
+#### `petstore`
+- **Image:** swaggerapi/petstore3:unstable
+- **Purpose:** Runs the Swagger Petstore sample API to demonstrate OpenAPI import and scanning.
+- **Configuration:**
+  - Runs on port 3002.
+
     
 ### Stopping the Services
 

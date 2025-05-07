@@ -12,11 +12,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.*;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -34,6 +30,9 @@ import java.util.stream.Collectors;
 public class ZapService {
 
     private final ClientApi zap;
+    private final String contextName = "default-context";
+    private final String sessionName = "default-session";
+//    private final String contextId;
 
     @Value("${zap.report.template:traditional-html-plus}")
     private String reportTemplate;
@@ -50,10 +49,15 @@ public class ZapService {
             @Value("${zap.server.port:8090}") int zapApiPort,
             @Value("${zap.server.apiKey:}") String zapApiKey,
             RestTemplate restTemplate
-    ) {
+    ) throws ClientApiException {
         this.restTemplate = restTemplate;
         // Initialize ZAP client
         this.zap = new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
+
+        zap.core.newSession(sessionName, "true");
+
+        zap.context.newContext(contextName);
+
     }
 
     @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")
@@ -63,25 +67,24 @@ public class ZapService {
         } catch (MalformedURLException e) {
             throw new IllegalArgumentException("Invalid URL format: " + targetUrl);
         }
-        String sessionName = "scan-" + System.currentTimeMillis();
+
+        try {
+            String sessionName = "scan-" + System.currentTimeMillis();
 //        zap.network.setConnectionTimeout("60");
-        zap.core.setOptionTimeoutInSecs(60);
-        zap.core.newSession(sessionName, "true");
-        // (Optionally) clear the Site-Tree and alerts
-//        zap.core.deleteAllAlerts("");
+            zap.core.setOptionTimeoutInSecs(60);
+            zap.context.includeInContext(contextName, targetUrl + ".*");
 
-        // Include the target in context
-        String contextName = "ctx-" + sessionName;
-        zap.context.newContext(contextName);
-        zap.context.includeInContext(contextName, targetUrl + ".*");
-
-        // Force-fetch the root so it appears in the tree
-        zap.core.accessUrl(targetUrl, "true");
-        // Set spider options
-        zap.spider.setOptionThreadCount(5);  // Limits the spider to 5 thread for a slower crawl
-        ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
-        String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement)resp).getValue();
-        return "Spider scan started with ID: " + scanId;
+            // Force-fetch the root so it appears in the tree
+            zap.core.accessUrl(targetUrl, "true");
+            // Set spider options
+            zap.spider.setOptionThreadCount(5);  // Limits the spider to 5 thread for a slower crawl
+            ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
+            String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
+            return "Spider scan started with ID: " + scanId;
+        } catch (Exception e) {
+            log.error("Error launching ZAP Spider for URL {}: {}", targetUrl, e.getMessage(), e);
+            return "❌ Error launching spider: " + e.getMessage();
+        }
     }
 
     @Tool(name = "zap_spider_status", description = "Get status of a spider scan by ID")
@@ -119,30 +122,32 @@ public class ZapService {
     @Tool(name="zap_get_html_report",
             description="Generate the full session ZAP scan report in HTML format, return the path to the file")
     public String getHtmlReport() throws Exception {
-        ApiResponse raw = zap.reports.generate(
-            "My ZAP Scan Report",          // title
-            "traditional-html-plus",       // template ID
-            "dark",                        // theme
-            "",                            // description
-            "",                            // contexts
-            "",                            // sites
-            "",                            // sections
-            "",                            // includedConfidences
-            "",                            // includedRisks
-            "zap-report-" + System.currentTimeMillis() + ".html",
-            "",                            // reportFileNamePattern
-            reportDirectory,
-            "false"                        // display=false means “don’t pop open a browser”
-        );
-        if (!(raw instanceof ApiResponseElement)) {
-            throw new IllegalStateException("Report generation failed: " + raw);
+        try {
+            ApiResponse raw = zap.reports.generate(
+                    "My ZAP Scan Report",          // title
+                    "traditional-html-plus",       // template ID
+                    "dark",                        // theme
+                    "",                            // description
+                    "",                            // contexts
+                    "",                            // sites
+                    "",                            // sections
+                    "",                            // includedConfidences
+                    "",                            // includedRisks
+                    "zap-report-" + System.currentTimeMillis() + ".html",
+                    "",                            // reportFileNamePattern
+                    reportDirectory,
+                    "false"                        // display=false means “don’t pop open a browser”
+            );
+            if (!(raw instanceof ApiResponseElement)) {
+                throw new IllegalStateException("Report generation failed: " + raw);
+            }
+            String fileName = ((ApiResponseElement) raw).getValue();
+            Path reportPath = Paths.get(fileName);
+            return reportPath.toString();
+        } catch (Exception e) {
+            log.error("Error generating ZAP report: {}", e.getMessage(), e);
+            return "❌ Error generating report: " + e.getMessage();
         }
-        String fileName = ((ApiResponseElement)raw).getValue();
-        Path reportPath = Paths.get(fileName);
-        if (!Files.exists(reportPath)) {
-            throw new IllegalStateException("Expected report not found at " + reportPath);
-        }
-        return reportPath.toString();
     }
 
     @Tool(
@@ -222,7 +227,10 @@ public class ZapService {
 
         // 2. Import OpenAPI spec
         ApiResponse importResp = zap.callApi(
-                "openapi", "action", "importUrl", Map.of("url", apiUrl)
+                "openapi",
+                "action",
+                "importUrl",
+                Map.of("url", apiUrl)
         );
 
         List<String> importIds = new ArrayList<>();
@@ -292,9 +300,9 @@ public class ZapService {
                targetUrl,
                recurse,
                "false",
-               policy,   // method
-               null,   // postData
-               null    // contextId
+               policy,   // policy name
+               null,   // method
+               null    // postData
         );
 
         if (!(scanResp instanceof ApiResponseElement)) {

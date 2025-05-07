@@ -74,6 +74,12 @@ Open http://localhost:3000 in your browser, and you should see the Open Web-UI i
 ### Set Up MCP Servers Connection
 ![MCP-Tools-Config-Open-WebUI](./MCP-Tools-Config-Open-WebUI.png)
 
+Once it is done, you can check the [Prompt Examples](#prompt-examples) section to see how to use the MCP ZAP server with your AI agent.
+
+### To view logs for all services, run:
+```bash
+   docker-compose logs -f
+```
 ### To view logs for a specific service, run:
 ```bash
    docker-compose logs -f <service_name>

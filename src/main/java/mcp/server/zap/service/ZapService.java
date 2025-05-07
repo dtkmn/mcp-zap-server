@@ -1,7 +1,11 @@
 package mcp.server.zap.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
+import io.apicurio.datamodels.Library;
+import io.apicurio.datamodels.models.Document;
+import io.apicurio.datamodels.validation.ValidationProblem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -14,6 +18,7 @@ import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -22,6 +27,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -138,127 +144,67 @@ public class ZapService {
         }
         return reportPath.toString();
     }
-//
-//    @Tool(
-//            name        = "generate_api_html_doc",
-//            description = "Generate a standalone HTML doc (via ReDoc) from a raw Swagger 2 or OpenAPI 3 spec (YAML or JSON)"
-//    )
-//    public String generateApiHtmlDoc(
-//            @ToolParam(description = "The raw OpenAPI/Swagger spec (JSON or YAML)")
-//            String rawSpec
-//    ) {
-//        List<ValidationProblem> problems = validateAPISpec(rawSpec);
-//        if (!problems.isEmpty()) {
-//            String issues = problems.stream()
-//                    .map(p -> p.message)
-//                    .collect(Collectors.joining("\n• ", "• ", ""));
-//            return "Spec validation errors:\n" + issues;
-//        }
-//
-//        // 1. Turn YAML or JSON into a Jackson tree
-//        JsonNode root;
-//        try {
-//            root = yamlMapper.readTree(rawSpec);
-//        } catch (IOException e) {
-//            throw new RuntimeException("Invalid spec syntax: " + e.getMessage());
-//        }
-//
-//        // 2. Serialize tree to pretty JSON
-//        String jsonSpec;
-//        try {
-//            jsonSpec = new ObjectMapper()
-//                    .writerWithDefaultPrettyPrinter()
-//                    .writeValueAsString(root);
-//        } catch (JsonProcessingException e) {
-//            throw new RuntimeException("Error converting spec to JSON: " + e.getMessage());
-//        }
-//
-//        // ── 6) Render HTML ────────────────────────────────────────
-//        return """
-//            <!DOCTYPE html>
-//            <html>
-//            <head>
-//            <meta charset="utf-8"/>
-//            <title>API Documentation</title>
-//            <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
-//            </head>
-//            <body>
-//            <div id="redoc-container"></div>
-//            <script type="application/json" id="api-spec">
-//            %s
-//            </script>
-//            <script>
-//                const raw = document.getElementById("api-spec").textContent;
-//                const spec = JSON.parse(raw);
-//                Redoc.init(spec, {}, document.getElementById("redoc-container"));
-//              </script>
-//            </body>
-//            </html>
-//       \s""".formatted(jsonSpec);
-//    }
-//
-//    @Tool(
-//            name        = "validate_openapi_spec",
-//            description = "Validate a Swagger 2 or OpenAPI 3 spec (JSON or YAML)"
-//    )
-//    public String validateOpenApiSpec(
-//            @ToolParam(description = "Raw Swagger 2 or OpenAPI 3 spec content")
-//            String rawSpec
-//    ) throws JsonProcessingException {
-//        List<ValidationProblem> problems = validateAPISpec(rawSpec);
-//        if (problems.isEmpty()) {
-//            return "✔️ Spec is valid";
-//        }
-//        String issues = problems.stream()
-//            .map(p -> p.message)
-//            .collect(Collectors.joining("\n• ", "• ", ""));
-//        return "❌ Validation issues:\n" + issues;
-//    }
-//
-//    private List<ValidationProblem> validateAPISpec(String rawSpec) {
-//        // 1) Parse YAML or JSON into Jackson tree
-//        JsonNode root;
-//        try {
-//            // Parse YAML/JSON into JsonNode (lenient for YAML)
-//            root = yamlMapper.readTree(rawSpec);
-//        } catch (IOException e) {
-//            throw new RuntimeException("Error: Invalid YAML/JSON syntax: " + e.getMessage());
-//        }
-//
-//        // Detect spec version
-//        boolean isOAS3 = root.has("openapi");
-//        boolean isSwagger2 = root.has("swagger");
-//        if (!isOAS3 && !isSwagger2) {
-//            throw new RuntimeException("Error: Missing 'openapi' or 'swagger' field. Cannot determine spec version.");
-//        }
-//
-//        // Convert to compact JSON string
-//        final ObjectMapper jsonMapper = new ObjectMapper();
-//        String jsonContent;
-//        try {
-//            jsonContent = jsonMapper.writeValueAsString(root);
-//        } catch (Exception e) {
-//            throw new RuntimeException("Error converting spec to JSON: " + e.getMessage());
-//        }
-//
-//        // Parse and validate using Apicurio Data Models
-//        Document apiDoc;
-//        try {
-//            apiDoc = Library.readDocumentFromJSONString(jsonContent);
-//        } catch (Exception e) {
-//             throw new RuntimeException("Error parsing API spec: " + e.getMessage());
-//        }
-//
-//        return Library.validate(apiDoc, null);
-//    }
-//
-//
-//    @Tool(name="validate_openapi_spec_from_url",description="Validate a Swagger 2 or OpenAPI 3 spec (JSON or YAML) from a URL")
-//    public String validateSpecFromUrl(@ToolParam(description = "URL of API spec") String url) throws Exception {
-//        String raw = restTemplate.getForObject(url, String.class);
-//        return validateOpenApiSpec(raw);
-//    }
 
+    @Tool(
+            name        = "validate_openapi_spec",
+            description = "Validate a Swagger 2 or OpenAPI 3 spec (JSON or YAML)"
+    )
+    public String validateOpenApiSpec(
+            @ToolParam(description = "Raw Swagger 2 or OpenAPI 3 spec content")
+            String rawSpec) {
+        List<ValidationProblem> problems = validateAPISpec(rawSpec);
+        if (problems.isEmpty()) {
+            return "✔️ Spec is valid";
+        }
+        String issues = problems.stream()
+            .map(p -> p.message)
+            .collect(Collectors.joining("\n• ", "• ", ""));
+        return "❌ Validation issues:\n" + issues;
+    }
+
+    private List<ValidationProblem> validateAPISpec(String rawSpec) {
+        // 1) Parse YAML or JSON into a Jackson tree
+        JsonNode root;
+        try {
+            // Parse YAML/JSON into JsonNode (lenient for YAML)
+            root = yamlMapper.readTree(rawSpec);
+        } catch (IOException e) {
+            throw new RuntimeException("Error: Invalid YAML/JSON syntax: " + e.getMessage());
+        }
+
+        // Detect spec version
+        boolean isOAS3 = root.has("openapi");
+        boolean isSwagger2 = root.has("swagger");
+        if (!isOAS3 && !isSwagger2) {
+            throw new RuntimeException("Error: Missing 'openapi' or 'swagger' field. Cannot determine spec version.");
+        }
+
+        // Convert to compact JSON string
+        final ObjectMapper jsonMapper = new ObjectMapper();
+        String jsonContent;
+        try {
+            jsonContent = jsonMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Error converting spec to JSON: " + e.getMessage());
+        }
+
+        // Parse and validate using Apicurio Data Models
+        Document apiDoc;
+        try {
+            apiDoc = Library.readDocumentFromJSONString(jsonContent);
+        } catch (Exception e) {
+             throw new RuntimeException("Error parsing API spec: " + e.getMessage());
+        }
+
+        return Library.validate(apiDoc, null);
+    }
+
+
+    @Tool(name="validate_openapi_spec_from_url",description="Validate a Swagger 2 or OpenAPI 3 spec (JSON or YAML) from a URL")
+    public String validateSpecFromUrl(@ToolParam(description = "URL of API spec") String url) throws Exception {
+        String raw = restTemplate.getForObject(url, String.class);
+        return validateOpenApiSpec(raw);
+    }
 
     @Tool(
         name        = "zap_import_openapi_spec",

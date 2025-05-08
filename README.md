@@ -7,7 +7,7 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
 ### Live Demo
-<a href="https://dtkmn.github.io/mcp-zap-server/" target="_blank" rel="noopener noreferrer">
+<a href="https://www.youtube.com/watch?v=9_9VqsL0lNw" target="_blank" rel="noopener noreferrer">
 <img src="https://img.youtube.com/vi/9_9VqsL0lNw/0.jpg" alt="▶️ Watch the demo">
 </a>
 

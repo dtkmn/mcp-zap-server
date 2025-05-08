@@ -195,3 +195,6 @@ docker-compose down
 
 ### Check the alerts found from the spider scan
 ![mcp-zap-server-prompt-3](./images/mcp-zap-server-prompt-3.png)
+
+
+[![▶️ Watch the demo](https://img.youtube.com/vi/9_9VqsL0lNw/0.jpg)](https://www.youtube.com/watch?v=9_9VqsL0lNw)

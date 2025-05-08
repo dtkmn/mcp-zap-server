@@ -1,12 +1,15 @@
 [//]: # (![MCP-ZAP Logo]&#40;./brand.png&#41;)
 
+>**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
+
+>**NOTE** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation of the Model Context Protocol (MCP) for use with OWASP ZAP.
+
 # MCP ZAP Server
 
 A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
 
->**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
-### Live Demo
+### Demo on Cursor
 <a href="https://www.youtube.com/watch?v=9_9VqsL0lNw" target="_blank" rel="noopener noreferrer">
 <img src="https://img.youtube.com/vi/9_9VqsL0lNw/0.jpg" alt="▶️ Watch the demo">
 </a>

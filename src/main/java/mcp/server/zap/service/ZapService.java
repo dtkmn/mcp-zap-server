@@ -17,7 +17,6 @@ import org.zaproxy.clientapi.core.*;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -69,6 +68,10 @@ public class ZapService {
         }
 
         try {
+
+            zap.core.newSession(sessionName, "true");
+            zap.context.newContext(contextName);
+
             String sessionName = "scan-" + System.currentTimeMillis();
 //        zap.network.setConnectionTimeout("60");
             zap.core.setOptionTimeoutInSecs(60);
@@ -225,6 +228,9 @@ public class ZapService {
             throw new IllegalArgumentException("Invalid URL: " + apiUrl, e);
         }
 
+        zap.core.newSession(sessionName, "true");
+        zap.context.newContext(contextName);
+
         // 2. Import OpenAPI spec
         ApiResponse importResp = zap.callApi(
                 "openapi",
@@ -333,6 +339,27 @@ public class ZapService {
 
         // 3) Return a human-friendly message
         return "Active Scan [" + scanId + "] is " + pct + "% complete";
+    }
+
+    @Tool(
+            name        = "zap_stop_active_scan",
+            description = "Stop a running Active Scan by its scanId"
+    )
+    public String stopActiveScan(
+            @ToolParam(description = "The scanId returned by zap_active_scan") String scanId
+    ) throws Exception {
+        // This will abort the specified scan
+        zap.ascan.stop(scanId);
+        return "🛑 Stopped active scan with ID: " + scanId;
+    }
+
+    @Tool(
+            name        = "zap_stop_all_scans",
+            description = "Stop all running Active Scans in this ZAP session"
+    )
+    public String stopAllScans() throws Exception {
+        zap.ascan.stopAllScans();
+        return "🛑 All active scans have been stopped.";
     }
 
 }

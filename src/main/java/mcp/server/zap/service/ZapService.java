@@ -298,7 +298,7 @@ public class ZapService {
         zap.ascan.setOptionMaxScanDurationInMins(0);    // No duration limit
 //        zap.ascan.setOptionTimeoutInSecs(60);           // 60 seconds per rule
         zap.ascan.setOptionHostPerScan(0);              // No limit on hosts
-        zap.ascan.setOptionThreadPerHost(2);           // Parallel scanning
+        zap.ascan.setOptionThreadPerHost(10);           // Parallel scanning
         zap.ascan.setOptionDelayInMs(500);               // No delay between requests
 //        zap.selenium.setOptionBrowserWithoutProxyTimeout(60);  // Browser timeout
 

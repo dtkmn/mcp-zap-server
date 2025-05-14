@@ -43,55 +43,14 @@ public class ZapService {
     private final RestTemplate restTemplate;
 
     public ZapService(ClientApi zap,
-                      RestTemplate restTemplate) throws ClientApiException {
+                      RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
         this.zap = zap;
     }
 
-    @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")
-    public String startSpider(@ToolParam(description = "targetUrl") String targetUrl) throws Exception {
-        try {
-            new URL(targetUrl);
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("Invalid URL format: " + targetUrl);
-        }
-
-        try {
-
-            zap.core.newSession(sessionName, "true");
-            zap.context.newContext(contextName);
-
-            String sessionName = "scan-" + System.currentTimeMillis();
-//        zap.network.setConnectionTimeout("60");
-            zap.core.setOptionTimeoutInSecs(60);
-            zap.context.includeInContext(contextName, targetUrl + ".*");
-
-            // Force-fetch the root so it appears in the tree
-            zap.core.accessUrl(targetUrl, "true");
-            // Set spider options
-            zap.spider.setOptionThreadCount(5);  // Limits the spider to 5 thread for a slower crawl
-            ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
-            String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
-            return "Spider scan started with ID: " + scanId;
-        } catch (Exception e) {
-            log.error("Error launching ZAP Spider for URL {}: {}", targetUrl, e.getMessage(), e);
-            return "❌ Error launching spider: " + e.getMessage();
-        }
-    }
-
-    @Tool(name = "zap_spider_status", description = "Get status of a spider scan by ID")
-    public String getSpiderStatus(@ToolParam(description = "scanId") String scanId) throws Exception {
-        ApiResponse resp = zap.spider.status(scanId);
-        return ((org.zaproxy.clientapi.core.ApiResponseElement)resp).getValue();
-    }
 
     @Tool(name = "zap_alerts", description = "Retrieve alerts for the given base URL")
     public List<String> getAlerts(@ToolParam(description = "baseUrl") String baseUrl) throws Exception {
-//        ApiResponse resp = zap.core.alerts(baseUrl, null, null);
-//        return ((org.zaproxy.clientapi.core.ApiResponseList)resp).getItems().stream()
-//                .map(r -> ((org.zaproxy.clientapi.core.ApiResponseSet)r).getStringValue("alert"))
-//                .collect(Collectors.toList());
-        // Request all alerts for the site (start=0, count=-1 means all)
         String start = "0";
         String count = "-1";
         ApiResponseList resp = (ApiResponseList) zap.core.alerts(
@@ -208,7 +167,8 @@ public class ZapService {
         description = "Import an OpenAPI/Swagger spec by URL into ZAP and return the importId"
     )
     public String importOpenApiSpec(
-        @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl
+        @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl,
+        @ToolParam(description = "Host override for the API spec") String hostOverride
     ) throws Exception {
         // 1. Validate the URL
         try {
@@ -220,13 +180,7 @@ public class ZapService {
         zap.core.newSession(sessionName, "true");
         zap.context.newContext(contextName);
 
-        // 2. Import OpenAPI spec
-        ApiResponse importResp = zap.callApi(
-                "openapi",
-                "action",
-                "importUrl",
-                Map.of("url", apiUrl)
-        );
+        ApiResponse importResp =  zap.openapi.importUrl(apiUrl, hostOverride);
 
         List<String> importIds = new ArrayList<>();
         if (importResp instanceof ApiResponseList list) {
@@ -270,13 +224,6 @@ public class ZapService {
                 : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
     }
 
-    @Tool(
-            name        = "zap_stop_all_scans",
-            description = "Stop all running Active Scans in this ZAP session"
-    )
-    public String stopAllScans() throws Exception {
-        zap.ascan.stopAllScans();
-        return "🛑 All active scans have been stopped.";
-    }
+
 
 }

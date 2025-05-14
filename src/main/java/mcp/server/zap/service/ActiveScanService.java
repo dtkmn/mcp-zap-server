@@ -14,11 +14,11 @@ import org.zaproxy.clientapi.core.ClientApi;
  */
 @Slf4j
 @Service
-public class ZapActiveScanService {
+public class ActiveScanService {
 
     private final ClientApi zap;
 
-    public ZapActiveScanService(ClientApi zap) {
+    public ActiveScanService(ClientApi zap) {
         this.zap = zap;
     }
 
@@ -114,6 +114,21 @@ public class ZapActiveScanService {
         // This will abort the specified scan
         zap.ascan.stop(scanId);
         return "🛑 Stopped active scan with ID: " + scanId;
+    }
+
+
+    @Tool(
+            name        = "zap_stop_all_scans",
+            description = "Stop all running Active Scans in this ZAP session"
+    )
+    public String stopAllScans() throws Exception {
+        try {
+            zap.ascan.stopAllScans();
+            return "🛑 All active scans have been stopped.";
+        } catch (Exception e) {
+            log.error("Error stopping all active scans: {}", e.getMessage(), e);
+            return "❌ Error stopping all active scans: " + e.getMessage();
+        }
     }
 
 }

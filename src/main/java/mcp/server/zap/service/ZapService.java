@@ -9,7 +9,6 @@ import io.apicurio.datamodels.validation.ValidationProblem;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.zaproxy.clientapi.core.*;
@@ -17,8 +16,6 @@ import org.zaproxy.clientapi.core.*;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,12 +28,6 @@ public class ZapService {
     private final ClientApi zap;
     private final String contextName = "default-context";
     private final String sessionName = "default-session";
-
-    @Value("${zap.report.template:traditional-html-plus}")
-    private String reportTemplate;
-
-    @Value("${zap.report.directory:/zap/wrk}")
-    private String reportDirectory;
 
     private final ObjectMapper yamlMapper = new YAMLMapper();
 
@@ -68,37 +59,6 @@ public class ZapService {
         }
         return alerts;
 
-    }
-
-    @Tool(name="zap_get_html_report",
-            description="Generate the full session ZAP scan report in HTML format, return the path to the file")
-    public String getHtmlReport() throws Exception {
-        try {
-            ApiResponse raw = zap.reports.generate(
-                    "My ZAP Scan Report",          // title
-                    "traditional-html-plus",       // template ID
-                    "dark",                        // theme
-                    "",                            // description
-                    "",                            // contexts
-                    "",                            // sites
-                    "",                            // sections
-                    "",                            // includedConfidences
-                    "",                            // includedRisks
-                    "zap-report-" + System.currentTimeMillis() + ".html",
-                    "",                            // reportFileNamePattern
-                    reportDirectory,
-                    "false"                        // display=false means “don’t pop open a browser”
-            );
-            if (!(raw instanceof ApiResponseElement)) {
-                throw new IllegalStateException("Report generation failed: " + raw);
-            }
-            String fileName = ((ApiResponseElement) raw).getValue();
-            Path reportPath = Paths.get(fileName);
-            return reportPath.toString();
-        } catch (Exception e) {
-            log.error("Error generating ZAP report: {}", e.getMessage(), e);
-            return "❌ Error generating report: " + e.getMessage();
-        }
     }
 
     @Tool(
@@ -157,7 +117,7 @@ public class ZapService {
 
 
     @Tool(name="validate_openapi_spec_from_url",description="Validate a Swagger 2 or OpenAPI 3 spec (JSON or YAML) from a URL")
-    public String validateSpecFromUrl(@ToolParam(description = "URL of API spec") String url) throws Exception {
+    public String validateSpecFromUrl(@ToolParam(description = "URL of API spec") String url) {
         String raw = restTemplate.getForObject(url, String.class);
         return validateOpenApiSpec(raw);
     }
@@ -174,7 +134,8 @@ public class ZapService {
         try {
             new URL(apiUrl);
         } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("Invalid URL: " + apiUrl, e);
+            log.error("Invalid URL: {}", apiUrl, e);
+            return "❌ Invalid URL: " + apiUrl;
         }
 
         zap.core.newSession(sessionName, "true");

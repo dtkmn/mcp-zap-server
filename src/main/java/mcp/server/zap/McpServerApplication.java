@@ -1,5 +1,6 @@
 package mcp.server.zap;
 
+import mcp.server.zap.service.ZapActiveScanService;
 import mcp.server.zap.service.ZapService;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbacks;
@@ -17,8 +18,9 @@ public class McpServerApplication {
     }
 
     @Bean
-    public List<ToolCallback> toolCallbacks(ZapService zapService) {
-        return List.of(ToolCallbacks.from(zapService));
+    public List<ToolCallback> toolCallbacks(ZapService zapService,
+                                            ZapActiveScanService zapActiveScanService) {
+        return List.of(ToolCallbacks.from(zapService, zapActiveScanService));
     }
 
     @Bean

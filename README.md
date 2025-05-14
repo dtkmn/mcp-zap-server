@@ -171,7 +171,7 @@ docker-compose down
           "-Dspring.main.web-application-type=none",
           "-Dlogging.pattern.console=",
           "-jar",
-          "/PROJECT_PATH/mcp-zap-server/build/libs/mcp-zap-server-0.0.1-SNAPSHOT.jar"
+          "/PROJECT_PATH/mcp-zap-server/build/libs/mcp-zap-server-0.1.0-SNAPSHOT.jar"
         ]
     }
   }

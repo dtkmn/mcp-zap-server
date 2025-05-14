@@ -31,7 +31,6 @@ public class ZapService {
     private final ClientApi zap;
     private final String contextName = "default-context";
     private final String sessionName = "default-session";
-//    private final String contextId;
 
     @Value("${zap.report.template:traditional-html-plus}")
     private String reportTemplate;
@@ -43,20 +42,10 @@ public class ZapService {
 
     private final RestTemplate restTemplate;
 
-    public ZapService(
-            @Value("${zap.server.url:localhost}") String zapApiUrl,
-            @Value("${zap.server.port:8090}") int zapApiPort,
-            @Value("${zap.server.apiKey:}") String zapApiKey,
-            RestTemplate restTemplate
-    ) throws ClientApiException {
+    public ZapService(ClientApi zap,
+                      RestTemplate restTemplate) throws ClientApiException {
         this.restTemplate = restTemplate;
-        // Initialize ZAP client
-        this.zap = new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
-
-        zap.core.newSession(sessionName, "true");
-
-        zap.context.newContext(contextName);
-
+        this.zap = zap;
     }
 
     @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")
@@ -279,78 +268,6 @@ public class ZapService {
         return importIds.isEmpty()
                 ? "Import completed synchronously and is ready to scan."
                 : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
-    }
-
-    // ─── Active Scan ─────────────────────────────────────────────────────────────
-    @Tool(
-            name        = "zap_active_scan",
-            description = "Start an active scan against the given URL and return the scanId"
-    )
-    public String activeScan(
-            @ToolParam(description = "Target URL to scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (true/false)") String recurse,
-            @ToolParam(description = "Scan policy name (e.g. Default Policy, API Policy)") String policy
-    ) throws Exception {
-        // Configure active scanner
-        zap.ascan.enableAllScanners(null);  // Enable all scanners
-        
-        // Configure global timeouts and scan settings
-        zap.ascan.setOptionMaxScanDurationInMins(0);    // No duration limit
-//        zap.ascan.setOptionTimeoutInSecs(60);           // 60 seconds per rule
-        zap.ascan.setOptionHostPerScan(0);              // No limit on hosts
-        zap.ascan.setOptionThreadPerHost(10);           // Parallel scanning
-        zap.ascan.setOptionDelayInMs(500);               // No delay between requests
-//        zap.selenium.setOptionBrowserWithoutProxyTimeout(60);  // Browser timeout
-
-        ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scan(
-               targetUrl,
-               recurse,
-               "false",
-               policy,   // policy name
-               null,   // method
-               null    // postData
-        );
-
-        if (!(scanResp instanceof ApiResponseElement)) {
-            throw new IllegalStateException("Failed to start scan on " + targetUrl + ": " + scanResp);
-        }
-
-        String scanId = ((ApiResponseElement) scanResp).getValue();
-        log.info("Started active scan with ID {} on {}", scanId, targetUrl);
-
-        return "Active scan started with ID: " + scanId;
-    }
-
-    @Tool(
-            name        = "zap_active_scan_status",
-            description = "Get the current progress (0–100%) of a ZAP Active Scan job"
-    )
-    public String getActiveScanStatus(
-            @ToolParam(description = "The scan ID returned when you started the Active Scan") String scanId
-    ) throws Exception {
-        // 1) Call the typed status wrapper
-        ApiResponse resp = zap.ascan.status(scanId);
-
-        // 2) Validate & extract
-        if (!(resp instanceof ApiResponseElement)) {
-            throw new IllegalStateException("Unexpected response from ascan.status(): " + resp);
-        }
-        String pct = ((ApiResponseElement) resp).getValue();
-
-        // 3) Return a human-friendly message
-        return "Active Scan [" + scanId + "] is " + pct + "% complete";
-    }
-
-    @Tool(
-            name        = "zap_stop_active_scan",
-            description = "Stop a running Active Scan by its scanId"
-    )
-    public String stopActiveScan(
-            @ToolParam(description = "The scanId returned by zap_active_scan") String scanId
-    ) throws Exception {
-        // This will abort the specified scan
-        zap.ascan.stop(scanId);
-        return "🛑 Stopped active scan with ID: " + scanId;
     }
 
     @Tool(

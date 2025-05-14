@@ -10,6 +10,10 @@ import org.zaproxy.clientapi.core.ClientApi;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+/**
+ * Service for managing ZAP Spider Scans.
+ * This service provides methods to start and check the status of spider scans using the ZAP API.
+ */
 @Slf4j
 @Service
 public class SpiderScanService {

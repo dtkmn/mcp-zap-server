@@ -63,7 +63,7 @@ public class ReportService {
      * @param sites         The sites to include in the report (comma-separated)
      * @return The path to the generated report file
      */
-    @Tool(name="zap_get_html_report",
+    @Tool(name="zap_generate_report",
             description="Generate the full session ZAP scan report in HTML format, return the path to the file")
     public String getHtmlReport(
             @ToolParam(description = "The report template to use (eg. modern/traditional-html-plus/traditional-json-plus)") String reportTemplate,

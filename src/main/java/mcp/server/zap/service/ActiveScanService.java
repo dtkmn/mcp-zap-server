@@ -60,11 +60,11 @@ public class ActiveScanService {
                 null    // postData
         );
 
-        if (!(scanResp instanceof ApiResponseElement)) {
+        if (scanResp == null) {
             throw new IllegalStateException("Failed to start scan on " + targetUrl + ": " + scanResp);
         }
 
-        String scanId = ((ApiResponseElement) scanResp).getValue();
+        String scanId = scanResp.getValue();
         log.info("Started active scan with ID {} on {}", scanId, targetUrl);
 
         return "Active scan started with ID: " + scanId;

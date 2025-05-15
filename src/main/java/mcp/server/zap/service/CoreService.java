@@ -41,4 +41,34 @@ public class CoreService {
         return alerts;
     }
 
+    @Tool(name = "zap_hosts", description = "Retrieve the list of hosts accessed through/by ZAP")
+    public List<String> getHosts() throws Exception {
+        ApiResponseList resp = (ApiResponseList) zap.core.hosts();
+        List<String> hosts = new ArrayList<>();
+        for (ApiResponse item : resp.getItems()) {
+            hosts.add(((ApiResponseElement) item).getValue());
+        }
+        return hosts;
+    }
+
+    @Tool(name = "zap_sites", description = "Retrieve the list of sites accessed through/by ZAP")
+    public List<String> getSites() throws Exception {
+        ApiResponseList resp = (ApiResponseList) zap.core.sites();
+        List<String> sites = new ArrayList<>();
+        for (ApiResponse item : resp.getItems()) {
+            sites.add(((ApiResponseElement) item).getValue());
+        }
+        return sites;
+    }
+
+    @Tool(name = "zap_urls", description = "Retrieve the list of URLs accessed through/by ZAP, optionally filtered by base URL")
+    public List<String> getUrls(@ToolParam(description = "Base URL to filter (optional)") String baseUrl) throws Exception {
+        ApiResponseList resp = (ApiResponseList) zap.core.urls(baseUrl != null ? baseUrl : "");
+        List<String> urls = new ArrayList<>();
+        for (ApiResponse item : resp.getItems()) {
+            urls.add(((ApiResponseElement) item).getValue());
+        }
+        return urls;
+    }
+
 }

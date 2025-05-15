@@ -17,12 +17,12 @@ public class McpServerApplication {
     }
 
     @Bean
-    public List<ToolCallback> toolCallbacks(ZapService zapService,
+    public List<ToolCallback> toolCallbacks(CoreService coreService,
                                             ActiveScanService activeScanService,
                                             SpiderScanService spiderScanService,
                                             OpenApiService openApiService,
                                             ReportService reportService) {
-        return List.of(ToolCallbacks.from(zapService, activeScanService, spiderScanService, openApiService, reportService));
+        return List.of(ToolCallbacks.from(coreService, activeScanService, spiderScanService, openApiService, reportService));
     }
 
     @Bean

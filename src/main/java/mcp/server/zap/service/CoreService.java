@@ -11,13 +11,13 @@ import java.util.List;
 
 @Slf4j
 @Service
-public class ZapService {
+public class CoreService {
 
     private final ClientApi zap;
     private final String contextName = "default-context";
     private final String sessionName = "default-session";
 
-    public ZapService(ClientApi zap) {
+    public CoreService(ClientApi zap) {
         this.zap = zap;
     }
 

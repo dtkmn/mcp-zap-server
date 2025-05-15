@@ -117,11 +117,16 @@ public class ActiveScanService {
     }
 
 
+    /**
+     * Stop all running Active Scans in this ZAP session.
+     *
+     * @return Confirmation message
+     */
     @Tool(
             name        = "zap_stop_all_scans",
             description = "Stop all running Active Scans in this ZAP session"
     )
-    public String stopAllScans() throws Exception {
+    public String stopAllScans() {
         try {
             zap.ascan.stopAllScans();
             return "🛑 All active scans have been stopped.";

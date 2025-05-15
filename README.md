@@ -72,15 +72,15 @@ cd mcp-zap-server
 export LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace # or any other folder you want to use as ZAP's workspace
 docker-compose up -d
 ```
-![Docker-Compose](./mcp-zap-server-docker-compose.png)
+![Docker-Compose](./images/mcp-zap-server-docker-compose.png)
 
 Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
 
 ### Set Up Custom OpenAI / Ollama API Connection
-![Admin-Panel-Open-WebUI](./Admin-Panel-Open-WebUI.png)
+![Admin-Panel-Open-WebUI](./images/Admin-Panel-Open-WebUI.png)
 
 ### Set Up MCP Servers Connection
-![MCP-Tools-Config-Open-WebUI](./MCP-Tools-Config-Open-WebUI.png)
+![MCP-Tools-Config-Open-WebUI](./images/MCP-Tools-Config-Open-WebUI.png)
 
 Once it is done, you can check the [Prompt Examples](#prompt-examples) section to see how to use the MCP ZAP server with your AI agent.
 

@@ -19,8 +19,6 @@ import java.util.List;
 public class OpenApiService {
 
     private final ClientApi zap;
-    private final String contextName = "default-context";
-    private final String sessionName = "default-session";
 
     public OpenApiService(ClientApi zap) {
         this.zap = zap;
@@ -49,9 +47,6 @@ public class OpenApiService {
             return "❌ Invalid URL: " + apiUrl;
         }
 
-        zap.core.newSession(sessionName, "true");
-        zap.context.newContext(contextName);
-
         ApiResponse importResp =  zap.openapi.importUrl(apiUrl, hostOverride);
 
         List<String> importIds = new ArrayList<>();
@@ -69,6 +64,13 @@ public class OpenApiService {
     }
 
 
+    /**
+     * Import an OpenAPI/Swagger spec from a local file into ZAP and return the importId.
+     *
+     * @param filePath     The path to the OpenAPI/Swagger spec file (JSON or YAML)
+     * @param hostOverride Optional host override for the API spec
+     * @return A message indicating the import status
+     */
     @Tool(
             name = "zap_import_openapi_spec_file",
             description = "Import an OpenAPI/Swagger spec (JSON or YAML) from a local file into ZAP and return the importId"
@@ -78,8 +80,6 @@ public class OpenApiService {
             @ToolParam(description = "Host override for the API spec") String hostOverride
     ) {
         try {
-            zap.core.newSession(sessionName, "true");
-            zap.context.newContext(contextName);
 
             ApiResponse importResp = zap.openapi.importFile(filePath, hostOverride);
 

@@ -42,9 +42,6 @@ public class SpiderScanService {
 
         try {
 
-            zap.core.newSession(sessionName, "true");
-            zap.context.newContext(contextName);
-
             String sessionName = "scan-" + System.currentTimeMillis();
 //        zap.network.setConnectionTimeout("60");
             zap.core.setOptionTimeoutInSecs(60);

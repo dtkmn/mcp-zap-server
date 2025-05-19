@@ -19,8 +19,6 @@ import java.net.URL;
 public class SpiderScanService {
 
     private final ClientApi zap;
-    private final String contextName = "default-context";
-    private final String sessionName = "default-session";
 
     public SpiderScanService(ClientApi zap) {
         this.zap = zap;
@@ -45,12 +43,10 @@ public class SpiderScanService {
             String sessionName = "scan-" + System.currentTimeMillis();
 //        zap.network.setConnectionTimeout("60");
             zap.core.setOptionTimeoutInSecs(60);
-            zap.context.includeInContext(contextName, targetUrl + ".*");
-
             // Force-fetch the root so it appears in the tree
             zap.core.accessUrl(targetUrl, "true");
             // Set spider options
-            zap.spider.setOptionThreadCount(5);  // Limits the spider to 5 thread for a slower crawl
+            zap.spider.setOptionThreadCount(5); // Number of threads
             ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
             String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
             return "Spider scan started with ID: " + scanId;

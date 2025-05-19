@@ -157,7 +157,7 @@ docker-compose down
 ./gradlew clean build
 ```
 
-### Usage with Claude Desktop, Cursor, Windsurf or any MCP‑compatible AI agent
+### Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent
 
 #### STDIO mode
 

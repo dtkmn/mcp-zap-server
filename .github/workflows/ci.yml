@@ -1,10 +1,10 @@
-name: Building zap-mcp-server image
+name: For build/test/docker on all branches
 env:
   DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
   IMAGE_NAME: mcp-zap-server
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 jobs:
   build:
@@ -25,7 +25,7 @@ jobs:
         settings-path: ${{ github.workspace }} # location for the settings.xml file
 
     - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
+      uses: gradle/actions/setup-gradle@v4
 
     - name: Build with Gradle
       run: ./gradlew build --scan

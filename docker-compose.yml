@@ -78,7 +78,7 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:${LOCAL_ZAP_WORKPLACE_FOLDER}
 
   mcp-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:a91e674
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.1.0
     restart: always
     depends_on:
       zap:

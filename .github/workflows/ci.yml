@@ -4,7 +4,7 @@ env:
   IMAGE_NAME: mcp-zap-server
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
 
 jobs:
   build:

@@ -2,7 +2,6 @@
 .git
 
 # Build outputs
-build/
 .gradle/
 
 # IDE configuration

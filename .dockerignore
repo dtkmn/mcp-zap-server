@@ -1,0 +1,17 @@
+# Ignore version control system files
+.git
+
+# Build outputs
+.gradle/
+
+# IDE configuration
+.idea/
+.vscode/
+*.iml
+
+# Documentation and other resources
+docs/
+images/
+
+# Miscellaneous system files
+.DS_Store

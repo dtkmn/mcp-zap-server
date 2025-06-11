@@ -9,8 +9,9 @@ services:
       - 0.0.0.0
       - -port
       - "8090"
+      # -config api.disablekey=true # Removed to enable API key
       - -config
-      - api.disablekey=true
+      - api.key=${ZAP_API_KEY_CONFIGURED} # Use the configured API key
       - -config
       - api.addrs.addr.name=.*
       - -config
@@ -18,7 +19,8 @@ services:
     ports:
       - "8090:8090"
     environment:
-      ZAP_API_KEY: ""
+      # ZAP_API_KEY: "" # This was for mcp-server, now mcp-server will use ZAP_API_KEY directly from .env or host
+      ZAP_API_KEY_CONFIGURED: ${ZAP_API_KEY_VALUE:-} # ZAP itself will use this key. Defaults to empty if not set, but README will instruct to set ZAP_API_KEY_VALUE.
       ZAP_MEMORY: "4G"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/JSON/core/view/version/"]
@@ -88,6 +90,7 @@ services:
     environment:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
+      ZAP_API_KEY: ${ZAP_API_KEY_VALUE:-} # mcp-server uses this to connect to ZAP. It should be the same as ZAP_API_KEY_CONFIGURED.
     healthcheck:
       test: [ "CMD-SHELL", "nc -zv localhost 7456"]
       interval: 10s

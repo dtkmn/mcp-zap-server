@@ -1,0 +1,14 @@
+# Gradle build output
+/build/
+.gradle/
+
+# Java class files
+*.class
+
+# IDE directories
+.idea/
+.vscode/
+*.iml
+
+# Misc
+.DS_Store

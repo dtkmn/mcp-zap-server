@@ -2,8 +2,9 @@ spring:
   ai:
     mcp:
       server:
-        name: security-testing-mcp-server
-        version: 0.0.2
+        name: mcp-zap-server
+        version: 0.1.1
+        instructions: "Use this server to interact with the ZAP API for security testing."
 
 logging:
   level:

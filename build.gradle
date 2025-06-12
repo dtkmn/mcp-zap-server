@@ -31,7 +31,6 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
-    implementation 'io.apicurio:apicurio-data-models:2.2.2'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -7,6 +7,9 @@ on:
 jobs:
   docker-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +25,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build with Gradle
-        run: ./gradlew build --scan
+        run: ./gradlew build --scan --no-daemon --stacktrace --info
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v2

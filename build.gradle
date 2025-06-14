@@ -1,11 +1,11 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.4.4'
+    id 'org.springframework.boot' version '3.5.0'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'mcp.server.zap'
-version = '0.1.1'
+version = '0.2.0-SNAPSHOT'
 
 java {
     toolchain {
@@ -24,14 +24,13 @@ repositories {
 }
 
 ext {
-    set('springAiVersion', "1.0.0-M8")
+    set('springAiVersion', "1.0.0")
 }
 
 dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
-    implementation 'io.apicurio:apicurio-data-models:2.2.2'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

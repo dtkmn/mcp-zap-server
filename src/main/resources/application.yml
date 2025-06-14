@@ -3,17 +3,22 @@ spring:
     mcp:
       server:
         name: mcp-zap-server
-        version: 0.1.1
+        version: 0.2.0
         instructions: "Use this server to interact with the ZAP API for security testing."
 
 logging:
   level:
-    mcp.server.zap.service.ZapService: DEBUG
+    mcp.server.zap.service: DEBUG
 server:
   port: 7456
 
 
 zap:
+  scan:
+    active:
+      enableAllScanners: true # Enable all scanners for active scanning
+      # enabledScannersPolicy: "Default Policy" # Use the default policy for enabled scanners
+      # enabledScannersIds: "400012,40014" # List of enabled scanners by their IDs
   server:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}

@@ -28,7 +28,7 @@ jobs:
       uses: gradle/actions/setup-gradle@v4
 
     - name: Build with Gradle
-      run: ./gradlew build --scan
+      run: ./gradlew build --scan --no-daemon --stacktrace --info
 
     - name: Get short SHA from long commit SHA for image tagging
       id: build-tag

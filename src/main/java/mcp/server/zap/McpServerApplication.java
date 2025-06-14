@@ -18,7 +18,7 @@ public class McpServerApplication {
     }
 
     @Bean
-    public ToolCallbackProvider toolCallbacks(CoreService coreService,
+    public ToolCallbackProvider toolCallbackProvider(CoreService coreService,
                                              ActiveScanService activeScanService,
                                              SpiderScanService spiderScanService,
                                              OpenApiService openApiService,

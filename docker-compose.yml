@@ -101,13 +101,13 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 
   juice-shop:
-    image: bkimminich/juice-shop
+    image: bkimminich/juice-shop:v17.3.0
     restart: always
     ports:
       - "3001:3000"
 
   petstore:
-    image: swaggerapi/petstore3:unstable
+    image: swaggerapi/petstore3:1.0.26
     restart: always
     ports:
       - "3002:8080"

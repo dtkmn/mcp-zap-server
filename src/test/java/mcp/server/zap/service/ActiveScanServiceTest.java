@@ -1,22 +1,29 @@
 package mcp.server.zap.service;
 
+import mcp.server.zap.exception.ZapApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Ascan;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class ActiveScanServiceTest {
-    private ClientApi clientApi;
     private Ascan ascan;
     private ActiveScanService service;
 
     @BeforeEach
     void setup() {
-        clientApi = new ClientApi("localhost", 0);
+        ClientApi clientApi = new ClientApi("localhost", 0);
         ascan = mock(Ascan.class);
         clientApi.ascan = ascan;
         service = new ActiveScanService(clientApi);
@@ -56,8 +63,7 @@ public class ActiveScanServiceTest {
 
     @Test
     void stopAllScansHandlesException() throws Exception {
-        doThrow(new RuntimeException("boom")).when(ascan).stopAllScans();
-        String msg = service.stopAllScans();
-        assertTrue(msg.contains("boom"));
+        doThrow(new ClientApiException("boom", null)).when(ascan).stopAllScans();
+        assertThrowsExactly(ZapApiException.class, () -> service.stopAllScans());
     }
 }

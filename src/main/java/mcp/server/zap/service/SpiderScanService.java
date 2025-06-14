@@ -1,11 +1,13 @@
 package mcp.server.zap.service;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.exception.ZapApiException;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -39,7 +41,6 @@ public class SpiderScanService {
         }
 
         try {
-
             String sessionName = "scan-" + System.currentTimeMillis();
 //        zap.network.setConnectionTimeout("60");
             zap.core.setOptionTimeoutInSecs(60);
@@ -50,9 +51,9 @@ public class SpiderScanService {
             ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
             String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
             return "Spider scan started with ID: " + scanId;
-        } catch (Exception e) {
+        } catch (ClientApiException e) {
             log.error("Error launching ZAP Spider for URL {}: {}", targetUrl, e.getMessage(), e);
-            return "❌ Error launching spider: " + e.getMessage();
+            throw new ZapApiException("Error launching ZAP Spider for URL " + targetUrl, e);
         }
     }
 
@@ -67,9 +68,9 @@ public class SpiderScanService {
         try {
             ApiResponse resp = zap.spider.status(scanId);
             return ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
-        } catch (Exception e) {
+        } catch (ClientApiException e) {
             log.error("Error retrieving spider status for ID {}: {}", scanId, e.getMessage(), e);
-            return "❌ Error retrieving spider status: " + e.getMessage();
+            throw new ZapApiException("Error retrieving spider status for ID " + scanId, e);
         }
     }
 

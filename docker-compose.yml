@@ -91,12 +91,6 @@ services:
     environment:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
-    healthcheck:
-      test: [ "CMD-SHELL", "nc -zv localhost 7456"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 

@@ -7,20 +7,22 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Spider;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class SpiderScanServiceTest {
-    private ClientApi clientApi;
     private Spider spider;
-    private Core core;
     private SpiderScanService service;
 
     @BeforeEach
     void setup() {
-        clientApi = new ClientApi("localhost", 0);
+        ClientApi clientApi = new ClientApi("localhost", 0);
         spider = mock(Spider.class);
-        core = mock(Core.class);
+        Core core = mock(Core.class);
         clientApi.spider = spider;
         clientApi.core = core;
         service = new SpiderScanService(clientApi);

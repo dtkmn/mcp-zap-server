@@ -1,13 +1,11 @@
 package mcp.server.zap.service;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.exception.ZapApiException;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.*;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -30,7 +28,6 @@ public class OpenApiService {
      * @param apiUrl       The OpenAPI/Swagger spec URL (JSON or YAML)
      * @param hostOverride Optional host override for the API spec
      * @return A message indicating the import status
-     * @throws Exception If an error occurs during the import process
      */
     @Tool(
             name        = "zap_import_openapi_spec_url",
@@ -39,28 +36,31 @@ public class OpenApiService {
     public String importOpenApiSpec(
             @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl,
             @ToolParam(description = "Host override for the API spec") String hostOverride
-    ) throws Exception {
+    ) {
         try {
             new URL(apiUrl);
         } catch (MalformedURLException e) {
-            log.error("Invalid URL: {}", apiUrl, e);
-            return "❌ Invalid URL: " + apiUrl;
+            log.error("Invalid OpenAPI/Swagger spec URL: {}", apiUrl, e);
+            throw new IllegalArgumentException("Invalid URL: " + apiUrl);
         }
 
-        ApiResponse importResp =  zap.openapi.importUrl(apiUrl, hostOverride);
-
-        List<String> importIds = new ArrayList<>();
-        if (importResp instanceof ApiResponseList list) {
-            for (ApiResponse item : list.getItems()) {
-                if (item instanceof ApiResponseElement elt) {
-                    importIds.add(elt.getValue());
+        try {
+            ApiResponse importResp = zap.openapi.importUrl(apiUrl, hostOverride);
+            List<String> importIds = new ArrayList<>();
+            if (importResp instanceof ApiResponseList list) {
+                for (ApiResponse item : list.getItems()) {
+                    if (item instanceof ApiResponseElement elt) {
+                        importIds.add(elt.getValue());
+                    }
                 }
             }
+            return importIds.isEmpty()
+                    ? "Import completed synchronously and is ready to scan."
+                    : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
+        } catch (ClientApiException e) {
+            log.error("Failed to retrieve URLs for base URL: {}: {}", apiUrl, e.getMessage(), e);
+            throw new ZapApiException("Failed to retrieve URLs", e);
         }
-
-        return importIds.isEmpty()
-                ? "Import completed synchronously and is ready to scan."
-                : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
     }
 
 
@@ -80,9 +80,7 @@ public class OpenApiService {
             @ToolParam(description = "Host override for the API spec") String hostOverride
     ) {
         try {
-
             ApiResponse importResp = zap.openapi.importFile(filePath, hostOverride);
-
             List<String> importIds = new ArrayList<>();
             if (importResp instanceof ApiResponseList list) {
                 for (ApiResponse item : list.getItems()) {
@@ -91,13 +89,12 @@ public class OpenApiService {
                     }
                 }
             }
-
             return importIds.isEmpty()
                     ? "Import completed synchronously and is ready to scan."
                     : "Import completed asynchronously (jobs: " + String.join(",", importIds) + ") and is ready to scan.";
-        } catch (Exception e) {
+        } catch (ClientApiException e) {
             log.error("Error importing OpenAPI spec file: {}", e.getMessage(), e);
-            return "❌ Error importing OpenAPI spec file: " + e.getMessage();
+            throw new ZapApiException("Error importing OpenAPI/Swagger spec file", e);
         }
     }
 

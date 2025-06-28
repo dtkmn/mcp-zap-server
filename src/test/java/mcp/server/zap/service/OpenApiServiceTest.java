@@ -1,14 +1,18 @@
 package mcp.server.zap.service;
 
+import mcp.server.zap.exception.ZapApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Openapi;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class OpenApiServiceTest {
     private ClientApi clientApi;
@@ -35,14 +39,14 @@ public class OpenApiServiceTest {
 
     @Test
     void importOpenApiSpecInvalidUrl() throws Exception {
-        String result = service.importOpenApiSpec("bad-url", "");
-        assertTrue(result.startsWith("❌ Invalid URL"));
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.importOpenApiSpec("bad-url",
+            "host"));
     }
 
     @Test
     void importOpenApiSpecFileHandlesException() throws Exception {
-        when(openapi.importFile("/tmp/api.yaml", "host")).thenThrow(new RuntimeException("oops"));
-        String result = service.importOpenApiSpecFile("/tmp/api.yaml", "host");
-        assertTrue(result.contains("oops"));
+        when(openapi.importFile("/tmp/api.yaml", "host")).thenThrow(new ClientApiException("oops"));
+        assertThrowsExactly(ZapApiException.class, () -> service.importOpenApiSpecFile("/tmp/api.yaml",
+            "host"));
     }
 }

@@ -1,14 +1,12 @@
 package mcp.server.zap.service;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.exception.ZapApiException;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.*;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -48,9 +46,9 @@ public class ReportService {
                 sb.append(item.toString()).append("\n");
             }
             return sb.toString().trim();
-        } catch (Exception e) {
+        } catch (ClientApiException e) {
             log.error("Error getting report templates: {}", e.getMessage(), e);
-            return "❌ Error getting report templates: " + e.getMessage();
+            throw new ZapApiException("Error getting report templates: " + e.getMessage(), e);
         }
     }
 
@@ -92,9 +90,9 @@ public class ReportService {
             String fileName = ((ApiResponseElement) raw).getValue();
             Path reportPath = Paths.get(fileName);
             return reportPath.toString();
-        } catch (Exception e) {
+        } catch (ClientApiException e) {
             log.error("Error generating ZAP report: {}", e.getMessage(), e);
-            return "❌ Error generating report: " + e.getMessage();
+            throw new ZapApiException("Error generating ZAP report: " + e.getMessage(), e);
         }
     }
 

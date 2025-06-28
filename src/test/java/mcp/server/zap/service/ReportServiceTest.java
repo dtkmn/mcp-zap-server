@@ -8,17 +8,19 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.gen.Reports;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ReportServiceTest {
-    private ClientApi clientApi;
     private Reports reports;
     private ReportService service;
 
     @BeforeEach
     void setup() {
-        clientApi = new ClientApi("localhost", 0);
+        ClientApi clientApi = new ClientApi("localhost", 0);
         reports = mock(Reports.class);
         clientApi.reports = reports;
         service = new ReportService(clientApi);

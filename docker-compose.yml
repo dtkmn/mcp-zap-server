@@ -81,7 +81,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/dtkmn/mcp-zap-server:v0.2.0-SNAPSHOT
+    image: mcp-zap-server:latest
     restart: always
     depends_on:
       zap:

@@ -1,5 +1,5 @@
 # Build stage
-FROM gradle:8.14.2-jdk21 as builder
+FROM gradle:8.14.3-jdk21 as builder
 WORKDIR /usr/src/app
 COPY src ./src
 COPY build.gradle .

@@ -3,7 +3,7 @@ spring:
     mcp:
       server:
         name: mcp-zap-server
-        version: 0.2.0
+        version: 0.2.1-SNAPSHOT
         instructions: "Use this server to interact with the ZAP API for security testing."
 
 logging:

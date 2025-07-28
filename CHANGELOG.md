@@ -5,11 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+
+## [0.2.0] – 2025-06-27
 
 ### Added
 
+- Dependabot configuration for automated dependency updates.
+- Custom `ZapApiException` for ZAP API related errors.
 
+### Changed
+
+- Updated CI/CD workflows for improved automation.
+- Modified Dockerfile and Docker Compose configurations.
+- Updated Gradle build configuration and wrapper version.
+- Refinements to the main application class (`McpServerApplication.java`).
+- Adjusted application properties in `application.yml`.
+
+## [0.1.1] – 2025-06-11
+
+### Added
+
+- Initial project configuration files (`.dockerignore`, `.gitignore`, `SECURITY.md`).
+- Basic application test class (`McpServerApplicationTests.java`).
+
+### Changed
+
+- Updated CI/CD workflows.
+- Updated Docker Compose configuration.
 
 ## [0.1.0] – 2025-05-27
 

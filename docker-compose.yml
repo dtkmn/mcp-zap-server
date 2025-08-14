@@ -10,7 +10,7 @@ services:
       - -port
       - "8090"
       - -config
-      - api.disablekey=true
+      - api.key=${ZAP_API_KEY}
       - -config
       - api.addrs.addr.name=.*
       - -config
@@ -18,7 +18,7 @@ services:
     ports:
       - "8090:8090"
     environment:
-      ZAP_API_KEY: ""
+      ZAP_API_KEY: "my-api-key"
       ZAP_MEMORY: "4G"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/JSON/core/view/version/"]
@@ -91,6 +91,7 @@ services:
     environment:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
+      ZAP_API_KEY: my-api-key
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 

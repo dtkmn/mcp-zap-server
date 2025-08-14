@@ -22,7 +22,7 @@ zap:
   server:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}
-    apiKey: ${ZAP_API_KEY:}
+    apiKey: ${ZAP_API_KEY}
 
 management:
   endpoints:

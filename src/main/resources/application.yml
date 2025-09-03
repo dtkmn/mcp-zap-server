@@ -5,6 +5,13 @@ spring:
         name: mcp-zap-server
         version: 0.2.1-SNAPSHOT
         instructions: "Use this server to interact with the ZAP API for security testing."
+        protocol: streamable
+        resource-change-notification: true
+        tool-change-notification: true
+        prompt-change-notification: true
+        streamable-http:
+          keep-alive-interval: 30s
+        type: async
 
 logging:
   level:

@@ -55,9 +55,9 @@ services:
       - --port
       - "9090"
       - --server-type
-      - "sse"
+      - "streamable-http"
       - --
-      - "http://mcp-server:7456/sse"
+      - "http://mcp-server:7456/mcp"
 
   mcpo-filesystem:
     image: ghcr.io/open-webui/mcpo:main

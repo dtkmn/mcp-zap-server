@@ -12,7 +12,7 @@ public class ZapApiConfig {
     public ClientApi zapClientApi(
             @Value("${zap.server.url:localhost}") String zapApiUrl,
             @Value("${zap.server.port:8090}") int zapApiPort,
-            @Value("${zap.server.apiKey:}") String zapApiKey
+            @Value("${zap.server.apiKey}") String zapApiKey
     ) {
         return new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
     }

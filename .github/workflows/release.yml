@@ -48,4 +48,6 @@ jobs:
           file: Dockerfile
           push: true
           platforms: linux/amd64, linux/arm64
-          tags: ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
+            ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:${{ steps.build-tag.outputs.build_number }}

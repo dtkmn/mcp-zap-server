@@ -45,6 +45,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GHCR_PAT }}
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Build and push mcp-zap-server image to registry
       if: github.actor != 'dependabot[bot]'
       uses: docker/build-push-action@v6

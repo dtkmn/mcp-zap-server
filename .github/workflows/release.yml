@@ -11,10 +11,10 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -28,7 +28,7 @@ jobs:
         run: ./gradlew build --scan --no-daemon --stacktrace --info
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -39,11 +39,10 @@ jobs:
         run: echo "version=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
 
       - name: Build and push mcp-zap-server image to registry
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           push: true
+          platforms: linux/amd64, linux/arm64
           tags: ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
-
-

@@ -21,7 +21,7 @@ services:
       ZAP_API_KEY: "my-api-key"
       ZAP_MEMORY: "4G"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/JSON/core/view/version/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8090/"]
       interval: 30s
       timeout: 10s
       retries: 3

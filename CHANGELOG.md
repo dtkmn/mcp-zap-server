@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated healthcheck command in `docker-compose.yml` for the `zap` service.
 - Updated various GitHub Actions to newer versions in build and release workflows.
 - Enabled multi-platform Docker builds for `linux/amd64` and `linux/arm64`.
-- Upgraded Gradle from 8.12 to 9.1.0.
+- Upgraded Gradle from 8.14.2 to 9.1.0.
 - Upgraded Spring Boot from 3.5.3 to 3.5.7.
 - Switched from `spring-ai-starter-mcp-server-webmvc` to `spring-ai-starter-mcp-server-webflux`.
 - Updated ZAP API key configuration to be mandatory.

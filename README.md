@@ -24,8 +24,7 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 - [Services Overview](#services-overview)
 - [Manual build](#manual-build)
 - [Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent](#usage-with-claude-desktop-cursor-windsurf-or-any-mcp-compatible-ai-agent)
-  - [STDIO mode](#stdio-mode)
-  - [SSE mode](#sse-mode)
+  - [Streamable HTTP mode](#streamable-http-mode)
 - [Prompt Examples](#prompt-examples)
 
 
@@ -49,7 +48,7 @@ flowchart LR
     Petstore["Swagger Petstore Server"]
   end
 
-  MCPZAP <-->|HTTP/SSE + MCPO| Client
+  MCPZAP <-->|HTTP/Streamable + MCPO| Client
   MCPFile <-->|STDIO + MCPO| Client
   MCPZAP -->|ZAP REST API| ZAP
   ZAP -->|scan, alerts, reports| MCPZAP
@@ -98,7 +97,7 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
 - **Image:** zaproxy/zap-stable
 - **Purpose:** Runs the OWASP ZAP daemon on port 8090.
 - **Configuration:**
-    - Disables the API key.
+    - Requires an API key for security, configured via the `ZAP_API_KEY` environment variable.
     - Accepts requests from all addresses.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to the container path `/zap/wrk`.
 
@@ -114,14 +113,14 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
 - **Purpose:** Expose any MCP tool as an OpenAPI-compatible HTTP server. Required by open-webui only. https://github.com/open-webui/mcpo
 - **Configuration:**
     - Runs on port 8000.
-    - Connects to the MCP server using SSE via the URL `http://mcp-server:7456/sse`.
+    - Connects to the MCP server using streamable HTTP mode via the URL `http://mcp-server:7456/mcp`.
 
 #### `mcp-server`
 - **Image:** mcp-zap-server:latest
 - **Purpose:** This repo. Acts as the MCP server exposing ZAP actions.
 - **Configuration:**
-    - Depends on the `zap` service.
-    - Exposes port 7456 for HTTP SSE connections.
+    - Depends on the `zap` service and connects to it using the configured `ZAP_API_KEY`.
+    - Exposes port 7456 for streamable HTTP connections.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/tmp` to allow file access.
 
 #### `mcpo-filesystem`
@@ -159,34 +158,17 @@ docker-compose down
 
 ### Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent
 
-#### STDIO mode
+#### Streamable HTTP mode
+
+This is the recommended mode for connecting to the MCP server.
 
 ```json
 {
   "mcpServers": {
     "zap-mcp-server": {
-        "command": "java",
-        "args": [
-          "-Dspring.ai.mcp.server.stdio=true",
-          "-Dspring.main.web-application-type=none",
-          "-Dlogging.pattern.console=",
-          "-jar",
-          "/PROJECT_PATH/mcp-zap-server/build/libs/mcp-zap-server-0.1.0-SNAPSHOT.jar"
-        ]
-    }
-  }
-}
-```
-
-#### SSE mode
-
-```json
-{
-  "mcpServers": {
-    "zap-mcp-server": {
-      "protocol": "mcp",
+      "protocol": "streamable",
       "transport": "http",
-      "url": "http://localhost:7456/sse"
+      "url": "http://localhost:7456/mcp"
     }
   }
 }

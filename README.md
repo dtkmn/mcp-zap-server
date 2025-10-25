@@ -1,4 +1,12 @@
-[//]: # (![MCP-ZAP Logo]&#40;./brand.png&#41;)
+![GitHub stars](https://img.shields.io/github/stars/dtkmn/mcp-zap-server?style=social)
+![GitHub forks](https://img.shields.io/github/forks/dtkmn/mcp-zap-server?style=social)
+![GitHub watchers](https://img.shields.io/github/watchers/dtkmn/mcp-zap-server?style=social)
+![GitHub repo size](https://img.shields.io/github/repo-size/dtkmn/mcp-zap-server)
+![GitHub language count](https://img.shields.io/github/languages/count/dtkmn/mcp-zap-server)
+![GitHub top language](https://img.shields.io/github/languages/top/dtkmn/mcp-zap-server)
+![GitHub last commit](https://img.shields.io/github/last-commit/dtkmn/mcp-zap-server?color=red)
+![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
+
 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 

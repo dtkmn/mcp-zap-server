@@ -1,4 +1,12 @@
-[//]: # (![MCP-ZAP Logo]&#40;./brand.png&#41;)
+![GitHub stars](https://img.shields.io/github/stars/dtkmn/mcp-zap-server?style=social)
+![GitHub forks](https://img.shields.io/github/forks/dtkmn/mcp-zap-server?style=social)
+![GitHub watchers](https://img.shields.io/github/watchers/dtkmn/mcp-zap-server?style=social)
+![GitHub repo size](https://img.shields.io/github/repo-size/dtkmn/mcp-zap-server)
+![GitHub language count](https://img.shields.io/github/languages/count/dtkmn/mcp-zap-server)
+![GitHub top language](https://img.shields.io/github/languages/top/dtkmn/mcp-zap-server)
+![GitHub last commit](https://img.shields.io/github/last-commit/dtkmn/mcp-zap-server?color=red)
+![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
+
 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
@@ -19,13 +27,12 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
-  - [Set Up Custom OpenAI / Ollama API Connection](#set-up-custom-openai--ollama-api-connection)
-  - [Set Up MCP Servers Connection](#set-up-mcp-servers-connection)
+    - [Set Up Custom OpenAI / Ollama API Connection](#set-up-custom-openai--ollama-api-connection)
+    - [Set Up MCP Servers Connection](#set-up-mcp-servers-connection)
 - [Services Overview](#services-overview)
 - [Manual build](#manual-build)
 - [Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent](#usage-with-claude-desktop-cursor-windsurf-or-any-mcp-compatible-ai-agent)
-  - [STDIO mode](#stdio-mode)
-  - [SSE mode](#sse-mode)
+    - [Streamable HTTP mode](#streamable-http-mode)
 - [Prompt Examples](#prompt-examples)
 
 
@@ -49,7 +56,7 @@ flowchart LR
     Petstore["Swagger Petstore Server"]
   end
 
-  MCPZAP <-->|HTTP/SSE + MCPO| Client
+  MCPZAP <-->|HTTP/Streamable + MCPO| Client
   MCPFile <-->|STDIO + MCPO| Client
   MCPZAP -->|ZAP REST API| ZAP
   ZAP -->|scan, alerts, reports| MCPZAP
@@ -98,7 +105,7 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
 - **Image:** zaproxy/zap-stable
 - **Purpose:** Runs the OWASP ZAP daemon on port 8090.
 - **Configuration:**
-    - Disables the API key.
+    - Requires an API key for security, configured via the `ZAP_API_KEY` environment variable.
     - Accepts requests from all addresses.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to the container path `/zap/wrk`.
 
@@ -114,36 +121,36 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
 - **Purpose:** Expose any MCP tool as an OpenAPI-compatible HTTP server. Required by open-webui only. https://github.com/open-webui/mcpo
 - **Configuration:**
     - Runs on port 8000.
-    - Connects to the MCP server using SSE via the URL `http://mcp-server:7456/sse`.
+    - Connects to the MCP server using streamable HTTP mode via the URL `http://mcp-server:7456/mcp`.
 
 #### `mcp-server`
 - **Image:** mcp-zap-server:latest
 - **Purpose:** This repo. Acts as the MCP server exposing ZAP actions.
 - **Configuration:**
-    - Depends on the `zap` service.
-    - Exposes port 7456 for HTTP SSE connections.
+    - Depends on the `zap` service and connects to it using the configured `ZAP_API_KEY`.
+    - Exposes port 7456 for streamable HTTP connections.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/tmp` to allow file access.
 
 #### `mcpo-filesystem`
 - **Image:** ghcr.io/open-webui/mcpo:main
 - **Purpose:** Exposes the MCP File System Server as an OpenAPI-compatible HTTP endpoint.
 - **Configuration:**
-  - Depends on `open-webui`
-  - Exposes port 8001.
+    - Depends on `open-webui`
+    - Exposes port 8001.
 
 #### `juice-shop`
 - **Image:** bkimminich/juice-shop
 - **Purpose:** Provides a deliberately insecure web application for testing ZAP’s scanning capabilities.
 - **Configuration:**
-  - Runs on port 3001.
+    - Runs on port 3001.
 
 #### `petstore`
 - **Image:** swaggerapi/petstore3:unstable
 - **Purpose:** Runs the Swagger Petstore sample API to demonstrate OpenAPI import and scanning.
 - **Configuration:**
-  - Runs on port 3002.
+    - Runs on port 3002.
 
-    
+
 ### Stopping the Services
 
 To stop and remove all the containers, run:
@@ -159,34 +166,17 @@ docker-compose down
 
 ### Usage with Claude Desktop, Cursor, Windsurf or any MCP-compatible AI agent
 
-#### STDIO mode
+#### Streamable HTTP mode
 
-```json
-{
-  "mcpServers": {
-    "zap-mcp-server": {
-        "command": "java",
-        "args": [
-          "-Dspring.ai.mcp.server.stdio=true",
-          "-Dspring.main.web-application-type=none",
-          "-Dlogging.pattern.console=",
-          "-jar",
-          "/PROJECT_PATH/mcp-zap-server/build/libs/mcp-zap-server-0.1.0-SNAPSHOT.jar"
-        ]
-    }
-  }
-}
-```
-
-#### SSE mode
+This is the recommended mode for connecting to the MCP server.
 
 ```json
 {
   "mcpServers": {
     "zap-mcp-server": {
       "protocol": "mcp",
-      "transport": "http",
-      "url": "http://localhost:7456/sse"
+      "transport": "streamable-http",
+      "url": "http://localhost:7456/mcp"
     }
   }
 }
@@ -203,6 +193,3 @@ docker-compose down
 
 ### Check the alerts found from the spider scan
 ![mcp-zap-server-prompt-3](./images/mcp-zap-server-prompt-3.png)
-
-
-

@@ -9,7 +9,7 @@ version = '0.3.0-SNAPSHOT'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -21,8 +21,8 @@ configurations {
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.spring.io/milestone' }
-    maven { url 'https://repo.spring.io/snapshot' }
+    maven { url = 'https://repo.spring.io/milestone' }
+    maven { url = 'https://repo.spring.io/snapshot' }
     maven {
         name = 'Central Portal Snapshots'
         url = 'https://central.sonatype.com/repository/maven-snapshots/'

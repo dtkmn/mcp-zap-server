@@ -1,5 +1,5 @@
 # Build stage
-FROM gradle:9.2.0-jdk21 AS builder
+FROM gradle:9.2.0-jdk25 AS builder
 WORKDIR /usr/src/app
 COPY src ./src
 COPY build.gradle .
@@ -7,7 +7,7 @@ COPY settings.gradle .
 RUN gradle build -x test
 
 # Runtime stage
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 RUN apk add --no-cache curl
 WORKDIR /app
 COPY --from=builder /usr/src/app/build/libs/mcp-zap-server-*.jar ./app.jar

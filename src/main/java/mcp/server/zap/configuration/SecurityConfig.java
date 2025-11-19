@@ -8,6 +8,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
@@ -15,6 +19,8 @@ import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
 
 /**
  * Security configuration for the MCP ZAP Server.
@@ -191,9 +197,17 @@ public class SecurityConfig {
                 return unauthorizedResponse(exchange, "Token has been revoked");
             }
 
-            // Authentication successful
+            // Authentication successful - populate SecurityContext
             log.debug("JWT authentication successful for client: {}", clientId);
-            return chain.filter(exchange);
+            
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                clientId, 
+                token, 
+                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+            );
+            
+            return chain.filter(exchange)
+                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
 
         } catch (JwtException e) {
             log.warn("JWT validation failed: {}", e.getMessage());
@@ -219,9 +233,23 @@ public class SecurityConfig {
             return unauthorizedResponse(exchange, "Invalid API key");
         }
 
-        // Authentication successful
-        log.debug("API key authentication successful for {}", exchange.getRequest().getPath());
-        return chain.filter(exchange);
+        // Authentication successful - populate SecurityContext
+        String clientId = apiKeyProperties.getApiKeys().stream()
+            .filter(client -> client.getKey().equals(apiKey))
+            .map(ApiKeyProperties.ApiKeyClient::getClientId)
+            .findFirst()
+            .orElse("legacy-client");
+        
+        log.debug("API key authentication successful for client: {}", clientId);
+        
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+            clientId,
+            apiKey,
+            List.of(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        
+        return chain.filter(exchange)
+            .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
     }
 
     /**

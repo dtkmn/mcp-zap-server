@@ -42,11 +42,23 @@ public class SpiderScanService {
         urlValidationService.validateUrl(targetUrl);
 
         try {
-            // Configure timeouts and limits
-            zap.core.setOptionTimeoutInSecs(scanLimitProperties.getConnectionTimeoutInSecs());
-            
-            // Force-fetch the root so it appears in the tree
-            zap.core.accessUrl(targetUrl, "true");
+            // Force-fetch the root so it appears in the tree (retry with delay if fails)
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++) {
+                try {
+                    zap.core.accessUrl(targetUrl, "true");
+                    break; // Success
+                } catch (ClientApiException e) {
+                    if (i == maxRetries - 1) {
+                        log.error("Failed to access URL after {} retries: {}", maxRetries, e.getMessage());
+                        throw new ZapApiException("Target website is blocking ZAP requests or is unreachable. " +
+                            "This could be due to WAF protection, IP blocking, or network issues. " +
+                            "Original error: " + e.getMessage(), e);
+                    }
+                    log.warn("Retry {}/{} - Failed to access URL {}: {}", i + 1, maxRetries, targetUrl, e.getMessage());
+                    Thread.sleep(2000); // Wait 2 seconds before retry
+                }
+            }
             
             // Set spider options from configuration
             zap.spider.setOptionThreadCount(scanLimitProperties.getSpiderThreadCount());
@@ -63,8 +75,22 @@ public class SpiderScanService {
             
             log.info("Spider scan started with ID: {} for URL: {}", scanId, targetUrl);
             return "Spider scan started with ID: " + scanId;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Spider scan was interrupted for URL {}", targetUrl);
+            throw new ZapApiException("Spider scan was interrupted", e);
         } catch (ClientApiException e) {
             log.error("Error launching ZAP Spider for URL {}: {}", targetUrl, e.getMessage(), e);
+            
+            // Provide user-friendly error message for common issues
+            String errorMsg = e.getMessage().toLowerCase();
+            if (errorMsg.contains("unexpected end of file") || errorMsg.contains("socketexception")) {
+                throw new ZapApiException("Target website is blocking ZAP requests or closed the connection. " +
+                    "Common causes: WAF protection, bot detection, IP blocking. " +
+                    "Try testing with juice-shop (http://juice-shop:3000) or petstore (http://petstore:8080) instead. " +
+                    "Original error: " + e.getMessage(), e);
+            }
+            
             throw new ZapApiException("Error launching ZAP Spider for URL " + targetUrl + ": " + e.getMessage(), e);
         }
     }

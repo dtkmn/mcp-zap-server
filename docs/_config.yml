@@ -1,0 +1,27 @@
+title: MCP ZAP Server
+description: Spring AI MCP Server for OWASP ZAP Security Testing
+theme: jekyll-theme-cayman
+baseurl: "/mcp-zap-server"
+url: "https://dtkmn.github.io"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"
+
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/

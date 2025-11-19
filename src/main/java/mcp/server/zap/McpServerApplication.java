@@ -1,6 +1,7 @@
 package mcp.server.zap;
 
 import mcp.server.zap.service.ActiveScanService;
+import mcp.server.zap.service.AjaxSpiderService;
 import mcp.server.zap.service.CoreService;
 import mcp.server.zap.service.OpenApiService;
 import mcp.server.zap.service.ReportService;
@@ -21,12 +22,14 @@ public class McpServerApplication {
     public ToolCallbackProvider toolCallbackProvider(CoreService coreService,
                                              ActiveScanService activeScanService,
                                              SpiderScanService spiderScanService,
+                                             AjaxSpiderService ajaxSpiderService,
                                              OpenApiService openApiService,
                                              ReportService reportService) {
         return MethodToolCallbackProvider.builder().toolObjects(
                 coreService,
                 activeScanService,
                 spiderScanService,
+                ajaxSpiderService,
                 openApiService,
                 reportService
         ).build();

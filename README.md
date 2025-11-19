@@ -16,8 +16,20 @@
 
 A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
 
+## 📚 Documentation
+
+**[📖 View Full Documentation](https://dtkmn.github.io/mcp-zap-server/)** - Complete guides, API reference, and examples
+
+### Quick Links
+- [Security & Authentication Guide](https://dtkmn.github.io/mcp-zap-server/SECURITY_MODES.html) - Three security modes
+- [JWT Authentication Setup](https://dtkmn.github.io/mcp-zap-server/JWT_AUTHENTICATION.html) - Production-ready auth
+- [AJAX Spider Guide](https://dtkmn.github.io/mcp-zap-server/AJAX_SPIDER.html) - Bypass WAF protection
+- [Kubernetes Deployment](./helm/README.md) - Helm charts for production
+
 
 ### Demo on Cursor
+**[📺 Watch Demo Video](https://dtkmn.github.io/mcp-zap-server/demo.html)** | [YouTube Link](https://www.youtube.com/watch?v=9_9VqsL0lNw)
+
 <a href="https://www.youtube.com/watch?v=9_9VqsL0lNw" target="_blank" rel="noopener noreferrer">
 <img src="https://img.youtube.com/vi/9_9VqsL0lNw/0.jpg" alt="▶️ Watch the demo">
 </a>
@@ -71,12 +83,153 @@ flowchart LR
 - Docker Compose ≥ 1.29
 - Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
 
+## Security Configuration
+
+### Generate API Keys
+
+Before starting the services, generate secure API keys:
+
+```bash
+# Generate ZAP API key
+openssl rand -hex 32
+
+# Generate MCP API key
+openssl rand -hex 32
+```
+
+### Environment Setup
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Edit `.env` and update the following required values:
+```bash
+# Required: Set your secure API keys
+ZAP_API_KEY=your-generated-zap-api-key-here
+MCP_API_KEY=your-generated-mcp-api-key-here
+
+# Required: Set your workspace directory
+LOCAL_ZAP_WORKPLACE_FOLDER=/path/to/your/zap-workplace
+```
+
+3. **Important**: Never commit `.env` to version control. It's already in `.gitignore`.
+
+### Security Features
+
+The MCP ZAP Server includes comprehensive security features with **three authentication modes**:
+
+- **🔐 Flexible Authentication**: Choose between `none`, `api-key`, or `jwt` modes
+- **🔑 API Key Authentication**: Simple bearer token for trusted environments
+- **🎫 JWT Authentication**: Modern token-based auth with expiration and refresh
+- **🛡️ URL Validation**: Prevents scanning of internal resources and private networks
+- **⏱️ Scan Limits**: Configurable timeouts and concurrent scan limits
+- **📋 Whitelist/Blacklist**: Fine-grained control over scannable domains
+
+### Authentication Modes
+
+The MCP server supports **three authentication modes** to balance security and ease of use:
+
+#### 🚫 Mode 1: No Authentication (`none`)
+
+**⚠️ WARNING: Development/Testing ONLY**
+
+```bash
+# .env
+MCP_SECURITY_MODE=none
+```
+
+Use this mode **only** for local development on trusted networks. All requests are permitted without authentication.
+
+#### 🔑 Mode 2: API Key Authentication (`api-key`)
+
+**✅ Recommended for: Simple deployments, internal networks**
+
+```bash
+# .env
+MCP_SECURITY_MODE=api-key
+MCP_API_KEY=your-secure-api-key-here
+```
+
+Simple authentication with a static API key:
+
+```bash
+# Using X-API-Key header
+curl -H "X-API-Key: your-mcp-api-key" http://localhost:7456/mcp
+```
+
+**Advantages**: Simple configuration, no token expiration, minimal overhead  
+**Use Cases**: Docker Compose, internal networks, single-tenant deployments
+
+#### 🎫 Mode 3: JWT Authentication (`jwt`)
+
+**✅ Recommended for: Production, cloud deployments, multi-tenant**
+
+```bash
+# .env
+MCP_SECURITY_MODE=jwt
+JWT_ENABLED=true
+JWT_SECRET=your-256-bit-secret-minimum-32-chars
+MCP_API_KEY=your-initial-api-key
+```
+
+Token-based authentication with automatic expiration:
+
+```bash
+# 1. Exchange API key for JWT tokens
+curl -X POST http://localhost:7456/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"apiKey": "your-mcp-api-key", "clientId": "your-client-id"}'
+
+# 2. Use access token (expires in 1 hour)
+curl -H "Authorization: Bearer YOUR_ACCESS_TOKEN" http://localhost:7456/mcp
+
+# 3. Refresh when expired (refresh token valid for 7 days)
+curl -X POST http://localhost:7456/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken": "YOUR_REFRESH_TOKEN"}'
+```
+
+**Advantages**: Tokens expire (1hr access, 7d refresh), token revocation, audit trails  
+**Use Cases**: Production deployments, public access, compliance requirements
+
+**Note**: JWT mode is backward compatible—clients can still use API keys during migration.
+
+📚 **Detailed Documentation**:
+- [Security Modes Guide](docs/SECURITY_MODES.md) - Complete comparison and migration guide
+- [JWT Authentication Guide](docs/JWT_AUTHENTICATION.md) - JWT implementation details
+- [MCP Client Configuration](docs/MCP_CLIENT_AUTHENTICATION.md) - Client setup for all modes
+
+### URL Security Configuration
+
+By default, the server blocks scanning of:
+- Localhost and loopback addresses (127.0.0.0/8, ::1)
+- Private network ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+- Link-local addresses (169.254.0.0/16)
+
+To enable scanning specific domains, configure the whitelist in `.env`:
+```bash
+# Allow only specific domains (wildcards supported)
+ZAP_URL_WHITELIST=example.com,*.test.com,demo.org
+```
+
+**Warning**: Only enable `ZAP_ALLOW_LOCALHOST=true` or `ZAP_ALLOW_PRIVATE_NETWORKS=true` in isolated, secure environments.
+
 ## Quick Start
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
-export LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace # or any other folder you want to use as ZAP's workspace
+
+# Setup environment variables
+cp .env.example .env
+# Edit .env with your API keys and configuration
+
+# Create workspace directory
+mkdir -p $(grep LOCAL_ZAP_WORKPLACE_FOLDER .env | cut -d '=' -f2)/zap-wrk
+
+# Start services
 docker-compose up -d
 ```
 ![Docker-Compose](./images/mcp-zap-server-docker-compose.png)
@@ -125,11 +278,17 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
 
 #### `mcp-server`
 - **Image:** mcp-zap-server:latest
-- **Purpose:** This repo. Acts as the MCP server exposing ZAP actions.
+- **Purpose:** This repo. Acts as the MCP server exposing ZAP actions with API key authentication.
 - **Configuration:**
     - Depends on the `zap` service and connects to it using the configured `ZAP_API_KEY`.
+    - Requires `MCP_API_KEY` for client authentication (set in `.env` file).
     - Exposes port 7456 for streamable HTTP connections.
-    - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/tmp` to allow file access.
+    - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/zap/wrk` to allow file access.
+    - Supports configurable scan limits and URL validation policies.
+- **Security:**
+    - All endpoints (except health checks) require API key authentication.
+    - Include API key in requests via `X-API-Key` header or `Authorization: Bearer <token>`.
+    - URL validation prevents scanning internal/private networks by default.
 
 #### `mcpo-filesystem`
 - **Image:** ghcr.io/open-webui/mcpo:main
@@ -170,17 +329,41 @@ docker-compose down
 
 This is the recommended mode for connecting to the MCP server.
 
+**Important**: You must include the API key for authentication.
+
 ```json
 {
   "mcpServers": {
     "zap-mcp-server": {
       "protocol": "mcp",
       "transport": "streamable-http",
-      "url": "http://localhost:7456/mcp"
+      "url": "http://localhost:7456/mcp",
+      "headers": {
+        "X-API-Key": "your-mcp-api-key-here"
+      }
     }
   }
 }
 ```
+
+Or using Bearer token:
+
+```json
+{
+  "mcpServers": {
+    "zap-mcp-server": {
+      "protocol": "mcp",
+      "transport": "streamable-http",
+      "url": "http://localhost:7456/mcp",
+      "headers": {
+        "Authorization": "Bearer your-mcp-api-key-here"
+      }
+    }
+  }
+}
+```
+
+Replace `your-mcp-api-key-here` with the `MCP_API_KEY` value from your `.env` file.
 
 
 ## Prompt Examples

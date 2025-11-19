@@ -1,6 +1,7 @@
 package mcp.server.zap.service;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.configuration.ScanLimitProperties;
 import mcp.server.zap.exception.ZapApiException;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -8,9 +9,6 @@ import org.springframework.stereotype.Service;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
-
-import java.net.MalformedURLException;
-import java.net.URL;
 
 /**
  * Service for managing ZAP Spider Scans.
@@ -21,9 +19,15 @@ import java.net.URL;
 public class SpiderScanService {
 
     private final ClientApi zap;
+    private final UrlValidationService urlValidationService;
+    private final ScanLimitProperties scanLimitProperties;
 
-    public SpiderScanService(ClientApi zap) {
+    public SpiderScanService(ClientApi zap, 
+                            UrlValidationService urlValidationService,
+                            ScanLimitProperties scanLimitProperties) {
         this.zap = zap;
+        this.urlValidationService = urlValidationService;
+        this.scanLimitProperties = scanLimitProperties;
     }
 
     /**
@@ -33,27 +37,35 @@ public class SpiderScanService {
      * @return Scan ID of the started spider scan
      */
     @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")
-    public String startSpider(@ToolParam(description = "targetUrl") String targetUrl) {
-        try {
-            new URL(targetUrl);
-        } catch (MalformedURLException e) {
-            throw new IllegalArgumentException("Invalid URL format: " + targetUrl);
-        }
+    public String startSpider(@ToolParam(description = "Target URL to spider scan (e.g., http://example.com)") String targetUrl) {
+        // Validate URL before scanning
+        urlValidationService.validateUrl(targetUrl);
 
         try {
-            String sessionName = "scan-" + System.currentTimeMillis();
-//        zap.network.setConnectionTimeout("60");
-            zap.core.setOptionTimeoutInSecs(60);
+            // Configure timeouts and limits
+            zap.core.setOptionTimeoutInSecs(scanLimitProperties.getConnectionTimeoutInSecs());
+            
             // Force-fetch the root so it appears in the tree
             zap.core.accessUrl(targetUrl, "true");
-            // Set spider options
-            zap.spider.setOptionThreadCount(5); // Number of threads
-            ApiResponse resp = zap.spider.scan(targetUrl, "10", "true", "", "false");
+            
+            // Set spider options from configuration
+            zap.spider.setOptionThreadCount(scanLimitProperties.getSpiderThreadCount());
+            zap.spider.setOptionMaxDuration(scanLimitProperties.getMaxSpiderScanDurationInMins());
+            
+            ApiResponse resp = zap.spider.scan(
+                targetUrl, 
+                String.valueOf(scanLimitProperties.getSpiderMaxDepth()), 
+                "true", 
+                "", 
+                "false"
+            );
             String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
+            
+            log.info("Spider scan started with ID: {} for URL: {}", scanId, targetUrl);
             return "Spider scan started with ID: " + scanId;
         } catch (ClientApiException e) {
             log.error("Error launching ZAP Spider for URL {}: {}", targetUrl, e.getMessage(), e);
-            throw new ZapApiException("Error launching ZAP Spider for URL " + targetUrl, e);
+            throw new ZapApiException("Error launching ZAP Spider for URL " + targetUrl + ": " + e.getMessage(), e);
         }
     }
 

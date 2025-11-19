@@ -1,3 +1,47 @@
+# Test configuration
+spring:
+  ai:
+    mcp:
+      server:
+        name: mcp-zap-server-test
+
+# Disable security for tests
+mcp:
+  server:
+    apiKey: test-api-key
+    security:
+      enabled: false
+    
+    # Test JWT configuration
+    auth:
+      apiKeys:
+        - clientId: test-client
+          key: test-api-key
+          description: Test client
+      
+      jwt:
+        enabled: true
+        secret: test-secret-key-for-jwt-at-least-32-characters-long-required
+        issuer: mcp-zap-server-test
+        accessTokenExpiry: 3600
+        refreshTokenExpiry: 604800
+
 zap:
   server:
     apiKey: test-api-key
+  
+  scan:
+    limits:
+      maxActiveScanDurationInMins: 5
+      maxSpiderScanDurationInMins: 3
+      connectionTimeoutInSecs: 30
+    
+    url:
+      allowLocalhost: true
+      allowPrivateNetworks: true
+      whitelist: ""
+      blacklist: ""
+
+logging:
+  level:
+    mcp.server.zap: DEBUG

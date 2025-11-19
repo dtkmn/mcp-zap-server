@@ -1,5 +1,6 @@
 package mcp.server.zap.service;
 
+import mcp.server.zap.configuration.ScanLimitProperties;
 import mcp.server.zap.exception.ZapApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,13 +21,24 @@ import static org.mockito.Mockito.when;
 public class ActiveScanServiceTest {
     private Ascan ascan;
     private ActiveScanService service;
+    private UrlValidationService urlValidationService;
+    private ScanLimitProperties scanLimitProperties;
 
     @BeforeEach
     void setup() {
         ClientApi clientApi = new ClientApi("localhost", 0);
         ascan = mock(Ascan.class);
         clientApi.ascan = ascan;
-        service = new ActiveScanService(clientApi);
+        
+        urlValidationService = mock(UrlValidationService.class);
+        scanLimitProperties = mock(ScanLimitProperties.class);
+        
+        // Setup default mock behavior
+        when(scanLimitProperties.getMaxActiveScanDurationInMins()).thenReturn(30);
+        when(scanLimitProperties.getHostPerScan()).thenReturn(5);
+        when(scanLimitProperties.getThreadPerHost()).thenReturn(10);
+        
+        service = new ActiveScanService(clientApi, urlValidationService, scanLimitProperties);
     }
 
     @Test
@@ -37,6 +49,7 @@ public class ActiveScanServiceTest {
         String result = service.activeScan("http://example.com", "true", "Default Policy");
 
         assertEquals("Active scan started with ID: 101", result);
+        verify(urlValidationService).validateUrl("http://example.com");
         verify(ascan).scan("http://example.com", "true", "false", "Default Policy", null, null);
     }
 

@@ -25,9 +25,17 @@ import java.util.List;
 /**
  * Security configuration for the MCP ZAP Server.
  * Supports three authentication modes:
- * - NONE: No authentication (development/testing only)
- * - API_KEY: Simple API key authentication
- * - JWT: JWT token-based authentication (recommended for production)
+ * - NONE: No authentication (development/testing only) - CSRF disabled
+ * - API_KEY: Simple API key authentication - CSRF enabled
+ * - JWT: JWT token-based authentication (recommended for production) - CSRF enabled
+ * 
+ * IMPORTANT: CSRF protection is only disabled in NONE mode. For API_KEY and JWT modes,
+ * CSRF remains enabled to protect against Cross-Site Request Forgery attacks, even though
+ * this is primarily a machine-to-machine API. This follows security best practices and
+ * defense-in-depth principles.
+ * 
+ * Note: MCP clients should include CSRF tokens when making state-changing requests in
+ * authenticated modes. For STDIO-based MCP clients (local development), use NONE mode.
  */
 @Slf4j
 @Configuration
@@ -78,16 +86,19 @@ public class SecurityConfig {
         if (!securityEnabled || mode == SecurityMode.NONE) {
             log.warn("⚠️ SECURITY DISABLED - All requests will be permitted without authentication");
             log.warn("   This should ONLY be used in development/testing environments");
+            log.warn("   CSRF protection is also disabled for this mode");
             return http
-                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)  // Only disable CSRF in NONE mode
                 .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
                 .build();
         }
 
         // Apply authentication for API_KEY or JWT mode
+        // CSRF protection is ENABLED by default for security
         log.info("Security mode: {} - Authentication required for all endpoints (except public paths)", mode);
+        log.info("CSRF protection: ENABLED (default Spring Security behavior)");
         http
-            .csrf(ServerHttpSecurity.CsrfSpec::disable)
+            // DO NOT disable CSRF in authenticated modes - removed .csrf(disable)
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers("/actuator/health", "/actuator/info", "/auth/token", "/auth/refresh").permitAll()
                 .anyExchange().authenticated()

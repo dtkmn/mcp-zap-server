@@ -7,8 +7,6 @@ import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 import org.zaproxy.clientapi.core.*;
 
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,9 +15,11 @@ import java.util.List;
 public class OpenApiService {
 
     private final ClientApi zap;
+    private final UrlValidationService urlValidationService;
 
-    public OpenApiService(ClientApi zap) {
+    public OpenApiService(ClientApi zap, UrlValidationService urlValidationService) {
         this.zap = zap;
+        this.urlValidationService = urlValidationService;
     }
 
     /**
@@ -34,15 +34,11 @@ public class OpenApiService {
             description = "Import an OpenAPI/Swagger spec by URL into ZAP and return the importId"
     )
     public String importOpenApiSpec(
-            @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML)") String apiUrl,
-            @ToolParam(description = "Host override for the API spec") String hostOverride
+            @ToolParam(description = "OpenAPI/Swagger spec URL (JSON or YAML, e.g., http://example.com/openapi.yaml)") String apiUrl,
+            @ToolParam(description = "Host override for the API spec (optional)") String hostOverride
     ) {
-        try {
-            new URL(apiUrl);
-        } catch (MalformedURLException e) {
-            log.error("Invalid OpenAPI/Swagger spec URL: {}", apiUrl, e);
-            throw new IllegalArgumentException("Invalid URL: " + apiUrl);
-        }
+        // Validate URL before importing
+        urlValidationService.validateUrl(apiUrl);
 
         try {
             ApiResponse importResp = zap.openapi.importUrl(apiUrl, hostOverride);

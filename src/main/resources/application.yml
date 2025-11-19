@@ -16,21 +16,81 @@ spring:
 logging:
   level:
     mcp.server.zap.service: DEBUG
+    mcp.server.zap.configuration: INFO
+    
 server:
   port: 7456
 
+# MCP Server Security Configuration
+# Authentication Modes:
+#   - none: No authentication (default - suitable for local development/STDIO transport)
+#   - api-key: Simple API key authentication (suitable for trusted environments)
+#   - jwt: JWT token-based authentication (recommended for production)
+mcp:
+  server:
+    security:
+      # Set authentication mode: none, api-key, or jwt
+      mode: ${MCP_SECURITY_MODE:none}
+      enabled: ${MCP_SECURITY_ENABLED:true}
+    
+    # Legacy single API key (for backward compatibility)
+    apiKey: ${MCP_API_KEY:changeme-default-key}
+    
+    # Multi-Client API Key Configuration
+    auth:
+      apiKeys:
+        - clientId: ${MCP_CLIENT_ID:default-client}
+          key: ${MCP_API_KEY:changeme-default-key}
+          description: ${MCP_CLIENT_DESCRIPTION:Default MCP client}
+      
+      # JWT Token Configuration
+      jwt:
+        enabled: ${JWT_ENABLED:true}
+        secret: ${JWT_SECRET:}
+        issuer: ${JWT_ISSUER:mcp-zap-server}
+        accessTokenExpiry: ${JWT_ACCESS_TOKEN_EXPIRATION:3600}
+        refreshTokenExpiry: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
 
+# ZAP Configuration
 zap:
-  scan:
-    active:
-      enableAllScanners: true # Enable all scanners for active scanning
-      # enabledScannersPolicy: "Default Policy" # Use the default policy for enabled scanners
-      # enabledScannersIds: "400012,40014" # List of enabled scanners by their IDs
   server:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}
     apiKey: ${ZAP_API_KEY}
+  
+  scan:
+    # Scan Limits and Timeouts
+    limits:
+      maxActiveScanDurationInMins: ${ZAP_MAX_ACTIVE_SCAN_DURATION:30}
+      maxSpiderScanDurationInMins: ${ZAP_MAX_SPIDER_SCAN_DURATION:15}
+      maxConcurrentActiveScans: ${ZAP_MAX_CONCURRENT_ACTIVE_SCANS:3}
+      maxConcurrentSpiderScans: ${ZAP_MAX_CONCURRENT_SPIDER_SCANS:5}
+      threadPerHost: ${ZAP_THREAD_PER_HOST:10}
+      hostPerScan: ${ZAP_HOST_PER_SCAN:5}
+      connectionTimeoutInSecs: ${ZAP_CONNECTION_TIMEOUT:60}
+      spiderThreadCount: ${ZAP_SPIDER_THREAD_COUNT:5}
+      spiderMaxDepth: ${ZAP_SPIDER_MAX_DEPTH:10}
+    
+    # Active Scan Configuration
+    active:
+      enableAllScanners: true
+      # enabledScannersPolicy: "Default Policy"
+      # enabledScannersIds: "400012,40014"
+    
+    # URL Validation and Security
+    url:
+      allowLocalhost: ${ZAP_ALLOW_LOCALHOST:false}
+      allowPrivateNetworks: ${ZAP_ALLOW_PRIVATE_NETWORKS:false}
+      # Comma-separated list of allowed domains (wildcards supported: *.example.com)
+      # If whitelist is empty, blacklist will be enforced instead
+      whitelist: ${ZAP_URL_WHITELIST:}
+      # Default blacklist includes localhost and private network ranges
+      blacklist: ${ZAP_URL_BLACKLIST:localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+  
+  report:
+    directory: ${ZAP_REPORT_DIRECTORY:/zap/wrk}
 
+# Actuator Configuration
 management:
   endpoints:
     web:

@@ -12,19 +12,22 @@ import org.zaproxy.clientapi.gen.Openapi;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class OpenApiServiceTest {
     private ClientApi clientApi;
     private Openapi openapi;
     private OpenApiService service;
+    private UrlValidationService urlValidationService;
 
     @BeforeEach
     void setup() {
         clientApi = new ClientApi("localhost", 0);
         openapi = mock(Openapi.class);
         clientApi.openapi = openapi;
-        service = new OpenApiService(clientApi);
+        urlValidationService = mock(UrlValidationService.class);
+        service = new OpenApiService(clientApi, urlValidationService);
     }
 
     @Test
@@ -35,12 +38,7 @@ public class OpenApiServiceTest {
 
         String result = service.importOpenApiSpec("http://example.com/api.yaml", "host");
         assertTrue(result.contains("jobs: 9"));
-    }
-
-    @Test
-    void importOpenApiSpecInvalidUrl() throws Exception {
-        assertThrowsExactly(IllegalArgumentException.class, () -> service.importOpenApiSpec("bad-url",
-            "host"));
+        verify(urlValidationService).validateUrl("http://example.com/api.yaml");
     }
 
     @Test

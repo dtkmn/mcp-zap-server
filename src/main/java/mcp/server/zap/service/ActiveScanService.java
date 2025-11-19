@@ -1,6 +1,7 @@
 package mcp.server.zap.service;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.configuration.ScanLimitProperties;
 import mcp.server.zap.exception.ZapApiException;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -19,9 +20,15 @@ import org.zaproxy.clientapi.core.ClientApiException;
 public class ActiveScanService {
 
     private final ClientApi zap;
+    private final UrlValidationService urlValidationService;
+    private final ScanLimitProperties scanLimitProperties;
 
-    public ActiveScanService(ClientApi zap) {
+    public ActiveScanService(ClientApi zap, 
+                            UrlValidationService urlValidationService,
+                            ScanLimitProperties scanLimitProperties) {
         this.zap = zap;
+        this.urlValidationService = urlValidationService;
+        this.scanLimitProperties = scanLimitProperties;
     }
 
     /**
@@ -37,18 +44,21 @@ public class ActiveScanService {
             description = "Start an active scan against the given URL and return the scanId"
     )
     public String activeScan(
-            @ToolParam(description = "Target URL to scan") String targetUrl,
+            @ToolParam(description = "Target URL to scan (e.g., http://example.com)") String targetUrl,
             @ToolParam(description = "Recurse into sub-paths? (true/false)") String recurse,
             @ToolParam(description = "Scan policy name (e.g. Default Policy, API Policy)") String policy
     ) {
+        // Validate URL before scanning
+        urlValidationService.validateUrl(targetUrl);
+
         try {
             // Configure active scanner
             zap.ascan.enableAllScanners(null);  // Enable all scanners
 
-            // Configure global timeouts and scan settings
-            zap.ascan.setOptionMaxScanDurationInMins(0);    // No duration limit
-            zap.ascan.setOptionHostPerScan(0);              // No limit on hosts
-            zap.ascan.setOptionThreadPerHost(10);           // Parallel scanning
+            // Configure timeouts and scan settings from properties
+            zap.ascan.setOptionMaxScanDurationInMins(scanLimitProperties.getMaxActiveScanDurationInMins());
+            zap.ascan.setOptionHostPerScan(scanLimitProperties.getHostPerScan());
+            zap.ascan.setOptionThreadPerHost(scanLimitProperties.getThreadPerHost());
 
             ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scan(
                     targetUrl,
@@ -60,16 +70,17 @@ public class ActiveScanService {
             );
 
             if (scanResp == null) {
-                throw new IllegalStateException("Failed to start scan on " + targetUrl + ": " + scanResp);
+                throw new IllegalStateException("Failed to start scan on " + targetUrl + ": received null response");
             }
 
             String scanId = scanResp.getValue();
-            log.info("Started active scan with ID {} on {}", scanId, targetUrl);
+            log.info("Started active scan with ID {} on {} with policy: {}, maxDuration: {} mins", 
+                    scanId, targetUrl, policy, scanLimitProperties.getMaxActiveScanDurationInMins());
 
             return "Active scan started with ID: " + scanId;
         } catch (ClientApiException e) {
             log.error("Error starting active scan on {}: {}", targetUrl, e.getMessage(), e);
-            throw new ZapApiException("Error starting active scan on " + targetUrl, e);
+            throw new ZapApiException("Error starting active scan on " + targetUrl + ": " + e.getMessage(), e);
         }
     }
 

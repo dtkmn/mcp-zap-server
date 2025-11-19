@@ -14,6 +14,9 @@ public class ZapApiConfig {
             @Value("${zap.server.port:8090}") int zapApiPort,
             @Value("${zap.server.apiKey}") String zapApiKey
     ) {
+        // The ZAP ClientApi uses default Java HTTP client settings
+        // Timeout issues are typically caused by ZAP server-side configuration
+        // Configure ZAP server timeouts via startup options in docker-compose.yml
         return new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
     }
 

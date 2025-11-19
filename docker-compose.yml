@@ -15,11 +15,13 @@ services:
       - api.addrs.addr.name=.*
       - -config
       - api.addrs.addr.regex=true
+      - -addoninstall
+      - ajaxSpider
     ports:
       - "8090:8090"
     environment:
-      ZAP_API_KEY: "my-api-key"
-      ZAP_MEMORY: "4G"
+      ZAP_API_KEY: ${ZAP_API_KEY}
+      ZAP_MEMORY: ${ZAP_MEMORY:-4G}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/"]
       interval: 30s
@@ -87,11 +89,18 @@ services:
       zap:
         condition: service_healthy
     ports:
-      - "7456:7456"   # HTTP transport (SSE) endpoint
+      - "7456:7456"
     environment:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
-      ZAP_API_KEY: my-api-key
+      ZAP_API_KEY: ${ZAP_API_KEY:-ZAP_API_KEY}
+      MCP_API_KEY: ${MCP_API_KEY}
+      MCP_SECURITY_ENABLED: ${MCP_SECURITY_ENABLED:-true}
+      ZAP_MAX_ACTIVE_SCAN_DURATION: ${ZAP_MAX_ACTIVE_SCAN_DURATION:-30}
+      ZAP_MAX_SPIDER_SCAN_DURATION: ${ZAP_MAX_SPIDER_SCAN_DURATION:-15}
+      ZAP_ALLOW_LOCALHOST: ${ZAP_ALLOW_LOCALHOST:-false}
+      ZAP_ALLOW_PRIVATE_NETWORKS: ${ZAP_ALLOW_PRIVATE_NETWORKS:-false}
+      ZAP_URL_WHITELIST: ${ZAP_URL_WHITELIST:-}
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 

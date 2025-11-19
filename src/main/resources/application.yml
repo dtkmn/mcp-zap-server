@@ -31,7 +31,7 @@ mcp:
     security:
       # Set authentication mode: none, api-key, or jwt
       mode: ${MCP_SECURITY_MODE:none}
-      enabled: ${MCP_SECURITY_ENABLED:true}
+      enabled: ${MCP_SECURITY_ENABLED:false}
     
     # Legacy single API key (for backward compatibility)
     apiKey: ${MCP_API_KEY:changeme-default-key}
@@ -45,8 +45,8 @@ mcp:
       
       # JWT Token Configuration
       jwt:
-        enabled: ${JWT_ENABLED:true}
-        secret: ${JWT_SECRET:}
+        enabled: ${JWT_ENABLED:false}
+        secret: ${JWT_SECRET:jwt-secret-key-please-change-this-to-a-secure-random-value}
         issuer: ${JWT_ISSUER:mcp-zap-server}
         accessTokenExpiry: ${JWT_ACCESS_TOKEN_EXPIRATION:3600}
         refreshTokenExpiry: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
@@ -89,6 +89,12 @@ zap:
   
   report:
     directory: ${ZAP_REPORT_DIRECTORY:/zap/wrk}
+  
+  # ZAP Initialization Settings (applied at startup via Network API)
+  initialization:
+    userAgent: ${ZAP_USER_AGENT:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}
+    connectionTimeoutInSecs: ${ZAP_INIT_CONNECTION_TIMEOUT:300}
+    dnsTtlSuccessfulQueries: ${ZAP_DNS_TTL:60}
 
 # Actuator Configuration
 management:

@@ -1,0 +1,54 @@
+// 1. Typography - The "Terminal" Look
+// Force monospace for EVERYTHING (Headings, Body, Code)
+$font-family-base: "Courier New", Courier, "Lucida Sans Typewriter", "Lucida Typewriter", monospace !important;
+$font-family-heading: "Courier New", Courier, monospace !important;
+$font-family-code: "Courier New", Courier, monospace !important;
+
+// 2. Color Palette - Mr. Robot (Black, Red, White)
+// Backgrounds
+$dark-site-bg: #000000 !important;      // Pure black background
+$dark-body-bg: #000000 !important;      // Pure black body
+$dark-nav-bg: #0a0a0a !important;       // Very dark grey for sidebar
+
+// Text Colors
+$dark-body-text-color: #e0e0e0 !important; // Off-white text (easier on eyes than pure white)
+$dark-heading-color: #ffffff !important;   // Pure white headings
+
+// Accents (The "Mr. Robot" Red)
+$fsociety-red: #d62d20; 
+$link-color: $fsociety-red !important;
+$btn-primary-bg: $fsociety-red !important;
+$nav-child-link-color: $fsociety-red !important;
+
+// 3. Component Overrides
+
+// Make the sidebar look like a directory tree
+.side-bar {
+  border-right: 1px solid #333;
+  background-color: $dark-nav-bg;
+}
+
+// Terminal-style Search Bar
+.search-input {
+  background-color: #000 !important;
+  border: 1px solid #333 !important;
+  color: $fsociety-red !important;
+  font-family: monospace;
+}
+
+// Code Blocks - Green Text on Black (Classic Terminal)
+pre, code {
+  background-color: #111 !important;
+  color: #0f0 !important; // Matrix Green for code snippets
+  border: 1px solid #333;
+}
+
+// Add a "cursor" blink effect to the site title
+.site-title::after {
+  content: "_";
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}

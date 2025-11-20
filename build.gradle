@@ -31,6 +31,7 @@ repositories {
 
 ext {
     set('springAiVersion', "1.1.0")
+    set('jjwtVersion', "0.13.0")
 }
 
 dependencies {
@@ -40,9 +41,14 @@ dependencies {
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
     
     // JWT dependencies
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.3'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.3'
+    implementation 'io.jsonwebtoken:jjwt-api'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl'
+    runtimeOnly('io.jsonwebtoken:jjwt-jackson') {
+        exclude group: 'com.fasterxml.jackson.core', module: 'jackson-databind'
+    }
+    
+    // Explicit Jackson version (jjwt-jackson would downgrade to 2.12.7.1)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -56,6 +62,7 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+        mavenBom "io.jsonwebtoken:jjwt-bom:${jjwtVersion}"
     }
 }
 

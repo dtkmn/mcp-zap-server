@@ -43,7 +43,12 @@ dependencies {
     // JWT dependencies
     implementation 'io.jsonwebtoken:jjwt-api'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson'
+    runtimeOnly('io.jsonwebtoken:jjwt-jackson') {
+        exclude group: 'com.fasterxml.jackson.core', module: 'jackson-databind'
+    }
+    
+    // Explicit Jackson version (jjwt-jackson would downgrade to 2.12.7.1)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -1,3 +1,10 @@
+---
+layout: default
+title: JWT Setup
+parent: Security Modes
+nav_order: 1
+---
+
 # JWT Authentication Guide
 
 ## Overview

@@ -1,42 +1,54 @@
 title: MCP ZAP Server
-description: Spring AI MCP Server for OWASP ZAP Security Testing
-
-# Available GitHub Pages themes (uncomment one to try):
-# theme: jekyll-theme-cayman          # Current - Clean, modern (blue header)
-# theme: jekyll-theme-minimal       # Minimalist sidebar layout
-theme: jekyll-theme-slate         # Dark theme with gray tones
-# theme: jekyll-theme-architect     # Green accent, modern
-# theme: jekyll-theme-hacker        # Matrix-style green on black
-# theme: jekyll-theme-midnight      # Dark blue/black theme
-# theme: jekyll-theme-leap-day      # Bright, colorful theme
-# theme: jekyll-theme-time-machine  # Retro newspaper style
-# theme: jekyll-theme-dinky         # Compact sidebar theme
-# theme: jekyll-theme-tactile       # Clean with orange accents
-# theme: jekyll-theme-modernist     # Clean, wide layout
-# theme: jekyll-theme-merlot        # Red accent theme
-# theme: minima                     # Jekyll's default theme
-
-baseurl: "/mcp-zap-server"
+description: Enterprise-grade Security Testing for AI Agents
 url: "https://dtkmn.github.io"
+baseurl: "/mcp-zap-server"
 
-markdown: kramdown
-kramdown:
-  input: GFM
-  syntax_highlighter: rouge
+# Switch to Just the Docs via Remote Theme
+remote_theme: just-the-docs/just-the-docs
 
+# Enable native search
+search_enabled: true
+heading_anchors: true
+
+# Visual Customization
+color_scheme: dark # Options: light, dark, system
+callouts:
+  warning:
+    title: Warning
+    color: red
+  important:
+    title: Important
+    color: blue
+
+# Header Links
+aux_links:
+  "GitHub Repository": "https://github.com/dtkmn/mcp-zap-server"
+  "Download": "https://github.com/dtkmn/mcp-zap-server/releases"
+
+# Footer
+footer_content: "Copyright &copy; 2025 Daniel Tse. Distributed by the MIT License."
+
+# Plugins
 plugins:
   - jekyll-seo-tag
   - jekyll-sitemap
+  - jekyll-remote-theme
 
-defaults:
-  - scope:
-      path: ""
-    values:
-      layout: "default"
+# Theme Settings
+remote_theme: just-the-docs/just-the-docs
 
-exclude:
-  - README.md
-  - Gemfile
-  - Gemfile.lock
-  - vendor/
-  - .bundle/
+# Force Dark Mode
+color_scheme: dark
+
+# Search Settings
+search_enabled: true
+heading_anchors: true
+
+# Mr. Robot Style Callouts
+callouts:
+  warning:
+    title: SYSTEM ALERT
+    color: red
+  important:
+    title: ROOT ACCESS
+    color: purple

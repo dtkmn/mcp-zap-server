@@ -1,3 +1,10 @@
+---
+layout: default
+title: Security Modes
+nav_order: 2
+has_children: true
+---
+
 # Security Modes Guide
 
 The MCP ZAP Server supports three authentication modes to balance security and ease of use for different deployment scenarios.

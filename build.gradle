@@ -48,7 +48,7 @@ dependencies {
     }
     
     // Explicit Jackson version (jjwt-jackson would downgrade to 2.12.7.1)
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -1,5 +1,6 @@
 # Gradle build output
 /build/
+/bin/
 .gradle/
 
 # Java class files
@@ -10,5 +11,17 @@
 .vscode/
 *.iml
 
-# Misc
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# macOS
 .DS_Store
+
+# Jekyll/Documentation (docs folder)
+docs/_site/
+docs/.jekyll-cache/
+docs/.sass-cache/
+docs/Gemfile.lock
+docs/vendor/

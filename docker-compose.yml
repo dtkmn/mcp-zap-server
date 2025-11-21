@@ -82,8 +82,8 @@ services:
   mcp-server:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: mcp-zap-server:latest
+      dockerfile: ${DOCKERFILE:-Dockerfile}  # Use Dockerfile.native for native image
+    image: mcp-zap-server:${IMAGE_TAG:-latest}
     restart: always
     depends_on:
       zap:
@@ -95,7 +95,7 @@ services:
       ZAP_API_PORT: 8090
       ZAP_API_KEY: ${ZAP_API_KEY:-ZAP_API_KEY}
       MCP_API_KEY: ${MCP_API_KEY}
-      MCP_SECURITY_ENABLED: ${MCP_SECURITY_ENABLED:-true}
+      MCP_SECURITY_ENABLED: ${MCP_SECURITY_ENABLED:-false}
       ZAP_MAX_ACTIVE_SCAN_DURATION: ${ZAP_MAX_ACTIVE_SCAN_DURATION:-30}
       ZAP_MAX_SPIDER_SCAN_DURATION: ${ZAP_MAX_SPIDER_SCAN_DURATION:-15}
       ZAP_ALLOW_LOCALHOST: ${ZAP_ALLOW_LOCALHOST:-false}

@@ -1,0 +1,11 @@
+# Production override - Use native image (20+ min build, 0.6s startup)
+services:
+  mcp-server:
+    build:
+      dockerfile: Dockerfile.native  # Native image - slow builds, fast startup
+    image: mcp-zap-server:native
+    environment:
+      # Production defaults
+      MCP_SECURITY_ENABLED: "true"
+      MCP_SECURITY_MODE: jwt
+      SPRING_PROFILES_ACTIVE: prod

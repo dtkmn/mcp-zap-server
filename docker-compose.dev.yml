@@ -1,0 +1,10 @@
+# Development override - Use fast JVM build (2-3 min vs 20+ min native)
+services:
+  mcp-server:
+    build:
+      dockerfile: Dockerfile  # JVM image - fast builds
+    image: mcp-zap-server:dev
+    environment:
+      # Development defaults
+      MCP_SECURITY_ENABLED: "false"
+      SPRING_PROFILES_ACTIVE: dev

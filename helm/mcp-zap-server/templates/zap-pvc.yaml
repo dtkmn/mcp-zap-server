@@ -1,0 +1,17 @@
+{{- if and .Values.zap.enabled .Values.zap.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-zap-pvc
+  labels:
+    {{- include "mcp-zap-server.zap.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.zap.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.zap.persistence.size }}
+  {{- if .Values.zap.persistence.storageClass }}
+  storageClassName: {{ .Values.zap.persistence.storageClass }}
+  {{- end }}
+{{- end }}

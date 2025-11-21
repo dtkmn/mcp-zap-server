@@ -1,0 +1,105 @@
+{{- if .Values.zap.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-zap
+  labels:
+    {{- include "mcp-zap-server.zap.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.zap.replicaCount }}
+  strategy:
+    type: Recreate  # ZAP is stateful, use Recreate strategy
+  selector:
+    matchLabels:
+      {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mcp-zap-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: zap
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.zap.image.repository }}:{{ .Values.zap.image.tag }}"
+        imagePullPolicy: {{ .Values.zap.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.zap.service.targetPort }}
+          protocol: TCP
+        command:
+        - zap.sh
+        - -daemon
+        - -host
+        - "0.0.0.0"
+        - -port
+        - "{{ .Values.zap.service.targetPort }}"
+        - -config
+        - api.key={{ .Values.zap.config.apiKey }}
+        {{- if .Values.zap.config.options }}
+        - {{ .Values.zap.config.options }}
+        {{- end }}
+        env:
+        - name: ZAP_PORT
+          value: "{{ .Values.zap.service.targetPort }}"
+        {{- if .Values.zap.livenessProbe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.zap.livenessProbe.httpGet.path }}
+            port: {{ .Values.zap.livenessProbe.httpGet.port }}
+          initialDelaySeconds: {{ .Values.zap.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.zap.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.zap.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.zap.livenessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.zap.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.zap.readinessProbe.httpGet.path }}
+            port: {{ .Values.zap.readinessProbe.httpGet.port }}
+          initialDelaySeconds: {{ .Values.zap.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.zap.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.zap.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.zap.readinessProbe.failureThreshold }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.zap.resources | nindent 12 }}
+        {{- if .Values.zap.persistence.enabled }}
+        volumeMounts:
+        - name: zap-data
+          mountPath: {{ .Values.zap.persistence.mountPath }}
+        {{- end }}
+      {{- if .Values.zap.persistence.enabled }}
+      volumes:
+      - name: zap-data
+        persistentVolumeClaim:
+          claimName: {{ include "mcp-zap-server.fullname" . }}-zap-pvc
+      {{- end }}
+      {{- with .Values.zap.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.zap.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.zap.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

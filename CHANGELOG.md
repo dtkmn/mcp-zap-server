@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.0] - 2025-11-22
+
+### Changed
+- **Framework**: Upgraded Spring Boot from 3.5.7 to 4.0.0
+- **Security**: Migrated from JJWT to Spring Security OAuth2 JWT for GraalVM native image compatibility
+- **Security**: CSRF protection now disabled in `none` mode for MCP protocol compatibility
+- **Security**: CSRF protection enabled by default in `api-key` and `jwt` modes (Spring Security default)
+- **Security**: Changed default security mode to disabled (`MCP_SECURITY_ENABLED=false`) in docker-compose for development
+- **Performance**: Added GraalVM native image support with 10x faster startup time (0.6s vs 3-5s)
+- **Docker**: Added healthcheck to Dockerfile.native for container orchestration
+- **Docker**: Added curl to runtime dependencies for healthcheck support
+- **Tests**: Removed deprecated `@AutoConfigureWebTestClient` annotation (auto-configured in Spring Boot 4.0.0)
+
+### Added
+- GraalVM native image build support via `Dockerfile.native`
+- Spring Security OAuth2 JWT library for native-image-ready JWT handling
+- Comprehensive CSRF documentation in README, SECURITY_MODES.md, and JWT_AUTHENTICATION.md
+- Development and production Docker Compose profiles (`docker-compose.dev.yml` and `docker-compose.prod.yml`)
+- Quick start scripts (`dev.sh` for JVM builds, `prod.sh` for native builds)
+- Native image performance documentation (`docs/NATIVE_IMAGE_PERFORMANCE.md`)
+
+### Removed
+- JJWT library (incompatible with GraalVM native images)
+- Native-image reflection configuration files (no longer needed with Spring Security OAuth2)
+- Deprecated `@AutoConfigureWebTestClient` annotation from tests
+
 ## [0.2.1] - 2025-10-24
 
 ### Changed

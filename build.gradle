@@ -1,11 +1,11 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.7'
+    id 'org.springframework.boot' version '4.0.0'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'mcp.server.zap'
-version = '0.3.0-SNAPSHOT'
+version = '0.3.0'
 
 java {
     toolchain {
@@ -31,24 +31,14 @@ repositories {
 
 ext {
     set('springAiVersion', "1.1.0")
-    set('jjwtVersion', "0.13.0")
 }
 
 dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.zaproxy:zap-clientapi:1.16.0'
-    
-    // JWT dependencies
-    implementation 'io.jsonwebtoken:jjwt-api'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl'
-    runtimeOnly('io.jsonwebtoken:jjwt-jackson') {
-        exclude group: 'com.fasterxml.jackson.core', module: 'jackson-databind'
-    }
-    
-    // Explicit Jackson version (jjwt-jackson would downgrade to 2.12.7.1)
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.19.2'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
@@ -62,7 +52,6 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
-        mavenBom "io.jsonwebtoken:jjwt-bom:${jjwtVersion}"
     }
 }
 

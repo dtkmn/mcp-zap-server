@@ -142,6 +142,8 @@ MCP_SECURITY_MODE=none
 
 Use this mode **only** for local development on trusted networks. All requests are permitted without authentication.
 
+**CSRF Protection**: Disabled for MCP protocol compatibility (MCP endpoints don't support CSRF tokens).
+
 #### 🔑 Mode 2: API Key Authentication (`api-key`)
 
 **✅ Recommended for: Simple deployments, internal networks**
@@ -158,6 +160,8 @@ Simple authentication with a static API key:
 # Using X-API-Key header
 curl -H "X-API-Key: your-mcp-api-key" http://localhost:7456/mcp
 ```
+
+**CSRF Protection**: Disabled (by design) - This is an API-only server using token-based authentication, not session cookies. CSRF attacks only affect cookie-based authentication in browsers. See [SECURITY.md](SECURITY.md#csrf-protection---why-its-disabled) for detailed explanation.
 
 **Advantages**: Simple configuration, no token expiration, minimal overhead  
 **Use Cases**: Docker Compose, internal networks, single-tenant deployments
@@ -191,10 +195,14 @@ curl -X POST http://localhost:7456/auth/refresh \
   -d '{"refreshToken": "YOUR_REFRESH_TOKEN"}'
 ```
 
+**CSRF Protection**: Disabled (by design) - API-only server with stateless JWT authentication. See [SECURITY.md](SECURITY.md#csrf-protection---why-its-disabled) for OWASP compliance explanation.
+
 **Advantages**: Tokens expire (1hr access, 7d refresh), token revocation, audit trails  
 **Use Cases**: Production deployments, public access, compliance requirements
 
 **Note**: JWT mode is backward compatible—clients can still use API keys during migration.
+
+**🔐 MCP Security Compliance**: This server follows the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices). See [SECURITY.md](SECURITY.md#mcp-security-best-practices-compliance) for full compliance details and roadmap.
 
 📚 **Detailed Documentation**:
 - [Security Modes Guide](docs/SECURITY_MODES.md) - Complete comparison and migration guide
@@ -218,6 +226,10 @@ ZAP_URL_WHITELIST=example.com,*.test.com,demo.org
 
 ## Quick Start
 
+### Development (Fast Builds - 2-3 minutes) ⚡
+
+For local development, use the JVM image for fast iteration:
+
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
@@ -229,9 +241,40 @@ cp .env.example .env
 # Create workspace directory
 mkdir -p $(grep LOCAL_ZAP_WORKPLACE_FOLDER .env | cut -d '=' -f2)/zap-wrk
 
-# Start services
-docker-compose up -d
+# Start services (JVM - fast builds)
+./dev.sh
+# OR manually:
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+**Build time:** ~2-3 minutes  
+**Startup:** ~3-5 seconds  
+**Use for:** Development, testing, rapid iteration
+
+### Production (Native Image - 20+ minutes) 🏭
+
+For production deployments with lightning-fast startup:
+
+```bash
+# Build native image (grab a coffee ☕)
+./prod.sh
+# OR manually:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+**Build time:** ~20-25 minutes  
+**Startup:** ~0.6 seconds  
+**Use for:** Production, cloud deployments, serverless
+
+### Performance Comparison
+
+| Metric | JVM (Dev) | Native (Prod) |
+|--------|-----------|---------------|
+| Build Time | 2-3 min | 20-25 min |
+| Startup Time | 3-5 sec | 0.6 sec |
+| Memory | ~300MB | ~200MB |
+| Image Size | 383MB | 391MB |
+| **Best For** | **Development** | **Production** |
 ![Docker-Compose](./images/mcp-zap-server-docker-compose.png)
 
 Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.

@@ -1,0 +1,220 @@
+// Mr. Robot / Hacker Aesthetic for Just the Docs Theme
+
+// Terminal-style fonts
+@import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500;700&display=swap');
+
+// Color palette - Mr. Robot style
+$terminal-green: #00ff00;
+$terminal-red: #d62d20;
+$terminal-blue: #00d4ff;
+$terminal-bg: #050505;
+$terminal-border: #333;
+$terminal-text: #c0c0c0;
+
+// Override Just the Docs colors
+body {
+  background-color: $terminal-bg;
+  color: $terminal-text;
+  font-family: 'Source Code Pro', 'Courier New', monospace;
+}
+
+// Sidebar hacker style
+.side-bar {
+  background-color: #0a0a0a;
+  border-right: 2px solid $terminal-red;
+}
+
+// Navigation links with terminal cursor
+.side-bar .nav-list .nav-list-item > a {
+  display: flex;
+  align-items: center;
+  
+  &::before {
+    content: '>';
+    color: $terminal-red;
+    font-weight: bold;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  
+  &:hover {
+    color: $terminal-green;
+    text-decoration: none;
+  }
+}
+
+// Hide the default expand/collapse button, keep our arrow
+.side-bar .nav-list .nav-list-expander {
+  display: none;
+}
+
+// Remove default list styling
+.side-bar .nav-list .nav-list-item {
+  list-style: none;
+}
+
+// Code blocks - terminal style
+pre, code {
+  background-color: #0f0f0f;
+  border: 1px solid $terminal-border;
+  color: $terminal-text !important;
+  font-family: 'Source Code Pro', monospace;
+  
+  // Remove syntax highlighting in code blocks
+  * {
+    color: $terminal-text !important;
+  }
+  
+  // Comments in terminal green
+  .c, .c1, .cm {
+    color: #666 !important;
+    font-style: italic;
+  }
+}
+
+// Inline code
+code {
+  background-color: rgba(15, 15, 15, 0.5);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: $terminal-green !important;
+}
+
+// Block code (pre > code)
+pre code {
+  color: $terminal-text !important;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+// Headers with glitch effect
+h1, h2, h3 {
+  font-family: 'Source Code Pro', monospace;
+  font-weight: 700;
+  color: $terminal-red;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  
+  &::before {
+    content: '# ';
+    color: $terminal-red;
+    opacity: 0.7;
+  }
+}
+
+// Terminal-style buttons
+.btn, .btn-primary {
+  background-color: transparent;
+  border: 2px solid $terminal-red;
+  color: $terminal-red;
+  font-family: 'Source Code Pro', monospace;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background-color: $terminal-red;
+    color: #000;
+    box-shadow: 0 0 10px $terminal-red;
+  }
+}
+
+// Terminal prompt style for lists
+// Only sidebar navigation links get the arrow
+.side-bar .nav-list .nav-list-item > a {
+  display: flex;
+  align-items: center;
+  
+  &::before {
+    content: '>';
+    color: $terminal-red;
+    font-weight: bold;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  
+  &:hover {
+    color: $terminal-green;
+    text-decoration: none;
+  }
+}
+
+// Callout boxes - system alerts
+.callout {
+  border-left: 4px solid $terminal-red;
+  background-color: rgba(214, 45, 32, 0.1);
+  font-family: 'Source Code Pro', monospace;
+  
+  &.callout-warning {
+    border-left-color: #ff0000;
+  }
+  
+  &.callout-important {
+    border-left-color: #00d4ff;
+  }
+}
+
+// Search bar - terminal input style
+.search-input {
+  background-color: #0f0f0f;
+  border: 2px solid $terminal-border;
+  color: $terminal-green;
+  font-family: 'Source Code Pro', monospace;
+  
+  &:focus {
+    border-color: $terminal-red;
+    box-shadow: 0 0 5px $terminal-red;
+  }
+}
+
+// Links - terminal cursor effect
+a {
+  color: $terminal-blue;
+  text-decoration: none;
+  
+  &:hover {
+    color: $terminal-green;
+    
+    &::after {
+      content: ' _';
+      animation: blink 1s infinite;
+    }
+  }
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+// Tables - grid style
+table {
+  border: 1px solid $terminal-border;
+  
+  th {
+    background-color: #0f0f0f;
+    color: $terminal-red;
+    border: 1px solid $terminal-border;
+    text-transform: uppercase;
+  }
+  
+  td {
+    border: 1px solid $terminal-border;
+  }
+}
+
+// Footer - end of line
+.site-footer {
+  border-top: 2px solid $terminal-red;
+  background-color: #0a0a0a;
+  color: #666;
+  font-family: 'Source Code Pro', monospace;
+  
+  &::before {
+    content: '> _END OF LINE_';
+    display: block;
+    text-align: center;
+    padding: 10px;
+    color: #666;
+  }
+}

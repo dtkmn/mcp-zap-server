@@ -1,0 +1,137 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-mcp
+  labels:
+    {{- include "mcp-zap-server.mcp.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.mcp.autoscaling.enabled }}
+  replicas: {{ .Values.mcp.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mcp-zap-server.mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mcp-zap-server.mcp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "mcp-zap-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: mcp-server
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.mcp.image.repository }}:{{ .Values.mcp.image.tag }}"
+        imagePullPolicy: {{ .Values.mcp.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.mcp.service.targetPort }}
+          protocol: TCP
+        env:
+        - name: SERVER_PORT
+          value: "{{ .Values.mcp.service.targetPort }}"
+        - name: ZAP_API_URL
+          value: "{{ .Values.mcp.zapClient.url }}"
+        - name: ZAP_API_PORT
+          value: "{{ .Values.mcp.zapClient.port }}"
+        - name: ZAP_API_KEY
+          value: "{{ .Values.mcp.zapClient.apiKey }}"
+        - name: MCP_SECURITY_MODE
+          value: "{{ .Values.mcp.security.mode }}"
+        - name: MCP_SECURITY_ENABLED
+          value: "{{ .Values.mcp.security.enabled }}"
+        - name: MCP_API_KEY
+          value: "{{ .Values.mcp.security.apiKey }}"
+        - name: JWT_ENABLED
+          value: "{{ .Values.mcp.security.jwt.enabled }}"
+        - name: JWT_SECRET
+          value: "{{ .Values.mcp.security.jwt.secret }}"
+        - name: JWT_ISSUER
+          value: "{{ .Values.mcp.security.jwt.issuer }}"
+        - name: JWT_ACCESS_TOKEN_EXPIRATION
+          value: "{{ .Values.mcp.security.jwt.accessTokenExpiry }}"
+        - name: JWT_REFRESH_TOKEN_EXPIRATION
+          value: "{{ .Values.mcp.security.jwt.refreshTokenExpiry }}"
+        - name: ZAP_MAX_ACTIVE_SCAN_DURATION
+          value: "{{ .Values.mcp.scan.limits.maxActiveScanDurationInMins }}"
+        - name: ZAP_MAX_SPIDER_SCAN_DURATION
+          value: "{{ .Values.mcp.scan.limits.maxSpiderScanDurationInMins }}"
+        - name: ZAP_MAX_CONCURRENT_ACTIVE_SCANS
+          value: "{{ .Values.mcp.scan.limits.maxConcurrentActiveScans }}"
+        - name: ZAP_MAX_CONCURRENT_SPIDER_SCANS
+          value: "{{ .Values.mcp.scan.limits.maxConcurrentSpiderScans }}"
+        - name: ZAP_THREAD_PER_HOST
+          value: "{{ .Values.mcp.scan.limits.threadPerHost }}"
+        - name: ZAP_HOST_PER_SCAN
+          value: "{{ .Values.mcp.scan.limits.hostPerScan }}"
+        - name: ZAP_CONNECTION_TIMEOUT
+          value: "{{ .Values.mcp.scan.limits.connectionTimeoutInSecs }}"
+        - name: ZAP_SPIDER_THREAD_COUNT
+          value: "{{ .Values.mcp.scan.limits.spiderThreadCount }}"
+        - name: ZAP_SPIDER_MAX_DEPTH
+          value: "{{ .Values.mcp.scan.limits.spiderMaxDepth }}"
+        - name: ZAP_ALLOW_LOCALHOST
+          value: "{{ .Values.mcp.scan.url.allowLocalhost }}"
+        - name: ZAP_ALLOW_PRIVATE_NETWORKS
+          value: "{{ .Values.mcp.scan.url.allowPrivateNetworks }}"
+        - name: ZAP_URL_WHITELIST
+          value: "{{ .Values.mcp.scan.url.whitelist }}"
+        - name: ZAP_URL_BLACKLIST
+          value: "{{ .Values.mcp.scan.url.blacklist }}"
+        {{- with .Values.mcp.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.mcp.envFrom }}
+        envFrom:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if .Values.mcp.livenessProbe.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.mcp.livenessProbe.httpGet.path }}
+            port: {{ .Values.mcp.livenessProbe.httpGet.port }}
+          initialDelaySeconds: {{ .Values.mcp.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.mcp.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.mcp.livenessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.mcp.livenessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.mcp.readinessProbe.enabled }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.mcp.readinessProbe.httpGet.path }}
+            port: {{ .Values.mcp.readinessProbe.httpGet.port }}
+          initialDelaySeconds: {{ .Values.mcp.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.mcp.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.mcp.readinessProbe.timeoutSeconds }}
+          failureThreshold: {{ .Values.mcp.readinessProbe.failureThreshold }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 12 }}
+      {{- with .Values.mcp.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

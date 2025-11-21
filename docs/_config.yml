@@ -3,27 +3,30 @@ description: Enterprise-grade Security Testing for AI Agents
 url: "https://dtkmn.github.io"
 baseurl: "/mcp-zap-server"
 
-# Switch to Just the Docs via Remote Theme
+# Mr. Robot / Hacker Theme
 remote_theme: just-the-docs/just-the-docs
+color_scheme: dark
 
-# Enable native search
+# Enable search and navigation
 search_enabled: true
 heading_anchors: true
 
-# Visual Customization
-color_scheme: dark # Options: light, dark, system
+# Terminal-style callouts
 callouts:
   warning:
-    title: Warning
+    title: "⚠️ SYSTEM ALERT"
     color: red
   important:
-    title: Important
+    title: "🔐 ROOT ACCESS"
+    color: purple
+  note:
+    title: "📡 TRANSMISSION"
     color: blue
 
 # Header Links
 aux_links:
-  "GitHub Repository": "https://github.com/dtkmn/mcp-zap-server"
-  "Download": "https://github.com/dtkmn/mcp-zap-server/releases"
+  "📡 GitHub": "https://github.com/dtkmn/mcp-zap-server"
+  "⬇️ Download": "https://github.com/dtkmn/mcp-zap-server/releases"
 
 # Footer
 footer_content: "Copyright &copy; 2025 Daniel Tse. Distributed by the MIT License."
@@ -34,21 +37,7 @@ plugins:
   - jekyll-sitemap
   - jekyll-remote-theme
 
-# Theme Settings
-remote_theme: just-the-docs/just-the-docs
-
-# Force Dark Mode
-color_scheme: dark
-
-# Search Settings
-search_enabled: true
-heading_anchors: true
-
-# Mr. Robot Style Callouts
-callouts:
-  warning:
-    title: SYSTEM ALERT
-    color: red
-  important:
-    title: ROOT ACCESS
-    color: purple
+# Disable syntax highlighting for terminal aesthetic
+kramdown:
+  syntax_highlighter_opts:
+    disable: true

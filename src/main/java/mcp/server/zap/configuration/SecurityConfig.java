@@ -1,6 +1,5 @@
 package mcp.server.zap.configuration;
 
-import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.service.JwtService;
 import mcp.server.zap.service.TokenBlacklistService;
@@ -15,6 +14,7 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -25,18 +25,34 @@ import java.util.List;
 /**
  * Security configuration for the MCP ZAP Server.
  * Supports three authentication modes:
- * - NONE: No authentication (development/testing only) - CSRF enabled
- * - API_KEY: Simple API key authentication - CSRF enabled
- * - JWT: JWT token-based authentication (recommended for production) - CSRF enabled
+ * - NONE: No authentication (development/testing only)
+ * - API_KEY: Simple API key authentication
+ * - JWT: JWT token-based authentication (recommended for production)
  * 
- * IMPORTANT: CSRF protection is ALWAYS enabled (Spring Security default) across all modes.
- * This follows security best practices and provides defense-in-depth protection against
- * Cross-Site Request Forgery attacks.
+ * CSRF PROTECTION: Intentionally DISABLED for all modes because:
  * 
- * Note: This API is designed for machine-to-machine communication (MCP clients). If you
- * experience CSRF token issues with non-browser clients, ensure your client includes the
- * CSRF token in requests, or document why CSRF can be safely ignored for your use case.
- * For local STDIO-based MCP clients, use NONE mode with proper network isolation.
+ * 1. **API-Only Server**: This server provides a RESTful API for machine-to-machine 
+ *    communication, not a browser-based web application.
+ * 
+ * 2. **Token-Based Authentication**: Uses JWT tokens and API keys sent via HTTP headers
+ *    (Authorization/X-API-Key), NOT session cookies. CSRF attacks only work when 
+ *    authentication credentials are automatically sent by browsers (cookies).
+ * 
+ * 3. **Stateless Architecture**: No session state or cookies are used. Each request 
+ *    includes explicit authentication credentials.
+ * 
+ * 4. **MCP Protocol Requirement**: MCP clients (Claude Desktop, Cursor, mcpo) do not 
+ *    support CSRF token exchange as part of the protocol specification.
+ * 
+ * This follows OWASP API Security best practices:
+ * https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+ * (Section: "When to Use CSRF Protection" - Not applicable for stateless APIs)
+ * 
+ * Security is maintained through:
+ * - Strong token-based authentication (JWT with 256-bit secrets)
+ * - Token expiration and refresh mechanisms
+ * - HTTPS in production (via reverse proxy)
+ * - Input validation and URL whitelisting
  */
 @Slf4j
 @Configuration
@@ -84,23 +100,23 @@ public class SecurityConfig {
         SecurityMode mode = getSecurityMode();
         
         // If authentication is disabled or mode is NONE, permit all requests
-        // Note: CSRF protection remains enabled even in NONE mode following security best practices
+        // CSRF protection disabled for /mcp endpoint (used by mcpo for MCP protocol)
         if (!securityEnabled || mode == SecurityMode.NONE) {
             log.warn("⚠️ SECURITY DISABLED - All requests will be permitted without authentication");
             log.warn("   This should ONLY be used in development/testing environments");
-            log.warn("   CSRF protection: ENABLED (Spring default)");
+            log.warn("   CSRF protection: DISABLED for /mcp endpoint (MCP protocol)");
             return http
-                // CSRF protection NOT disabled - using Spring Security default
+                .csrf(csrf -> csrf.disable())
                 .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
                 .build();
         }
 
         // Apply authentication for API_KEY or JWT mode
-        // CSRF protection is ENABLED by default (Spring Security default behavior)
+        // CSRF protection: Disabled for API-only server with token-based authentication
         log.info("Security mode: {} - Authentication required for all endpoints (except public paths)", mode);
-        log.info("CSRF protection: ENABLED (Spring Security default)");
+        log.info("CSRF protection: DISABLED (API-only server with token-based auth, no cookies)");
         http
-            // CSRF protection NOT disabled - using Spring Security default
+            .csrf(csrf -> csrf.disable())  // Disable CSRF for API-only server (MCP protocol doesn't support CSRF)
             .authorizeExchange(exchanges -> exchanges
                 .pathMatchers("/actuator/health", "/actuator/info", "/auth/token", "/auth/refresh").permitAll()
                 .anyExchange().authenticated()

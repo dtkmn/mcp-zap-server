@@ -1,0 +1,238 @@
+# Default values for mcp-zap-server
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  # Environment (dev, staging, prod)
+  environment: dev
+
+# ZAP Proxy Configuration
+zap:
+  enabled: true
+  replicaCount: 1  # Usually keep at 1, ZAP is stateful
+  
+  image:
+    repository: zaproxy/zap-stable
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+    annotations: {}
+  
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+  
+  # ZAP specific configuration
+  config:
+    apiKey: "changeme-zap-api-key"  # Change in production!
+    # Additional ZAP startup options
+    options: "-config api.disablekey=false -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true"
+  
+  persistence:
+    enabled: true
+    storageClass: ""  # Use default storage class
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    mountPath: /zap/wrk
+  
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /
+      port: 8090
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /
+      port: 8090
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # Node selector, tolerations, and affinity
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# MCP Server Configuration
+mcp:
+  enabled: true
+  replicaCount: 3  # Scale based on load
+  
+  image:
+    repository: dtkmn/mcp-zap-server  # Change to your registry
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  
+  service:
+    type: LoadBalancer  # Use LoadBalancer for external access, ClusterIP for internal only
+    port: 7456
+    targetPort: 7456
+    annotations: {}
+    # For AWS: service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # For GCP: cloud.google.com/load-balancer-type: "Internal"
+  
+  # Ingress configuration (optional, alternative to LoadBalancer)
+  ingress:
+    enabled: false
+    className: "nginx"
+    annotations: {}
+      # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: mcp-zap.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+      # - secretName: mcp-zap-tls
+      #   hosts:
+      #     - mcp-zap.example.com
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  # Security Configuration
+  security:
+    mode: "none"  # Options: none, api-key, jwt
+    enabled: false
+    apiKey: "changeme-mcp-api-key"  # Only used if mode=api-key
+    
+    # JWT Configuration (only used if mode=jwt)
+    jwt:
+      enabled: false
+      secret: ""  # Generate with: openssl rand -base64 32
+      issuer: "mcp-zap-server"
+      accessTokenExpiry: 3600
+      refreshTokenExpiry: 604800
+  
+  # ZAP Client Configuration (connects to ZAP pod)
+  zapClient:
+    url: "zap-proxy"  # Service name of ZAP
+    port: 8090
+    apiKey: "changeme-zap-api-key"  # Must match zap.config.apiKey
+  
+  # Scan Configuration
+  scan:
+    limits:
+      maxActiveScanDurationInMins: 30
+      maxSpiderScanDurationInMins: 15
+      maxConcurrentActiveScans: 3
+      maxConcurrentSpiderScans: 5
+      threadPerHost: 10
+      hostPerScan: 5
+      connectionTimeoutInSecs: 60
+      spiderThreadCount: 5
+      spiderMaxDepth: 10
+    
+    url:
+      allowLocalhost: false
+      allowPrivateNetworks: false
+      whitelist: ""
+      blacklist: "localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  
+  # Liveness and readiness probes
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /actuator/health
+      port: 7456
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /actuator/health
+      port: 7456
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  # Environment variables
+  env: []
+    # - name: CUSTOM_VAR
+    #   value: "custom-value"
+  
+  # Secrets (use Kubernetes secrets or external secret management)
+  envFrom: []
+    # - secretRef:
+    #     name: mcp-zap-secrets
+  
+  # Node selector, tolerations, and affinity
+  nodeSelector: {}
+  tolerations: []
+  
+  # Pod affinity to co-locate MCP pods with ZAP (optional, for reduced latency)
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: zap-proxy
+            topologyKey: kubernetes.io/hostname
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Security Context
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+
+# Image pull secrets (if using private registry)
+imagePullSecrets: []
+  # - name: regcred
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}

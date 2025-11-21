@@ -1,0 +1,46 @@
+# Stage 1: Build native image with GraalVM
+FROM ghcr.io/graalvm/native-image-community:25 AS builder
+
+WORKDIR /build
+
+# Copy Gradle wrapper and build files
+COPY gradlew .
+COPY gradle gradle
+COPY build.gradle settings.gradle ./
+
+# Copy source code
+COPY src src
+
+# Build native executable
+RUN ./gradlew nativeCompile --no-daemon --parallel --max-workers=8
+
+# Stage 2: Runtime image
+FROM debian:bookworm-slim
+
+# Install required runtime libraries
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libstdc++6 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy native executable from builder
+COPY --from=builder /build/build/native/nativeCompile/mcp-zap-server .
+
+# Run as non-root user
+RUN groupadd -g 1001 appuser && \
+    useradd -r -u 1001 -g appuser appuser && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 9092
+
+# Healthcheck
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=10s \
+  CMD curl -f http://localhost:7456/actuator/health || exit 1
+
+ENTRYPOINT ["/app/mcp-zap-server"]

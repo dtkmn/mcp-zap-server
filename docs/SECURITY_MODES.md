@@ -39,6 +39,9 @@ export MCP_SECURITY_MODE=none
 - Debugging connectivity issues
 - Proof of concept demos
 
+**CSRF Protection:**
+- ✅ Disabled for MCP protocol compatibility (MCP endpoints don't use CSRF tokens)
+
 **Risks:**
 - ❌ No authentication or authorization
 - ❌ Anyone with network access can use the service
@@ -93,6 +96,9 @@ response = requests.post("http://localhost:7456/mcp", headers=headers)
 - ✅ Single-tenant applications
 - ✅ Simple authentication requirements
 - ✅ When you want minimal client configuration
+
+**CSRF Protection:**
+- ✅ Enabled (Spring Security default) for web security
 
 **Advantages:**
 - Simple to configure
@@ -183,6 +189,9 @@ curl -X POST http://localhost:7456/auth/refresh \
 - ✅ Public or semi-public access
 - ✅ Compliance requirements (audit trails)
 - ✅ Fine-grained access control needed
+
+**CSRF Protection:**
+- ✅ Enabled (Spring Security default) for web security
 
 **Advantages:**
 - Tokens expire automatically (access: 1hr, refresh: 7 days)

@@ -18,6 +18,7 @@ The MCP ZAP Server supports JWT (JSON Web Token) authentication for enhanced sec
 - **Token Revocation**: Blacklist tokens before expiration for immediate access revocation
 - **Backward Compatible**: Coexists with existing API key authentication
 - **HS256 Signing**: Industry-standard HMAC-SHA256 algorithm for token signing
+- **CSRF Protection**: Enabled by default (Spring Security) for web security best practices
 
 ## Quick Start
 

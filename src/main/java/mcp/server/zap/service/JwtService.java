@@ -1,21 +1,15 @@
 package mcp.server.zap.service;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.JwtParser;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.UnsupportedJwtException;
-import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.configuration.JwtProperties;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,8 +21,8 @@ import java.util.UUID;
 public class JwtService {
 
     private final JwtProperties jwtProperties;
-    private final SecretKey secretKey;
-    private final JwtParser jwtParser;
+    private final JwtEncoder jwtEncoder;
+    private final JwtDecoder jwtDecoder;
 
     public JwtService(JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;
@@ -44,11 +38,12 @@ public class JwtService {
             throw new IllegalStateException("JWT secret must be at least 256 bits (32 characters)");
         }
         
-        this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        SecretKey secretKey = new SecretKeySpec(keyBytes, "HmacSHA256");
         
-        // Initialize JWT parser
-        this.jwtParser = Jwts.parser()
-                .verifyWith(secretKey)
+        // Initialize JWT encoder and decoder
+        this.jwtEncoder = new NimbusJwtEncoder(new com.nimbusds.jose.jwk.source.ImmutableSecret<>(secretKey));
+        this.jwtDecoder = NimbusJwtDecoder.withSecretKey(secretKey)
+                .macAlgorithm(MacAlgorithm.HS256)
                 .build();
         
         log.info("JWT service initialized with issuer: {}", jwtProperties.getIssuer());
@@ -65,19 +60,22 @@ public class JwtService {
         Instant now = Instant.now();
         Instant expiry = now.plusSeconds(jwtProperties.getAccessTokenExpiry());
 
-        return Jwts.builder()
-                .header()
-                    .type("JWT")
-                .and()
+        JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(clientId)
                 .issuer(jwtProperties.getIssuer())
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiry))
+                .issuedAt(now)
+                .expiresAt(expiry)
                 .id(UUID.randomUUID().toString())
                 .claim("scopes", scopes)
                 .claim("type", "access")
-                .signWith(secretKey, Jwts.SIG.HS256)
-                .compact();
+                .build();
+
+        JwtEncoderParameters parameters = JwtEncoderParameters.from(
+                JwsHeader.with(MacAlgorithm.HS256).type("JWT").build(),
+                claims
+        );
+
+        return jwtEncoder.encode(parameters).getTokenValue();
     }
 
     /**
@@ -90,44 +88,35 @@ public class JwtService {
         Instant now = Instant.now();
         Instant expiry = now.plusSeconds(jwtProperties.getRefreshTokenExpiry());
 
-        return Jwts.builder()
-                .header()
-                    .type("JWT")
-                .and()
+        JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(clientId)
                 .issuer(jwtProperties.getIssuer())
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(expiry))
+                .issuedAt(now)
+                .expiresAt(expiry)
                 .id(UUID.randomUUID().toString())
                 .claim("type", "refresh")
-                .signWith(secretKey, Jwts.SIG.HS256)
-                .compact();
+                .build();
+
+        JwtEncoderParameters parameters = JwtEncoderParameters.from(
+                JwsHeader.with(MacAlgorithm.HS256).type("JWT").build(),
+                claims
+        );
+
+        return jwtEncoder.encode(parameters).getTokenValue();
     }
 
     /**
      * Validate and parse a JWT token.
      *
      * @param token JWT token string
-     * @return Parsed claims
+     * @return Parsed JWT
      * @throws JwtException if token is invalid
      */
-    public Claims validateToken(String token) {
+    public Jwt validateToken(String token) {
         try {
-            return jwtParser.parseSignedClaims(token).getPayload();
-        } catch (ExpiredJwtException e) {
-            log.debug("JWT token expired: {}", e.getMessage());
-            throw e;
-        } catch (UnsupportedJwtException e) {
-            log.warn("Unsupported JWT token: {}", e.getMessage());
-            throw e;
-        } catch (MalformedJwtException e) {
-            log.warn("Malformed JWT token: {}", e.getMessage());
-            throw e;
-        } catch (SecurityException e) {
-            log.warn("Invalid JWT signature: {}", e.getMessage());
-            throw e;
-        } catch (IllegalArgumentException e) {
-            log.warn("JWT claims string is empty: {}", e.getMessage());
+            return jwtDecoder.decode(token);
+        } catch (JwtException e) {
+            log.warn("JWT validation failed: {}", e.getMessage());
             throw e;
         }
     }
@@ -139,8 +128,8 @@ public class JwtService {
      * @return Client ID
      */
     public String getClientIdFromToken(String token) {
-        Claims claims = validateToken(token);
-        return claims.getSubject();
+        Jwt jwt = validateToken(token);
+        return jwt.getSubject();
     }
 
     /**
@@ -151,8 +140,8 @@ public class JwtService {
      */
     @SuppressWarnings("unchecked")
     public List<String> getScopesFromToken(String token) {
-        Claims claims = validateToken(token);
-        Object scopesClaim = claims.get("scopes");
+        Jwt jwt = validateToken(token);
+        Object scopesClaim = jwt.getClaim("scopes");
         if (scopesClaim instanceof List) {
             return (List<String>) scopesClaim;
         }
@@ -166,8 +155,8 @@ public class JwtService {
      * @return Token type
      */
     public String getTokenType(String token) {
-        Claims claims = validateToken(token);
-        return claims.get("type", String.class);
+        Jwt jwt = validateToken(token);
+        return jwt.getClaim("type");
     }
 
     /**
@@ -177,8 +166,8 @@ public class JwtService {
      * @return Token ID
      */
     public String getTokenId(String token) {
-        Claims claims = validateToken(token);
-        return claims.getId();
+        Jwt jwt = validateToken(token);
+        return jwt.getId();
     }
 
     /**
@@ -189,9 +178,9 @@ public class JwtService {
      */
     public boolean isTokenExpired(String token) {
         try {
-            Claims claims = validateToken(token);
-            return claims.getExpiration().before(new Date());
-        } catch (ExpiredJwtException e) {
+            Jwt jwt = validateToken(token);
+            return jwt.getExpiresAt() != null && jwt.getExpiresAt().isBefore(Instant.now());
+        } catch (JwtException e) {
             return true;
         }
     }
@@ -204,12 +193,15 @@ public class JwtService {
      */
     public long getSecondsUntilExpiration(String token) {
         try {
-            Claims claims = validateToken(token);
-            Instant expiry = claims.getExpiration().toInstant();
+            Jwt jwt = validateToken(token);
+            Instant expiry = jwt.getExpiresAt();
+            if (expiry == null) {
+                return 0;
+            }
             Instant now = Instant.now();
             long seconds = expiry.getEpochSecond() - now.getEpochSecond();
             return Math.max(0, seconds);
-        } catch (ExpiredJwtException e) {
+        } catch (JwtException e) {
             return 0;
         }
     }

@@ -1,10 +1,9 @@
 package mcp.server.zap.service;
 
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
 import mcp.server.zap.configuration.JwtProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.jwt.JwtException;
 
 import java.util.Arrays;
 import java.util.List;
@@ -128,12 +127,15 @@ class JwtServiceTest {
         JwtService shortExpiryService = new JwtService(shortExpiryProps);
         String token = shortExpiryService.generateAccessToken("test-client", Arrays.asList("scan:read"));
 
+        // Token should not be expired immediately
+        assertThat(shortExpiryService.isTokenExpired(token)).isFalse();
+        
         // Wait for token to expire
         Thread.sleep(2000);
 
-        // When/Then
-        assertThatThrownBy(() -> shortExpiryService.validateToken(token))
-                .isInstanceOf(ExpiredJwtException.class);
+        // Token should now be expired
+        assertThat(shortExpiryService.isTokenExpired(token)).isTrue();
+        assertThat(shortExpiryService.getSecondsUntilExpiration(token)).isEqualTo(0);
     }
 
     @Test

@@ -1,6 +1,5 @@
 package mcp.server.zap.configuration;
 
-import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.service.JwtService;
 import mcp.server.zap.service.TokenBlacklistService;
@@ -15,6 +14,7 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -84,13 +84,13 @@ public class SecurityConfig {
         SecurityMode mode = getSecurityMode();
         
         // If authentication is disabled or mode is NONE, permit all requests
-        // Note: CSRF protection remains enabled even in NONE mode following security best practices
+        // CSRF protection disabled for /mcp endpoint (used by mcpo for MCP protocol)
         if (!securityEnabled || mode == SecurityMode.NONE) {
             log.warn("⚠️ SECURITY DISABLED - All requests will be permitted without authentication");
             log.warn("   This should ONLY be used in development/testing environments");
-            log.warn("   CSRF protection: ENABLED (Spring default)");
+            log.warn("   CSRF protection: DISABLED for /mcp endpoint (MCP protocol)");
             return http
-                // CSRF protection NOT disabled - using Spring Security default
+                .csrf(csrf -> csrf.disable())
                 .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
                 .build();
         }

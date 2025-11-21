@@ -1,0 +1,21 @@
+{{- if .Values.zap.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-zap
+  labels:
+    {{- include "mcp-zap-server.zap.labels" . | nindent 4 }}
+  {{- with .Values.zap.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.zap.service.type }}
+  ports:
+  - port: {{ .Values.zap.service.port }}
+    targetPort: {{ .Values.zap.service.targetPort }}
+    protocol: TCP
+    name: http
+  selector:
+    {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 4 }}
+{{- end }}

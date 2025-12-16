@@ -33,6 +33,12 @@ jobs:
     - name: Generate SBOM with CycloneDX
       run: ./gradlew cyclonedxBom
 
+    - name: Upload SBOM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bom.json
+        path: build/reports/cyclonedx-direct/bom.json
+
     - name: Get short SHA from long commit SHA for image tagging
       id: build-tag
       run: echo "build_number=$(git rev-parse --short ${{ github.sha }})" >> "$GITHUB_OUTPUT"

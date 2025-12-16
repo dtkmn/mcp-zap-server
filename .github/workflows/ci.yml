@@ -7,7 +7,7 @@ on:
     types: [ opened, reopened, synchronize, edited ]
     branches: [ "main" ]
   push:
-    branches:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -29,6 +29,15 @@ jobs:
 
     - name: Build with Gradle
       run: ./gradlew build --scan --no-daemon --stacktrace --info
+
+    - name: Generate SBOM with CycloneDX
+      run: ./gradlew cyclonedxBom
+
+    - name: Upload SBOM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: bom.json
+        path: build/reports/cyclonedx-direct/bom.json
 
     - name: Get short SHA from long commit SHA for image tagging
       id: build-tag

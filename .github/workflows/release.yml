@@ -46,5 +46,4 @@ jobs:
           push: true
           platforms: linux/amd64, linux/arm64
           tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
-            ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/mcp-zap-server:${{ matrix.tag-suffix }}

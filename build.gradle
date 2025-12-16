@@ -21,12 +21,6 @@ configurations {
 
 repositories {
     mavenCentral()
-    maven { url = 'https://repo.spring.io/milestone' }
-    maven { url = 'https://repo.spring.io/snapshot' }
-    maven {
-        name = 'Central Portal Snapshots'
-        url = 'https://central.sonatype.com/repository/maven-snapshots/'
-    }
 }
 
 ext {
@@ -38,7 +32,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-    implementation 'org.zaproxy:zap-clientapi:1.16.0'
+    implementation 'org.zaproxy:zap-clientapi:1.17.0'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

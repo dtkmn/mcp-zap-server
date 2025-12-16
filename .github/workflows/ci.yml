@@ -30,6 +30,9 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew build --scan --no-daemon --stacktrace --info
 
+    - name: Generate SBOM with CycloneDX
+      run: ./gradlew cyclonedxBom
+
     - name: Get short SHA from long commit SHA for image tagging
       id: build-tag
       run: echo "build_number=$(git rev-parse --short ${{ github.sha }})" >> "$GITHUB_OUTPUT"

@@ -1,5 +1,5 @@
 # Build stage
-FROM gradle:9.3.0-jdk25 AS builder
+FROM gradle:9.3.1-jdk25 AS builder
 WORKDIR /usr/src/app
 COPY src ./src
 COPY build.gradle .

@@ -57,6 +57,19 @@ Choose your initialization vector:
 * **Active_Scan**: Launch targeted attacks against defined scopes.
 * **Reporting**: Generate evidence (HTML/JSON) for vulnerability assessment.
 
+
+
+## > ./contact_support.sh
+
+**Target:** Enterprise & Corporate Integration
+
+**Agentic Lab** provides commercial consulting for:
+* 🔐 **SSO/OAuth2 Authentication** Setup
+* 🛡️ **CI/CD Quality Gates** (GitHub Actions / GitLab)
+* 📜 **Compliance Reporting**
+
+[**> OPEN_COMMUNICATION_CHANNEL**](mailto:agentic.lab.au@gmail.com)
+
 ---
 
 <div style="text-align: center; margin-top: 40px; color: #666;">

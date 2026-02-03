@@ -7,6 +7,8 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/dtkmn/mcp-zap-server?color=red)
 ![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
 
+[![Commercial Support](https://img.shields.io/badge/Agentic_Lab-Enterprise_Support-blueviolet?style=for-the-badge&logo=shield)](mailto:agentic.lab.au@gmail.com?subject=Enterprise%20Inquiry)
+
 
 >**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
 
@@ -419,3 +421,16 @@ Replace `your-mcp-api-key-here` with the `MCP_API_KEY` value from your `.env` fi
 
 ### Check the alerts found from the spider scan
 ![mcp-zap-server-prompt-3](./images/mcp-zap-server-prompt-3.png)
+
+## 💼 Commercial Support & Enterprise
+
+Need help integrating MCP ZAP Server into your corporate CI/CD pipeline? Looking for advanced features or dedicated support?
+
+**Agentic Lab** offers commercial consulting and enterprise-tier features:
+
+* **🚀 Enterprise Deployment**: Custom Kubernetes/Helm configurations, High Availability (HA) setups, and Air-Gapped environment support.
+* **🔐 Complex Authentication**: Custom MCP tools to handle complex login flows (OAuth2, 2FA, SSO) that standard scanners fail to crawl.
+* **🛠️ CI/CD "Quality Gates"**: Setup of automated blocking rules (e.g., *"Fail build if High Risk > 0"*) for GitHub Actions, GitLab CI, and Jenkins.
+* **📊 Executive Reporting**: Custom PDF summaries, compliance mapping (PCI-DSS, SOC2), and persistent scan history dashboards.
+
+**[👉 Contact Agentic Lab for a Quote](mailto:agentic.lab.au@gmail.com?subject=Inquiry:%20MCP%20ZAP%20Server%20Enterprise%20Support)**

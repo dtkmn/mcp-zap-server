@@ -7,16 +7,15 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/dtkmn/mcp-zap-server?color=red)
 ![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
 
-[![Commercial Support](https://img.shields.io/badge/Agentic_Lab-Enterprise_Support-blueviolet?style=for-the-badge&logo=shield)](mailto:agentic.lab.au@gmail.com?subject=Enterprise%20Inquiry)
-
-
->**IMPORTANT** This project is a work in progress and is not yet production-ready. It is intended for educational purposes and to demonstrate the capabilities of the Model Context Protocol (MCP) with OWASP ZAP.
-
->**NOTE** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation of the Model Context Protocol (MCP) for use with OWASP ZAP.
+>**NOTE** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation.
 
 # MCP ZAP Server
 
-A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, import OpenAPI specs, and generate reports.
+[![Commercial Support](https://img.shields.io/badge/Agentic_Lab-Enterprise_Support-blueviolet?style=for-the-badge&logo=shield)](mailto:agentic.lab.au@gmail.com?subject=Enterprise%20Inquiry)
+
+A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, and generate reports.
+
+> 🚀 **Using this in production?** [Agentic Lab](#-commercial-support--enterprise) offers enterprise deployment, CI/CD integration, and SLA support.
 
 ## 📚 Documentation
 

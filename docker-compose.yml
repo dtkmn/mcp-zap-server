@@ -83,7 +83,7 @@ services:
     build:
       context: .
       dockerfile: ${DOCKERFILE:-Dockerfile}  # Use Dockerfile.native for native image
-    image: mcp-zap-server:${IMAGE_TAG:-latest}
+    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-latest}
     restart: always
     depends_on:
       zap:
@@ -105,13 +105,13 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
 
   juice-shop:
-    image: bkimminich/juice-shop:v17.3.0
+    image: bkimminich/juice-shop:v19.1.1
     restart: always
     ports:
       - "3001:3000"
 
   petstore:
-    image: swaggerapi/petstore3:1.0.26
+    image: swaggerapi/petstore3:1.0.27
     restart: always
     ports:
       - "3002:8080"

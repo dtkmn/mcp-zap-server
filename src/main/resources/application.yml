@@ -82,9 +82,9 @@ zap:
       allowLocalhost: ${ZAP_ALLOW_LOCALHOST:false}
       allowPrivateNetworks: ${ZAP_ALLOW_PRIVATE_NETWORKS:false}
       # Comma-separated list of allowed domains (wildcards supported: *.example.com)
-      # If whitelist is empty, blacklist will be enforced instead
+      # If set, host must match whitelist AND still pass blacklist/private-network checks
       whitelist: ${ZAP_URL_WHITELIST:}
-      # Default blacklist includes localhost and private network ranges
+      # The default blacklist includes localhost and private network ranges
       blacklist: ${ZAP_URL_BLACKLIST:localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
   
   report:
@@ -104,4 +104,4 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never

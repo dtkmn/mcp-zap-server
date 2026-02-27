@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-02-26
+
+### Added
+- New `zap_get_findings_summary` tool in `ReportService` to generate token-optimized Markdown summaries grouped by risk level and alert type.
+- `ZapHealthIndicator` for reactive ZAP API connectivity checks via Spring Boot Actuator.
+- `GlobalExceptionHandler` with consistent JSON error responses for ZAP API, validation, and unexpected server errors.
+- CycloneDX SBOM generation and artifact upload steps in both CI and release workflows.
+- Manual `workflow_dispatch` support for CI and release workflows, including custom version input for release builds.
+
+### Changed
+- Upgraded Spring Boot plugin to `4.0.3`.
+- Upgraded Spring AI BOM to `1.1.2`.
+- Upgraded Gradle wrapper to `9.3.1` and Docker build image to `gradle:9.3.1-jdk25`.
+- Upgraded ZAP client API to `1.17.0` and added `spring-boot-starter-validation`.
+- Updated release workflow image tagging/version resolution and Docker registry publishing behavior (versioned + `latest` tags).
+- Updated CI Docker publishing to include `dev` tags and SBOM artifacts.
+- Updated `docker-compose.yml` images for MCP ZAP Server (`dtkmn/mcp-zap-server`), Juice Shop (`v19.1.1`), and Petstore (`1.0.27`).
+
+### Fixed
+- Resolved transitive `org.jdom` conflict by excluding legacy `jdom` and explicitly adding `org.jdom:jdom2:2.0.6.1`.
+- Hardened Actuator health endpoint exposure by setting `management.endpoint.health.show-details: never`.
+- Clarified URL whitelist/blacklist behavior comments in `application.yml`.
+
+### Documentation
+- Added non-affiliation/project-positioning note and expanded enterprise/commercial support details in `README.md`.
+- Added commercial/private vulnerability reporting section to `SECURITY.md`.
+- Added commercial support contact section to docs homepage (`docs/index.md`).
+
 ## [0.3.0] - 2025-11-22
 
 ### Changed

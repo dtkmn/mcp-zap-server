@@ -6,8 +6,8 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 | Version    | Supported                                |
 | ---------- | ---------------------------------------- |
-| `>= 0.3.0` | ✅ Active development; receives security fixes |
-| `< 0.3.0`  | ⚠️ Legacy versions; consider upgrading    |
+| `>= 0.4.0` | ✅ Active development; receives security fixes |
+| `< 0.4.0`  | ⚠️ Legacy versions; consider upgrading    |
 
 ## Security Features
 
@@ -81,7 +81,7 @@ All security vulnerabilities in this project should be reported responsibly and 
    # Development: none (CSRF disabled for MCP compatibility)
    MCP_SECURITY_MODE=none
    
-   # Production: jwt (CSRF enabled, tokens expire)
+   # Production: jwt (CSRF intentionally disabled, tokens expire)
    MCP_SECURITY_MODE=jwt
    JWT_ENABLED=true
    JWT_SECRET=<256-bit-secret>
@@ -237,4 +237,4 @@ This policy is modeled after GitHub’s recommended [Security Policy template](h
 
 ---
 
-*Last updated: 2025-05-27*
+*Last updated: 2026-03-05*

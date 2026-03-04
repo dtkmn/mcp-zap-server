@@ -98,7 +98,7 @@ response = requests.post("http://localhost:7456/mcp", headers=headers)
 - ✅ When you want minimal client configuration
 
 **CSRF Protection:**
-- ✅ Enabled (Spring Security default) for web security
+- ✅ Disabled by design (API-only server with token-based auth; no session cookies)
 
 **Advantages:**
 - Simple to configure
@@ -191,7 +191,7 @@ curl -X POST http://localhost:7456/auth/refresh \
 - ✅ Fine-grained access control needed
 
 **CSRF Protection:**
-- ✅ Enabled (Spring Security default) for web security
+- ✅ Disabled by design (API-only server with token-based auth; no session cookies)
 
 **Advantages:**
 - Tokens expire automatically (access: 1hr, refresh: 7 days)

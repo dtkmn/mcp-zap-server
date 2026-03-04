@@ -2,6 +2,11 @@
 
 This directory contains the source files for the [GitHub Pages documentation site](https://dtkmn.github.io/mcp-zap-server/).
 
+## Release Status
+
+- Latest documented release: `v0.4.0` (2026-02-26)
+- Release details: [`CHANGELOG.md`](../CHANGELOG.md)
+
 ## Structure
 
 - `index.md` - Main landing page

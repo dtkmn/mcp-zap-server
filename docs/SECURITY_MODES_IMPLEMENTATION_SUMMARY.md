@@ -35,8 +35,8 @@ The `application.yml` now includes:
 mcp:
   server:
     security:
-      mode: ${MCP_SECURITY_MODE:api-key}  # Default to api-key
-      enabled: ${MCP_SECURITY_ENABLED:true}
+      mode: ${MCP_SECURITY_MODE:none}
+      enabled: ${MCP_SECURITY_ENABLED:false}
 ```
 
 ## 📝 Files Modified
@@ -119,17 +119,10 @@ curl -H "Authorization: Bearer TOKEN" http://localhost:7456/mcp
 
 ## ✅ Testing
 
-All tests pass:
+Validate locally with:
 ```bash
 ./gradlew test
-# BUILD SUCCESSFUL
-# 43 tests executed
-```
-
-Build successful:
-```bash
 ./gradlew build
-# BUILD SUCCESSFUL
 ```
 
 ## 🔒 Security Considerations

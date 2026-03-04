@@ -57,6 +57,17 @@ Choose your initialization vector:
 * **Active_Scan**: Launch targeted attacks against defined scopes.
 * **Reporting**: Generate evidence (HTML/JSON) for vulnerability assessment.
 
+## > cat /opt/releases/v0.4.0.txt
+
+**Latest Release:** `v0.4.0` (2026-02-26)
+
+* Added `zap_get_findings_summary` for token-optimized, LLM-friendly scan summaries.
+* Added `ZapHealthIndicator` and `GlobalExceptionHandler` for better runtime reliability.
+* Added SBOM generation/upload in CI and release workflows.
+* Upgraded stack: Spring Boot `4.0.3`, Gradle `9.3.1`, ZAP Client API `1.17.0`.
+
+[**> READ_CHANGELOG**](https://github.com/dtkmn/mcp-zap-server/blob/main/CHANGELOG.md)
+
 
 
 ## > ./contact_support.sh

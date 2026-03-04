@@ -17,6 +17,16 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 
 > 🚀 **Using this in production?** [Agentic Lab](#-commercial-support--enterprise) offers enterprise deployment, CI/CD integration, and SLA support.
 
+## Latest Release (`v0.4.0`)
+
+- Added `zap_get_findings_summary` for token-optimized Markdown summaries of scan alerts.
+- Added `ZapHealthIndicator` for ZAP API connectivity health checks.
+- Added centralized exception handling via `GlobalExceptionHandler`.
+- Added SBOM generation/upload in CI and release workflows.
+- Upgraded core stack: Spring Boot `4.0.3`, Gradle `9.3.1`, ZAP Client API `1.17.0`.
+
+See [CHANGELOG.md](./CHANGELOG.md) and [RELEASE_NOTES_0.4.0.md](./RELEASE_NOTES_0.4.0.md) for full release details.
+
 ## 📚 Documentation
 
 **[📖 View Full Documentation](https://dtkmn.github.io/mcp-zap-server/)** - Complete guides, API reference, and examples
@@ -53,6 +63,7 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 - **MCP ZAP server**: Exposes ZAP actions as MCP tools. Eliminates manual CLI calls and brittle scripts.
 - **OpenAPI integration**: Import remote OpenAPI specs into ZAP and kick off active scans
 - **Report generation**: Generate HTML/JSON reports and fetch contents programmatically
+- **Findings summary**: Generate LLM-friendly Markdown summaries grouped by risk and alert type
 - **Dockerized**: Runs ZAP and the MCP server in containers, orchestrated via docker-compose
 - **Secure**: Configure API keys for both ZAP (ZAP_API_KEY) and the MCP server (MCP_API_KEY)
 
@@ -82,7 +93,7 @@ flowchart LR
 - LLM support Tool calling (e.g. gpt-4o, Claude 3, Llama 3, mistral, phi3)
 - Docker ≥ 20.10
 - Docker Compose ≥ 1.29
-- Java 21+ (only if you want to build the Spring Boot MCP server outside Docker)
+- Java 25+ (only if you want to build the Spring Boot MCP server outside Docker)
 
 ## Security Configuration
 
@@ -321,7 +332,7 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
     - Connects to the MCP server using streamable HTTP mode via the URL `http://mcp-server:7456/mcp`.
 
 #### `mcp-server`
-- **Image:** mcp-zap-server:latest
+- **Image:** dtkmn/mcp-zap-server:latest
 - **Purpose:** This repo. Acts as the MCP server exposing ZAP actions with API key authentication.
 - **Configuration:**
     - Depends on the `zap` service and connects to it using the configured `ZAP_API_KEY`.
@@ -342,13 +353,13 @@ Once it is done, you can check the [Prompt Examples](#prompt-examples) section t
     - Exposes port 8001.
 
 #### `juice-shop`
-- **Image:** bkimminich/juice-shop
+- **Image:** bkimminich/juice-shop:v19.1.1
 - **Purpose:** Provides a deliberately insecure web application for testing ZAP’s scanning capabilities.
 - **Configuration:**
     - Runs on port 3001.
 
 #### `petstore`
-- **Image:** swaggerapi/petstore3:unstable
+- **Image:** swaggerapi/petstore3:1.0.27
 - **Purpose:** Runs the Swagger Petstore sample API to demonstrate OpenAPI import and scanning.
 - **Configuration:**
     - Runs on port 3002.

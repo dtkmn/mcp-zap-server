@@ -18,7 +18,7 @@ The MCP ZAP Server supports JWT (JSON Web Token) authentication for enhanced sec
 - **Token Revocation**: Blacklist tokens before expiration for immediate access revocation
 - **Backward Compatible**: Coexists with existing API key authentication
 - **HS256 Signing**: Industry-standard HMAC-SHA256 algorithm for token signing
-- **CSRF Protection**: Enabled by default (Spring Security) for web security best practices
+- **CSRF Protection**: Intentionally disabled for this API-only, token-based MCP server
 
 ## Quick Start
 
@@ -494,7 +494,7 @@ Modify your client to:
 ## Additional Resources
 
 - [JWT.io](https://jwt.io/) - JWT token inspector and debugger
-- [JJWT Documentation](https://github.com/jwtk/jjwt) - Java JWT library
+- [Spring Security OAuth2 Resource Server](https://docs.spring.io/spring-security/reference/reactive/oauth2/resource-server/index.html) - JWT validation and resource-server docs
 - [Spring Security](https://spring.io/projects/spring-security) - Security framework
 
 ## Support

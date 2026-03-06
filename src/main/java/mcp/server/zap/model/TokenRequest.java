@@ -1,5 +1,6 @@
 package mcp.server.zap.model;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 
 /**
@@ -7,5 +8,6 @@ import lombok.Data;
  */
 @Data
 public class TokenRequest {
+    @NotBlank(message = "API key is required")
     private String apiKey;
 }

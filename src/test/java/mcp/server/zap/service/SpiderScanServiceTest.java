@@ -1,18 +1,18 @@
 package mcp.server.zap.service;
 
 import mcp.server.zap.configuration.ScanLimitProperties;
+import mcp.server.zap.exception.ZapApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Spider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.mockito.Mockito.*;
 
 public class SpiderScanServiceTest {
     private Spider spider;
@@ -28,33 +28,69 @@ public class SpiderScanServiceTest {
         core = mock(Core.class);
         clientApi.spider = spider;
         clientApi.core = core;
-        
+
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
-        
-        // Setup default mock behavior
+
         when(scanLimitProperties.getConnectionTimeoutInSecs()).thenReturn(60);
         when(scanLimitProperties.getSpiderThreadCount()).thenReturn(5);
         when(scanLimitProperties.getMaxSpiderScanDurationInMins()).thenReturn(15);
         when(scanLimitProperties.getSpiderMaxDepth()).thenReturn(10);
-        
+
         service = new SpiderScanService(clientApi, urlValidationService, scanLimitProperties);
     }
 
     @Test
-    void startSpiderReturnsScanId() throws Exception {
+    void startSpiderScanJobReturnsScanId() throws Exception {
         when(spider.scan(any(), any(), any(), any(), any()))
                 .thenReturn(new ApiResponseElement("scan", "55"));
-        String result = service.startSpider("http://example.com");
-        assertEquals("Spider scan started with ID: 55", result);
+
+        String scanId = service.startSpiderScanJob("http://example.com");
+
+        assertEquals("55", scanId);
         verify(urlValidationService).validateUrl("http://example.com");
         verify(spider).scan("http://example.com", "10", "true", "", "false");
     }
 
     @Test
-    void getSpiderStatusReturnsValue() throws Exception {
+    void getSpiderScanProgressPercentReturnsValue() throws Exception {
         when(spider.status("1")).thenReturn(new ApiResponseElement("status", "80"));
-        String result = service.getSpiderStatus("1");
-        assertEquals("80", result);
+
+        int progress = service.getSpiderScanProgressPercent("1");
+
+        assertEquals(80, progress);
+    }
+
+    @Test
+    void startSpiderScanAsUserJobReturnsScanId() throws Exception {
+        when(spider.scanAsUser(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(new ApiResponseElement("scan", "77"));
+
+        String scanId = service.startSpiderScanAsUserJob(
+                "2",
+                "9",
+                "http://example.com",
+                null,
+                null,
+                null
+        );
+
+        assertEquals("77", scanId);
+        verify(urlValidationService).validateUrl("http://example.com");
+        verify(spider).scanAsUser("2", "9", "http://example.com", "10", "true", "false");
+    }
+
+    @Test
+    void stopSpiderScanJobCallsApi() throws Exception {
+        service.stopSpiderScanJob("9");
+
+        verify(spider).stop("9");
+    }
+
+    @Test
+    void stopSpiderScanJobHandlesException() throws Exception {
+        doThrow(new ClientApiException("boom", null)).when(spider).stop("9");
+
+        assertThrowsExactly(ZapApiException.class, () -> service.stopSpiderScanJob("9"));
     }
 }

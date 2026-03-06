@@ -3,12 +3,7 @@ package mcp.server.zap.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
+import org.zaproxy.clientapi.core.*;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Reports;
 
@@ -18,9 +13,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 public class ReportServiceTest {
     private Reports reports;

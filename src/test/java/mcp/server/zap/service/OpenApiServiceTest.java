@@ -3,17 +3,15 @@ package mcp.server.zap.service;
 import mcp.server.zap.exception.ZapApiException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Openapi;
 
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 public class OpenApiServiceTest {
     private ClientApi clientApi;

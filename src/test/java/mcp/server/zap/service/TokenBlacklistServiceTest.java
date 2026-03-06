@@ -1,6 +1,5 @@
 package mcp.server.zap.service;
 
-import mcp.server.zap.configuration.JwtProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

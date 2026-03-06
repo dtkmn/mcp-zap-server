@@ -16,6 +16,7 @@ class UrlValidationServiceTest {
     void setup() {
         service = new UrlValidationService();
         // Set default configuration
+        ReflectionTestUtils.setField(service, "validationEnabled", true);
         ReflectionTestUtils.setField(service, "allowLocalhost", false);
         ReflectionTestUtils.setField(service, "allowPrivateNetworks", false);
         ReflectionTestUtils.setField(service, "whitelist", List.of());
@@ -53,6 +54,7 @@ class UrlValidationServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://localhost"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://127.0.0.1"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://127.0.0.2"));
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://[::1]"));
     }
 
     @Test
@@ -67,6 +69,8 @@ class UrlValidationServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://10.0.0.1"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://172.16.0.1"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://192.168.1.1"));
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://100.64.0.1"));
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://198.18.0.1"));
     }
 
     @Test
@@ -78,14 +82,21 @@ class UrlValidationServiceTest {
 
     @Test
     void whitelistTakesPrecedence() {
-        ReflectionTestUtils.setField(service, "whitelist", List.of("example.com", "*.test.com"));
-        
+        ReflectionTestUtils.setField(service, "whitelist", List.of("example.com", "*.example.com"));
+
         // Whitelisted domains should pass
         assertDoesNotThrow(() -> service.validateUrl("http://example.com"));
-        assertDoesNotThrow(() -> service.validateUrl("http://api.test.com"));
-        
+        assertDoesNotThrow(() -> service.validateUrl("http://www.example.com"));
+
         // Non-whitelisted should fail
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://other.com"));
+    }
+
+    @Test
+    void whitelistDoesNotBypassNetworkSafetyChecks() {
+        ReflectionTestUtils.setField(service, "whitelist", List.of("localhost", "*.localhost"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://localhost"));
     }
 
     @Test
@@ -97,10 +108,18 @@ class UrlValidationServiceTest {
     }
 
     @Test
+    void blacklistSupportsCidrEntries() {
+        ReflectionTestUtils.setField(service, "allowPrivateNetworks", true);
+        ReflectionTestUtils.setField(service, "blacklist", List.of("10.0.0.0/8", "2001:db8::/32"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://10.1.2.3"));
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://[2001:db8::1]"));
+    }
+
+    @Test
     void wildcardPatternsWork() {
         ReflectionTestUtils.setField(service, "whitelist", List.of("*.example.com"));
-        
-        assertDoesNotThrow(() -> service.validateUrl("http://api.example.com"));
+
         assertDoesNotThrow(() -> service.validateUrl("http://www.example.com"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://example.com"));
     }
@@ -111,5 +130,13 @@ class UrlValidationServiceTest {
         assertNotNull(summary);
         assertTrue(summary.contains("allowLocalhost"));
         assertTrue(summary.contains("allowPrivateNetworks"));
+    }
+
+    @Test
+    void validationCanBeDisabledGlobally() {
+        ReflectionTestUtils.setField(service, "validationEnabled", false);
+
+        assertDoesNotThrow(() -> service.validateUrl("ftp://localhost"));
+        assertDoesNotThrow(() -> service.validateUrl("not-a-url"));
     }
 }

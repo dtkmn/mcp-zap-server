@@ -3,16 +3,14 @@ package mcp.server.zap.service;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.configuration.ScanLimitProperties;
 import mcp.server.zap.exception.ZapApiException;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 
 /**
- * Service for managing ZAP Spider Scans.
- * This service provides methods to start and check the status of spider scans using the ZAP API.
+ * Internal service for managing ZAP spider scans.
+ * Queue orchestration calls these methods to start, monitor, and stop scans.
  */
 @Slf4j
 @Service
@@ -30,14 +28,7 @@ public class SpiderScanService {
         this.scanLimitProperties = scanLimitProperties;
     }
 
-    /**
-     * Start a spider scan against the given URL and return the scanId.
-     *
-     * @param targetUrl Target URL to scan
-     * @return Scan ID of the started spider scan
-     */
-    @Tool(name = "zap_spider", description = "Start a spider scan on the given URL")
-    public String startSpider(@ToolParam(description = "Target URL to spider scan (e.g., http://example.com)") String targetUrl) {
+    String startSpiderScanJob(String targetUrl) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
@@ -74,7 +65,7 @@ public class SpiderScanService {
             String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
             
             log.info("Spider scan started with ID: {} for URL: {}", scanId, targetUrl);
-            return "Spider scan started with ID: " + scanId;
+            return scanId;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Spider scan was interrupted for URL {}", targetUrl);
@@ -95,21 +86,71 @@ public class SpiderScanService {
         }
     }
 
-    /**
-     * Get the status of a spider scan by ID.
-     *
-     * @param scanId The ID of the spider scan
-     * @return Status of the spider scan
-     */
-    @Tool(name = "zap_spider_status", description = "Get status of a spider scan by ID")
-    public String getSpiderStatus(@ToolParam(description = "scanId") String scanId) {
+    String startSpiderScanAsUserJob(String contextId,
+                                    String userId,
+                                    String targetUrl,
+                                    String maxChildren,
+                                    String recurse,
+                                    String subtreeOnly) {
+        String normalizedContextId = requireText(contextId, "contextId");
+        String normalizedUserId = requireText(userId, "userId");
+        urlValidationService.validateUrl(targetUrl);
+
+        String effectiveMaxChildren = hasText(maxChildren) ? maxChildren.trim() : String.valueOf(scanLimitProperties.getSpiderMaxDepth());
+        String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
+        String effectiveSubtreeOnly = hasText(subtreeOnly) ? subtreeOnly.trim() : "false";
+
+        try {
+            zap.spider.setOptionThreadCount(scanLimitProperties.getSpiderThreadCount());
+            zap.spider.setOptionMaxDuration(scanLimitProperties.getMaxSpiderScanDurationInMins());
+
+            ApiResponse resp = zap.spider.scanAsUser(
+                    normalizedContextId,
+                    normalizedUserId,
+                    targetUrl,
+                    effectiveMaxChildren,
+                    effectiveRecurse,
+                    effectiveSubtreeOnly
+            );
+
+            String scanId = ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
+            log.info("Spider-as-user started with ID: {} for URL: {}, context: {}, user: {}",
+                    scanId, targetUrl, normalizedContextId, normalizedUserId);
+            return scanId;
+        } catch (ClientApiException e) {
+            log.error("Error launching spider-as-user for URL {}: {}", targetUrl, e.getMessage(), e);
+            throw new ZapApiException("Error launching spider-as-user for URL " + targetUrl + ": " + e.getMessage(), e);
+        }
+    }
+
+    int getSpiderScanProgressPercent(String scanId) {
         try {
             ApiResponse resp = zap.spider.status(scanId);
-            return ((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue();
+            return Integer.parseInt(((org.zaproxy.clientapi.core.ApiResponseElement) resp).getValue());
         } catch (ClientApiException e) {
             log.error("Error retrieving spider status for ID {}: {}", scanId, e.getMessage(), e);
             throw new ZapApiException("Error retrieving spider status for ID " + scanId, e);
         }
+    }
+
+    void stopSpiderScanJob(String scanId) {
+        try {
+            zap.spider.stop(scanId);
+        } catch (ClientApiException e) {
+            log.error("Error stopping spider scan {}: {}", scanId, e.getMessage(), e);
+            throw new ZapApiException("Error stopping spider scan " + scanId, e);
+        }
+    }
+
+    private String requireText(String value, String fieldName) {
+        if (!hasText(value)) {
+            throw new IllegalArgumentException(fieldName + " cannot be null or blank");
+        }
+        return value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
 }

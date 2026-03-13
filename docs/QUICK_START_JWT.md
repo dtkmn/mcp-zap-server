@@ -89,7 +89,7 @@ curl -X POST http://localhost:7456/zap/spider/start \
 
 ## Step 6: Refresh Token (Optional)
 
-When access token expires, use refresh token:
+When access token expires, use refresh token (one-time use):
 
 ```bash
 REFRESH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -98,6 +98,8 @@ curl -X POST http://localhost:7456/auth/refresh \
   -H "Content-Type: application/json" \
   -d "{\"refreshToken\": \"$REFRESH_TOKEN\"}"
 ```
+
+Store the returned `refreshToken` from the response. The previous refresh token is consumed and cannot be reused.
 
 ## Troubleshooting
 
@@ -119,7 +121,7 @@ Check that `MCP_API_KEY` in `.env` matches the one you're using.
 ### "Invalid or expired JWT token"
 
 1. Check token expiration with `/auth/validate`
-2. Use `/auth/refresh` to get a new access token
+2. Use `/auth/refresh` to get a new token pair (access + rotated refresh token)
 3. If refresh token is expired, get new tokens via `/auth/token`
 
 ## Next Steps

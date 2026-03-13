@@ -2,6 +2,8 @@
 
 Choose your authentication mode in 60 seconds.
 
+For the shipped HTTP/server defaults, the base runtime starts in `api-key`. Use `none` only as an explicit local dev/test override.
+
 ## 🚀 Quick Setup
 
 ### Step 1: Choose Your Mode

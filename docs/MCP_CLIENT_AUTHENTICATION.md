@@ -113,6 +113,7 @@ class JWTProxyServer {
     }, false);
 
     this.accessToken = response.accessToken;
+    this.refreshToken = response.refreshToken;
     this.tokenExpiry = Date.now() + (response.expiresIn * 1000);
   }
 
@@ -379,9 +380,9 @@ result = client.call_tool("zap_spider_scan", {
 print(result)
 ```
 
-### 5. Open WebUI (Your Current Setup)
+### 5. Open WebUI (Native MCP)
 
-For Open WebUI with MCPO (MCP-over-HTTP):
+Open WebUI can connect to this server directly over streamable HTTP MCP, so `mcpo` is not required for the default deployment.
 
 #### docker-compose.yml Configuration
 
@@ -389,35 +390,13 @@ For Open WebUI with MCPO (MCP-over-HTTP):
 services:
   open-webui:
     environment:
-      # MCP Server Configuration
-      - ENABLE_MCP_SERVERS=true
-      - MCP_SERVERS=[{
-          "name": "zap-security",
-          "url": "http://mcp-zap-server:7456",
-          "headers": {
-            "X-API-Key": "${MCP_API_KEY}"
-          }
-        }]
+      TOOL_SERVER_CONNECTIONS: >-
+        [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP tools exposed by the MCP server."}}]
 ```
 
-Or for JWT authentication, you'll need to handle token management in the Open WebUI configuration:
+This uses Open WebUI's native MCP tool-server configuration and injects the API key via a custom `X-API-Key` header on each request.
 
-```yaml
-services:
-  open-webui:
-    environment:
-      - ENABLE_MCP_SERVERS=true
-      - MCP_SERVERS=[{
-          "name": "zap-security",
-          "url": "http://mcp-zap-server:7456",
-          "auth": {
-            "type": "jwt",
-            "tokenUrl": "http://mcp-zap-server:7456/auth/token",
-            "clientId": "${MCP_CLIENT_ID}",
-            "apiKey": "${MCP_API_KEY}"
-          }
-        }]
-```
+If you use JWT mode instead of API-key mode, Open WebUI can still send a pre-issued bearer token by switching to `auth_type: "bearer"` and setting `key`, but token minting and refresh are not handled automatically for this server. For the bundled Open WebUI deployment, API-key mode with `X-API-Key` remains the simplest option.
 
 ## Simplified Approach: Use API Key Authentication
 

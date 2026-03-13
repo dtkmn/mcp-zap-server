@@ -432,6 +432,19 @@ Replace `your-mcp-api-key-here` with the `MCP_API_KEY` value from your `.env` fi
 ### Check the alerts found from the spider scan
 ![mcp-zap-server-prompt-3](./images/mcp-zap-server-prompt-3.png)
 
+## Sponsor This Project
+
+If MCP ZAP Server saves you time or helps your team ship safer software, you can support ongoing open source maintenance through GitHub Sponsors.
+
+Sponsorships help fund:
+
+* dependency and security updates
+* bug fixes and release maintenance
+* documentation, examples, and onboarding improvements
+* new MCP and OWASP ZAP integrations
+
+If you need SLAs, custom delivery, or hands-on consulting, see the commercial support section below.
+
 ## 💼 Commercial Support & Enterprise
 
 Need help integrating MCP ZAP Server into your corporate CI/CD pipeline? Looking for advanced features or dedicated support?

@@ -23,7 +23,7 @@ permalink: /
 
 # Welcome, Friend.
 
-You have accessed the **MCP ZAP Server** documentation. This system allows AI Agents (Claude, Cursor) to breach security defenses using OWASP ZAP.
+You have accessed the **MCP ZAP Server** documentation. This system lets AI agents and operators drive OWASP ZAP through MCP for security testing and reporting.
 
 ---
 
@@ -49,6 +49,22 @@ Choose your initialization vector:
     </div>
   </div>
 
+  <div class="col-md-6 col-sm-12">
+    <div class="p-4 border rounded-0 mb-4" style="border-color: #d62d20 !important;">
+      <h3 style="color: #d62d20;">> [03] AUTH_SCAN_BEST_PRACTICES</h3>
+      <p>Configure context, auth, and user-driven scan flows for high-value coverage.</p>
+      <a href="./AUTHENTICATED_SCANNING_BEST_PRACTICES.html" class="btn btn-primary">> EXECUTE</a>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-sm-12">
+    <div class="p-4 border rounded-0 mb-4" style="border-color: #d62d20 !important;">
+      <h3 style="color: #d62d20;">> [04] CLIENT_SETUP</h3>
+      <p>Connect Open WebUI, Cursor, Claude Desktop, or another MCP client.</p>
+      <a href="./MCP_CLIENT_AUTHENTICATION.html" class="btn btn-primary">> EXECUTE</a>
+    </div>
+  </div>
+
 </div>
 
 ## > tail -f /var/log/capabilities.txt
@@ -57,24 +73,13 @@ Choose your initialization vector:
 * **Active_Scan**: Launch targeted attacks against defined scopes.
 * **Reporting**: Generate evidence (HTML/JSON) for vulnerability assessment.
 
-## > cat /opt/releases/v0.4.0.txt
-
-**Latest Release:** `v0.4.0` (2026-02-26)
-
-* Added `zap_get_findings_summary` for token-optimized, LLM-friendly scan summaries.
-* Added `ZapHealthIndicator` and `GlobalExceptionHandler` for better runtime reliability.
-* Added SBOM generation/upload in CI and release workflows.
-* Upgraded stack: Spring Boot `4.0.3`, Gradle `9.3.1`, ZAP Client API `1.17.0`.
-
-[**> READ_CHANGELOG**](https://github.com/dtkmn/mcp-zap-server/blob/main/CHANGELOG.md)
-
 
 
 ## > ./contact_support.sh
 
-**Target:** Enterprise & Corporate Integration
+**Target:** Teams deploying the OSS project
 
-**Agentic Lab** provides commercial consulting for:
+**Agentic Lab** provides optional commercial help around `mcp-zap-server` for:
 * 🔐 **SSO/OAuth2 Authentication** Setup
 * 🛡️ **CI/CD Quality Gates** (GitHub Actions / GitLab)
 * 📜 **Compliance Reporting**

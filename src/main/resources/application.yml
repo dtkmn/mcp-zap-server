@@ -12,6 +12,16 @@ spring:
         streamable-http:
           keep-alive-interval: 30s
         type: async
+  flyway:
+    enabled: ${DB_MIGRATIONS_ENABLED:false}
+    locations: classpath:db/migration
+    url: ${DB_MIGRATIONS_POSTGRES_URL:${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:${ZAP_SCAN_QUEUE_STORE_POSTGRES_URL:}}}
+    user: ${DB_MIGRATIONS_POSTGRES_USERNAME:${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:${ZAP_SCAN_QUEUE_STORE_POSTGRES_USERNAME:}}}
+    password: ${DB_MIGRATIONS_POSTGRES_PASSWORD:${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:${ZAP_SCAN_QUEUE_STORE_POSTGRES_PASSWORD:}}}
+    validate-on-migrate: ${DB_MIGRATIONS_VALIDATE_ON_MIGRATE:true}
+    baseline-on-migrate: ${DB_MIGRATIONS_BASELINE_ON_MIGRATE:false}
+    baseline-version: ${DB_MIGRATIONS_BASELINE_VERSION:0}
+    clean-disabled: true
 
 logging:
   level:
@@ -23,15 +33,18 @@ server:
 
 # MCP Server Security Configuration
 # Authentication Modes:
-#   - none: No authentication (default - suitable for local development/STDIO transport)
-#   - api-key: Simple API key authentication (suitable for trusted environments)
+#   - none: No authentication (explicit dev/test override only)
+#   - api-key: Simple API key authentication (default for HTTP deployments)
 #   - jwt: JWT token-based authentication (recommended for production)
 mcp:
   server:
     security:
       # Set authentication mode: none, api-key, or jwt
-      mode: ${MCP_SECURITY_MODE:none}
-      enabled: ${MCP_SECURITY_ENABLED:false}
+      mode: ${MCP_SECURITY_MODE:api-key}
+      enabled: ${MCP_SECURITY_ENABLED:true}
+      # Allow placeholder API keys only for local/dev convenience.
+      # Set to false for cloud/prod deployments to fail fast on insecure defaults.
+      allowPlaceholderApiKey: ${MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY:true}
     
     # Legacy single API key (for backward compatibility)
     apiKey: ${MCP_API_KEY:changeme-default-key}
@@ -50,6 +63,14 @@ mcp:
         issuer: ${JWT_ISSUER:mcp-zap-server}
         accessTokenExpiry: ${JWT_ACCESS_TOKEN_EXPIRATION:3600}
         refreshTokenExpiry: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
+        revocation:
+          backend: ${JWT_REVOCATION_STORE_BACKEND:in-memory}
+          postgres:
+            url: ${JWT_REVOCATION_STORE_POSTGRES_URL:}
+            username: ${JWT_REVOCATION_STORE_POSTGRES_USERNAME:}
+            password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
+            table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
+            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
 
 # ZAP Configuration
 zap:
@@ -79,13 +100,50 @@ zap:
     
     # URL Validation and Security
     url:
+      validation:
+        enabled: ${ZAP_URL_VALIDATION_ENABLED:true}
       allowLocalhost: ${ZAP_ALLOW_LOCALHOST:false}
       allowPrivateNetworks: ${ZAP_ALLOW_PRIVATE_NETWORKS:false}
       # Comma-separated list of allowed domains (wildcards supported: *.example.com)
       # If set, host must match whitelist AND still pass blacklist/private-network checks
       whitelist: ${ZAP_URL_WHITELIST:}
-      # The default blacklist includes localhost and private network ranges
+      # Default blacklist includes localhost and private network ranges
       blacklist: ${ZAP_URL_BLACKLIST:localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
+    queue:
+      dispatch-interval-ms: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:2000}
+      virtual-threads:
+        enabled: ${ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED:false}
+      coordinator:
+        backend: ${ZAP_SCAN_QUEUE_COORDINATOR_BACKEND:single-node}
+        node-id: ${ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID:${HOSTNAME:asg-node}}
+        postgres:
+          url: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL:${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:${ZAP_SCAN_QUEUE_STORE_POSTGRES_URL:}}}
+          username: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_USERNAME:${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:${ZAP_SCAN_QUEUE_STORE_POSTGRES_USERNAME:}}}
+          password: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_PASSWORD:${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:${ZAP_SCAN_QUEUE_STORE_POSTGRES_PASSWORD:}}}
+          advisory-lock-key: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_ADVISORY_LOCK_KEY:861001}
+          heartbeat-interval-ms: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_HEARTBEAT_INTERVAL_MS:5000}
+          fail-fast: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_FAIL_FAST:false}
+      retry:
+        active:
+          max-attempts: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_ATTEMPTS:3}
+          initial-backoff-ms: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_INITIAL_BACKOFF_MS:2000}
+          max-backoff-ms: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_BACKOFF_MS:30000}
+          multiplier: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MULTIPLIER:2.0}
+        spider:
+          max-attempts: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_ATTEMPTS:2}
+          initial-backoff-ms: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_INITIAL_BACKOFF_MS:1000}
+          max-backoff-ms: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS:10000}
+          multiplier: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER:2.0}
+    jobs:
+      store:
+        backend: ${ZAP_SCAN_JOBS_STORE_BACKEND:${ZAP_SCAN_QUEUE_STORE_BACKEND:in-memory}}
+        postgres:
+          url: ${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:${ZAP_SCAN_QUEUE_STORE_POSTGRES_URL:}}
+          username: ${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:${ZAP_SCAN_QUEUE_STORE_POSTGRES_USERNAME:}}
+          password: ${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:${ZAP_SCAN_QUEUE_STORE_POSTGRES_PASSWORD:}}
+          table-name: ${ZAP_SCAN_JOBS_STORE_POSTGRES_TABLE_NAME:scan_jobs}
+          fail-fast: ${ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST:${ZAP_SCAN_QUEUE_STORE_POSTGRES_FAIL_FAST:false}}
   
   report:
     directory: ${ZAP_REPORT_DIRECTORY:/zap/wrk}

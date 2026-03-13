@@ -2,7 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '4.0.3'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'org.cyclonedx.bom' version '3.2.1'
+    id 'org.cyclonedx.bom' version '3.2.2'
 }
 
 group = 'mcp.server.zap'
@@ -34,10 +34,13 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.flywaydb:flyway-core'
     implementation('org.zaproxy:zap-clientapi:1.17.0') {
         exclude group: 'org.jdom', module: 'jdom'
     }
     implementation 'org.jdom:jdom2:2.0.6.1'
+    runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

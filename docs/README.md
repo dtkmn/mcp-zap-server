@@ -1,91 +1,74 @@
 # MCP ZAP Server Documentation
 
-This directory contains the source files for the [GitHub Pages documentation site](https://dtkmn.github.io/mcp-zap-server/).
+This directory contains the source files for the public [GitHub Pages documentation site](https://dtkmn.github.io/mcp-zap-server/).
 
-## Release Status
+## Public Docs Policy
 
-- Latest documented release: `v0.4.0` (2026-02-26)
-- Release details: [`CHANGELOG.md`](../CHANGELOG.md)
+Only commit documentation here if it helps external users or operators adopt the project.
 
-## Structure
+Good fits for `/docs`:
 
-- `index.md` - Main landing page
-- `_config.yml` - Jekyll configuration
-- `*.md` - Documentation pages (auto-linked)
+- installation and quick-start guides
+- authentication and client configuration
+- scanning workflows and usage examples
+- deployment and operator guidance that is safe to share publicly
+
+Do not keep these in the public docs tree:
+
+- sprint plans or milestone notes
+- SLO baselines, internal dashboards, or alert contracts
+- technical debt registers and backlog rankings
+- implementation summaries written for a single task or private rollout
+
+## Public Documentation Pages
+
+### Getting Started
+- `index.md` - Docs landing page
+- `MCP_CLIENT_AUTHENTICATION.md` - Open WebUI, Cursor, Claude Desktop, and other MCP clients
+- `AUTHENTICATION_QUICK_START.md` - Quick auth setup
+- `SECURITY_MODES.md` - Overview of the supported security modes
+- `SECURITY_MODE_EXAMPLES.md` - Configuration examples
+
+### Scanning Workflows
+- `AJAX_SPIDER.md` - Browser-based crawling for client-rendered apps
+- `AUTHENTICATED_SCANNING_BEST_PRACTICES.md` - Context, auth, and user-driven scan flows
+
+### Deployment & Operations
+- `JWT_AUTHENTICATION.md` - JWT setup guide
+- `JWT_KEY_ROTATION_RUNBOOK.md` - JWT key rotation procedure
+- `QUICK_START_JWT.md` - Fast JWT setup
+- `PRODUCTION_CHECKLIST.md` - Public production-readiness baseline
+- `LOCAL_HA_COMPOSE.md` - Local multi-replica Compose simulation
+- `QUEUE_COORDINATOR_LEADER_ELECTION.md` - Multi-replica leader election configuration
+- `SCAN_QUEUE_RETRY_POLICY.md` - Queue retry behavior and operator notes
+- `NATIVE_IMAGE_PERFORMANCE.md` - JVM vs native-image tradeoffs
 - `demo.html` - Demo video page
 
-## Documentation Pages
-
-### Security & Authentication
-- `SECURITY_MODES.md` - Overview of three security modes
-- `JWT_AUTHENTICATION.md` - Complete JWT setup guide
-- `QUICK_START_JWT.md` - Fast JWT setup
-- `MCP_CLIENT_AUTHENTICATION.md` - Client configuration
-- `AUTHENTICATION_QUICK_START.md` - Quick auth setup
-- `SECURITY_MODE_EXAMPLES.md` - Real-world examples
-
-### Features
-- `AJAX_SPIDER.md` - WAF bypass using browser-based scanning
-
-### Implementation Details
-- `JWT_IMPLEMENTATION_SUMMARY.md` - JWT technical details
-- `SECURITY_MODES_IMPLEMENTATION_SUMMARY.md` - Security implementation
-
-## Local Development
-
-### Preview site locally:
+## Local Preview
 
 ```bash
-# Install Jekyll
-gem install bundler jekyll
-
-# Create Gemfile (first time only)
 cd docs
-cat > Gemfile << EOF
-source "https://rubygems.org"
-gem "github-pages", group: :jekyll_plugins
-gem "webrick"
-EOF
-
-# Install dependencies
 bundle install
-
-# Serve locally
 bundle exec jekyll serve
-
-# View at http://localhost:4000/mcp-zap-server/
 ```
 
-## GitHub Pages Setup
+Then open `http://localhost:4000/security-gateway/`.
 
-1. Go to **Repository Settings → Pages**
-2. Source: **GitHub Actions**
-3. Site will auto-deploy on push to main/master
+## Adding or Updating Pages
 
-Site URL: `https://dtkmn.github.io/mcp-zap-server/`
-
-## Adding New Pages
-
-1. Create `new-page.md` in `/docs`
-2. Add frontmatter:
+1. Create or edit a page under `/docs`.
+2. Add frontmatter if the page should be published:
    ```yaml
    ---
    layout: default
    title: Page Title
    ---
    ```
-3. Link from `index.md`
-4. Commit and push - auto-deploys!
-
-## Theme
-
-Using **Cayman** theme. To change:
-- Edit `theme:` in `_config.yml`
-- [Available themes](https://pages.github.com/themes/)
+3. Link it from `index.md` or another public page if users should discover it easily.
+4. Keep the page user-facing; move internal notes elsewhere before committing.
 
 ## Notes
 
-- Markdown files automatically converted to HTML
-- Demo video available at `/demo.html`
-- Jekyll ignores files starting with `_`
-- Build output in `_site/` (gitignored)
+- The site uses the `just-the-docs` theme configured in [`_config.yml`](./_config.yml).
+- `demo.html` is published as a static page.
+- `_site/` is build output and should not be treated as source.

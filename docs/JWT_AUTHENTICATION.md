@@ -15,10 +15,12 @@ The MCP ZAP Server supports JWT (JSON Web Token) authentication for enhanced sec
 
 - **Token-Based Authentication**: Exchange API keys for JWT tokens with configurable expiration
 - **Access & Refresh Tokens**: Short-lived access tokens (1 hour default) with long-lived refresh tokens (7 days default)
+- **Refresh Token Rotation**: Refresh tokens are one-time-use and rotated on every refresh
+- **Replay Detection**: Reuse of consumed refresh tokens is rejected (401)
 - **Token Revocation**: Blacklist tokens before expiration for immediate access revocation
 - **Backward Compatible**: Coexists with existing API key authentication
 - **HS256 Signing**: Industry-standard HMAC-SHA256 algorithm for token signing
-- **CSRF Protection**: Intentionally disabled for this API-only, token-based MCP server
+- **CSRF Protection**: Disabled by design for stateless API authentication (no cookie sessions)
 
 ## Quick Start
 
@@ -77,13 +79,25 @@ curl -X POST http://localhost:7456/zap/spider/start \
 
 ### 4. Refresh Token
 
-When the access token expires, use the refresh token to get a new one:
+When the access token expires, use the refresh token to get a new token pair:
 
 ```bash
 curl -X POST http://localhost:7456/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{
     "refreshToken": "YOUR_REFRESH_TOKEN"
+  }'
+```
+
+### 5. Revoke Token (Logout/Incident Response)
+
+Revoke an access or refresh token so it cannot be used again:
+
+```bash
+curl -X POST http://localhost:7456/auth/revoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "YOUR_ACCESS_OR_REFRESH_TOKEN"
   }'
 ```
 
@@ -108,6 +122,16 @@ JWT_ACCESS_TOKEN_EXPIRATION=3600
 
 # Refresh token expiration in seconds (default: 604800 = 7 days)
 JWT_REFRESH_TOKEN_EXPIRATION=604800
+
+# Revocation store backend: in-memory or postgres
+JWT_REVOCATION_STORE_BACKEND=in-memory
+
+# Postgres revocation store settings (when backend=postgres)
+JWT_REVOCATION_STORE_POSTGRES_URL=jdbc:postgresql://postgres:5432/mcp_zap
+JWT_REVOCATION_STORE_POSTGRES_USERNAME=mcp_user
+JWT_REVOCATION_STORE_POSTGRES_PASSWORD=change-me
+JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME=jwt_token_revocation
+JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST=false
 ```
 
 ### Application Configuration
@@ -124,6 +148,14 @@ mcp:
         issuer: ${JWT_ISSUER:mcp-zap-server}
         accessTokenExpiry: ${JWT_ACCESS_TOKEN_EXPIRATION:3600}
         refreshTokenExpiry: ${JWT_REFRESH_TOKEN_EXPIRATION:604800}
+        revocation:
+          backend: ${JWT_REVOCATION_STORE_BACKEND:in-memory}
+          postgres:
+            url: ${JWT_REVOCATION_STORE_POSTGRES_URL:}
+            username: ${JWT_REVOCATION_STORE_POSTGRES_USERNAME:}
+            password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
+            table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
+            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
 ```
 
 ## API Endpoints
@@ -169,8 +201,31 @@ Refresh an expired access token using a valid refresh token.
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "ROTATED_REFRESH_TOKEN",
   "tokenType": "Bearer",
   "expiresIn": 3600
+}
+```
+
+### POST /auth/revoke
+
+Revoke an access or refresh token by blacklisting its `jti` claim.
+
+**Request:**
+
+```json
+{
+  "token": "YOUR_ACCESS_OR_REFRESH_TOKEN"
+}
+```
+
+**Response:**
+
+```json
+{
+  "revoked": true,
+  "tokenId": "uuid-v4",
+  "expiresAt": "2026-02-18T00:00:00Z"
 }
 ```
 
@@ -189,12 +244,10 @@ Authorization: Bearer YOUR_ACCESS_TOKEN
 ```json
 {
   "valid": true,
+  "tokenId": "uuid-v4",
   "clientId": "your-client-id",
   "scopes": ["scan:read", "scan:write"],
-  "issuer": "mcp-zap-server",
-  "issuedAt": "2025-01-18T10:30:00Z",
-  "expiresAt": "2025-01-18T11:30:00Z",
-  "tokenType": "access"
+  "expiresIn": 3520
 }
 ```
 
@@ -247,7 +300,7 @@ Server → [Validates Token] → Response
 
 ```
 Client → [Refresh Token] → Server
-Server → [New Access Token] → Client
+Server → [New Access Token + New Refresh Token] → Client
 ```
 
 ## Security Features
@@ -255,7 +308,7 @@ Server → [New Access Token] → Client
 ### Token Expiration
 
 - **Access Tokens**: Short-lived (1 hour default) for active sessions
-- **Refresh Tokens**: Long-lived (7 days default) for obtaining new access tokens
+- **Refresh Tokens**: Long-lived (7 days default), one-time-use, rotated on each refresh
 - Expired tokens are automatically rejected
 
 ### Token Blacklisting
@@ -263,8 +316,17 @@ Server → [New Access Token] → Client
 Tokens can be revoked before expiration:
 
 - Each token has a unique ID (jti claim)
-- Blacklisted tokens are stored in-memory
-- Cleanup automatically removes expired blacklist entries
+- Revocation store backend is configurable:
+  - `in-memory` for local/single-node development
+  - `postgres` for shared multi-replica deployments
+- Expired revocations are automatically cleaned up during revoke operations
+- Revoke endpoint: `POST /auth/revoke`
+
+### Refresh Rotation and Replay Detection
+
+- On `/auth/refresh`, the presented refresh token is consumed and revoked.
+- Server returns a newly rotated refresh token with the new access token.
+- Reusing a previously consumed refresh token is treated as replay and rejected with `401`.
 
 ### Token Validation
 
@@ -366,7 +428,7 @@ class MCPZapClient:
         self.token_expiry = time.time() + data["expiresIn"] - 60  # Refresh 1 min early
     
     def refresh_access_token(self):
-        """Refresh expired access token"""
+        """Refresh expired access token and rotate refresh token"""
         response = requests.post(
             f"{self.base_url}/auth/refresh",
             json={"refreshToken": self.refresh_token}
@@ -375,7 +437,18 @@ class MCPZapClient:
         data = response.json()
         
         self.access_token = data["accessToken"]
+        self.refresh_token = data["refreshToken"]
         self.token_expiry = time.time() + data["expiresIn"] - 60
+
+    def revoke_token(self, token=None):
+        """Revoke access or refresh token (e.g., on logout)"""
+        token_to_revoke = token or self.access_token
+        response = requests.post(
+            f"{self.base_url}/auth/revoke",
+            json={"token": token_to_revoke}
+        )
+        response.raise_for_status()
+        return response.json()
     
     def get_headers(self):
         """Get authorization headers with valid token"""
@@ -398,6 +471,8 @@ class MCPZapClient:
 client = MCPZapClient("http://localhost:7456", "your-api-key", "your-client-id")
 client.authenticate()
 result = client.start_spider_scan("https://example.com")
+# Optional: revoke token on logout
+client.revoke_token()
 ```
 
 ### JavaScript/Node.js
@@ -432,7 +507,15 @@ class MCPZapClient {
     });
     
     this.accessToken = response.data.accessToken;
+    this.refreshToken = response.data.refreshToken;
     this.tokenExpiry = Date.now() + (response.data.expiresIn * 1000) - 60000;
+  }
+
+  async revokeToken(token = this.accessToken) {
+    const response = await axios.post(`${this.baseUrl}/auth/revoke`, {
+      token
+    });
+    return response.data;
   }
 
   async getHeaders() {
@@ -459,6 +542,8 @@ class MCPZapClient {
 const client = new MCPZapClient('http://localhost:7456', 'your-api-key', 'your-client-id');
 await client.authenticate();
 const result = await client.startSpiderScan('https://example.com');
+// Optional: revoke token on logout
+await client.revokeToken();
 ```
 
 ## Migration from API Key Authentication
@@ -493,8 +578,9 @@ Modify your client to:
 
 ## Additional Resources
 
+- [JWT Key Rotation Runbook](JWT_KEY_ROTATION_RUNBOOK.md) - Planned and emergency rotation steps
 - [JWT.io](https://jwt.io/) - JWT token inspector and debugger
-- [Spring Security OAuth2 Resource Server](https://docs.spring.io/spring-security/reference/reactive/oauth2/resource-server/index.html) - JWT validation and resource-server docs
+- [JJWT Documentation](https://github.com/jwtk/jjwt) - Java JWT library
 - [Spring Security](https://spring.io/projects/spring-security) - Security framework
 
 ## Support

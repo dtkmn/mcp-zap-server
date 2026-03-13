@@ -9,6 +9,8 @@ has_children: true
 
 The MCP ZAP Server supports three authentication modes to balance security and ease of use for different deployment scenarios.
 
+For shipped HTTP/server defaults, the base runtime uses `api-key`. `none` is reserved for explicit dev/test overrides.
+
 ## 🔐 Authentication Modes
 
 ### 1. No Authentication (`none`)
@@ -52,6 +54,7 @@ export MCP_SECURITY_MODE=none
 ### 2. API Key Authentication (`api-key`)
 
 **✅ Recommended for: Trusted environments, simple deployments**
+**Default for the base HTTP/server runtime.**
 
 - **Use Case**: Single-tenant deployments, internal networks, docker-compose setups
 - **Security**: Simple bearer token authentication
@@ -98,7 +101,7 @@ response = requests.post("http://localhost:7456/mcp", headers=headers)
 - ✅ When you want minimal client configuration
 
 **CSRF Protection:**
-- ✅ Disabled by design (API-only server with token-based auth; no session cookies)
+- ✅ Disabled by design for stateless API authentication (no cookie sessions)
 
 **Advantages:**
 - Simple to configure
@@ -175,7 +178,7 @@ curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   http://localhost:7456/mcp
 ```
 
-3. **Refresh Token** (when access token expires):
+3. **Refresh Token** (one-time use; server returns a rotated refresh token):
 ```bash
 curl -X POST http://localhost:7456/auth/refresh \
   -H "Content-Type: application/json" \
@@ -191,13 +194,13 @@ curl -X POST http://localhost:7456/auth/refresh \
 - ✅ Fine-grained access control needed
 
 **CSRF Protection:**
-- ✅ Disabled by design (API-only server with token-based auth; no session cookies)
+- ✅ Disabled by design for stateless API authentication (no cookie sessions)
 
 **Advantages:**
 - Tokens expire automatically (access: 1hr, refresh: 7 days)
 - Token revocation support (blacklist)
 - Client identification (clientId in token)
-- Secure token refresh mechanism
+- One-time refresh-token rotation with replay rejection
 - Industry-standard (RFC 7519)
 - Backward compatible (still accepts API keys)
 
@@ -379,6 +382,7 @@ mcp:
 ## 📚 Related Documentation
 
 - [JWT Authentication Guide](JWT_AUTHENTICATION.md)
+- [JWT Key Rotation Runbook](JWT_KEY_ROTATION_RUNBOOK.md)
 - [MCP Client Configuration](MCP_CLIENT_AUTHENTICATION.md)
 - [Quick Start Guide](QUICK_START_JWT.md)
 - [Security Review](../SECURITY.md)

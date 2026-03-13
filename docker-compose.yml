@@ -32,11 +32,16 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk:/zap/wrk
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-home:/home/zap/.ZAP
 
-
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
+    depends_on:
+      mcp-server:
+        condition: service_started
     ports:
       - "3000:8080"
+    environment:
+      TOOL_SERVER_CONNECTIONS: >-
+        [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY:-change-me-to-secure-random-key}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP scanning and reporting tools exposed by the local MCP server."}}]
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 30s
@@ -45,39 +50,6 @@ services:
       start_period: 30s
     volumes:
       - open-webui:/app/backend/data
-
-  mcpo:
-    image: ghcr.io/open-webui/mcpo:main
-    depends_on:
-      mcp-server:
-        condition: service_healthy
-    ports:
-      - "9090:9090"
-    command:
-      - --port
-      - "9090"
-      - --server-type
-      - "streamable-http"
-      - --
-      - "http://mcp-server:7456/mcp"
-
-  mcpo-filesystem:
-    image: ghcr.io/open-webui/mcpo:main
-    depends_on:
-      open-webui:
-        condition: service_healthy
-    ports:
-      - "8001:8001"        # Expose the HTTP OpenAPI endpoint
-    command:
-      - --port
-      - "8001"
-      - --                  # End of mcpo flags; what follows is the MCP server command
-      - "npx"
-      - "-y"
-      - "@modelcontextprotocol/server-filesystem"
-      - "${LOCAL_ZAP_WORKPLACE_FOLDER}"         # Allowed directory inside the container
-    volumes:
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:${LOCAL_ZAP_WORKPLACE_FOLDER}
 
   mcp-server:
     build:
@@ -94,12 +66,41 @@ services:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
       ZAP_API_KEY: ${ZAP_API_KEY:-ZAP_API_KEY}
-      MCP_API_KEY: ${MCP_API_KEY}
-      MCP_SECURITY_ENABLED: ${MCP_SECURITY_ENABLED:-false}
+      MCP_API_KEY: ${MCP_API_KEY:-changeme-default-key}
+      MCP_SECURITY_MODE: ${MCP_SECURITY_MODE:-api-key}
+      MCP_SECURITY_ENABLED: ${MCP_SECURITY_ENABLED:-true}
+      MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: ${MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY:-true}
       ZAP_MAX_ACTIVE_SCAN_DURATION: ${ZAP_MAX_ACTIVE_SCAN_DURATION:-30}
       ZAP_MAX_SPIDER_SCAN_DURATION: ${ZAP_MAX_SPIDER_SCAN_DURATION:-15}
-      ZAP_ALLOW_LOCALHOST: ${ZAP_ALLOW_LOCALHOST:-false}
-      ZAP_ALLOW_PRIVATE_NETWORKS: ${ZAP_ALLOW_PRIVATE_NETWORKS:-false}
+      ZAP_MAX_CONCURRENT_ACTIVE_SCANS: ${ZAP_MAX_CONCURRENT_ACTIVE_SCANS:-3}
+      ZAP_MAX_CONCURRENT_SPIDER_SCANS: ${ZAP_MAX_CONCURRENT_SPIDER_SCANS:-5}
+      ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:-2000}
+      ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED: ${ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED:-false}
+      ZAP_SCAN_QUEUE_COORDINATOR_BACKEND: ${ZAP_SCAN_QUEUE_COORDINATOR_BACKEND:-single-node}
+      ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID: ${ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID:-mcp-server}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL:-}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_USERNAME: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_USERNAME:-}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_PASSWORD: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_PASSWORD:-}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_ADVISORY_LOCK_KEY: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_ADVISORY_LOCK_KEY:-861001}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_HEARTBEAT_INTERVAL_MS: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_HEARTBEAT_INTERVAL_MS:-5000}
+      ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_FAIL_FAST: ${ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_FAIL_FAST:-false}
+      ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_ATTEMPTS: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_ATTEMPTS:-3}
+      ZAP_SCAN_QUEUE_RETRY_ACTIVE_INITIAL_BACKOFF_MS: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_INITIAL_BACKOFF_MS:-2000}
+      ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_BACKOFF_MS: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_BACKOFF_MS:-30000}
+      ZAP_SCAN_QUEUE_RETRY_ACTIVE_MULTIPLIER: ${ZAP_SCAN_QUEUE_RETRY_ACTIVE_MULTIPLIER:-2.0}
+      ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_ATTEMPTS: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_ATTEMPTS:-2}
+      ZAP_SCAN_QUEUE_RETRY_SPIDER_INITIAL_BACKOFF_MS: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_INITIAL_BACKOFF_MS:-1000}
+      ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS:-10000}
+      ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER:-2.0}
+      ZAP_SCAN_JOBS_STORE_BACKEND: ${ZAP_SCAN_JOBS_STORE_BACKEND:-in-memory}
+      ZAP_SCAN_JOBS_STORE_POSTGRES_URL: ${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:-}
+      ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME: ${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:-}
+      ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD: ${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:-}
+      ZAP_SCAN_JOBS_STORE_POSTGRES_TABLE_NAME: ${ZAP_SCAN_JOBS_STORE_POSTGRES_TABLE_NAME:-scan_jobs}
+      ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST: ${ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST:-false}
+      ZAP_URL_VALIDATION_ENABLED: ${ZAP_URL_VALIDATION_ENABLED:-true}
+      ZAP_ALLOW_LOCALHOST: ${ZAP_ALLOW_LOCALHOST:-true}
+      ZAP_ALLOW_PRIVATE_NETWORKS: ${ZAP_ALLOW_PRIVATE_NETWORKS:-true}
       ZAP_URL_WHITELIST: ${ZAP_URL_WHITELIST:-}
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk

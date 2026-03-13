@@ -1,21 +1,22 @@
-name: Deploy Jekyll site to Pages
+name: Docs Pages
 
 on:
   push:
+    branches: ["dev", "main", "master"]
+  pull_request:
     branches: ["main", "master"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "pages-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
-  build:
+  docs-build:
+    name: docs-build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,14 +32,21 @@ jobs:
           destination: ./_site
       
       - name: Upload artifact
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: actions/upload-pages-artifact@v3
 
   deploy:
+    name: pages-deploy
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: docs-build
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

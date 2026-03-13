@@ -62,6 +62,7 @@ Capture the `contextId` for next steps.
 
 Set auth method and reliable login indicators.
 
+{% raw %}
 ```json
 {
   "tool": "zap_context_auth_configure",
@@ -74,6 +75,7 @@ Set auth method and reliable login indicators.
   }
 }
 ```
+{% endraw %}
 
 ### 4. Create a Dedicated Scan User
 

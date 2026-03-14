@@ -32,9 +32,9 @@ See [CHANGELOG.md](./CHANGELOG.md) and [RELEASE_NOTES_0.4.0.md](./RELEASE_NOTES_
 **[📖 View Full Documentation](https://dtkmn.github.io/mcp-zap-server/)** - Complete guides, API reference, and examples
 
 ### Quick Links
-- [Security & Authentication Guide](https://dtkmn.github.io/mcp-zap-server/SECURITY_MODES.html) - Three security modes
-- [JWT Authentication Setup](https://dtkmn.github.io/mcp-zap-server/JWT_AUTHENTICATION.html) - Production-ready auth
-- [AJAX Spider Guide](https://dtkmn.github.io/mcp-zap-server/AJAX_SPIDER.html) - Bypass WAF protection
+- [Security & Authentication Guide](https://dtkmn.github.io/mcp-zap-server/security-modes/) - Three security modes
+- [JWT Authentication Setup](https://dtkmn.github.io/mcp-zap-server/security-modes/jwt-authentication/) - Production-ready auth
+- [AJAX Spider Guide](https://dtkmn.github.io/mcp-zap-server/scanning/ajax-spider/) - Bypass WAF protection
 - [Kubernetes Deployment](./helm/README.md) - Helm charts for production
 
 
@@ -217,9 +217,9 @@ curl -X POST http://localhost:7456/auth/refresh \
 **🔐 MCP Security Compliance**: This server follows the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices). See [SECURITY.md](SECURITY.md#mcp-security-best-practices-compliance) for full compliance details and roadmap.
 
 📚 **Detailed Documentation**:
-- [Security Modes Guide](docs/SECURITY_MODES.md) - Complete comparison and migration guide
-- [JWT Authentication Guide](docs/JWT_AUTHENTICATION.md) - JWT implementation details
-- [MCP Client Configuration](docs/MCP_CLIENT_AUTHENTICATION.md) - Client setup for all modes
+- [Security Modes Guide](https://dtkmn.github.io/mcp-zap-server/security-modes/) - Complete comparison and migration guide
+- [JWT Authentication Guide](https://dtkmn.github.io/mcp-zap-server/security-modes/jwt-authentication/) - JWT implementation details
+- [MCP Client Configuration](https://dtkmn.github.io/mcp-zap-server/getting-started/mcp-client-authentication/) - Client setup for all modes
 
 ### URL Security Configuration
 

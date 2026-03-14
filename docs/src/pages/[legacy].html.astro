@@ -1,0 +1,46 @@
+---
+export function getStaticPaths() {
+	const redirects = {
+		AJAX_SPIDER: 'scanning/ajax-spider/',
+		AUTHENTICATED_SCANNING_BEST_PRACTICES: 'scanning/authenticated-scanning-best-practices/',
+		AUTHENTICATION_QUICK_START: 'getting-started/authentication-quick-start/',
+		JWT_AUTHENTICATION: 'security-modes/jwt-authentication/',
+		JWT_IMPLEMENTATION_SUMMARY: 'security-modes/jwt-implementation-summary/',
+		JWT_KEY_ROTATION_RUNBOOK: 'security-modes/jwt-key-rotation-runbook/',
+		LOCAL_HA_COMPOSE: 'operations/local-ha-compose/',
+		MCP_CLIENT_AUTHENTICATION: 'getting-started/mcp-client-authentication/',
+		NATIVE_IMAGE_PERFORMANCE: 'operations/native-image-performance/',
+		PRODUCTION_CHECKLIST: 'operations/production-checklist/',
+		QUEUE_COORDINATOR_LEADER_ELECTION: 'operations/queue-coordinator-leader-election/',
+		QUICK_START_JWT: 'getting-started/jwt-quick-start/',
+		SCAN_QUEUE_RETRY_POLICY: 'operations/scan-queue-retry-policy/',
+		SECURITY_MODES: 'security-modes/',
+		SECURITY_MODES_IMPLEMENTATION_SUMMARY: 'security-modes/implementation-summary/',
+		SECURITY_MODE_EXAMPLES: 'security-modes/examples/',
+	};
+
+	return Object.entries(redirects).map(([legacy, target]) => ({
+		params: { legacy },
+		props: { target: `/mcp-zap-server/${target}` },
+	}));
+}
+
+const { target } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Redirecting...</title>
+		<meta http-equiv="refresh" content={`0; url=${target}`} />
+		<meta name="robots" content="noindex" />
+		<link rel="canonical" href={target} />
+	</head>
+	<body>
+		<p>Redirecting to <a href={target}>{target}</a>...</p>
+		<script is:inline define:vars={{ target }}>
+			window.location.replace(target);
+		</script>
+	</body>
+</html>

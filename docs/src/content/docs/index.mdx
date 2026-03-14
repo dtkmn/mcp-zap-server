@@ -1,0 +1,83 @@
+---
+title: root@localhost:~
+description: Initialising MCP ZAP Server Protocol...
+template: splash
+editUrl: false
+---
+
+<div class="mission-terminal">
+  <pre>{`  __  __  _____ _____    _____  __  _____
+ |  \\/  |/ ____|  __ \\  |___  |/  \\|  __ \\
+ | \\  / | |    | |__) |    / // /\\ \\ |__) |
+ | |\\/| | |    |  ___/    / // /__\\ \\  ___/
+ | |  | | |____| |       / // /____\\ \\ |
+ |_|  |_|\\_____|_|      /_//_/      \\_\\_|
+
+ > SYSTEM READY.
+ > CONNECTING TO MCP PROTOCOL... [OK]
+ > INITIALIZING OWASP ZAP CORE... [OK]`}</pre>
+
+  # Welcome, Friend.
+
+  <p class="mission-lead">
+    You have accessed the <strong>MCP ZAP Server</strong> documentation. This system lets AI agents and
+    operators drive OWASP ZAP through MCP for security testing and reporting.
+  </p>
+
+  <div class="telemetry-strip">
+    <div class="telemetry-chip">
+      <span>Protocol</span>
+      <strong>MCP + OWASP ZAP</strong>
+    </div>
+    <div class="telemetry-chip">
+      <span>Coverage</span>
+      <strong>Auth, Ajax, Queue, Ops</strong>
+    </div>
+    <div class="telemetry-chip">
+      <span>Search Index</span>
+      <strong>Pagefind Online</strong>
+    </div>
+  </div>
+
+  <span class="section-label">./execute_mission.sh</span>
+
+  <div class="mission-grid">
+    <a class="mission-card" href="./security-modes/">
+      <h3>&gt; [01] AUTHENTICATION</h3>
+      <p>Bypass access controls using JWT tokens and API keys.</p>
+    </a>
+    <a class="mission-card" href="./scanning/ajax-spider/">
+      <h3>&gt; [02] AJAX_SPIDER</h3>
+      <p>Deploy headless browsers to crawl client-side applications.</p>
+    </a>
+    <a class="mission-card" href="./scanning/authenticated-scanning-best-practices/">
+      <h3>&gt; [03] AUTH_SCAN_BEST_PRACTICES</h3>
+      <p>Configure context, auth, and user-driven scan flows for high-value coverage.</p>
+    </a>
+    <a class="mission-card" href="./getting-started/mcp-client-authentication/">
+      <h3>&gt; [04] CLIENT_SETUP</h3>
+      <p>Connect Open WebUI, Cursor, Claude Desktop, or another MCP client.</p>
+    </a>
+  </div>
+
+  <span class="section-label">tail -f /var/log/capabilities.txt</span>
+
+  <ul class="capability-list">
+    <li><strong>Interceptor</strong>: Proxy traffic through ZAP for analysis.</li>
+    <li><strong>Active_Scan</strong>: Launch targeted attacks against defined scopes.</li>
+    <li><strong>Reporting</strong>: Generate evidence for vulnerability assessment.</li>
+  </ul>
+
+  <span class="section-label">./contact_support.sh</span>
+
+  <div class="support-box">
+    <p><strong>Target:</strong> Teams deploying the OSS project</p>
+    <p>
+      <strong>Agentic Lab</strong> provides optional commercial help around <code>mcp-zap-server</code>
+      for SSO and OAuth2 setup, CI/CD quality gates, and compliance reporting.
+    </p>
+    <a class="support-link" href="mailto:agentic.lab.au@gmail.com">&gt; OPEN_COMMUNICATION_CHANNEL</a>
+  </div>
+
+  <p class="home-status">_END OF LINE_</p>
+</div>

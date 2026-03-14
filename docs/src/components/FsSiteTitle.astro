@@ -1,0 +1,11 @@
+---
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="site-title ops-glitch-link">
+	<span class="ops-glitch-shell" translate="no">
+		<span class="ops-glitch-base">{siteTitle}</span>
+		<span class="ops-glitch-ghost ops-glitch-ghost-red" aria-hidden="true">{siteTitle}</span>
+		<span class="ops-glitch-ghost ops-glitch-ghost-cyan" aria-hidden="true">{siteTitle}</span>
+	</span>
+</a>

@@ -1,0 +1,34 @@
+---
+import config from 'virtual:starlight/user-config';
+import Search from '@astrojs/starlight/components/Search.astro';
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro';
+import FsSiteTitle from './FsSiteTitle.astro';
+
+const shouldRenderSearch =
+	config.pagefind || config.components.Search !== '@astrojs/starlight/components/Search.astro';
+---
+
+<div class="ops-header-shell">
+	<div class="ops-header-left">
+		<span class="ops-header-kicker">Encrypted Transmission</span>
+		<FsSiteTitle />
+	</div>
+
+	<div class="ops-header-center print:hidden">
+		{shouldRenderSearch && <Search class="ops-search" />}
+	</div>
+
+	<div class="ops-header-right sl-hidden lg:sl-flex print:hidden">
+		<div class="ops-readout">
+			<span>Network</span>
+			<strong>MCP // ZAP</strong>
+		</div>
+		<div class="ops-status">
+			<span class="ops-status-dot" aria-hidden="true"></span>
+			<span>Signal Locked</span>
+		</div>
+		<div class="ops-social">
+			<SocialIcons />
+		</div>
+	</div>
+</div>

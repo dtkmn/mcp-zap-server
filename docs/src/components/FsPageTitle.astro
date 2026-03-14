@@ -1,0 +1,14 @@
+---
+const title = Astro.locals.starlightRoute.entry.data.title;
+---
+
+<div class="ops-page-title">
+	<span class="ops-page-kicker">Field Manual</span>
+	<h1 id="_top" class="ops-glitch-title">
+		<span class="ops-glitch-shell">
+			<span class="ops-glitch-base">{title}</span>
+			<span class="ops-glitch-ghost ops-glitch-ghost-red" aria-hidden="true">{title}</span>
+			<span class="ops-glitch-ghost ops-glitch-ghost-cyan" aria-hidden="true">{title}</span>
+		</span>
+	</h1>
+</div>

@@ -1,0 +1,34 @@
+---
+import EditLink from '@astrojs/starlight/components/EditLink.astro';
+import LastUpdated from '@astrojs/starlight/components/LastUpdated.astro';
+import Pagination from '@astrojs/starlight/components/Pagination.astro';
+---
+
+<footer class="ops-footer">
+	<div class="ops-footer-grid">
+		<section class="ops-footer-panel">
+			<p class="ops-footer-label">Transmission</p>
+			<p>
+				Public operator docs for MCP ZAP Server, focused on authenticated scanning,
+				client integration, and deployment workflows.
+			</p>
+		</section>
+
+		<section class="ops-footer-panel">
+			<p class="ops-footer-label">Channels</p>
+			<div class="ops-footer-links">
+				<a href="https://github.com/dtkmn/mcp-zap-server">GitHub</a>
+				<a href="https://github.com/dtkmn/mcp-zap-server/releases">Releases</a>
+				<a href="mailto:agentic.lab.au@gmail.com">Support</a>
+			</div>
+		</section>
+	</div>
+
+	<div class="ops-footer-meta">
+		<div class="ops-footer-meta-left sl-flex">
+			<EditLink />
+			<LastUpdated />
+		</div>
+		<Pagination />
+	</div>
+</footer>

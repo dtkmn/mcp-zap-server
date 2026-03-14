@@ -19,9 +19,7 @@
 # macOS
 .DS_Store
 
-# Jekyll/Documentation (docs folder)
-docs/_site/
-docs/.jekyll-cache/
-docs/.sass-cache/
-docs/Gemfile.lock
-docs/vendor/
+# Astro documentation app
+docs/.astro/
+docs/dist/
+docs/node_modules/

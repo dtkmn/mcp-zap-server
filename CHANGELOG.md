@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-03-14
+
+### Added
+- Persistent scan job orchestration via `ScanJob`, `ScanJobQueueService`, and `ScanJobStore` implementations for in-memory and Postgres backends.
+- `ContextUserService` for managing ZAP contexts, users, and authentication setup for more advanced scan workflows.
+- Queue leadership coordination with single-node and Postgres advisory lock strategies for multi-replica deployments.
+- Flyway migrations and Postgres schema readiness validation for shared queue and token revocation state.
+- `TokenRevocationStore` backends plus `TokenBlacklistService` support for pluggable JWT revocation persistence.
+- `SecurityStartupValidator` and expanded test coverage for safer startup defaults and auth configuration validation.
+
+### Changed
+- Reorganized core runtime classes under the `mcp.server.zap.core` package for clearer separation of concerns.
+- Enhanced URL validation, scan queue configuration, retry/backoff behavior, and scheduling support for scan execution.
+- Upgraded the Gradle wrapper and Docker build image to `9.4.0`.
+- Upgraded the CycloneDX plugin to `3.2.2` and added Flyway/PostgreSQL runtime dependencies.
+- Migrated the public docs site from Jekyll to Astro + Starlight while preserving legacy `.html` entry points via redirects.
+
+### Fixed
+- Fail-fast validation for insecure placeholder API key configurations in stricter deployments.
+- Markdown rendering issue in the authenticated scanning guide that previously broke the Pages build.
+
+### Documentation
+- Expanded public documentation with authenticated scanning best practices, production readiness guidance, HA Compose simulation, queue coordination, retry policy, and JWT rotation guidance.
+- Updated the README, docs site structure, and Pages workflow for the Astro-based documentation stack.
+
 ## [0.4.0] - 2026-02-26
 
 ### Added

@@ -1,11 +1,11 @@
 ---
-title: "JWT & Security Implementation Summary (`v0.4.0`)"
+title: "JWT & Security Implementation Summary (`v0.5.0`)"
 editUrl: false
-description: "This document summarizes the current authentication and security implementation used by MCP ZAP Server as of v0.4.0."
+description: "This document summarizes the current authentication and security implementation used by MCP ZAP Server as of v0.5.0."
 ---
 ## Overview
 
-This document summarizes the current authentication and security implementation used by MCP ZAP Server as of `v0.4.0`.
+This document summarizes the current authentication and security implementation used by MCP ZAP Server as of `v0.5.0`.
 
 ## Current Security Model
 
@@ -49,12 +49,13 @@ JWT_REFRESH_TOKEN_EXPIRATION=604800
 
 ## Key Implementation Components
 
-- `src/main/java/mcp/server/zap/configuration/SecurityConfig.java`
-- `src/main/java/mcp/server/zap/controller/AuthController.java`
-- `src/main/java/mcp/server/zap/service/JwtService.java`
-- `src/main/java/mcp/server/zap/service/TokenBlacklistService.java`
-- `src/main/java/mcp/server/zap/configuration/JwtProperties.java`
-- `src/main/java/mcp/server/zap/configuration/ApiKeyProperties.java`
+- `src/main/java/mcp/server/zap/core/configuration/SecurityConfig.java`
+- `src/main/java/mcp/server/zap/core/controller/AuthController.java`
+- `src/main/java/mcp/server/zap/core/service/JwtService.java`
+- `src/main/java/mcp/server/zap/core/service/TokenBlacklistService.java`
+- `src/main/java/mcp/server/zap/core/service/revocation/TokenRevocationStore.java`
+- `src/main/java/mcp/server/zap/core/configuration/JwtProperties.java`
+- `src/main/java/mcp/server/zap/core/configuration/ApiKeyProperties.java`
 
 ## Notes for Operators
 - Use API key mode for simpler trusted-network deployments; use JWT mode for production-grade token lifecycle

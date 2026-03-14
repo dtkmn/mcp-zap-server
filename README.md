@@ -17,15 +17,15 @@ A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) 
 
 > 🚀 **Using this in production?** [Agentic Lab](#-commercial-support--enterprise) offers enterprise deployment, CI/CD integration, and SLA support.
 
-## Latest Release (`v0.4.0`)
+## Latest Release (`v0.5.0`)
 
-- Added `zap_get_findings_summary` for token-optimized Markdown summaries of scan alerts.
-- Added `ZapHealthIndicator` for ZAP API connectivity health checks.
-- Added centralized exception handling via `GlobalExceptionHandler`.
-- Added SBOM generation/upload in CI and release workflows.
-- Upgraded core stack: Spring Boot `4.0.3`, Gradle `9.3.1`, ZAP Client API `1.17.0`.
+- Added persistent scan job queueing and storage with in-memory and Postgres backends.
+- Added queue leadership coordination, Flyway migrations, and Postgres schema readiness checks for multi-node deployments.
+- Added startup security validation and pluggable JWT token revocation storage.
+- Migrated the public documentation site from Jekyll to Astro + Starlight and expanded operator guidance.
+- Upgraded the build stack to Gradle `9.4.0`, Docker build image `gradle:9.4.0-jdk25`, and CycloneDX `3.2.2`.
 
-See [CHANGELOG.md](./CHANGELOG.md) and [RELEASE_NOTES_0.4.0.md](./RELEASE_NOTES_0.4.0.md) for full release details.
+See [CHANGELOG.md](./CHANGELOG.md) and [RELEASE_NOTES_0.5.0.md](./RELEASE_NOTES_0.5.0.md) for full release details.
 
 ## 📚 Documentation
 

@@ -20,20 +20,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Setup Pages
         uses: actions/configure-pages@v4
       
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          source: ./docs
-          destination: ./_site
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-astro/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./docs-astro
+        run: npm ci
+
+      - name: Validate Astro content
+        working-directory: ./docs-astro
+        run: npm run check
+
+      - name: Build Astro site
+        working-directory: ./docs-astro
+        run: npm run build
       
       - name: Upload artifact
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs-astro/dist
 
   deploy:
     name: pages-deploy

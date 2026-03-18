@@ -2,8 +2,9 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.OperationRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
@@ -24,9 +25,12 @@ import org.zaproxy.clientapi.core.ClientApiException;
 @Slf4j
 @Service
 public class AjaxSpiderService {
+    public static final String QUEUE_SCAN_ID_PREFIX = "ajax-spider:";
 
     private final ClientApi zap;
     private final UrlValidationService urlValidationService;
+    private OperationRegistry operationRegistry;
+    private ClientWorkspaceResolver clientWorkspaceResolver;
 
     /**
      * Build-time dependency injection constructor.
@@ -37,6 +41,16 @@ public class AjaxSpiderService {
         this.urlValidationService = urlValidationService;
     }
 
+    @Autowired(required = false)
+    void setOperationRegistry(OperationRegistry operationRegistry) {
+        this.operationRegistry = operationRegistry;
+    }
+
+    @Autowired(required = false)
+    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
+    }
+
     /**
      * Start an AJAX Spider scan against the given URL using a real browser.
      * This is more effective against JavaScript-heavy sites and WAF protection.
@@ -44,10 +58,17 @@ public class AjaxSpiderService {
      * @param targetUrl Target URL to scan with AJAX Spider
      * @return Status message with scan information
      */
-    @Tool(name = "zap_ajax_spider", 
-          description = "Start an AJAX Spider scan using a real browser (bypasses WAF and crawls JavaScript apps). " +
-                       "Use this for sites that block regular spider or need JavaScript to render content.")
-    public String startAjaxSpider(@ToolParam(description = "Target URL to AJAX spider scan (e.g., http://example.com)") String targetUrl) {
+    public String startAjaxSpider(String targetUrl) {
+        String scanId = startAjaxSpiderJob(targetUrl);
+        trackAjaxSpiderStarted(scanId, resolveWorkspaceId());
+        log.info("AJAX Spider direct scan token {}", scanId);
+        return formatDirectStartMessage(targetUrl);
+    }
+
+    /**
+     * Queue/worker-facing start method that launches AJAX Spider and returns a synthetic durable scan id.
+     */
+    public String startAjaxSpiderJob(String targetUrl) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
@@ -86,15 +107,7 @@ public class AjaxSpiderService {
             zap.ajaxSpider.scan(targetUrl, "false", "", "");
             
             log.info("AJAX Spider scan started for URL: {}", targetUrl);
-            
-            return String.format(
-                "AJAX Spider scan started successfully for URL: %s%n" +
-                "Using real browser (Firefox headless) to crawl JavaScript content.%n" +
-                "This method bypasses WAF protection and bot detection.%n" +
-                "Using default scan duration and browser settings.%n" +
-                "Use 'zap_ajax_spider_status' to check progress.",
-                targetUrl
-            );
+            return QUEUE_SCAN_ID_PREFIX + System.currentTimeMillis();
             
         } catch (ClientApiException e) {
             log.error("Error launching AJAX Spider for URL {}: {}", targetUrl, e.getMessage(), e);
@@ -107,24 +120,19 @@ public class AjaxSpiderService {
      *
      * @return Current status of AJAX Spider scan
      */
-    @Tool(name = "zap_ajax_spider_status", 
-          description = "Get the current status of the AJAX Spider scan")
     public String getAjaxSpiderStatus() {
         try {
-            ApiResponse statusResponse = zap.ajaxSpider.status();
-            String status = ((ApiResponseElement) statusResponse).getValue();
+            AjaxSpiderStatus ajaxStatus = readAjaxSpiderStatus();
+            trackAjaxSpiderStatus(ajaxStatus.running());
             
-            ApiResponse messagesResponse = zap.ajaxSpider.numberOfResults();
-            String messagesCount = ((ApiResponseElement) messagesResponse).getValue();
-            
-            boolean isRunning = "running".equalsIgnoreCase(status);
+            boolean isRunning = ajaxStatus.running();
             
             return String.format(
                 "AJAX Spider Status: %s%n" +
                 "Pages/URLs discovered: %s%n" +
                 "%s",
-                status,
-                messagesCount,
+                ajaxStatus.status(),
+                ajaxStatus.discoveredCount(),
                 isRunning ? "Scan is in progress..." : "Scan completed."
             );
             
@@ -139,13 +147,16 @@ public class AjaxSpiderService {
      *
      * @return Confirmation message
      */
-    @Tool(name = "zap_ajax_spider_stop", 
-          description = "Stop the currently running AJAX Spider scan")
     public String stopAjaxSpider() {
+        stopAjaxSpiderJob(null);
+        trackAjaxSpiderStopped();
+        return "AJAX Spider scan stopped successfully";
+    }
+
+    public void stopAjaxSpiderJob(String ignoredScanId) {
         try {
             zap.ajaxSpider.stop();
             log.info("AJAX Spider scan stopped");
-            return "AJAX Spider scan stopped successfully";
         } catch (ClientApiException e) {
             log.error("Error stopping AJAX Spider: {}", e.getMessage(), e);
             throw new ZapApiException("Error stopping AJAX Spider", e);
@@ -157,8 +168,6 @@ public class AjaxSpiderService {
      *
      * @return Full results including all discovered URLs
      */
-    @Tool(name = "zap_ajax_spider_results", 
-          description = "Get full results from the AJAX Spider scan including all discovered URLs")
     public String getAjaxSpiderResults() {
         try {
             ApiResponse response = zap.ajaxSpider.fullResults();
@@ -167,5 +176,70 @@ public class AjaxSpiderService {
             log.error("Error retrieving AJAX Spider results: {}", e.getMessage(), e);
             throw new ZapApiException("Error retrieving AJAX Spider results", e);
         }
+    }
+
+    public int getAjaxSpiderProgressPercent(String ignoredScanId) {
+        try {
+            return readAjaxSpiderStatus().running() ? 0 : 100;
+        } catch (ClientApiException e) {
+            log.error("Error retrieving AJAX Spider progress: {}", e.getMessage(), e);
+            throw new ZapApiException("Error retrieving AJAX Spider progress", e);
+        }
+    }
+
+    private AjaxSpiderStatus readAjaxSpiderStatus() throws ClientApiException {
+        ApiResponse statusResponse = zap.ajaxSpider.status();
+        String status = ((ApiResponseElement) statusResponse).getValue();
+
+        ApiResponse messagesResponse = zap.ajaxSpider.numberOfResults();
+        String messagesCount = ((ApiResponseElement) messagesResponse).getValue();
+        boolean running = "running".equalsIgnoreCase(status);
+        return new AjaxSpiderStatus(status, messagesCount, running);
+    }
+
+    private String formatDirectStartMessage(String targetUrl) {
+        return String.format(
+                "AJAX Spider scan started successfully for URL: %s%n" +
+                        "Using real browser (Firefox headless) to crawl JavaScript content.%n" +
+                        "This method bypasses WAF protection and bot detection.%n" +
+                        "Using default scan duration and browser settings.%n" +
+                        "Use 'zap_ajax_spider_status' to check progress.",
+                targetUrl
+        );
+    }
+
+    private void trackAjaxSpiderStarted(String scanId, String workspaceId) {
+        if (operationRegistry == null || scanId == null || scanId.isBlank()) {
+            return;
+        }
+        operationRegistry.registerDirectScan("ajax:" + scanId, workspaceId);
+    }
+
+    private void trackAjaxSpiderStatus(boolean running) {
+        if (operationRegistry == null) {
+            return;
+        }
+        if (running) {
+            operationRegistry.touchDirectScansByPrefix("ajax:");
+            return;
+        }
+        operationRegistry.releaseDirectScansByPrefix("ajax:");
+    }
+
+    private void trackAjaxSpiderStopped() {
+        if (operationRegistry == null) {
+            return;
+        }
+        operationRegistry.releaseDirectScansByPrefix("ajax:");
+    }
+
+    private String resolveWorkspaceId() {
+        if (clientWorkspaceResolver == null) {
+            return "default-workspace";
+        }
+        return clientWorkspaceResolver.resolveCurrentWorkspaceId();
+    }
+
+    private record AjaxSpiderStatus(String status, String discoveredCount, boolean running) {
     }
 }

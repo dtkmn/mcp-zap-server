@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.model.ScanJob;
@@ -7,13 +9,12 @@ import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,8 +22,23 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.UnaryOperator;
@@ -39,6 +55,10 @@ public class ScanJobQueueService {
     private static final String PARAM_MAX_CHILDREN = "maxChildren";
     private static final String PARAM_SUBTREE_ONLY = "subtreeOnly";
     private static final String PARAM_REPLAY_OF_JOB_ID = "replayOfJobId";
+    private static final String PARAM_IDEMPOTENCY_KEY = "idempotencyKey";
+    private static final String DEFAULT_REQUESTER_ID = "anonymous";
+    private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+    private static final long DEFAULT_CLAIM_LEASE_MS = 15000L;
 
     private static final AtomicInteger PLATFORM_THREAD_COUNTER = new AtomicInteger(0);
     private static final Comparator<ScanJob> JOB_CREATION_ORDER =
@@ -46,14 +66,20 @@ public class ScanJobQueueService {
 
     private final ActiveScanService activeScanService;
     private final SpiderScanService spiderScanService;
+    private final AjaxSpiderService ajaxSpiderService;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
     private final RetryPolicy activeRetryPolicy;
     private final RetryPolicy spiderRetryPolicy;
     private final ScanJobStore scanJobStore;
     private final QueueLeadershipCoordinator queueLeadershipCoordinator;
+    private final String workerNodeId;
 
     private final ExecutorService ioExecutor;
+    private long claimLeaseMs = DEFAULT_CLAIM_LEASE_MS;
+    private ClaimMetrics claimMetrics = ClaimMetrics.noop();
+    private QueueStateMetrics queueStateMetrics = QueueStateMetrics.noop();
+    private ClientWorkspaceResolver clientWorkspaceResolver;
 
     private final Map<String, ScanJob> jobs = new ConcurrentHashMap<>();
     private final Deque<String> queuedJobIds = new ArrayDeque<>();
@@ -64,11 +90,14 @@ public class ScanJobQueueService {
     @Autowired
     public ScanJobQueueService(ActiveScanService activeScanService,
                                SpiderScanService spiderScanService,
+                               ObjectProvider<AjaxSpiderService> ajaxSpiderServiceProvider,
                                UrlValidationService urlValidationService,
                                ScanLimitProperties scanLimitProperties,
                                ObjectProvider<ScanJobStore> scanJobStoreProvider,
                                ObjectProvider<QueueLeadershipCoordinator> queueLeadershipCoordinatorProvider,
+                               ObjectProvider<MeterRegistry> meterRegistryProvider,
                                @Value("${zap.scan.queue.virtual-threads.enabled:false}") boolean virtualThreadsEnabled,
+                               @Value("${zap.scan.queue.claim-lease-ms:15000}") long claimLeaseMs,
                                @Value("${zap.scan.queue.retry.active.max-attempts:3}") int activeMaxAttempts,
                                @Value("${zap.scan.queue.retry.active.initial-backoff-ms:2000}") long activeInitialBackoffMs,
                                @Value("${zap.scan.queue.retry.active.max-backoff-ms:30000}") long activeMaxBackoffMs,
@@ -80,6 +109,7 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                ajaxSpiderServiceProvider.getIfAvailable(),
                 urlValidationService,
                 scanLimitProperties,
                 new RetryPolicy(activeMaxAttempts, activeInitialBackoffMs, activeMaxBackoffMs, activeBackoffMultiplier),
@@ -88,6 +118,15 @@ public class ScanJobQueueService {
                 scanJobStoreProvider.getIfAvailable(InMemoryScanJobStore::new),
                 queueLeadershipCoordinatorProvider.getIfAvailable(SingleNodeQueueLeadershipCoordinator::new)
         );
+        this.claimLeaseMs = sanitizeClaimLeaseMs(claimLeaseMs);
+        MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
+        this.claimMetrics = ClaimMetrics.create(meterRegistry);
+        this.queueStateMetrics = QueueStateMetrics.create(meterRegistry);
+    }
+
+    @Autowired(required = false)
+    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     ScanJobQueueService(ActiveScanService activeScanService,
@@ -99,6 +138,25 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                maxAttempts,
+                virtualThreadsEnabled
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        int maxAttempts,
+                        boolean virtualThreadsEnabled) {
+        this(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 maxAttempts,
@@ -118,6 +176,27 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                maxAttempts,
+                virtualThreadsEnabled,
+                scanJobStore
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        int maxAttempts,
+                        boolean virtualThreadsEnabled,
+                        ScanJobStore scanJobStore) {
+        this(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 maxAttempts,
@@ -138,6 +217,29 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                maxAttempts,
+                virtualThreadsEnabled,
+                scanJobStore,
+                queueLeadershipCoordinator
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        int maxAttempts,
+                        boolean virtualThreadsEnabled,
+                        ScanJobStore scanJobStore,
+                        QueueLeadershipCoordinator queueLeadershipCoordinator) {
+        this(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 new RetryPolicy(maxAttempts, 0, 0, 1.0),
@@ -158,6 +260,27 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                activeRetryPolicy,
+                spiderRetryPolicy,
+                virtualThreadsEnabled
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        RetryPolicy activeRetryPolicy,
+                        RetryPolicy spiderRetryPolicy,
+                        boolean virtualThreadsEnabled) {
+        this(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 activeRetryPolicy,
@@ -179,6 +302,29 @@ public class ScanJobQueueService {
         this(
                 activeScanService,
                 spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                activeRetryPolicy,
+                spiderRetryPolicy,
+                virtualThreadsEnabled,
+                scanJobStore
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        RetryPolicy activeRetryPolicy,
+                        RetryPolicy spiderRetryPolicy,
+                        boolean virtualThreadsEnabled,
+                        ScanJobStore scanJobStore) {
+        this(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 activeRetryPolicy,
@@ -198,8 +344,33 @@ public class ScanJobQueueService {
                         boolean virtualThreadsEnabled,
                         ScanJobStore scanJobStore,
                         QueueLeadershipCoordinator queueLeadershipCoordinator) {
+        this(
+                activeScanService,
+                spiderScanService,
+                null,
+                urlValidationService,
+                scanLimitProperties,
+                activeRetryPolicy,
+                spiderRetryPolicy,
+                virtualThreadsEnabled,
+                scanJobStore,
+                queueLeadershipCoordinator
+        );
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        RetryPolicy activeRetryPolicy,
+                        RetryPolicy spiderRetryPolicy,
+                        boolean virtualThreadsEnabled,
+                        ScanJobStore scanJobStore,
+                        QueueLeadershipCoordinator queueLeadershipCoordinator) {
         this.activeScanService = activeScanService;
         this.spiderScanService = spiderScanService;
+        this.ajaxSpiderService = ajaxSpiderService;
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
         this.activeRetryPolicy = activeRetryPolicy.sanitized();
@@ -208,6 +379,7 @@ public class ScanJobQueueService {
         this.queueLeadershipCoordinator = queueLeadershipCoordinator != null
                 ? queueLeadershipCoordinator
                 : new SingleNodeQueueLeadershipCoordinator();
+        this.workerNodeId = sanitizeWorkerNodeId(this.queueLeadershipCoordinator.nodeId());
 
         if (virtualThreadsEnabled) {
             this.ioExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -222,7 +394,10 @@ public class ScanJobQueueService {
             log.info("Scan queue IO executor initialized with cached platform thread pool");
         }
 
-        log.info("Scan queue retry policy active={} spider={}", this.activeRetryPolicy, this.spiderRetryPolicy);
+        log.info("Scan queue retry policy active={} spider={} workerNodeId={}",
+                this.activeRetryPolicy,
+                this.spiderRetryPolicy,
+                this.workerNodeId);
         restoreStateFromStore();
     }
 
@@ -232,106 +407,61 @@ public class ScanJobQueueService {
         queueLeadershipCoordinator.close();
     }
 
-    @Tool(
-            name = "zap_queue_active_scan",
-            description = "Queue an active scan job with lifecycle tracking and concurrency guardrails"
-    )
     public String queueActiveScan(
-            @ToolParam(description = "Target URL to scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy
+            String targetUrl,
+            String recurse,
+            String policy,
+            String idempotencyKey
     ) {
-        String normalizedTarget = requireText(targetUrl, PARAM_TARGET_URL);
-        urlValidationService.validateUrl(normalizedTarget);
-
-        ScanJob job = enqueueJob(ScanJobType.ACTIVE_SCAN, Map.of(
-                PARAM_TARGET_URL, normalizedTarget,
-                PARAM_RECURSE, hasText(recurse) ? recurse.trim() : "true",
-                PARAM_POLICY, hasText(policy) ? policy.trim() : ""
-        ));
-
-        return formatSubmission(job);
+        Map<String, String> parameters = targetParameters(targetUrl);
+        parameters.put(PARAM_RECURSE, trimToDefault(recurse, "true"));
+        parameters.put(PARAM_POLICY, trimToDefault(policy, ""));
+        return submitQueuedScan(ScanJobType.ACTIVE_SCAN, parameters, idempotencyKey);
     }
 
-    @Tool(
-            name = "zap_queue_active_scan_as_user",
-            description = "Queue an authenticated active scan job with lifecycle tracking and concurrency guardrails"
-    )
     public String queueActiveScanAsUser(
-            @ToolParam(description = "ZAP context ID") String contextId,
-            @ToolParam(description = "ZAP user ID") String userId,
-            @ToolParam(description = "Target URL to scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy
+            String contextId,
+            String userId,
+            String targetUrl,
+            String recurse,
+            String policy,
+            String idempotencyKey
     ) {
-        String normalizedContext = requireText(contextId, PARAM_CONTEXT_ID);
-        String normalizedUser = requireText(userId, PARAM_USER_ID);
-        String normalizedTarget = requireText(targetUrl, PARAM_TARGET_URL);
-        urlValidationService.validateUrl(normalizedTarget);
-
-        ScanJob job = enqueueJob(ScanJobType.ACTIVE_SCAN_AS_USER, Map.of(
-                PARAM_CONTEXT_ID, normalizedContext,
-                PARAM_USER_ID, normalizedUser,
-                PARAM_TARGET_URL, normalizedTarget,
-                PARAM_RECURSE, hasText(recurse) ? recurse.trim() : "true",
-                PARAM_POLICY, hasText(policy) ? policy.trim() : ""
-        ));
-
-        return formatSubmission(job);
+        Map<String, String> parameters = userScopedTargetParameters(contextId, userId, targetUrl);
+        parameters.put(PARAM_RECURSE, trimToDefault(recurse, "true"));
+        parameters.put(PARAM_POLICY, trimToDefault(policy, ""));
+        return submitQueuedScan(ScanJobType.ACTIVE_SCAN_AS_USER, parameters, idempotencyKey);
     }
 
-    @Tool(
-            name = "zap_queue_spider_scan",
-            description = "Queue a spider scan job with lifecycle tracking and concurrency guardrails"
-    )
     public String queueSpiderScan(
-            @ToolParam(description = "Target URL to spider") String targetUrl
+            String targetUrl,
+            String idempotencyKey
     ) {
-        String normalizedTarget = requireText(targetUrl, PARAM_TARGET_URL);
-        urlValidationService.validateUrl(normalizedTarget);
-
-        ScanJob job = enqueueJob(ScanJobType.SPIDER_SCAN, Map.of(
-                PARAM_TARGET_URL, normalizedTarget
-        ));
-
-        return formatSubmission(job);
+        return submitQueuedScan(ScanJobType.SPIDER_SCAN, targetParameters(targetUrl), idempotencyKey);
     }
 
-    @Tool(
-            name = "zap_queue_spider_scan_as_user",
-            description = "Queue an authenticated spider scan job with lifecycle tracking and concurrency guardrails"
-    )
+    public String queueAjaxSpiderScan(String targetUrl, String idempotencyKey) {
+        return submitQueuedScan(ScanJobType.AJAX_SPIDER, targetParameters(targetUrl), idempotencyKey);
+    }
+
     public String queueSpiderScanAsUser(
-            @ToolParam(description = "ZAP context ID") String contextId,
-            @ToolParam(description = "ZAP user ID") String userId,
-            @ToolParam(description = "Target URL to spider") String targetUrl,
-            @ToolParam(description = "Maximum children to crawl (optional)") String maxChildren,
-            @ToolParam(description = "Recurse into sub-paths? true/false (optional, default: true)") String recurse,
-            @ToolParam(description = "Restrict to subtree only? true/false (optional, default: false)") String subtreeOnly
+            String contextId,
+            String userId,
+            String targetUrl,
+            String maxChildren,
+            String recurse,
+            String subtreeOnly,
+            String idempotencyKey
     ) {
-        String normalizedContext = requireText(contextId, PARAM_CONTEXT_ID);
-        String normalizedUser = requireText(userId, PARAM_USER_ID);
-        String normalizedTarget = requireText(targetUrl, PARAM_TARGET_URL);
-        urlValidationService.validateUrl(normalizedTarget);
-
-        ScanJob job = enqueueJob(ScanJobType.SPIDER_SCAN_AS_USER, Map.of(
-                PARAM_CONTEXT_ID, normalizedContext,
-                PARAM_USER_ID, normalizedUser,
-                PARAM_TARGET_URL, normalizedTarget,
-                PARAM_MAX_CHILDREN, hasText(maxChildren) ? maxChildren.trim() : "",
-                PARAM_RECURSE, hasText(recurse) ? recurse.trim() : "true",
-                PARAM_SUBTREE_ONLY, hasText(subtreeOnly) ? subtreeOnly.trim() : "false"
-        ));
-
-        return formatSubmission(job);
+        Map<String, String> parameters = userScopedTargetParameters(contextId, userId, targetUrl);
+        parameters.put(PARAM_MAX_CHILDREN, trimToDefault(maxChildren, ""));
+        parameters.put(PARAM_RECURSE, trimToDefault(recurse, "true"));
+        parameters.put(PARAM_SUBTREE_ONLY, trimToDefault(subtreeOnly, "false"));
+        return submitQueuedScan(ScanJobType.SPIDER_SCAN_AS_USER, parameters, idempotencyKey);
     }
 
-    @Tool(
-            name = "zap_scan_job_status",
-            description = "Get status details for a queued/running/completed scan job"
-    )
     public String getScanJobStatus(
-            @ToolParam(description = "Scan job ID") String jobId
+            String jobId
     ) {
         String normalizedJobId = requireText(jobId, "jobId");
         processQueue();
@@ -343,12 +473,8 @@ public class ScanJobQueueService {
         return formatJobDetail(job, job.getQueuePosition());
     }
 
-    @Tool(
-            name = "zap_scan_job_list",
-            description = "List scan jobs and current queue state"
-    )
     public String listScanJobs(
-            @ToolParam(description = "Optional status filter: QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED") String statusFilter
+            String statusFilter
     ) {
         ScanJobStatus filter = parseStatusFilter(statusFilter);
         processQueue();
@@ -356,6 +482,7 @@ public class ScanJobQueueService {
         List<ScanJob> snapshot = scanJobStore.list().stream()
                 .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
                 .toList();
+        Instant now = Instant.now();
 
         StringBuilder output = new StringBuilder();
         output.append("Scan job summary")
@@ -365,6 +492,12 @@ public class ScanJobQueueService {
                 .append('\n')
                 .append("Queue depth: ")
                 .append(snapshot.stream().filter(job -> job.getStatus() == ScanJobStatus.QUEUED).count())
+                .append('\n')
+                .append("Claimed for Dispatch: ")
+                .append(snapshot.stream().filter(job -> job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)).count())
+                .append('\n')
+                .append("Running: ")
+                .append(snapshot.stream().filter(job -> job.getStatus() == ScanJobStatus.RUNNING).count())
                 .append('\n');
 
         if (filter != null) {
@@ -399,6 +532,7 @@ public class ScanJobQueueService {
             if (job.getStatus() == ScanJobStatus.QUEUED && job.getNextAttemptAt() != null) {
                 output.append(" | retryAt=").append(job.getNextAttemptAt());
             }
+            appendClaimSummary(output, job, now);
             output.append('\n');
         }
 
@@ -409,12 +543,18 @@ public class ScanJobQueueService {
         return output.toString();
     }
 
-    @Tool(
-            name = "zap_scan_job_cancel",
-            description = "Cancel a queued or running scan job"
-    )
+    /**
+     * Return the current durable job snapshot for runtime protection and diagnostics.
+     */
+    public List<ScanJob> listJobsSnapshot() {
+        processQueue();
+        return scanJobStore.list().stream()
+                .sorted(JOB_CREATION_ORDER)
+                .toList();
+    }
+
     public String cancelScanJob(
-            @ToolParam(description = "Scan job ID") String jobId
+            String jobId
     ) {
         String normalizedJobId = requireText(jobId, "jobId");
         StopRequest[] stopRequest = new StopRequest[1];
@@ -466,12 +606,8 @@ public class ScanJobQueueService {
         return response[0];
     }
 
-    @Tool(
-            name = "zap_scan_job_retry",
-            description = "Retry a failed or cancelled scan job"
-    )
     public String retryScanJob(
-            @ToolParam(description = "Scan job ID") String jobId
+            String jobId
     ) {
         String normalizedJobId = requireText(jobId, "jobId");
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
@@ -507,10 +643,6 @@ public class ScanJobQueueService {
         }
     }
 
-    @Tool(
-            name = "zap_scan_job_dead_letter_list",
-            description = "List dead-letter scan jobs (failed after exhausting retry budget)"
-    )
     /**
      * List jobs that exhausted retry budget and remain in FAILED state.
      */
@@ -546,12 +678,8 @@ public class ScanJobQueueService {
         return output.toString().trim();
     }
 
-    @Tool(
-            name = "zap_scan_job_dead_letter_requeue",
-            description = "Requeue a dead-letter scan job as a fresh job with a new retry budget"
-    )
     public String requeueDeadLetterJob(
-            @ToolParam(description = "Dead-letter scan job ID") String jobId
+            String jobId
     ) {
         String normalizedJobId = requireText(jobId, "jobId");
         ScanJob[] replayJob = new ScanJob[1];
@@ -574,7 +702,9 @@ public class ScanJobQueueService {
                     deadLetterJob.getType(),
                     replayParameters,
                     Instant.now(),
-                    policyFor(deadLetterJob.getType()).maxAttempts()
+                    policyFor(deadLetterJob.getType()).maxAttempts(),
+                    deadLetterJob.getRequesterId(),
+                    null
             );
 
             currentState.jobs().put(replayJob[0].getId(), replayJob[0]);
@@ -596,27 +726,22 @@ public class ScanJobQueueService {
      */
     @Scheduled(fixedDelayString = "${zap.scan.queue.dispatch-interval-ms:2000}")
     public void processQueue() {
-        LeadershipDecision leadershipDecision = evaluateLeadership();
-        if (!leadershipDecision.leader()) {
-            return;
-        }
-
+        observeLeadership();
         restoreStateFromStore(false);
+        Instant now = Instant.now();
+        Instant claimUntil = now.plusMillis(claimLeaseMs);
+        renewInFlightClaims(now, claimUntil);
 
-        WorkPlan workPlan = planWork();
+        WorkPlan workPlan = claimWork(now, claimUntil);
         if (workPlan.pollTargets().isEmpty() && workPlan.startTargets().isEmpty()) {
-            if (workPlan.stateUpdated()) {
-                persistState();
-            }
+            applyCommittedStoredJobs(scanJobStore.list());
             return;
         }
 
         List<PollResult> pollResults = executePollTargets(workPlan.pollTargets());
         List<StartResult> startResults = executeStartTargets(workPlan.startTargets());
-        ApplyOutcome applyOutcome = applyResults(pollResults, startResults);
-        if (workPlan.stateUpdated() || applyOutcome.stateUpdated()) {
-            persistState();
-        }
+        ApplyOutcome applyOutcome = applyClaimedResults(pollResults, startResults, claimUntil);
+        applyCommittedStoredJobs(scanJobStore.list());
 
         for (StopRequest stopRequest : applyOutcome.stopRequests()) {
             try {
@@ -641,18 +766,33 @@ public class ScanJobQueueService {
     }
 
     /**
-     * Evaluate leadership and run transition hooks for acquire/loss events.
+     * Continue evaluating optional coordinator leadership for observability only.
      */
-    private LeadershipDecision evaluateLeadership() {
+    private void observeLeadership() {
         LeadershipDecision leadershipDecision = queueLeadershipCoordinator.evaluateLeadership();
         if (leadershipDecision.acquiredLeadership()) {
-            log.info("Queue leadership acquired; restoring durable scan job state before dispatch/mutation");
-            restoreStateFromStore();
+            log.info("Queue maintenance leadership acquired on node {}. Normal scan dispatch now uses durable job claims.",
+                    workerNodeId);
         }
         if (leadershipDecision.lostLeadership()) {
-            log.warn("Queue leadership lost; this replica will stop dispatching/mutating scan jobs");
+            log.warn("Queue maintenance leadership lost on node {}. Claim-based dispatch remains active on all replicas.",
+                    workerNodeId);
         }
-        return leadershipDecision;
+    }
+
+    private void renewInFlightClaims(Instant now, Instant claimUntil) {
+        queueLock.lock();
+        try {
+            if (startingJobIds.isEmpty() && pollingJobIds.isEmpty()) {
+                return;
+            }
+            Set<String> inFlightJobIds = new HashSet<>(startingJobIds);
+            inFlightJobIds.addAll(pollingJobIds);
+            scanJobStore.renewClaims(workerNodeId, inFlightJobIds, now, claimUntil);
+            claimMetrics.recordRenewedClaims(inFlightJobIds.size());
+        } finally {
+            queueLock.unlock();
+        }
     }
 
     /**
@@ -696,102 +836,74 @@ public class ScanJobQueueService {
     }
 
     /**
-     * Persist queue state under lock.
-     */
-    private void persistState() {
-        queueLock.lock();
-        try {
-            persistStateLocked();
-        } finally {
-            queueLock.unlock();
-        }
-    }
-
-    /**
-     * Persist the current queue view into the durable scan job store.
-     */
-    private void persistStateLocked() {
-        List<ScanJob> committedJobs = scanJobStore.updateAndGet(this::mergeCurrentStateIntoStoredJobs);
-        applyNormalizedStateLocked(normalizeStoredJobs(committedJobs), false);
-    }
-
-    /**
      * Create a new queued job and trigger dispatch loop.
      */
-    private ScanJob enqueueJob(ScanJobType type, Map<String, String> parameters) {
-        ScanJob job = new ScanJob(
+    private AdmittedJob enqueueJob(ScanJobType type, Map<String, String> parameters, String idempotencyKey) {
+        String requesterId = resolveRequesterId();
+        String normalizedIdempotencyKey = normalizeIdempotencyKey(idempotencyKey);
+        ScanJob candidate = new ScanJob(
                 UUID.randomUUID().toString(),
                 type,
                 parameters,
                 Instant.now(),
-                policyFor(type).maxAttempts()
+                policyFor(type).maxAttempts(),
+                requesterId,
+                normalizedIdempotencyKey
         );
 
-        List<ScanJob> committedJobs = scanJobStore.updateAndGet(currentJobs -> {
-            NormalizedQueueState normalizedState = normalizeStoredJobs(currentJobs);
-            normalizedState.jobs().put(job.getId(), job);
-            normalizedState.queuedJobIds().addLast(job.getId());
-            return storedJobsOf(normalizedState.jobs(), normalizedState.queuedJobIds());
-        });
+        String[] admittedJobId = new String[1];
+        boolean[] idempotentReplay = new boolean[1];
+
+        ScanJob admitted = scanJobStore.admitQueuedJob(candidate);
+        admittedJobId[0] = admitted.getId();
+        idempotentReplay[0] = !candidate.getId().equals(admitted.getId());
+        if (idempotentReplay[0]) {
+            validateIdempotentReplay(admitted, candidate);
+        }
+        List<ScanJob> committedJobs = scanJobStore.list();
 
         applyCommittedStoredJobs(committedJobs);
-        log.info("Enqueued scan job {} ({})", job.getId(), job.getType());
+
+        if (idempotentReplay[0]) {
+            log.info(
+                    "Reused existing scan job {} for requester {} idempotency key {}",
+                    admittedJobId[0],
+                    requesterId,
+                    normalizedIdempotencyKey
+            );
+        } else {
+            log.info("Enqueued scan job {} ({})", admittedJobId[0], type);
+        }
 
         processQueue();
         queueLock.lock();
         try {
-            return jobs.getOrDefault(job.getId(), job);
+            ScanJob admittedJob = jobs.get(admittedJobId[0]);
+            if (admittedJob == null) {
+                admittedJob = committedJobs.stream()
+                        .filter(job -> job != null && job.getId().equals(admittedJobId[0]))
+                        .findFirst()
+                        .orElse(candidate);
+            }
+            return new AdmittedJob(admittedJob, idempotentReplay[0]);
         } finally {
             queueLock.unlock();
         }
     }
 
-    private List<ScanJob> mergeCurrentStateIntoStoredJobs(List<ScanJob> persistedJobs) {
-        NormalizedQueueState persistedState = normalizeStoredJobs(persistedJobs);
-        Map<String, ScanJob> mergedJobs = new LinkedHashMap<>(persistedState.jobs());
-        for (ScanJob job : jobs.values()) {
-            mergedJobs.put(job.getId(), job);
-        }
-
-        Deque<String> mergedQueuedJobIds = mergeQueuedJobIds(
-                persistedState.queuedJobIds(),
-                mergedJobs,
-                queuedJobIds
-        );
-        return storedJobsOf(mergedJobs, mergedQueuedJobIds);
+    private String submitQueuedScan(ScanJobType type, Map<String, String> parameters, String idempotencyKey) {
+        AdmittedJob admission = enqueueJob(type, parameters, idempotencyKey);
+        return formatSubmission(admission.job(), admission.idempotentReplay());
     }
 
-    private Deque<String> mergeQueuedJobIds(
-            Deque<String> persistedQueuedJobIds,
-            Map<String, ScanJob> mergedJobs,
-            Deque<String> localQueuedJobIds
-    ) {
-        Deque<String> mergedQueuedJobIds = new ArrayDeque<>();
-        Set<String> queuedSeen = new HashSet<>();
-
-        for (String jobId : persistedQueuedJobIds) {
-            ScanJob job = mergedJobs.get(jobId);
-            if (job == null || job.getStatus() != ScanJobStatus.QUEUED || !queuedSeen.add(jobId)) {
-                continue;
-            }
-            mergedQueuedJobIds.addLast(jobId);
+    private void validateIdempotentReplay(ScanJob existingJob, ScanJob requestedJob) {
+        if (existingJob.getType() != requestedJob.getType()
+                || !existingJob.getParameters().equals(requestedJob.getParameters())) {
+            throw new IllegalStateException(
+                    "Idempotency key '" + requestedJob.getIdempotencyKey()
+                            + "' has already been used for a different queued scan request."
+            );
         }
-
-        for (String jobId : localQueuedJobIds) {
-            ScanJob job = mergedJobs.get(jobId);
-            if (job == null || job.getStatus() != ScanJobStatus.QUEUED || !queuedSeen.add(jobId)) {
-                continue;
-            }
-            mergedQueuedJobIds.addLast(jobId);
-        }
-
-        mergedJobs.values().stream()
-                .filter(job -> job.getStatus() == ScanJobStatus.QUEUED)
-                .sorted(JOB_CREATION_ORDER)
-                .map(ScanJob::getId)
-                .filter(queuedSeen::add)
-                .forEach(mergedQueuedJobIds::addLast);
-        return mergedQueuedJobIds;
     }
 
     private void applyNormalizedStateLocked(NormalizedQueueState state, boolean resetTransientState) {
@@ -799,6 +911,7 @@ public class ScanJobQueueService {
         jobs.putAll(state.jobs());
         queuedJobIds.clear();
         queuedJobIds.addAll(state.queuedJobIds());
+        queueStateMetrics.refresh(state.jobs().values(), Instant.now());
 
         if (resetTransientState) {
             pollingJobIds.clear();
@@ -808,11 +921,15 @@ public class ScanJobQueueService {
 
         pollingJobIds.removeIf(jobId -> {
             ScanJob job = jobs.get(jobId);
-            return job == null || job.getStatus() != ScanJobStatus.RUNNING;
+            return job == null
+                    || job.getStatus() != ScanJobStatus.RUNNING
+                    || !job.isClaimedBy(workerNodeId);
         });
         startingJobIds.removeIf(jobId -> {
             ScanJob job = jobs.get(jobId);
-            return job == null || job.getStatus() != ScanJobStatus.QUEUED;
+            return job == null
+                    || job.getStatus() != ScanJobStatus.QUEUED
+                    || !job.isClaimedBy(workerNodeId);
         });
     }
 
@@ -940,83 +1057,118 @@ public class ScanJobQueueService {
     }
 
     /**
-     * Build the next poll/start work plan based on capacity and retry timing.
+     * Claim durable running and queued work for this replica.
      */
-    private WorkPlan planWork() {
+    private WorkPlan claimWork(Instant now, Instant claimUntil) {
+        Map<String, ScanJob> priorJobs = snapshotJobsForClaimObservation();
+        List<ScanJob> runningJobs = scanJobStore.claimRunningJobs(workerNodeId, now, claimUntil);
+        List<ScanJob> queuedJobs = scanJobStore.claimQueuedJobs(
+                workerNodeId,
+                now,
+                claimUntil,
+                scanLimitProperties.getMaxConcurrentActiveScans(),
+                scanLimitProperties.getMaxConcurrentSpiderScans()
+        );
+        recordClaimObservations(priorJobs, runningJobs, queuedJobs, now);
+
         queueLock.lock();
         try {
-            boolean stateUpdated = false;
             List<PollTarget> pollTargets = new ArrayList<>();
-            for (ScanJob job : jobs.values()) {
-                if (job.getStatus() != ScanJobStatus.RUNNING) {
-                    continue;
-                }
-
+            for (ScanJob job : runningJobs) {
                 if (!hasText(job.getZapScanId())) {
-                    job.markFailed("Missing ZAP scan ID while job is RUNNING");
-                    stateUpdated = true;
+                    scanJobStore.updateClaimedJob(job.getId(), workerNodeId, claimedJob -> {
+                        claimedJob.markFailed("Missing ZAP scan ID while job is RUNNING");
+                        return claimedJob;
+                    });
                     continue;
                 }
-
                 if (pollingJobIds.add(job.getId())) {
                     pollTargets.add(new PollTarget(job.getId(), job.getType(), job.getZapScanId()));
                 }
             }
 
-            int activeCapacity = Math.max(0,
-                    scanLimitProperties.getMaxConcurrentActiveScans()
-                            - countRunningJobs(true)
-                            - countStartingJobs(true));
-            int spiderCapacity = Math.max(0,
-                    scanLimitProperties.getMaxConcurrentSpiderScans()
-                            - countRunningJobs(false)
-                            - countStartingJobs(false));
-
             List<StartTarget> startTargets = new ArrayList<>();
-            int itemsToInspect = queuedJobIds.size();
-            Instant now = Instant.now();
-
-            for (int i = 0; i < itemsToInspect; i++) {
-                String jobId = queuedJobIds.pollFirst();
-                if (jobId == null) {
-                    break;
-                }
-
-                ScanJob job = jobs.get(jobId);
-                if (job == null || job.getStatus() != ScanJobStatus.QUEUED) {
-                    stateUpdated = true;
-                    continue;
-                }
-
-                if (job.getNextAttemptAt() != null && now.isBefore(job.getNextAttemptAt())) {
-                    queuedJobIds.addLast(jobId);
-                    continue;
-                }
-
-                boolean activeFamily = job.getType().isActiveFamily();
-                if (activeFamily && activeCapacity <= 0) {
-                    queuedJobIds.addLast(jobId);
-                    continue;
-                }
-                if (!activeFamily && spiderCapacity <= 0) {
-                    queuedJobIds.addLast(jobId);
-                    continue;
-                }
-
-                startingJobIds.add(jobId);
-                job.incrementAttempts();
-                startTargets.add(new StartTarget(jobId, job.getType(), job.getParameters()));
-
-                if (activeFamily) {
-                    activeCapacity -= 1;
-                } else {
-                    spiderCapacity -= 1;
+            for (ScanJob job : queuedJobs) {
+                if (startingJobIds.add(job.getId())) {
+                    startTargets.add(new StartTarget(job.getId(), job.getType(), job.getParameters()));
                 }
             }
-
-            return new WorkPlan(pollTargets, startTargets, stateUpdated);
+            return new WorkPlan(pollTargets, startTargets);
         } finally {
             queueLock.unlock();
+        }
+    }
+
+    private Map<String, ScanJob> snapshotJobsForClaimObservation() {
+        queueLock.lock();
+        try {
+            Map<String, ScanJob> snapshot = new LinkedHashMap<>();
+            for (Map.Entry<String, ScanJob> entry : jobs.entrySet()) {
+                if (entry.getValue() == null) {
+                    continue;
+                }
+                snapshot.put(entry.getKey(), copyJob(entry.getValue()));
+            }
+            return snapshot;
+        } finally {
+            queueLock.unlock();
+        }
+    }
+
+    private ScanJob copyJob(ScanJob job) {
+        return ScanJob.restore(
+                job.getId(),
+                job.getType(),
+                job.getParameters(),
+                job.getCreatedAt(),
+                job.getMaxAttempts(),
+                job.getRequesterId(),
+                job.getIdempotencyKey(),
+                job.getStatus(),
+                job.getAttempts(),
+                job.getZapScanId(),
+                job.getLastError(),
+                job.getStartedAt(),
+                job.getCompletedAt(),
+                job.getNextAttemptAt(),
+                job.getLastKnownProgress(),
+                job.getQueuePosition(),
+                job.getClaimOwnerId(),
+                job.getClaimHeartbeatAt(),
+                job.getClaimExpiresAt()
+        );
+    }
+
+    private void recordClaimObservations(
+            Map<String, ScanJob> priorJobs,
+            List<ScanJob> runningJobs,
+            List<ScanJob> queuedJobs,
+            Instant now
+    ) {
+        claimMetrics.recordQueuedClaims(queuedJobs.size());
+
+        for (ScanJob runningJob : runningJobs) {
+            ScanJob priorJob = priorJobs.get(runningJob.getId());
+            if (priorJob == null || priorJob.getStatus() != ScanJobStatus.RUNNING) {
+                continue;
+            }
+            if (hasText(priorJob.getClaimOwnerId()) && !workerNodeId.equals(priorJob.getClaimOwnerId())) {
+                claimMetrics.recordRunningRecoveries(1);
+                log.info(
+                        "Recovered running scan job {} claim from worker {} on worker {} (previous expiry={})",
+                        runningJob.getId(),
+                        priorJob.getClaimOwnerId(),
+                        workerNodeId,
+                        priorJob.getClaimExpiresAt()
+                );
+                continue;
+            }
+            if (!hasText(priorJob.getClaimOwnerId()) && runningJob.isClaimedBy(workerNodeId)) {
+                log.info("Claimed previously unowned running scan job {} on worker {}", runningJob.getId(), workerNodeId);
+            }
+            if (priorJob.claimExpiredAt(now) && workerNodeId.equals(runningJob.getClaimOwnerId())) {
+                claimMetrics.recordExpiredClaimRecoveries(1);
+            }
         }
     }
 
@@ -1076,20 +1228,26 @@ public class ScanJobQueueService {
     }
 
     /**
-     * Apply async poll/start results to canonical in-memory queue state.
+     * Apply async poll/start results only if this replica still owns the durable claim.
      */
-    private ApplyOutcome applyResults(List<PollResult> pollResults, List<StartResult> startResults) {
-        queueLock.lock();
-        try {
-            boolean stateUpdated = false;
-            List<StopRequest> stopRequests = new ArrayList<>();
+    private ApplyOutcome applyClaimedResults(
+            List<PollResult> pollResults,
+            List<StartResult> startResults,
+            Instant claimUntil
+    ) {
+        List<StopRequest> stopRequests = new ArrayList<>();
 
-            for (PollResult result : pollResults) {
+        for (PollResult result : pollResults) {
+            queueLock.lock();
+            try {
                 pollingJobIds.remove(result.jobId());
+            } finally {
+                queueLock.unlock();
+            }
 
-                ScanJob job = jobs.get(result.jobId());
-                if (job == null || job.getStatus() != ScanJobStatus.RUNNING) {
-                    continue;
+            ScanJob updatedJob = scanJobStore.updateClaimedJob(result.jobId(), workerNodeId, job -> {
+                if (job.getStatus() != ScanJobStatus.RUNNING) {
+                    return job;
                 }
 
                 if (!result.success()) {
@@ -1098,59 +1256,71 @@ public class ScanJobQueueService {
                     } else {
                         log.warn("Marking scan job {} as FAILED during status refresh: {}", job.getId(), result.error());
                     }
-                    stateUpdated = true;
-                    continue;
+                    return job;
                 }
 
-                int priorProgress = job.getLastKnownProgress();
                 job.updateProgress(result.progress());
-                if (job.getLastKnownProgress() != priorProgress) {
-                    stateUpdated = true;
-                }
                 if (result.progress() >= 100) {
                     job.markSucceeded(result.progress());
                     log.info("Scan job {} completed successfully", job.getId());
-                    stateUpdated = true;
+                } else {
+                    job.claim(workerNodeId, Instant.now(), claimUntil);
                 }
+                return job;
+            }).orElse(null);
+
+            if (updatedJob == null) {
+                claimMetrics.recordClaimConflicts(1);
+                log.debug("Skipping polling result for job {} because this replica no longer owns the claim", result.jobId());
+            }
+        }
+
+        for (StartResult result : startResults) {
+            queueLock.lock();
+            try {
+                startingJobIds.remove(result.jobId());
+            } finally {
+                queueLock.unlock();
             }
 
-            for (StartResult result : startResults) {
-                startingJobIds.remove(result.jobId());
-
-                ScanJob job = jobs.get(result.jobId());
-                if (job == null) {
-                    continue;
-                }
-
-                if (job.getStatus() == ScanJobStatus.CANCELLED) {
-                    if (result.success() && hasText(result.scanId())) {
-                        stopRequests.add(new StopRequest(result.type(), result.scanId()));
-                    }
-                    continue;
-                }
-
+            ScanJob updatedJob = scanJobStore.updateClaimedJob(result.jobId(), workerNodeId, job -> {
                 if (job.getStatus() != ScanJobStatus.QUEUED) {
-                    continue;
+                    return job;
                 }
 
+                job.incrementAttempts();
                 if (result.success()) {
                     job.markRunning(result.scanId());
-                    log.info("Started scan job {} as ZAP scan {}", job.getId(), result.scanId());
-                    stateUpdated = true;
+                    job.claim(workerNodeId, Instant.now(), claimUntil);
+                    log.info("Started scan job {} as ZAP scan {} on worker {}", job.getId(), result.scanId(), workerNodeId);
                 } else {
                     if (scheduleRetryIfAllowed(job, result.error())) {
                         log.info("Scheduled retry for scan job {} after startup error", job.getId());
                     } else {
                         log.error("Failed to start scan job {}: {}", job.getId(), result.error());
                     }
-                    stateUpdated = true;
                 }
-            }
+                return job;
+            }).orElse(null);
 
-            return new ApplyOutcome(stopRequests, stateUpdated);
-        } finally {
-            queueLock.unlock();
+            if (result.success() && hasText(result.scanId())
+                    && (updatedJob == null
+                    || updatedJob.getStatus() != ScanJobStatus.RUNNING
+                    || !result.scanId().equals(updatedJob.getZapScanId()))) {
+                claimMetrics.recordLateResultCleanups(1);
+                if (updatedJob == null) {
+                    claimMetrics.recordClaimConflicts(1);
+                }
+                log.warn(
+                        "Cleaning up late scan start result for job {} on worker {} because durable claim ownership moved",
+                        result.jobId(),
+                        workerNodeId
+                );
+                stopRequests.add(new StopRequest(result.type(), result.scanId()));
+            }
         }
+
+        return new ApplyOutcome(stopRequests);
     }
 
     /**
@@ -1166,47 +1336,7 @@ public class ScanJobQueueService {
         long delayMs = retryPolicy.computeDelayMs(job.getAttempts());
         Instant retryAt = Instant.now().plusMillis(delayMs);
         job.markQueuedForRetry(retryAt, reason);
-        queuedJobIds.addLast(job.getId());
         return true;
-    }
-
-    /**
-     * Count currently running jobs for the requested scan family.
-     */
-    private int countRunningJobs(boolean activeFamily) {
-        int running = 0;
-        for (ScanJob job : jobs.values()) {
-            if (job.getStatus() != ScanJobStatus.RUNNING) {
-                continue;
-            }
-            if (activeFamily && job.getType().isActiveFamily()) {
-                running += 1;
-            }
-            if (!activeFamily && job.getType().isSpiderFamily()) {
-                running += 1;
-            }
-        }
-        return running;
-    }
-
-    /**
-     * Count jobs currently being started for the requested scan family.
-     */
-    private int countStartingJobs(boolean activeFamily) {
-        int starting = 0;
-        for (String jobId : startingJobIds) {
-            ScanJob job = jobs.get(jobId);
-            if (job == null) {
-                continue;
-            }
-            if (activeFamily && job.getType().isActiveFamily()) {
-                starting += 1;
-            }
-            if (!activeFamily && job.getType().isSpiderFamily()) {
-                starting += 1;
-            }
-        }
-        return starting;
     }
 
     /**
@@ -1237,6 +1367,9 @@ public class ScanJobQueueService {
                     parameters.get(PARAM_RECURSE),
                     parameters.get(PARAM_SUBTREE_ONLY)
             );
+            case AJAX_SPIDER -> requireAjaxSpiderService().startAjaxSpiderJob(
+                    parameters.get(PARAM_TARGET_URL)
+            );
         };
     }
 
@@ -1247,6 +1380,7 @@ public class ScanJobQueueService {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.getSpiderScanProgressPercent(scanId);
+            case AJAX_SPIDER -> requireAjaxSpiderService().getAjaxSpiderProgressPercent(scanId);
         };
     }
 
@@ -1257,6 +1391,7 @@ public class ScanJobQueueService {
         switch (stopRequest.type()) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.stopActiveScanJob(stopRequest.scanId());
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.stopSpiderScanJob(stopRequest.scanId());
+            case AJAX_SPIDER -> requireAjaxSpiderService().stopAjaxSpiderJob(stopRequest.scanId());
         }
     }
 
@@ -1292,7 +1427,7 @@ public class ScanJobQueueService {
     /**
      * Format a human-readable response for newly accepted jobs.
      */
-    private String formatSubmission(ScanJob job) {
+    private String formatSubmission(ScanJob job, boolean idempotentReplay) {
         int position;
         queueLock.lock();
         try {
@@ -1319,6 +1454,16 @@ public class ScanJobQueueService {
 
         if (hasText(job.getZapScanId())) {
             sb.append('\n').append("ZAP Scan ID: ").append(job.getZapScanId());
+        }
+
+        appendClaimDetail(sb, job, Instant.now());
+
+        if (hasText(job.getIdempotencyKey())) {
+            sb.append('\n').append("Idempotency Key: ").append(job.getIdempotencyKey());
+        }
+
+        if (idempotentReplay) {
+            sb.append('\n').append("Admission: existing job returned for idempotent retry");
         }
 
         return sb.toString();
@@ -1353,6 +1498,10 @@ public class ScanJobQueueService {
         if (hasText(job.getZapScanId())) {
             sb.append('\n').append("ZAP Scan ID: ").append(job.getZapScanId());
         }
+        appendClaimDetail(sb, job, Instant.now());
+        if (hasText(job.getIdempotencyKey())) {
+            sb.append('\n').append("Idempotency Key: ").append(job.getIdempotencyKey());
+        }
         if (hasText(job.getLastError())) {
             sb.append('\n').append("Last Error: ").append(job.getLastError());
         }
@@ -1373,6 +1522,62 @@ public class ScanJobQueueService {
         return value.trim();
     }
 
+    private AjaxSpiderService requireAjaxSpiderService() {
+        if (ajaxSpiderService == null) {
+            throw new IllegalStateException("AJAX Spider service is not available in this runtime");
+        }
+        return ajaxSpiderService;
+    }
+
+    private String normalizeIdempotencyKey(String value) {
+        String normalized = normalizeBlankToNull(value);
+        if (normalized == null) {
+            return null;
+        }
+        if (normalized.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
+            throw new IllegalArgumentException(
+                    PARAM_IDEMPOTENCY_KEY + " must be " + MAX_IDEMPOTENCY_KEY_LENGTH + " characters or fewer"
+            );
+        }
+        return normalized;
+    }
+
+    private void appendClaimSummary(StringBuilder output, ScanJob job, Instant now) {
+        if (!hasText(job.getClaimOwnerId())) {
+            return;
+        }
+        output.append(" | claimOwner=").append(job.getClaimOwnerId());
+        if (job.getClaimExpiresAt() != null) {
+            output.append(" | claimExpiresAt=").append(job.getClaimExpiresAt());
+            if (job.hasLiveClaim(now)) {
+                output.append(" | claimState=active");
+            } else {
+                output.append(" | claimState=expired");
+            }
+        }
+    }
+
+    private void appendClaimDetail(StringBuilder output, ScanJob job, Instant now) {
+        if (!hasText(job.getClaimOwnerId())) {
+            return;
+        }
+        output.append('\n').append("Claim Owner: ").append(job.getClaimOwnerId());
+        if (job.getClaimHeartbeatAt() != null) {
+            output.append('\n').append("Claim Heartbeat: ").append(job.getClaimHeartbeatAt());
+        }
+        if (job.getClaimExpiresAt() != null) {
+            output.append('\n').append("Claim Expires: ").append(job.getClaimExpiresAt());
+            output.append('\n').append("Claim State: ").append(job.hasLiveClaim(now) ? "ACTIVE" : "EXPIRED");
+        }
+    }
+
+    private String resolveRequesterId() {
+        if (clientWorkspaceResolver == null) {
+            return DEFAULT_REQUESTER_ID;
+        }
+        return clientWorkspaceResolver.resolveCurrentClientId();
+    }
+
     /**
      * Resolve retry policy by scan family.
      */
@@ -1388,6 +1593,41 @@ public class ScanJobQueueService {
      */
     private boolean isDeadLetterJob(ScanJob job) {
         return job.getStatus() == ScanJobStatus.FAILED && job.getAttempts() >= job.getMaxAttempts();
+    }
+
+    private String sanitizeWorkerNodeId(String workerNodeId) {
+        if (!hasText(workerNodeId)) {
+            return "asg-node";
+        }
+        return workerNodeId.trim();
+    }
+
+    private long sanitizeClaimLeaseMs(long claimLeaseMs) {
+        return Math.max(5000L, claimLeaseMs);
+    }
+
+    private Map<String, String> targetParameters(String targetUrl) {
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put(PARAM_TARGET_URL, normalizeTargetUrl(targetUrl));
+        return parameters;
+    }
+
+    private Map<String, String> userScopedTargetParameters(String contextId, String userId, String targetUrl) {
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put(PARAM_CONTEXT_ID, requireText(contextId, PARAM_CONTEXT_ID));
+        parameters.put(PARAM_USER_ID, requireText(userId, PARAM_USER_ID));
+        parameters.put(PARAM_TARGET_URL, normalizeTargetUrl(targetUrl));
+        return parameters;
+    }
+
+    private String normalizeTargetUrl(String targetUrl) {
+        String normalizedTarget = requireText(targetUrl, PARAM_TARGET_URL);
+        urlValidationService.validateUrl(normalizedTarget);
+        return normalizedTarget;
+    }
+
+    private String trimToDefault(String value, String defaultValue) {
+        return hasText(value) ? value.trim() : defaultValue;
     }
 
     /**
@@ -1426,10 +1666,13 @@ public class ScanJobQueueService {
         T get();
     }
 
-    private record WorkPlan(List<PollTarget> pollTargets, List<StartTarget> startTargets, boolean stateUpdated) {
+    private record WorkPlan(List<PollTarget> pollTargets, List<StartTarget> startTargets) {
     }
 
-    private record ApplyOutcome(List<StopRequest> stopRequests, boolean stateUpdated) {
+    private record ApplyOutcome(List<StopRequest> stopRequests) {
+    }
+
+    private record AdmittedJob(ScanJob job, boolean idempotentReplay) {
     }
 
     private record PollTarget(String jobId, ScanJobType type, String scanId) {
@@ -1518,6 +1761,169 @@ public class ScanJobQueueService {
                     ", maxBackoffMs=" + maxBackoffMs +
                     ", multiplier=" + multiplier +
                     '}';
+        }
+    }
+
+    private static final class ClaimMetrics {
+        private final Counter queuedClaimCounter;
+        private final Counter runningRecoveryCounter;
+        private final Counter expiredClaimRecoveryCounter;
+        private final Counter renewedClaimCounter;
+        private final Counter claimConflictCounter;
+        private final Counter lateResultCleanupCounter;
+
+        private ClaimMetrics(
+                Counter queuedClaimCounter,
+                Counter runningRecoveryCounter,
+                Counter expiredClaimRecoveryCounter,
+                Counter renewedClaimCounter,
+                Counter claimConflictCounter,
+                Counter lateResultCleanupCounter
+        ) {
+            this.queuedClaimCounter = queuedClaimCounter;
+            this.runningRecoveryCounter = runningRecoveryCounter;
+            this.expiredClaimRecoveryCounter = expiredClaimRecoveryCounter;
+            this.renewedClaimCounter = renewedClaimCounter;
+            this.claimConflictCounter = claimConflictCounter;
+            this.lateResultCleanupCounter = lateResultCleanupCounter;
+        }
+
+        static ClaimMetrics create(MeterRegistry meterRegistry) {
+            if (meterRegistry == null) {
+                return noop();
+            }
+
+            return new ClaimMetrics(
+                    counter(meterRegistry, "queued_claimed"),
+                    counter(meterRegistry, "running_recovered"),
+                    counter(meterRegistry, "expired_claim_recovered"),
+                    counter(meterRegistry, "renewed"),
+                    counter(meterRegistry, "conflict"),
+                    counter(meterRegistry, "late_result_cleanup")
+            );
+        }
+
+        static ClaimMetrics noop() {
+            return new ClaimMetrics(null, null, null, null, null, null);
+        }
+
+        void recordQueuedClaims(int count) {
+            increment(queuedClaimCounter, count);
+        }
+
+        void recordRunningRecoveries(int count) {
+            increment(runningRecoveryCounter, count);
+        }
+
+        void recordExpiredClaimRecoveries(int count) {
+            increment(expiredClaimRecoveryCounter, count);
+        }
+
+        void recordRenewedClaims(int count) {
+            increment(renewedClaimCounter, count);
+        }
+
+        void recordClaimConflicts(int count) {
+            increment(claimConflictCounter, count);
+        }
+
+        void recordLateResultCleanups(int count) {
+            increment(lateResultCleanupCounter, count);
+        }
+
+        private static Counter counter(MeterRegistry meterRegistry, String event) {
+            return Counter.builder("asg.queue.claim.events")
+                    .tag("event", event)
+                    .register(meterRegistry);
+        }
+
+        private static void increment(Counter counter, int count) {
+            if (counter != null && count > 0) {
+                counter.increment(count);
+            }
+        }
+    }
+
+    private static final class QueueStateMetrics {
+        private final Map<ScanJobStatus, AtomicInteger> jobStatusGauges;
+        private final AtomicInteger activeClaimsGauge;
+        private final AtomicInteger expiredClaimsGauge;
+
+        private QueueStateMetrics(Map<ScanJobStatus, AtomicInteger> jobStatusGauges,
+                                  AtomicInteger activeClaimsGauge,
+                                  AtomicInteger expiredClaimsGauge) {
+            this.jobStatusGauges = jobStatusGauges;
+            this.activeClaimsGauge = activeClaimsGauge;
+            this.expiredClaimsGauge = expiredClaimsGauge;
+        }
+
+        static QueueStateMetrics create(MeterRegistry meterRegistry) {
+            if (meterRegistry == null) {
+                return noop();
+            }
+
+            Map<ScanJobStatus, AtomicInteger> statusGauges = new LinkedHashMap<>();
+            for (ScanJobStatus status : ScanJobStatus.values()) {
+                AtomicInteger gauge = meterRegistry.gauge(
+                        "asg.queue.jobs",
+                        List.of(io.micrometer.core.instrument.Tag.of("status", status.name().toLowerCase(Locale.ROOT))),
+                        new AtomicInteger(0)
+                );
+                statusGauges.put(status, gauge);
+            }
+
+            AtomicInteger activeClaimsGauge = meterRegistry.gauge(
+                    "asg.queue.claims",
+                    List.of(io.micrometer.core.instrument.Tag.of("state", "active")),
+                    new AtomicInteger(0)
+            );
+            AtomicInteger expiredClaimsGauge = meterRegistry.gauge(
+                    "asg.queue.claims",
+                    List.of(io.micrometer.core.instrument.Tag.of("state", "expired")),
+                    new AtomicInteger(0)
+            );
+            return new QueueStateMetrics(statusGauges, activeClaimsGauge, expiredClaimsGauge);
+        }
+
+        static QueueStateMetrics noop() {
+            return new QueueStateMetrics(Map.of(), null, null);
+        }
+
+        void refresh(Iterable<ScanJob> jobs, Instant now) {
+            if (jobStatusGauges.isEmpty()) {
+                return;
+            }
+
+            Map<ScanJobStatus, Integer> counts = new LinkedHashMap<>();
+            for (ScanJobStatus status : ScanJobStatus.values()) {
+                counts.put(status, 0);
+            }
+
+            int activeClaims = 0;
+            int expiredClaims = 0;
+            for (ScanJob job : jobs) {
+                if (job == null || job.getStatus() == null) {
+                    continue;
+                }
+                counts.computeIfPresent(job.getStatus(), (status, count) -> count + 1);
+                if (job.getClaimExpiresAt() != null) {
+                    if (job.claimExpiredAt(now)) {
+                        expiredClaims++;
+                    } else {
+                        activeClaims++;
+                    }
+                }
+            }
+
+            for (Map.Entry<ScanJobStatus, AtomicInteger> entry : jobStatusGauges.entrySet()) {
+                entry.getValue().set(counts.getOrDefault(entry.getKey(), 0));
+            }
+            if (activeClaimsGauge != null) {
+                activeClaimsGauge.set(activeClaims);
+            }
+            if (expiredClaimsGauge != null) {
+                expiredClaimsGauge.set(expiredClaims);
+            }
         }
     }
 }

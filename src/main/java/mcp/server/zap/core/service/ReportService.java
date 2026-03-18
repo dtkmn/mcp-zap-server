@@ -2,16 +2,20 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.*;
+import org.zaproxy.clientapi.core.ApiResponse;
+import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Locale;
 
 /**
  * Service for generating ZAP reports.
@@ -20,6 +24,8 @@ import java.util.Map;
 @Slf4j
 @Service
 public class ReportService {
+    private static final int DEFAULT_REPORT_READ_MAX_CHARS = 20000;
+    private static final int MAX_REPORT_READ_MAX_CHARS = 200000;
 
     private final ClientApi zap;
 
@@ -38,8 +44,6 @@ public class ReportService {
      *
      * @return A string representation of the available report templates
      */
-    @Tool(name="zap_view_templates",
-    description="List the available report templates")
     public String viewTemplates() {
         try {
             ApiResponse raw = zap.reports.templates();
@@ -59,25 +63,24 @@ public class ReportService {
 
 
     /**
-     * Generate a full session ZAP scan report in HTML format.
+     * Generate a full session ZAP scan report using the supplied template.
      *
      * @param reportTemplate The report template to use (e.g. traditional-html-plus/traditional-json-plus)
      * @param theme         The report theme (dark/light)
      * @param sites         The sites to include in the report (comma-separated)
      * @return The path to the generated report file
      */
-    @Tool(name="zap_generate_report",
-            description="Generate the full session ZAP scan report in HTML format, return the path to the file")
-    public String getHtmlReport(
-            @ToolParam(description = "The report template to use (eg. modern/traditional-html-plus/traditional-json-plus)") String reportTemplate,
-            @ToolParam(description = "The report theme (dark/light") String theme,
-            @ToolParam(description = "The sites to include in the report (commas separated)") String sites
+    public String generateReport(
+            String reportTemplate,
+            String theme,
+            String sites
     ) {
         try {
+            String normalizedTheme = normalizeTheme(reportTemplate, theme);
             ApiResponse raw = zap.reports.generate(
                     "My ZAP Scan Report",          // title
                     reportTemplate,                     // template ID
-                    theme,                              // theme
+                    normalizedTheme,                    // theme
                     "",                                 // description
                     "",                                 // contexts
                     sites,                              // sites
@@ -101,83 +104,79 @@ public class ReportService {
         }
     }
 
-    /**
-     * Generates a token-optimized markdown summary of the scan findings.
-     * This is designed for LLM consumption to avoid context window overflow.
-     *
-     * @param baseUrl The base URL to filter alerts (optional)
-     * @return A Markdown formatted summary of risks and counts.
-     */
-    @Tool(name = "zap_get_findings_summary",
-            description = "Get a high-level markdown summary of scan findings, grouped by risk and alert type. Use this instead of reading the full report.")
-    public String getFindingsSummary(@ToolParam(description = "Base URL to filter (optional)") String baseUrl) {
-        try {
-            // 1. Fetch all alerts
-            ApiResponseList resp = (ApiResponseList) zap.core.alerts(
-                    baseUrl != null ? baseUrl : "", "0", "-1"
-            );
-
-            if (resp.getItems().isEmpty()) {
-                return "✅ **Scan Complete**: No alerts found.";
-            }
-
-            // 2. Data Structures for Aggregation
-            // Map<RiskLevel, Map<AlertName, Count>>
-            Map<String, Map<String, Integer>> riskGroups = new HashMap<>();
-            // Map<AlertName, Description> (to provide context only once per alert type)
-            Map<String, String> alertDescriptions = new HashMap<>();
-
-            int totalAlerts = 0;
-
-            // 3. Process Alerts
-            for (ApiResponse item : resp.getItems()) {
-                ApiResponseSet set = (ApiResponseSet) item;
-                String name = set.getStringValue("alert");
-                String risk = set.getStringValue("risk"); // High, Medium, Low, Informational
-                String desc = set.getStringValue("description");
-
-                // Normalize Risk string just in case
-                riskGroups.putIfAbsent(risk, new HashMap<>());
-                Map<String, Integer> counts = riskGroups.get(risk);
-                counts.put(name, counts.getOrDefault(name, 0) + 1);
-
-                // Take only first line of desc to save tokens
-                alertDescriptions.putIfAbsent(name, desc != null ? desc.split("\n")[0] : "No description");
-                totalAlerts++;
-            }
-
-            // 4. Build Markdown Output
-            StringBuilder sb = new StringBuilder();
-            sb.append("# 🛡️ Scan Findings Summary\n\n");
-            sb.append("**Target:** ").append(baseUrl != null ? baseUrl : "All Targets").append("\n");
-            sb.append("**Total Alerts:** ").append(totalAlerts).append("\n\n");
-
-            // Define Risk Order
-            String[] riskOrder = {"High", "Medium", "Low", "Informational"};
-
-            for (String riskLevel : riskOrder) {
-                if (riskGroups.containsKey(riskLevel)) {
-                    Map<String, Integer> alerts = riskGroups.get(riskLevel);
-                    sb.append("## 🔴 ").append(riskLevel).append(" Risk\n");
-
-                    for (Map.Entry<String, Integer> entry : alerts.entrySet()) {
-                        String alertName = entry.getKey();
-                        int count = entry.getValue();
-                        String shortDesc = alertDescriptions.get(alertName);
-
-                        sb.append("* **").append(alertName).append("** (").append(count).append(" instances)\n");
-                        sb.append("  > ").append(shortDesc).append("\n");
-                    }
-                    sb.append("\n");
-                }
-            }
-
-            return sb.toString();
-
-        } catch (ClientApiException e) {
-            log.error("Error generating findings summary: {}", e.getMessage(), e);
-            throw new ZapApiException("Error generating findings summary", e);
+    private String normalizeTheme(String reportTemplate, String theme) {
+        if (!templateSupportsTheme(reportTemplate)) {
+            return "";
         }
+        return theme == null ? "" : theme;
+    }
+
+    private boolean templateSupportsTheme(String reportTemplate) {
+        if (reportTemplate == null) {
+            return false;
+        }
+        String normalizedTemplate = reportTemplate.toLowerCase(Locale.ROOT);
+        return !normalizedTemplate.contains("json")
+                && !normalizedTemplate.contains("xml")
+                && !normalizedTemplate.contains("sarif")
+                && !normalizedTemplate.endsWith("-md");
+    }
+
+    public String readReport(
+            String reportPath,
+            Integer maxChars
+    ) {
+        String normalizedReportPath = requireText(reportPath, "reportPath");
+        int boundedMaxChars = validateMaxChars(maxChars);
+        Path reportRoot = Paths.get(reportDirectory).toAbsolutePath().normalize();
+        Path resolvedPath = resolveReportPath(reportRoot, normalizedReportPath);
+
+        if (!resolvedPath.startsWith(reportRoot)) {
+            throw new IllegalArgumentException("Report path must stay within the configured report directory");
+        }
+        if (!Files.exists(resolvedPath) || !Files.isRegularFile(resolvedPath)) {
+            throw new IllegalArgumentException("Report file does not exist: " + resolvedPath);
+        }
+
+        try {
+            String content = Files.readString(resolvedPath, StandardCharsets.UTF_8);
+            boolean truncated = content.length() > boundedMaxChars;
+            String body = truncated ? content.substring(0, boundedMaxChars) : content;
+            return new StringBuilder()
+                    .append("Report artifact").append('\n')
+                    .append("Path: ").append(resolvedPath).append('\n')
+                    .append("Characters Returned: ").append(body.length()).append('\n')
+                    .append("Truncated: ").append(truncated ? "yes" : "no").append('\n')
+                    .append('\n')
+                    .append(body)
+                    .toString();
+        } catch (IOException e) {
+            log.error("Error reading report {}: {}", resolvedPath, e.getMessage(), e);
+            throw new ZapApiException("Error reading generated report", e);
+        }
+    }
+
+    private String requireText(String value, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " cannot be null or blank");
+        }
+        return value.trim();
+    }
+
+    private int validateMaxChars(Integer maxChars) {
+        int effectiveMaxChars = maxChars == null ? DEFAULT_REPORT_READ_MAX_CHARS : maxChars;
+        if (effectiveMaxChars <= 0) {
+            throw new IllegalArgumentException("maxChars must be greater than 0");
+        }
+        return Math.min(effectiveMaxChars, MAX_REPORT_READ_MAX_CHARS);
+    }
+
+    private Path resolveReportPath(Path reportRoot, String reportPath) {
+        Path candidate = Paths.get(reportPath);
+        if (candidate.isAbsolute()) {
+            return candidate.toAbsolutePath().normalize();
+        }
+        return reportRoot.resolve(candidate).normalize();
     }
 
 }

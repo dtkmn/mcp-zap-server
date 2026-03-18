@@ -1,26 +1,42 @@
 package mcp.server.zap.core.configuration;
 
-import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import mcp.server.zap.core.logging.RequestCorrelationHolder;
+import mcp.server.zap.core.logging.RequestLogContext;
+import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.JwtService;
 import mcp.server.zap.core.service.TokenBlacklistService;
+import mcp.server.zap.core.service.protection.RequestIdentityHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Security configuration for the MCP ZAP Server.
@@ -54,10 +70,10 @@ import java.util.List;
  * - HTTPS in production (via reverse proxy)
  * - Input validation and URL whitelisting
  */
-@Slf4j
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     public enum SecurityMode {
         NONE,      // No authentication
@@ -78,6 +94,8 @@ public class SecurityConfig {
     private final ApiKeyProperties apiKeyProperties;
     private final JwtService jwtService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final ObjectMapper objectMapper;
+    private final ObservabilityService observabilityService;
 
     private static final String API_KEY_HEADER = "X-API-Key";
     private static final String AUTHORIZATION_HEADER = "Authorization";
@@ -85,11 +103,15 @@ public class SecurityConfig {
     public SecurityConfig(JwtProperties jwtProperties,
                          ApiKeyProperties apiKeyProperties,
                          JwtService jwtService,
-                         TokenBlacklistService tokenBlacklistService) {
+                         TokenBlacklistService tokenBlacklistService,
+                         ObjectProvider<ObjectMapper> objectMapperProvider,
+                         ObservabilityService observabilityService) {
         this.jwtProperties = jwtProperties;
         this.apiKeyProperties = apiKeyProperties;
         this.jwtService = jwtService;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        this.observabilityService = observabilityService;
     }
 
     /**
@@ -175,16 +197,24 @@ public class SecurityConfig {
         String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
-            return authenticateWithJwt(token, exchange, chain);
+            return authenticateWithJwt(token, exchange, chain, "jwt");
         }
 
         // Fall back to API key authentication
         String apiKey = exchange.getRequest().getHeaders().getFirst(API_KEY_HEADER);
         if (apiKey != null && !apiKey.trim().isEmpty()) {
-            return authenticateWithApiKey(apiKey, exchange, chain);
+            return authenticateWithApiKey(apiKey, exchange, chain, "api_key");
         }
 
         log.warn("Missing authentication in request to {} (JWT mode)", exchange.getRequest().getPath());
+        observabilityService.recordAuthentication(
+                "jwt",
+                "failure",
+                "missing_authentication",
+                "anonymous",
+                "default-workspace",
+                RequestLogContext.correlationId(exchange)
+        );
         return unauthorizedResponse(exchange, "Missing authentication. Provide JWT token via Authorization: Bearer header or API key via X-API-Key header");
     }
     
@@ -194,18 +224,37 @@ public class SecurityConfig {
     private Mono<Void> authenticateWithApiKeyOnly(ServerWebExchange exchange, org.springframework.web.server.WebFilterChain chain) {
         String apiKey = exchange.getRequest().getHeaders().getFirst(API_KEY_HEADER);
         if (apiKey != null && !apiKey.trim().isEmpty()) {
-            return authenticateWithApiKey(apiKey, exchange, chain);
+            return authenticateWithApiKey(apiKey, exchange, chain, "api_key");
         }
 
         log.warn("Missing API key in request to {} (API_KEY mode)", exchange.getRequest().getPath());
+        observabilityService.recordAuthentication(
+                "api_key",
+                "failure",
+                "missing_api_key",
+                "anonymous",
+                "default-workspace",
+                RequestLogContext.correlationId(exchange)
+        );
         return unauthorizedResponse(exchange, "Missing API key. Provide via X-API-Key header");
     }
 
     /**
      * Authenticate using JWT token.
      */
-    private Mono<Void> authenticateWithJwt(String token, ServerWebExchange exchange, org.springframework.web.server.WebFilterChain chain) {
+    private Mono<Void> authenticateWithJwt(String token,
+                                           ServerWebExchange exchange,
+                                           org.springframework.web.server.WebFilterChain chain,
+                                           String authMethod) {
         if (!jwtProperties.isEnabled()) {
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "jwt_disabled",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
             return unauthorizedResponse(exchange, "JWT authentication is disabled");
         }
 
@@ -214,16 +263,33 @@ public class SecurityConfig {
             String clientId = jwtService.getClientIdFromToken(token);
             String tokenType = jwtService.getTokenType(token);
             String tokenId = jwtService.getTokenId(token);
+            List<String> scopes = jwtService.getScopesFromToken(token);
 
             // Check token type
             if (!"access".equals(tokenType)) {
                 log.warn("Invalid token type for API access: {}", tokenType);
+                observabilityService.recordAuthentication(
+                        authMethod,
+                        "failure",
+                        "invalid_token_type",
+                        "anonymous",
+                        "default-workspace",
+                        RequestLogContext.correlationId(exchange)
+                );
                 return unauthorizedResponse(exchange, "Invalid token type. Use access token.");
             }
 
             // Check blacklist
             if (tokenBlacklistService.isBlacklisted(tokenId)) {
                 log.warn("Attempt to use blacklisted token: {}", tokenId);
+                observabilityService.recordAuthentication(
+                        authMethod,
+                        "failure",
+                        "revoked_token",
+                        clientId,
+                        resolveWorkspaceId(clientId),
+                        RequestLogContext.correlationId(exchange)
+                );
                 return unauthorizedResponse(exchange, "Token has been revoked");
             }
 
@@ -233,14 +299,21 @@ public class SecurityConfig {
             Authentication authentication = new UsernamePasswordAuthenticationToken(
                 clientId, 
                 token, 
-                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                buildAuthorities(scopes)
             );
             
-            return chain.filter(exchange)
-                .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
+            return filterWithAuthentication(exchange, chain, authentication, authMethod);
 
         } catch (JwtException e) {
             log.warn("JWT validation failed: {}", e.getMessage());
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "invalid_or_expired_jwt",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
             return unauthorizedResponse(exchange, "Invalid or expired JWT token");
         }
     }
@@ -248,10 +321,16 @@ public class SecurityConfig {
     /**
      * Authenticate using API key.
      */
-    private Mono<Void> authenticateWithApiKey(String apiKey, ServerWebExchange exchange, org.springframework.web.server.WebFilterChain chain) {
+    private Mono<Void> authenticateWithApiKey(String apiKey,
+                                              ServerWebExchange exchange,
+                                              org.springframework.web.server.WebFilterChain chain,
+                                              String authMethod) {
         // Check configured API keys
-        boolean validKey = apiKeyProperties.getApiKeys().stream()
-                .anyMatch(client -> client.getKey().equals(apiKey));
+        Optional<ApiKeyProperties.ApiKeyClient> clientOpt = apiKeyProperties.getApiKeys().stream()
+                .filter(client -> client.getKey().equals(apiKey))
+                .findFirst();
+
+        boolean validKey = clientOpt.isPresent();
 
         // Also check legacy API key for backward compatibility
         if (!validKey && legacyMcpApiKey != null && !legacyMcpApiKey.trim().isEmpty()) {
@@ -260,26 +339,97 @@ public class SecurityConfig {
 
         if (!validKey) {
             log.warn("Invalid API key provided for {}", exchange.getRequest().getPath());
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "invalid_api_key",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
             return unauthorizedResponse(exchange, "Invalid API key");
         }
 
         // Authentication successful - populate SecurityContext
-        String clientId = apiKeyProperties.getApiKeys().stream()
-            .filter(client -> client.getKey().equals(apiKey))
+        String clientId = clientOpt
             .map(ApiKeyProperties.ApiKeyClient::getClientId)
-            .findFirst()
             .orElse("legacy-client");
+        List<String> scopes = clientOpt
+                .map(ApiKeyProperties.ApiKeyClient::getScopes)
+                .orElse(List.of("*"));
         
         log.debug("API key authentication successful for client: {}", clientId);
         
         Authentication authentication = new UsernamePasswordAuthenticationToken(
             clientId,
             apiKey,
-            List.of(new SimpleGrantedAuthority("ROLE_USER"))
+            buildAuthorities(scopes)
         );
         
-        return chain.filter(exchange)
-            .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
+        return filterWithAuthentication(exchange, chain, authentication, authMethod);
+    }
+
+    private Mono<Void> filterWithAuthentication(ServerWebExchange exchange,
+                                                org.springframework.web.server.WebFilterChain chain,
+                                                Authentication authentication,
+                                                String authMethod) {
+        return Mono.defer(() -> {
+            SecurityContext context = SecurityContextHolder.createEmptyContext();
+            context.setAuthentication(authentication);
+            String clientId = authentication.getName();
+            String workspaceId = resolveWorkspaceId(clientId);
+            SecurityContextHolder.setContext(context);
+            RequestIdentityHolder.set(clientId, workspaceId);
+            exchange.getAttributes().put(RequestLogContext.CLIENT_ID_ATTRIBUTE, clientId);
+            exchange.getAttributes().put(RequestLogContext.WORKSPACE_ID_ATTRIBUTE, workspaceId);
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "success",
+                    "authenticated",
+                    clientId,
+                    workspaceId,
+                    RequestLogContext.correlationId(exchange)
+            );
+            return chain.filter(exchange)
+                    .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication))
+                    .contextCapture()
+                    .doFinally(signalType -> {
+                        SecurityContextHolder.clearContext();
+                        RequestIdentityHolder.clear();
+                    });
+        });
+    }
+
+    private String resolveWorkspaceId(String clientId) {
+        if (clientId == null || clientId.isBlank()) {
+            return "default-workspace";
+        }
+
+        return apiKeyProperties.getApiKeys().stream()
+                .filter(client -> client != null && clientId.equals(client.getClientId()))
+                .map(ApiKeyProperties.ApiKeyClient::getWorkspaceId)
+                .filter(workspaceId -> workspaceId != null && !workspaceId.isBlank())
+                .map(String::trim)
+                .findFirst()
+                .orElse(clientId.trim());
+    }
+
+    private Collection<? extends GrantedAuthority> buildAuthorities(List<String> scopes) {
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+
+        LinkedHashSet<String> normalizedScopes = new LinkedHashSet<>();
+        if (scopes != null) {
+            scopes.stream()
+                    .filter(scope -> scope != null && !scope.isBlank())
+                    .map(scope -> scope.trim().toLowerCase(Locale.ROOT))
+                    .forEach(normalizedScopes::add);
+        }
+
+        for (String scope : normalizedScopes) {
+            authorities.add(new SimpleGrantedAuthority("SCOPE_" + scope));
+        }
+        return authorities;
     }
 
     /**
@@ -288,9 +438,29 @@ public class SecurityConfig {
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {
         exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         exchange.getResponse().getHeaders().add("WWW-Authenticate", "API-Key");
-        return exchange.getResponse().writeWith(
-            Mono.just(exchange.getResponse().bufferFactory()
-                .wrap(("{\"error\": \"" + message + "\"}").getBytes()))
-        );
+        exchange.getResponse().getHeaders().set(HttpHeaders.CONTENT_TYPE, "application/json");
+
+        String correlationId = RequestLogContext.correlationId(exchange);
+        if (correlationId != null && !correlationId.isBlank()) {
+            exchange.getResponse().getHeaders().set(RequestLogContext.CORRELATION_ID_HEADER, correlationId);
+        }
+
+        try {
+            var body = new java.util.LinkedHashMap<String, Object>();
+            body.put("error", message);
+            body.put("correlationId", correlationId != null ? correlationId : RequestCorrelationHolder.currentCorrelationId());
+            body.put("requestId", exchange.getRequest().getId());
+            byte[] bytes = objectMapper.writeValueAsBytes(body);
+            return exchange.getResponse().writeWith(
+                    Mono.just(exchange.getResponse().bufferFactory().wrap(bytes))
+            );
+        } catch (Exception e) {
+            String escapedMessage = message == null ? "Unauthorized" : message.replace("\"", "\\\"");
+            String escapedCorrelationId = correlationId == null ? "" : correlationId.replace("\"", "\\\"");
+            String fallback = "{\"error\":\"" + escapedMessage + "\",\"correlationId\":\"" + escapedCorrelationId + "\"}";
+            return exchange.getResponse().writeWith(
+                    Mono.just(exchange.getResponse().bufferFactory().wrap(fallback.getBytes()))
+            );
+        }
     }
 }

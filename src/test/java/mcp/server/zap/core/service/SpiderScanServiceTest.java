@@ -12,6 +12,7 @@ import org.zaproxy.clientapi.gen.Spider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -67,6 +68,18 @@ public class SpiderScanServiceTest {
     }
 
     @Test
+    void startSpiderScanReturnsDirectMessage() throws Exception {
+        when(spider.scan(any(), any(), any(), any(), any()))
+                .thenReturn(new ApiResponseElement("scan", "55"));
+
+        String result = service.startSpiderScan("http://example.com");
+
+        assertTrue(result.contains("Direct spider scan started."));
+        assertTrue(result.contains("Scan ID: 55"));
+        assertTrue(result.contains("Use 'zap_spider_status'"));
+    }
+
+    @Test
     void startSpiderScanAsUserJobReturnsScanId() throws Exception {
         when(spider.scanAsUser(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(new ApiResponseElement("scan", "77"));
@@ -86,9 +99,42 @@ public class SpiderScanServiceTest {
     }
 
     @Test
+    void startSpiderScanAsUserReturnsDirectMessage() throws Exception {
+        when(spider.scanAsUser(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(new ApiResponseElement("scan", "77"));
+
+        String result = service.startSpiderScanAsUser("2", "9", "http://example.com", null, null, null);
+
+        assertTrue(result.contains("Direct authenticated spider scan started."));
+        assertTrue(result.contains("Scan ID: 77"));
+        assertTrue(result.contains("Context ID: 2"));
+        assertTrue(result.contains("User ID: 9"));
+    }
+
+    @Test
+    void getSpiderScanStatusReturnsDirectMessage() throws Exception {
+        when(spider.status("1")).thenReturn(new ApiResponseElement("status", "80"));
+
+        String result = service.getSpiderScanStatus("1");
+
+        assertTrue(result.contains("Direct spider scan status:"));
+        assertTrue(result.contains("Progress: 80%"));
+        assertTrue(result.contains("Completed: no"));
+    }
+
+    @Test
     void stopSpiderScanJobCallsApi() throws Exception {
         service.stopSpiderScanJob("9");
 
+        verify(spider).stop("9");
+    }
+
+    @Test
+    void stopSpiderScanReturnsDirectMessage() throws Exception {
+        String result = service.stopSpiderScan("9");
+
+        assertTrue(result.contains("Direct spider scan stopped."));
+        assertTrue(result.contains("Scan ID: 9"));
         verify(spider).stop("9");
     }
 

@@ -3,37 +3,32 @@ package mcp.server.zap.core.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
-import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Reports;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ReportServiceTest {
     private Reports reports;
     private ReportService service;
-    private Core core;
 
     @BeforeEach
     void setup() {
         ClientApi clientApi = new ClientApi("localhost", 0);
         reports = mock(Reports.class);
-        core = mock(Core.class);
         clientApi.reports = reports;
-        clientApi.core = core;
         service = new ReportService(clientApi);
         ReflectionTestUtils.setField(service, "reportDirectory", "/tmp");
     }
@@ -49,48 +44,58 @@ public class ReportServiceTest {
     }
 
     @Test
-    void getHtmlReportReturnsPath() throws Exception {
+    void generateReportReturnsPath() throws Exception {
         when(reports.generate(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new ApiResponseElement("file", "/tmp/report.html"));
-        String result = service.getHtmlReport("modern", "light", "site");
+        String result = service.generateReport("modern", "light", "site");
         assertTrue(result.endsWith("report.html"));
     }
 
     @Test
-    void getFindingsSummary_ShouldGenerateMarkdown() throws ClientApiException {
-        // 1. Mock the ZAP API Response List
-        ApiResponseList mockList = new ApiResponseList("alerts");
+    void generateReportOmitsThemeForJsonTemplates() throws Exception {
+        when(reports.generate(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ApiResponseElement("file", "/tmp/report.json"));
 
-        // Helper to create alert objects easily
-        mockList.addItem(createAlert("SQL Injection", "High", "SQL Injection allows attackers to..."));
-        mockList.addItem(createAlert("SQL Injection", "High", "SQL Injection allows...")); // Duplicate type
-        mockList.addItem(createAlert("XSS", "Medium", "Cross Site Scripting..."));
+        String result = service.generateReport("traditional-json-plus", "light", "site");
 
-        // 2. Configure the Mock Behavior
-        when(core.alerts(anyString(), anyString(), anyString())).thenReturn(mockList);
-
-        // 3. Execute
-        String markdown = service.getFindingsSummary("http://target.com");
-
-        // 4. Verify output contains key summary elements
-        System.out.println(markdown); // Debug print
-
-        assertTrue(markdown.contains("**Total Alerts:** 3"), "Should count total alerts");
-        assertTrue(markdown.contains("## 🔴 High Risk"), "Should contain High Risk section");
-        assertTrue(markdown.contains("**SQL Injection** (2 instances)"), "Should aggregate duplicates");
-        assertTrue(markdown.contains("## 🔴 Medium Risk"), "Should contain Medium Risk section");
+        assertTrue(result.endsWith("report.json"));
+        verify(reports).generate(
+                any(),
+                eq("traditional-json-plus"),
+                eq(""),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
     }
 
-    // Helper method to construct ZAP API objects cleanly
-    private ApiResponseSet createAlert(String name, String risk, String description) {
-        // FIX: The values map must contain ApiResponse objects, not Strings.
-        Map<String, ApiResponse> values = new HashMap<>();
+    @Test
+    void readReportReturnsFileContents() throws Exception {
+        Path reportDir = Files.createTempDirectory("report-service-test");
+        Path reportFile = reportDir.resolve("sample-report.json");
+        Files.writeString(reportFile, "{\"status\":\"ok\"}");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportDir.toString());
 
-        values.put("alert", new ApiResponseElement("alert", name));
-        values.put("risk", new ApiResponseElement("risk", risk));
-        values.put("description", new ApiResponseElement("description", description));
+        String result = service.readReport(reportFile.toString(), 1000);
 
-        // Now use the constructor that accepts Map<String, ApiResponse>
-        return new ApiResponseSet("alert", values);
+        assertTrue(result.contains("Report artifact"));
+        assertTrue(result.contains("Truncated: no"));
+        assertTrue(result.contains("{\"status\":\"ok\"}"));
+    }
+
+    @Test
+    void readReportRejectsTraversalOutsideReportDirectory() throws Exception {
+        Path reportDir = Files.createTempDirectory("report-service-test-root");
+        Path outsideFile = Files.createTempFile("report-service-test-outside", ".txt");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportDir.toString());
+
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.readReport(outsideFile.toString(), 1000));
     }
 }

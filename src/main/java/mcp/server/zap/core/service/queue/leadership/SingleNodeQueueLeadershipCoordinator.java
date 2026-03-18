@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SingleNodeQueueLeadershipCoordinator implements QueueLeadershipCoordinator {
 
+    private static final String NODE_ID = "single-node";
     private final AtomicBoolean announced = new AtomicBoolean(false);
 
     /**
@@ -15,5 +16,10 @@ public class SingleNodeQueueLeadershipCoordinator implements QueueLeadershipCoor
             return new LeadershipDecision(true, true, false);
         }
         return LeadershipDecision.asLeader();
+    }
+
+    @Override
+    public String nodeId() {
+        return NODE_ID;
     }
 }

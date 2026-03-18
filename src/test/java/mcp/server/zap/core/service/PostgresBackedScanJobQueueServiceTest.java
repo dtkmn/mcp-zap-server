@@ -53,7 +53,7 @@ class PostgresBackedScanJobQueueServiceTest {
     static void migrateSchema() {
         Flyway.configure()
                 .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .locations("classpath:db/migration")
+                .locations("classpath:migration")
                 .load()
                 .migrate();
     }

@@ -1,12 +1,15 @@
 package mcp.server.zap.core.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.core.logging.RequestCorrelationHolder;
+import mcp.server.zap.core.logging.RequestLogContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.MissingRequestValueException;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.ServerWebInputException;
 
 import java.time.Instant;
@@ -26,49 +29,49 @@ public class GlobalExceptionHandler {
      * Handle ZAP API exceptions.
      */
     @ExceptionHandler(ZapApiException.class)
-    public ResponseEntity<Map<String, Object>> handleZapApiException(ZapApiException ex) {
+    public ResponseEntity<Map<String, Object>> handleZapApiException(ZapApiException ex, ServerWebExchange exchange) {
         log.error("ZAP API error: {}", ex.getMessage(), ex);
-        return buildErrorResponse(HttpStatus.SERVICE_UNAVAILABLE, "ZAP API Error", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "ZAP API Error", ex.getMessage());
     }
 
     /**
      * Handle validation exceptions.
      */
     @ExceptionHandler(WebExchangeBindException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationException(WebExchangeBindException ex) {
+    public ResponseEntity<Map<String, Object>> handleValidationException(WebExchangeBindException ex, ServerWebExchange exchange) {
         String errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         log.warn("Validation error: {}", errors);
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation Error", errors);
+        return buildErrorResponse(exchange, HttpStatus.BAD_REQUEST, "Validation Error", errors);
     }
 
     /**
      * Handle malformed/missing request inputs (headers/query/body values).
      */
     @ExceptionHandler({MissingRequestValueException.class, ServerWebInputException.class})
-    public ResponseEntity<Map<String, Object>> handleRequestInputException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleRequestInputException(Exception ex, ServerWebExchange exchange) {
         log.warn("Request input error: {}", ex.getMessage());
         String message = ex.getMessage() != null ? ex.getMessage() : "Invalid request input";
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid Request", message);
+        return buildErrorResponse(exchange, HttpStatus.BAD_REQUEST, "Invalid Request", message);
     }
 
     /**
      * Handle illegal argument exceptions (URL validation, etc.).
      */
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
+    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex, ServerWebExchange exchange) {
         log.warn("Invalid argument: {}", ex.getMessage());
-        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
     }
 
     /**
      * Handle illegal state exceptions.
      */
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex) {
+    public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex, ServerWebExchange exchange) {
         log.error("Illegal state: {}", ex.getMessage(), ex);
-        return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Server Error", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.INTERNAL_SERVER_ERROR, "Server Error", ex.getMessage());
     }
 
     /**
@@ -76,9 +79,10 @@ public class GlobalExceptionHandler {
      * Note: Does not expose stack traces in production.
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex, ServerWebExchange exchange) {
         log.error("Unexpected error: {}", ex.getMessage(), ex);
         return buildErrorResponse(
+                exchange,
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal Server Error",
                 "An unexpected error occurred. Please try again later."
@@ -88,12 +92,17 @@ public class GlobalExceptionHandler {
     /**
      * Build a consistent error response.
      */
-    private ResponseEntity<Map<String, Object>> buildErrorResponse(HttpStatus status, String error, String message) {
+    private ResponseEntity<Map<String, Object>> buildErrorResponse(ServerWebExchange exchange,
+                                                                  HttpStatus status,
+                                                                  String error,
+                                                                  String message) {
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", Instant.now().toString());
         body.put("status", status.value());
         body.put("error", error);
         body.put("message", message);
+        String correlationId = exchange != null ? RequestLogContext.correlationId(exchange) : null;
+        body.put("correlationId", correlationId != null ? correlationId : RequestCorrelationHolder.currentCorrelationId());
         return ResponseEntity.status(status).body(body);
     }
 }

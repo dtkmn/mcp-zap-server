@@ -38,10 +38,15 @@ server:
 #   - jwt: JWT token-based authentication (recommended for production)
 mcp:
   server:
+    tools:
+      surface: ${MCP_SERVER_TOOLS_SURFACE:guided}
     security:
       # Set authentication mode: none, api-key, or jwt
       mode: ${MCP_SECURITY_MODE:api-key}
       enabled: ${MCP_SECURITY_ENABLED:true}
+      authorization:
+        mode: ${MCP_SECURITY_AUTHORIZATION_MODE:enforce}
+        allowWildcard: ${MCP_SECURITY_AUTHORIZATION_ALLOW_WILDCARD:true}
       # Allow placeholder API keys only for local/dev convenience.
       # Set to false for cloud/prod deployments to fail fast on insecure defaults.
       allowPlaceholderApiKey: ${MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY:true}
@@ -71,6 +76,31 @@ mcp:
             password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
             table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
             fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
+    protection:
+      enabled: ${MCP_PROTECTION_ENABLED:true}
+      retryAfterSeconds: ${MCP_PROTECTION_RETRY_AFTER_SECONDS:30}
+      operationStaleAfterSeconds: ${MCP_PROTECTION_OPERATION_STALE_AFTER_SECONDS:21600}
+      rate-limit:
+        enabled: ${MCP_PROTECTION_RATE_LIMIT_ENABLED:true}
+        capacity: ${MCP_PROTECTION_RATE_LIMIT_CAPACITY:60}
+        refill-tokens: ${MCP_PROTECTION_RATE_LIMIT_REFILL_TOKENS:60}
+        refill-period-seconds: ${MCP_PROTECTION_RATE_LIMIT_REFILL_PERIOD_SECONDS:60}
+        max-tracked-clients: ${MCP_PROTECTION_RATE_LIMIT_MAX_TRACKED_CLIENTS:10000}
+      workspace-quota:
+        enabled: ${MCP_PROTECTION_WORKSPACE_QUOTA_ENABLED:true}
+        max-queued-or-running-scan-jobs: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_QUEUED_OR_RUNNING_SCAN_JOBS:5}
+        max-direct-scans: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_DIRECT_SCANS:2}
+        max-automation-plans: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_AUTOMATION_PLANS:2}
+      backpressure:
+        enabled: ${MCP_PROTECTION_BACKPRESSURE_ENABLED:true}
+        max-tracked-scan-jobs: ${MCP_PROTECTION_BACKPRESSURE_MAX_TRACKED_SCAN_JOBS:20}
+        max-running-scan-jobs: ${MCP_PROTECTION_BACKPRESSURE_MAX_RUNNING_SCAN_JOBS:8}
+        max-direct-scans: ${MCP_PROTECTION_BACKPRESSURE_MAX_DIRECT_SCANS:4}
+        max-automation-plans: ${MCP_PROTECTION_BACKPRESSURE_MAX_AUTOMATION_PLANS:4}
+    observability:
+      audit:
+        enabled: ${MCP_OBSERVABILITY_AUDIT_ENABLED:true}
+        max-events: ${MCP_OBSERVABILITY_AUDIT_MAX_EVENTS:500}
 
 # ZAP Configuration
 zap:
@@ -112,6 +142,7 @@ zap:
 
     queue:
       dispatch-interval-ms: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:2000}
+      claim-lease-ms: ${ZAP_SCAN_QUEUE_CLAIM_LEASE_MS:15000}
       virtual-threads:
         enabled: ${ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED:false}
       coordinator:
@@ -147,6 +178,10 @@ zap:
   
   report:
     directory: ${ZAP_REPORT_DIRECTORY:/zap/wrk}
+
+  automation:
+    local-directory: ${ZAP_AUTOMATION_LOCAL_DIRECTORY:/zap/wrk/automation}
+    zap-directory: ${ZAP_AUTOMATION_ZAP_DIRECTORY:/zap/wrk/automation}
   
   # ZAP Initialization Settings (applied at startup via Network API)
   initialization:
@@ -156,10 +191,13 @@ zap:
 
 # Actuator Configuration
 management:
+  metrics:
+    tags:
+      application: ${spring.ai.mcp.server.name:mcp-zap-server}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus,auditevents
   endpoint:
     health:
       show-details: never

@@ -5,7 +5,8 @@ metadata:
   name: {{ include "mcp-zap-server.fullname" . }}-mcp
   labels:
     {{- include "mcp-zap-server.mcp.labels" . | nindent 4 }}
-  {{- with .Values.mcp.ingress.annotations }}
+  {{- $ingressAnnotations := include "mcp-zap-server.mcp.ingressAnnotations" . | fromYaml }}
+  {{- with $ingressAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}

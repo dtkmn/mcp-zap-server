@@ -1,0 +1,63 @@
+# AWS/EKS reference values for cloud deployments.
+# Copy this file and replace placeholders before production use.
+
+global:
+  environment: prod
+
+zap:
+  service:
+    type: ClusterIP
+  config:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+  persistence:
+    enabled: true
+    size: 20Gi
+
+mcp:
+  replicaCount: 3
+  service:
+    type: LoadBalancer
+  streamableHttp:
+    sessionAffinity:
+      enabled: true
+      provider: aws-nlb
+  security:
+    mode: jwt
+    enabled: true
+    allowPlaceholderApiKey: false
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: MCP_API_KEY
+      jwtSecretKey: JWT_SECRET
+    jwt:
+      enabled: true
+  zapClient:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+
+migrations:
+  enabled: true
+  postgres:
+    url: jdbc:postgresql://<rds-endpoint>:5432/<db>
+    existingSecret:
+      name: mcp-zap-rds
+      usernameKey: RDS_USERNAME
+      passwordKey: RDS_PASSWORD
+
+networkPolicy:
+  zap:
+    enabled: true
+  mcp:
+    enabled: true
+    allowSameNamespace: true
+    extraIngress:
+      - ipBlock:
+          cidr: 10.0.0.0/16
+          # Replace with your ingress/NLB source CIDR range.

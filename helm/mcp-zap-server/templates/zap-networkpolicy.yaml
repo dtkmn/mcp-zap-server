@@ -1,0 +1,25 @@
+{{- if and .Values.zap.enabled .Values.networkPolicy.zap.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-zap
+  labels:
+    {{- include "mcp-zap-server.zap.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "mcp-zap-server.mcp.selectorLabels" . | nindent 14 }}
+        {{- with .Values.networkPolicy.zap.extraIngress }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.zap.service.targetPort }}
+{{- end }}

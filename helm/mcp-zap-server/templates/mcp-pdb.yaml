@@ -1,0 +1,13 @@
+{{- if and .Values.mcp.enabled .Values.mcp.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-mcp
+  labels:
+    {{- include "mcp-zap-server.mcp.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.mcp.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "mcp-zap-server.mcp.selectorLabels" . | nindent 6 }}
+{{- end }}

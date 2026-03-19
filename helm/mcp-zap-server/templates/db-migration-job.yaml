@@ -1,0 +1,55 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-db-migrate
+  labels:
+    {{- include "mcp-zap-server.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "mcp-zap-server.selectorLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: flyway
+          image: "{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}"
+          imagePullPolicy: {{ .Values.migrations.image.pullPolicy }}
+          args:
+            - -url={{ required "migrations.postgres.url is required when migrations.enabled=true" .Values.migrations.postgres.url }}
+            - -user=$(DB_MIGRATION_USERNAME)
+            - -password=$(DB_MIGRATION_PASSWORD)
+            - -locations=filesystem:/flyway/sql
+            - -connectRetries={{ .Values.migrations.connectRetries }}
+            - -validateOnMigrate={{ .Values.migrations.validateOnMigrate }}
+            - -baselineOnMigrate={{ .Values.migrations.baselineOnMigrate }}
+            - migrate
+          env:
+            - name: DB_MIGRATION_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "migrations.postgres.existingSecret.name is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.name }}
+                  key: {{ required "migrations.postgres.existingSecret.usernameKey is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.usernameKey }}
+            - name: DB_MIGRATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "migrations.postgres.existingSecret.name is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.name }}
+                  key: {{ required "migrations.postgres.existingSecret.passwordKey is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.passwordKey }}
+          volumeMounts:
+            - name: flyway-sql
+              mountPath: /flyway/sql
+              readOnly: true
+      volumes:
+        - name: flyway-sql
+          configMap:
+            name: {{ include "mcp-zap-server.fullname" . }}-db-migrations
+{{- end }}

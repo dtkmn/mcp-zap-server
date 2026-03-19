@@ -15,6 +15,10 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,6 +39,7 @@ public class ScanJobQueueServiceTest {
 
     private ActiveScanService activeScanService;
     private SpiderScanService spiderScanService;
+    private AjaxSpiderService ajaxSpiderService;
     private UrlValidationService urlValidationService;
     private ScanLimitProperties scanLimitProperties;
     private ScanJobQueueService service;
@@ -43,6 +48,7 @@ public class ScanJobQueueServiceTest {
     void setup() {
         activeScanService = mock(ActiveScanService.class);
         spiderScanService = mock(SpiderScanService.class);
+        ajaxSpiderService = mock(AjaxSpiderService.class);
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
 
@@ -52,6 +58,7 @@ public class ScanJobQueueServiceTest {
         service = new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 3,
@@ -66,6 +73,7 @@ public class ScanJobQueueServiceTest {
         return new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
+                ajaxSpiderService,
                 urlValidationService,
                 scanLimitProperties,
                 activePolicy,
@@ -78,7 +86,7 @@ public class ScanJobQueueServiceTest {
     void queueActiveScanStartsImmediatelyWhenCapacityAvailable() {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-101");
 
-        String response = service.queueActiveScan("http://example.com", null, null);
+        String response = service.queueActiveScan("http://example.com", null, null, null);
         String jobId = extractJobId(response);
 
         ScanJob job = service.getJobForTesting(jobId);
@@ -97,8 +105,8 @@ public class ScanJobQueueServiceTest {
         when(activeScanService.getActiveScanProgressPercent("A-1"))
                 .thenReturn(0, 100);
 
-        String firstResponse = service.queueActiveScan("http://example.com/1", "true", null);
-        String secondResponse = service.queueActiveScan("http://example.com/2", "true", null);
+        String firstResponse = service.queueActiveScan("http://example.com/1", "true", null, null);
+        String secondResponse = service.queueActiveScan("http://example.com/2", "true", null, null);
 
         String firstJobId = extractJobId(firstResponse);
         String secondJobId = extractJobId(secondResponse);
@@ -141,8 +149,8 @@ public class ScanJobQueueServiceTest {
 
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-restart");
 
-        String runningJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-1", "true", null));
-        String queuedJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-2", "true", null));
+        String runningJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-1", "true", null, null));
+        String queuedJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-2", "true", null, null));
 
         ScanJobQueueService restoredService = new ScanJobQueueService(
                 activeScanService,
@@ -246,7 +254,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void followerReplicaAcceptsQueueAdmissionAndLeaderDispatchesIt() {
+    void submittingReplicaCanClaimAndStartSharedQueuedJob() {
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
         SharedLeadershipState leadershipState = new SharedLeadershipState("node-a");
         TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
@@ -276,13 +284,15 @@ public class ScanJobQueueServiceTest {
                 followerCoordinator
         );
 
-        String response = followerService.queueActiveScan("http://example.com/follower", "true", null);
+        String response = followerService.queueActiveScan("http://example.com/follower", "true", null, null);
         String jobId = extractJobId(response);
 
         ScanJob followerJob = followerService.getJobForTesting(jobId);
         assertNotNull(followerJob);
-        assertEquals(ScanJobStatus.QUEUED, followerJob.getStatus());
-        verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
+        assertEquals(ScanJobStatus.RUNNING, followerJob.getStatus());
+        assertEquals("A-follower", followerJob.getZapScanId());
+        assertEquals("node-b", followerJob.getClaimOwnerId());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
 
         leaderService.processQueueOnceForTesting();
 
@@ -290,7 +300,138 @@ public class ScanJobQueueServiceTest {
         assertNotNull(leaderJob);
         assertEquals(ScanJobStatus.RUNNING, leaderJob.getStatus());
         assertEquals("A-follower", leaderJob.getZapScanId());
+        assertEquals("node-b", leaderJob.getClaimOwnerId());
         verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+    }
+
+    @Test
+    void repeatedQueueAdmissionWithSameIdempotencyKeyReturnsExistingJob() {
+        when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
+
+        String firstResponse = service.queueActiveScan("http://example.com/idempotent", "true", null, "req-123");
+        String secondResponse = service.queueActiveScan("http://example.com/idempotent", "true", null, "req-123");
+
+        String firstJobId = extractJobId(firstResponse);
+        String secondJobId = extractJobId(secondResponse);
+        ScanJob storedJob = service.getJobForTesting(firstJobId);
+
+        assertEquals(firstJobId, secondJobId);
+        assertNotNull(storedJob);
+        assertEquals("req-123", storedJob.getIdempotencyKey());
+        assertTrue(secondResponse.contains("existing job returned for idempotent retry"));
+        assertTrue(service.listScanJobs(null).contains("Total jobs: 1"));
+    }
+
+    @Test
+    void reusingIdempotencyKeyForDifferentRequestIsRejected() {
+        when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
+
+        service.queueActiveScan("http://example.com/idempotent-a", "true", null, "req-456");
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> service.queueActiveScan("http://example.com/idempotent-b", "true", null, "req-456")
+        );
+
+        assertTrue(exception.getMessage().contains("already been used"));
+    }
+
+    @Test
+    void concurrentFollowerAdmissionsDeduplicateSharedIdempotencyKey() throws Exception {
+        InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
+        SharedLeadershipState leadershipState = new SharedLeadershipState("node-c");
+        TestQueueLeadershipCoordinator followerCoordinatorA = new TestQueueLeadershipCoordinator("node-a", leadershipState);
+        TestQueueLeadershipCoordinator followerCoordinatorB = new TestQueueLeadershipCoordinator("node-b", leadershipState);
+
+        when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
+
+        ScanJobQueueService followerServiceA = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                urlValidationService,
+                scanLimitProperties,
+                3,
+                false,
+                sharedJobStore,
+                followerCoordinatorA
+        );
+        ScanJobQueueService followerServiceB = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                urlValidationService,
+                scanLimitProperties,
+                3,
+                false,
+                sharedJobStore,
+                followerCoordinatorB
+        );
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CyclicBarrier barrier = new CyclicBarrier(2);
+            Future<String> firstAdmission = executor.submit(() -> {
+                barrier.await();
+                return followerServiceA.queueActiveScan("http://example.com/concurrent", "true", null, "req-789");
+            });
+            Future<String> secondAdmission = executor.submit(() -> {
+                barrier.await();
+                return followerServiceB.queueActiveScan("http://example.com/concurrent", "true", null, "req-789");
+            });
+
+            String firstJobId = extractJobId(firstAdmission.get());
+            String secondJobId = extractJobId(secondAdmission.get());
+
+            assertEquals(firstJobId, secondJobId);
+            assertEquals(1, sharedJobStore.list().size());
+            assertEquals("req-789", sharedJobStore.load(firstJobId).orElseThrow().getIdempotencyKey());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void queuedAjaxSpiderUsesSharedJobLifecycle() {
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.getAjaxSpiderProgressPercent("ajax-spider:1")).thenReturn(0, 100);
+
+        String response = service.queueAjaxSpiderScan("http://example.com/spa", "ajax-req-1");
+        String jobId = extractJobId(response);
+
+        ScanJob runningJob = service.getJobForTesting(jobId);
+        assertNotNull(runningJob);
+        assertEquals(ScanJobStatus.RUNNING, runningJob.getStatus());
+        assertEquals(ScanJobType.AJAX_SPIDER, runningJob.getType());
+        assertEquals("ajax-spider:1", runningJob.getZapScanId());
+
+        service.processQueueOnceForTesting();
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(jobId).getStatus());
+
+        service.processQueueOnceForTesting();
+        assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
+        verify(ajaxSpiderService).startAjaxSpiderJob("http://example.com/spa");
+        verify(ajaxSpiderService, times(2)).getAjaxSpiderProgressPercent("ajax-spider:1");
+    }
+
+    @Test
+    void onlyOneAjaxSpiderJobStartsAtATimeEvenWhenSpiderCapacityAllowsMore() {
+        when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(5);
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1", "ajax-spider:2");
+        when(ajaxSpiderService.getAjaxSpiderProgressPercent("ajax-spider:1")).thenReturn(0, 100);
+
+        String firstJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-1", "ajax-1"));
+        String secondJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-2", "ajax-2"));
+
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(firstJobId).getStatus());
+        assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(secondJobId).getStatus());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString());
+
+        service.processQueueOnceForTesting();
+        assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(firstJobId).getStatus());
+        assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(secondJobId).getStatus());
+
+        service.processQueueOnceForTesting();
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondJobId).getStatus());
+        verify(ajaxSpiderService, times(2)).startAjaxSpiderJob(anyString());
     }
 
     @Test
@@ -323,7 +464,7 @@ public class ScanJobQueueServiceTest {
                 followerCoordinator
         );
 
-        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/cancel", "true", null));
+        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/cancel", "true", null, null));
         String cancelMessage = followerService.cancelScanJob(jobId);
         ScanJob cancelledJob = followerService.getJobForTesting(jobId);
 
@@ -363,7 +504,7 @@ public class ScanJobQueueServiceTest {
                 followerCoordinator
         );
 
-        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/retry", "true", null));
+        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/retry", "true", null, null));
         leaderService.cancelScanJob(jobId);
 
         String retryMessage = followerService.retryScanJob(jobId);
@@ -412,7 +553,7 @@ public class ScanJobQueueServiceTest {
                 followerCoordinator
         );
 
-        String sourceJobId = extractJobId(leaderService.queueActiveScan("http://example.com/dead-letter-follower", "true", null));
+        String sourceJobId = extractJobId(leaderService.queueActiveScan("http://example.com/dead-letter-follower", "true", null, null));
         ScanJob sourceJob = leaderService.getJobForTesting(sourceJobId);
         assertEquals(ScanJobStatus.FAILED, sourceJob.getStatus());
 
@@ -443,7 +584,7 @@ public class ScanJobQueueServiceTest {
                 new SingleNodeQueueLeadershipCoordinator()
         );
 
-        String jobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store", "true", null));
+        String jobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store", "true", null, null));
 
         ScanJob storedJob = scanJobStore.load(jobId).orElse(null);
         assertNotNull(storedJob);
@@ -468,8 +609,8 @@ public class ScanJobQueueServiceTest {
                 new SingleNodeQueueLeadershipCoordinator()
         );
 
-        String firstJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q1", "true", null));
-        String secondJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q2", "true", null));
+        String firstJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q1", "true", null, null));
+        String secondJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q2", "true", null, null));
 
         ScanJob firstStoredJob = scanJobStore.load(firstJobId).orElse(null);
         ScanJob secondStoredJob = scanJobStore.load(secondJobId).orElse(null);
@@ -558,7 +699,7 @@ public class ScanJobQueueServiceTest {
 
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-failover");
 
-        String queuedJobId = extractJobId(leaderService.queueActiveScan("http://example.com/failover", "true", null));
+        String queuedJobId = extractJobId(leaderService.queueActiveScan("http://example.com/failover", "true", null, null));
         verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
 
         leadershipState.setLeaderId("node-b");
@@ -573,10 +714,54 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
+    void expiredRunningClaimCanBeRecoveredWithoutDuplicateStart() {
+        InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
+        SharedLeadershipState leadershipState = new SharedLeadershipState("node-a");
+        TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
+        TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
+
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-recover");
+        when(activeScanService.getActiveScanProgressPercent("A-recover")).thenReturn(100);
+
+        ScanJobQueueService leaderService = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                urlValidationService,
+                scanLimitProperties,
+                3,
+                false,
+                sharedJobStore,
+                leaderCoordinator
+        );
+        ScanJobQueueService followerService = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                urlValidationService,
+                scanLimitProperties,
+                3,
+                false,
+                sharedJobStore,
+                followerCoordinator
+        );
+
+        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/recover-running", "true", null, null));
+        ScanJob runningJob = sharedJobStore.load(jobId).orElseThrow();
+        runningJob.claim("node-a", Instant.now().minusSeconds(30), Instant.now().minusSeconds(1));
+        sharedJobStore.upsertAll(List.of(runningJob));
+
+        followerService.processQueueOnceForTesting();
+
+        ScanJob recoveredJob = sharedJobStore.load(jobId).orElseThrow();
+        assertEquals(ScanJobStatus.SUCCEEDED, recoveredJob.getStatus());
+        verify(activeScanService, times(1)).startActiveScanJob("http://example.com/recover-running", "true", null);
+        verify(activeScanService).getActiveScanProgressPercent("A-recover");
+    }
+
+    @Test
     void cancelQueuedJobMarksCancelled() {
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
 
-        String response = service.queueActiveScan("http://example.com", "true", null);
+        String response = service.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
 
         String cancelMessage = service.cancelScanJob(jobId);
@@ -593,7 +778,7 @@ public class ScanJobQueueServiceTest {
                 .thenReturn("A-1")
                 .thenReturn("A-retry");
 
-        String response = service.queueActiveScan("http://example.com", "true", null);
+        String response = service.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
 
         service.cancelScanJob(jobId);
@@ -616,7 +801,7 @@ public class ScanJobQueueServiceTest {
     void cancelRunningJobStopsZapScan() {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-stop");
 
-        String response = service.queueActiveScan("http://example.com", "true", null);
+        String response = service.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
 
         String cancelMessage = service.cancelScanJob(jobId);
@@ -636,7 +821,7 @@ public class ScanJobQueueServiceTest {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
                 .thenThrow(new ZapApiException("boom", new RuntimeException("boom")));
 
-        String response = delayedService.queueActiveScan("http://example.com", "true", null);
+        String response = delayedService.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
 
         ScanJob job = delayedService.getJobForTesting(jobId);
@@ -663,8 +848,8 @@ public class ScanJobQueueServiceTest {
         when(spiderScanService.startSpiderScanJob(anyString()))
                 .thenThrow(new ZapApiException("spider boom", new RuntimeException("spider boom")));
 
-        String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null));
-        String spiderJobId = extractJobId(policyService.queueSpiderScan("http://example.com/spider"));
+        String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null, null));
+        String spiderJobId = extractJobId(policyService.queueSpiderScan("http://example.com/spider", null));
 
         policyService.processQueueOnceForTesting();
         policyService.processQueueOnceForTesting();
@@ -689,8 +874,8 @@ public class ScanJobQueueServiceTest {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-1");
         when(spiderScanService.startSpiderScanJob(anyString())).thenReturn("S-1");
 
-        String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null));
-        String spiderJobId = extractJobId(policyService.queueSpiderScan("http://example.com/spider"));
+        String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null, null));
+        String spiderJobId = extractJobId(policyService.queueSpiderScan("http://example.com/spider", null));
 
         ScanJob activeJob = policyService.getJobForTesting(activeJobId);
         ScanJob spiderJob = policyService.getJobForTesting(spiderJobId);
@@ -708,7 +893,7 @@ public class ScanJobQueueServiceTest {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
                 .thenThrow(new ZapApiException("active boom", new RuntimeException("active boom")));
 
-        String failedJobId = extractJobId(policyService.queueActiveScan("http://example.com/dead-letter", "true", null));
+        String failedJobId = extractJobId(policyService.queueActiveScan("http://example.com/dead-letter", "true", null, null));
 
         policyService.processQueueOnceForTesting();
 
@@ -731,7 +916,7 @@ public class ScanJobQueueServiceTest {
                 .thenThrow(new ZapApiException("first failure", new RuntimeException("first failure")))
                 .thenReturn("A-replayed");
 
-        String sourceJobId = extractJobId(policyService.queueActiveScan("http://example.com/requeue", "true", null));
+        String sourceJobId = extractJobId(policyService.queueActiveScan("http://example.com/requeue", "true", null, null));
         ScanJob sourceJob = policyService.getJobForTesting(sourceJobId);
         assertEquals(ScanJobStatus.FAILED, sourceJob.getStatus());
 
@@ -800,6 +985,11 @@ public class ScanJobQueueServiceTest {
             boolean lost = wasLeader && !isLeaderNow;
             wasLeader = isLeaderNow;
             return new LeadershipDecision(isLeaderNow, acquired, lost);
+        }
+
+        @Override
+        public String nodeId() {
+            return nodeId;
         }
     }
 }

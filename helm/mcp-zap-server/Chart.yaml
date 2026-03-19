@@ -2,8 +2,8 @@ apiVersion: v2
 name: mcp-zap-server
 description: A Helm chart for MCP ZAP Server - Model Context Protocol server for OWASP ZAP security scanning
 type: application
-version: 0.5.0
-appVersion: "0.5.0"
+version: 0.4.0
+appVersion: "0.4.0"
 keywords:
   - mcp
   - zap
@@ -11,7 +11,7 @@ keywords:
   - owasp
   - vulnerability-scanning
 maintainers:
-  - name: dtkmn
-    url: https://github.com/dtkmn/mcp-zap-server
+  - name: Agentic Lab
+    url: https://github.com/AgenticLab-AU/agentic-security-gateway
 sources:
-  - https://github.com/dtkmn/mcp-zap-server
+  - https://github.com/AgenticLab-AU/agentic-security-gateway

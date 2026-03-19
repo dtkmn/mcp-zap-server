@@ -1,0 +1,125 @@
+# High-availability reference values for AWS EKS + RDS.
+# Copy this file and replace placeholders before production use.
+
+global:
+  environment: prod
+
+zap:
+  replicaCount: 1
+  config:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+  persistence:
+    enabled: true
+    size: 20Gi
+
+mcp:
+  replicaCount: 3
+
+  service:
+    type: LoadBalancer
+    annotations: {}
+
+  streamableHttp:
+    sessionAffinity:
+      enabled: true
+      provider: aws-nlb
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  security:
+    mode: jwt
+    enabled: true
+    allowPlaceholderApiKey: false
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: MCP_API_KEY
+      jwtSecretKey: JWT_SECRET
+    jwt:
+      enabled: true
+      issuer: "mcp-zap-server"
+
+  zapClient:
+    # Keep empty to use chart-managed ZAP service name.
+    url: ""
+    port: 8090
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+
+  # Queue HA + durable state configuration for multi-replica deployments.
+  # Replace <rds-endpoint> and <db> with your Amazon RDS details.
+  env:
+    - name: ZAP_SCAN_JOBS_STORE_BACKEND
+      value: postgres
+    - name: ZAP_SCAN_JOBS_STORE_POSTGRES_URL
+      value: jdbc:postgresql://<rds-endpoint>:5432/<db>
+    - name: ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_USERNAME
+    - name: ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_PASSWORD
+    - name: ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST
+      value: "true"
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_BACKEND
+      value: postgres-lock
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID
+      valueFrom:
+        fieldRef:
+          fieldPath: metadata.name
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL
+      value: jdbc:postgresql://<rds-endpoint>:5432/<db>
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_USERNAME
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_PASSWORD
+    - name: ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_ADVISORY_LOCK_KEY
+      value: "861001"
+    - name: JWT_REVOCATION_STORE_BACKEND
+      value: postgres
+    - name: JWT_REVOCATION_STORE_POSTGRES_URL
+      value: jdbc:postgresql://<rds-endpoint>:5432/<db>
+    - name: JWT_REVOCATION_STORE_POSTGRES_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_USERNAME
+    - name: JWT_REVOCATION_STORE_POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: mcp-zap-rds
+          key: RDS_PASSWORD
+    - name: JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST
+      value: "true"
+
+migrations:
+  enabled: true
+  postgres:
+    url: jdbc:postgresql://<rds-endpoint>:5432/<db>
+    existingSecret:
+      name: mcp-zap-rds
+      usernameKey: RDS_USERNAME
+      passwordKey: RDS_PASSWORD
+
+networkPolicy:
+  zap:
+    enabled: true
+  mcp:
+    enabled: false

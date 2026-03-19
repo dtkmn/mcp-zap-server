@@ -1,0 +1,41 @@
+# Private deployment defaults for CI/CD.
+# Keep all secrets injected at deploy time from the pipeline.
+
+global:
+  environment: private
+
+zap:
+  service:
+    type: ClusterIP
+  config:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+
+mcp:
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+  security:
+    mode: jwt
+    enabled: true
+    allowPlaceholderApiKey: false
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: MCP_API_KEY
+      jwtSecretKey: JWT_SECRET
+    jwt:
+      enabled: true
+  zapClient:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+
+networkPolicy:
+  zap:
+    enabled: true

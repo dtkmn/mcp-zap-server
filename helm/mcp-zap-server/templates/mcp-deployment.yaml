@@ -6,6 +6,14 @@ metadata:
   labels:
     {{- include "mcp-zap-server.mcp.labels" . | nindent 4 }}
 spec:
+  revisionHistoryLimit: {{ .Values.mcp.revisionHistoryLimit }}
+  strategy:
+    type: {{ .Values.mcp.deploymentStrategy.type }}
+    {{- if eq .Values.mcp.deploymentStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.mcp.deploymentStrategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.mcp.deploymentStrategy.rollingUpdate.maxSurge }}
+    {{- end }}
   {{- if not .Values.mcp.autoscaling.enabled }}
   replicas: {{ .Values.mcp.replicaCount }}
   {{- end }}
@@ -30,13 +38,14 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "mcp-zap-server.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.mcp.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
       - name: mcp-server
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
-        image: "{{ .Values.mcp.image.repository }}:{{ .Values.mcp.image.tag }}"
+        image: "{{ .Values.mcp.image.repository }}:{{ default .Chart.AppVersion .Values.mcp.image.tag }}"
         imagePullPolicy: {{ .Values.mcp.image.pullPolicy }}
         ports:
         - name: http
@@ -46,21 +55,44 @@ spec:
         - name: SERVER_PORT
           value: "{{ .Values.mcp.service.targetPort }}"
         - name: ZAP_API_URL
-          value: "{{ .Values.mcp.zapClient.url }}"
+          value: "{{ default (printf "%s-zap" (include "mcp-zap-server.fullname" .)) .Values.mcp.zapClient.url }}"
         - name: ZAP_API_PORT
           value: "{{ .Values.mcp.zapClient.port }}"
         - name: ZAP_API_KEY
-          value: "{{ .Values.mcp.zapClient.apiKey }}"
+          {{- if .Values.mcp.zapClient.existingSecret.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mcp.zapClient.existingSecret.name }}
+              key: {{ .Values.mcp.zapClient.existingSecret.apiKeyKey }}
+          {{- else }}
+          value: "{{ default .Values.zap.config.apiKey .Values.mcp.zapClient.apiKey }}"
+          {{- end }}
         - name: MCP_SECURITY_MODE
           value: "{{ .Values.mcp.security.mode }}"
         - name: MCP_SECURITY_ENABLED
           value: "{{ .Values.mcp.security.enabled }}"
         - name: MCP_API_KEY
+          {{- if .Values.mcp.security.existingSecret.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mcp.security.existingSecret.name }}
+              key: {{ .Values.mcp.security.existingSecret.apiKeyKey }}
+          {{- else }}
           value: "{{ .Values.mcp.security.apiKey }}"
+          {{- end }}
+        - name: MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY
+          value: "{{ .Values.mcp.security.allowPlaceholderApiKey }}"
         - name: JWT_ENABLED
           value: "{{ .Values.mcp.security.jwt.enabled }}"
         - name: JWT_SECRET
+          {{- if and .Values.mcp.security.jwt.enabled .Values.mcp.security.existingSecret.name }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mcp.security.existingSecret.name }}
+              key: {{ .Values.mcp.security.existingSecret.jwtSecretKey }}
+          {{- else }}
           value: "{{ .Values.mcp.security.jwt.secret }}"
+          {{- end }}
         - name: JWT_ISSUER
           value: "{{ .Values.mcp.security.jwt.issuer }}"
         - name: JWT_ACCESS_TOKEN_EXPIRATION
@@ -89,6 +121,8 @@ spec:
           value: "{{ .Values.mcp.scan.url.allowLocalhost }}"
         - name: ZAP_ALLOW_PRIVATE_NETWORKS
           value: "{{ .Values.mcp.scan.url.allowPrivateNetworks }}"
+        - name: ZAP_URL_VALIDATION_ENABLED
+          value: "{{ .Values.mcp.scan.url.validationEnabled }}"
         - name: ZAP_URL_WHITELIST
           value: "{{ .Values.mcp.scan.url.whitelist }}"
         - name: ZAP_URL_BLACKLIST
@@ -119,6 +153,14 @@ spec:
           periodSeconds: {{ .Values.mcp.readinessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.mcp.readinessProbe.timeoutSeconds }}
           failureThreshold: {{ .Values.mcp.readinessProbe.failureThreshold }}
+        {{- end }}
+        {{- if .Values.mcp.startupProbe.enabled }}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.mcp.startupProbe.httpGet.path }}
+            port: {{ .Values.mcp.startupProbe.httpGet.port }}
+          failureThreshold: {{ .Values.mcp.startupProbe.failureThreshold }}
+          periodSeconds: {{ .Values.mcp.startupProbe.periodSeconds }}
         {{- end }}
         resources:
           {{- toYaml .Values.mcp.resources | nindent 12 }}

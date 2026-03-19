@@ -30,6 +30,18 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew build --scan --no-daemon --stacktrace --info
 
+    - name: Upload test reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-reports
+        if-no-files-found: ignore
+        retention-days: 7
+        path: |
+          build/test-results/test/**
+          build/reports/tests/test/**
+          build/reports/problems/problems-report.html
+
     - name: Generate SBOM with CycloneDX
       run: ./gradlew cyclonedxBom
 

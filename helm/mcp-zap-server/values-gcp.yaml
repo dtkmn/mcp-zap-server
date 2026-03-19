@@ -1,0 +1,74 @@
+# GKE reference values for cloud deployments.
+# Copy this file and replace placeholders before production use.
+
+global:
+  environment: prod
+
+zap:
+  service:
+    type: ClusterIP
+  config:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+  persistence:
+    enabled: true
+    size: 20Gi
+
+mcp:
+  replicaCount: 3
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+    hosts:
+      - host: mcp-zap.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: mcp-zap-tls
+        hosts:
+          - mcp-zap.example.com
+  streamableHttp:
+    sessionAffinity:
+      enabled: true
+      provider: ingress-nginx
+  security:
+    mode: jwt
+    enabled: true
+    allowPlaceholderApiKey: false
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: MCP_API_KEY
+      jwtSecretKey: JWT_SECRET
+    jwt:
+      enabled: true
+  zapClient:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+
+migrations:
+  enabled: true
+  postgres:
+    url: jdbc:postgresql://<cloudsql-endpoint>:5432/<db>
+    existingSecret:
+      name: mcp-zap-db
+      usernameKey: username
+      passwordKey: password
+
+networkPolicy:
+  zap:
+    enabled: true
+  mcp:
+    enabled: true
+    allowSameNamespace: true
+    extraIngress:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: monitoring

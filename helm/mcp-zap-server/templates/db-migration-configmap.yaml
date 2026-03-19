@@ -1,0 +1,10 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-db-migrations
+  labels:
+    {{- include "mcp-zap-server.labels" . | nindent 4 }}
+data:
+  {{- (.Files.Glob "files/db/migration/*.sql").AsConfig | nindent 2 }}
+{{- end }}

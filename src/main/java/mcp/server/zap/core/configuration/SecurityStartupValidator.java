@@ -1,6 +1,7 @@
 package mcp.server.zap.core.configuration;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -16,9 +17,9 @@ import java.util.stream.Stream;
  * Enforces a safer default posture for networked deployments while still allowing
  * explicit local/dev overrides to stay lightweight.
  */
-@Slf4j
 @Component
 public class SecurityStartupValidator implements InitializingBean {
+    private static final Logger log = LoggerFactory.getLogger(SecurityStartupValidator.class);
 
     private static final Set<String> PLACEHOLDER_API_KEYS = Set.of(
             "changeme-default-key",

@@ -2,10 +2,13 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.*;
+import org.zaproxy.clientapi.core.ApiResponse;
+import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ApiResponseSet;
+import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,8 +36,7 @@ public class CoreService {
      * @param baseUrl The base URL to filter alerts (optional).
      * @return A list of alert summaries.
      */
-    @Tool(name = "zap_alerts", description = "Retrieve alerts for the given base URL")
-    public List<String> getAlerts(@ToolParam(description = "baseUrl") String baseUrl) {
+    public List<String> getAlerts(String baseUrl) {
         try {
             String start = "0";
             String count = "-1";
@@ -63,7 +65,6 @@ public class CoreService {
      *
      * @return A list of host names.
      */
-    @Tool(name = "zap_hosts", description = "Retrieve the list of hosts accessed through/by ZAP")
     public List<String> getHosts() {
         try {
             ApiResponseList resp = (ApiResponseList) zap.core.hosts();
@@ -83,7 +84,6 @@ public class CoreService {
      *
      * @return A list of site URLs.
      */
-    @Tool(name = "zap_sites", description = "Retrieve the list of sites accessed through/by ZAP")
     public List<String> getSites() {
         try {
             ApiResponseList resp = (ApiResponseList) zap.core.sites();
@@ -104,8 +104,7 @@ public class CoreService {
      * @param baseUrl The base URL to filter URLs (optional).
      * @return A list of URLs.
      */
-    @Tool(name = "zap_urls", description = "Retrieve the list of URLs accessed through/by ZAP, optionally filtered by base URL")
-    public List<String> getUrls(@ToolParam(description = "Base URL to filter (optional)") String baseUrl) {
+    public List<String> getUrls(String baseUrl) {
         try {
             ApiResponseList resp = (ApiResponseList) zap.core.urls(baseUrl != null ? baseUrl : "");
             List<String> urls = new ArrayList<>();

@@ -8,6 +8,8 @@ spring:
 # Disable security for tests
 mcp:
   server:
+    tools:
+      surface: expert
     apiKey: test-api-key
     security:
       enabled: false
@@ -25,6 +27,8 @@ mcp:
         issuer: mcp-zap-server-test
         accessTokenExpiry: 3600
         refreshTokenExpiry: 604800
+        revocation:
+          backend: in-memory
 
 zap:
   server:
@@ -35,6 +39,11 @@ zap:
       maxActiveScanDurationInMins: 5
       maxSpiderScanDurationInMins: 3
       connectionTimeoutInSecs: 30
+    queue:
+      coordinator:
+        backend: single-node
+      store:
+        backend: in-memory
     
     url:
       allowLocalhost: true

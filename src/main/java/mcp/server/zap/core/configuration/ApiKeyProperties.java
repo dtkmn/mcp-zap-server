@@ -42,5 +42,11 @@ public class ApiKeyProperties {
          * Use "*" for all permissions.
          */
         private List<String> scopes = List.of("*");
+
+        /**
+         * Optional workspace identifier shared by one or more clients.
+         * When omitted, the clientId becomes the effective workspace boundary.
+         */
+        private String workspaceId;
     }
 }

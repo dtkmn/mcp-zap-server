@@ -1,0 +1,19 @@
+# Non-secret CI validation values.
+# These values keep Helm lint/template green while the default chart refuses
+# placeholder or blank runtime secrets.
+
+global:
+  environment: ci
+
+zap:
+  config:
+    apiKey: ci-zap-api-key-not-for-production
+
+mcp:
+  security:
+    mode: api-key
+    enabled: true
+    apiKey: ci-mcp-api-key-not-for-production
+    allowPlaceholderApiKey: false
+  zapClient:
+    apiKey: ci-zap-api-key-not-for-production

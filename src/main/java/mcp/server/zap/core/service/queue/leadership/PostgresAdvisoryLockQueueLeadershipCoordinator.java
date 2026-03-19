@@ -98,6 +98,11 @@ public class PostgresAdvisoryLockQueueLeadershipCoordinator implements QueueLead
         }
     }
 
+    @Override
+    public String nodeId() {
+        return nodeId;
+    }
+
     /**
      * Release resources and advisory lock on shutdown.
      */

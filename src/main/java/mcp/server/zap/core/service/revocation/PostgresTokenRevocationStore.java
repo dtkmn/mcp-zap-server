@@ -3,7 +3,13 @@ package mcp.server.zap.core.service.revocation;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.regex.Pattern;
 

@@ -14,7 +14,7 @@ zap:
   image:
     repository: zaproxy/zap-stable
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: "2.17.0"
   
   service:
     type: ClusterIP
@@ -32,9 +32,24 @@ zap:
   
   # ZAP specific configuration
   config:
-    apiKey: "changeme-zap-api-key"  # Change in production!
-    # Additional ZAP startup options
-    options: "-config api.disablekey=false -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true"
+    apiKey: ""  # Required unless zap.config.existingSecret.name is set
+    existingSecret:
+      name: ""
+      apiKeyKey: ZAP_API_KEY
+    api:
+      # Restrict the ZAP API to loopback and RFC1918 sources by default.
+      # When left empty, the chart also permits the chart-managed ZAP service
+      # hostname used by the MCP server.
+      allowedAddrRegex: ""
+    addons:
+      - ajaxSpider
+      - graphql
+      - soap
+      - automation
+    extraArgs: []
+      # Flat list of extra CLI args. Keep "-config" pairs as separate items.
+      # - -config
+      # - connection.timeoutInSecs=300
   
   persistence:
     enabled: true
@@ -75,15 +90,20 @@ mcp:
   replicaCount: 3  # Scale based on load
   
   image:
-    repository: dtkmn/mcp-zap-server  # Change to your registry
+    repository: ghcr.io/agenticlab-au/security-gateway  # Override for your own registry if needed
     pullPolicy: IfNotPresent
-    tag: "latest"
+    tag: ""  # Defaults to chart appVersion when empty
   
   service:
-    type: LoadBalancer  # Use LoadBalancer for external access, ClusterIP for internal only
+    type: ClusterIP  # Expose via ingress or load balancer only when needed
     port: 7456
     targetPort: 7456
     annotations: {}
+    # Multi-replica streamable MCP requires sticky-session/client-affinity at the
+    # exposure layer. If you expose MCP via Service type=LoadBalancer, set
+    # controller-specific affinity annotations here.
+    # AWS Load Balancer Controller example (NLB source-IP affinity):
+    # service.beta.kubernetes.io/aws-load-balancer-target-group-attributes: "stickiness.enabled=true,stickiness.type=source_ip"
     # For AWS: service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     # For GCP: cloud.google.com/load-balancer-type: "Internal"
   
@@ -103,6 +123,24 @@ mcp:
       # - secretName: mcp-zap-tls
       #   hosts:
       #     - mcp-zap.example.com
+
+  # Streamable MCP is stateful per replica in the OSS/local HA path.
+  # When mcp.replicaCount > 1, enable a supported session-affinity preset so
+  # follow-up MCP requests land on the same backend replica.
+  streamableHttp:
+    sessionAffinity:
+      enabled: false
+      provider: ""  # Supported: aws-nlb, ingress-nginx
+      ingressNginx:
+        upstreamHashBy: "$http_mcp_session_id$remote_addr$http_user_agent"
+        proxyReadTimeout: "3600"
+        proxySendTimeout: "3600"
+        proxyBuffering: "off"
+        proxyRequestBuffering: "off"
+      awsLoadBalancer:
+        type: nlb
+        scheme: internal
+        targetGroupAttributes: "stickiness.enabled=true,stickiness.type=source_ip"
   
   resources:
     requests:
@@ -122,9 +160,14 @@ mcp:
   
   # Security Configuration
   security:
-    mode: "none"  # Options: none, api-key, jwt
-    enabled: false
-    apiKey: "changeme-mcp-api-key"  # Only used if mode=api-key
+    mode: "api-key"  # Options: none, api-key, jwt
+    enabled: true
+    apiKey: ""  # Required unless mcp.security.existingSecret.name is set
+    allowPlaceholderApiKey: false  # Fail fast on insecure placeholder keys by default
+    existingSecret:
+      name: ""
+      apiKeyKey: MCP_API_KEY
+      jwtSecretKey: JWT_SECRET
     
     # JWT Configuration (only used if mode=jwt)
     jwt:
@@ -136,9 +179,12 @@ mcp:
   
   # ZAP Client Configuration (connects to ZAP pod)
   zapClient:
-    url: "zap-proxy"  # Service name of ZAP
+    url: ""  # Defaults to the chart-managed ZAP service name when empty
     port: 8090
-    apiKey: "changeme-zap-api-key"  # Must match zap.config.apiKey
+    apiKey: ""  # Defaults to zap.config.apiKey when blank and no secret is configured
+    existingSecret:
+      name: ""
+      apiKeyKey: ZAP_API_KEY
   
   # Scan Configuration
   scan:
@@ -154,6 +200,7 @@ mcp:
       spiderMaxDepth: 10
     
     url:
+      validationEnabled: true
       allowLocalhost: false
       allowPrivateNetworks: false
       whitelist: ""
@@ -179,6 +226,28 @@ mcp:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 3
+
+  startupProbe:
+    enabled: false
+    httpGet:
+      path: /actuator/health
+      port: 7456
+    failureThreshold: 30
+    periodSeconds: 10
+
+  revisionHistoryLimit: 5
+
+  deploymentStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
+  terminationGracePeriodSeconds: 60
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
   
   # Environment variables
   env: []
@@ -205,17 +274,41 @@ mcp:
                 app.kubernetes.io/name: zap-proxy
             topologyKey: kubernetes.io/hostname
 
+# Shared Postgres schema migration job
+migrations:
+  enabled: false
+
+  image:
+    repository: flyway/flyway
+    pullPolicy: IfNotPresent
+    tag: "11.15.0-alpine"
+
+  connectRetries: 60
+  validateOnMigrate: true
+  baselineOnMigrate: false
+
+  postgres:
+    url: ""
+    existingSecret:
+      name: ""
+      usernameKey: username
+      passwordKey: password
+
 # Service Account
 serviceAccount:
   create: true
   annotations: {}
   name: ""
+  automountServiceAccountToken: false
 
 # Pod Security Context
 podSecurityContext:
   fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
   runAsNonRoot: true
   runAsUser: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 # Security Context
 securityContext:
@@ -226,6 +319,8 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
   allowPrivilegeEscalation: false
+  seccompProfile:
+    type: RuntimeDefault
 
 # Image pull secrets (if using private registry)
 imagePullSecrets: []
@@ -236,3 +331,19 @@ podAnnotations: {}
 
 # Pod labels
 podLabels: {}
+
+# Network policy defaults
+networkPolicy:
+  zap:
+    enabled: true
+    extraIngress: []
+      # - namespaceSelector:
+      #     matchLabels:
+      #       kubernetes.io/metadata.name: tools
+  mcp:
+    enabled: false
+    allowSameNamespace: true
+    extraIngress: []
+      # - namespaceSelector:
+      #     matchLabels:
+      #       kubernetes.io/metadata.name: ingress-nginx

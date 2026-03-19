@@ -2,12 +2,20 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.*;
+import org.zaproxy.clientapi.core.ApiResponse;
+import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ApiResponseSet;
+import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -30,10 +38,6 @@ public class ContextUserService {
         this.zap = zap;
     }
 
-    @Tool(
-            name = "zap_contexts_list",
-            description = "List all ZAP contexts with context ID, scope state, and include/exclude regexes"
-    )
     public List<Map<String, Object>> listContexts() {
         try {
             List<String> names = listContextNames();
@@ -50,15 +54,11 @@ public class ContextUserService {
         }
     }
 
-    @Tool(
-            name = "zap_context_upsert",
-            description = "Create or update a ZAP context with include/exclude regexes and optional in-scope flag"
-    )
     public Map<String, Object> upsertContext(
-            @ToolParam(description = "Context name (e.g. shop-auth)") String contextName,
-            @ToolParam(description = "List of include URL regexes (max 20)") List<String> includeRegexes,
-            @ToolParam(description = "List of exclude URL regexes (max 20)") List<String> excludeRegexes,
-            @ToolParam(description = "Set context in scope (true/false). Optional.") Boolean inScope
+            String contextName,
+            List<String> includeRegexes,
+            List<String> excludeRegexes,
+            Boolean inScope
     ) {
         String normalizedContextName = requireText(contextName, "contextName");
         List<String> normalizedIncludes = validateRegexEntries(includeRegexes, "includeRegexes");
@@ -91,12 +91,8 @@ public class ContextUserService {
         }
     }
 
-    @Tool(
-            name = "zap_users_list",
-            description = "List users for a ZAP context ID"
-    )
     public List<Map<String, Object>> listUsers(
-            @ToolParam(description = "ZAP context ID") String contextId
+            String contextId
     ) {
         String normalizedContextId = requireText(contextId, "contextId");
 
@@ -127,15 +123,11 @@ public class ContextUserService {
         }
     }
 
-    @Tool(
-            name = "zap_user_upsert",
-            description = "Create or update a user in a ZAP context and optionally set credentials/enabled state"
-    )
     public Map<String, Object> upsertUser(
-            @ToolParam(description = "ZAP context ID") String contextId,
-            @ToolParam(description = "User name") String userName,
-            @ToolParam(description = "Authentication credentials config params string. Optional.") String authCredentialsConfigParams,
-            @ToolParam(description = "Set user enabled state (true/false). Optional.") Boolean enabled
+            String contextId,
+            String userName,
+            String authCredentialsConfigParams,
+            Boolean enabled
     ) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserName = requireText(userName, "userName");
@@ -189,16 +181,12 @@ public class ContextUserService {
         }
     }
 
-    @Tool(
-            name = "zap_context_auth_configure",
-            description = "Configure authentication method and login indicators for a ZAP context"
-    )
     public Map<String, Object> configureContextAuthentication(
-            @ToolParam(description = "ZAP context ID") String contextId,
-            @ToolParam(description = "Authentication method name (e.g. formBasedAuthentication, jsonBasedAuthentication)") String authMethodName,
-            @ToolParam(description = "Authentication method config params string. Optional.") String authMethodConfigParams,
-            @ToolParam(description = "Logged-in indicator regex. Optional.") String loggedInIndicatorRegex,
-            @ToolParam(description = "Logged-out indicator regex. Optional.") String loggedOutIndicatorRegex
+            String contextId,
+            String authMethodName,
+            String authMethodConfigParams,
+            String loggedInIndicatorRegex,
+            String loggedOutIndicatorRegex
     ) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedAuthMethodName = requireText(authMethodName, "authMethodName");
@@ -233,13 +221,9 @@ public class ContextUserService {
         }
     }
 
-    @Tool(
-            name = "zap_auth_test_user",
-            description = "Test authentication as a specific user and return authentication diagnostics"
-    )
     public Map<String, Object> testUserAuthentication(
-            @ToolParam(description = "ZAP context ID") String contextId,
-            @ToolParam(description = "ZAP user ID") String userId
+            String contextId,
+            String userId
     ) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserId = requireText(userId, "userId");

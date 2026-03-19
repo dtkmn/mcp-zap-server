@@ -1,192 +1,54 @@
 ---
-title: "AJAX Spider - Bypassing WAF and Scanning JavaScript Applications"
+title: "AJAX Spider"
 editUrl: false
-description: "The AJAX Spider uses a real browser (Firefox headless via Selenium) to crawl websites. This is much more effective than the traditional HTTP-based spider for:"
+description: "Use the browser-backed crawler for JavaScript-heavy apps, protected sites, and queued HA workflows."
 ---
-The AJAX Spider uses a **real browser** (Firefox headless via Selenium) to crawl websites. This is much more effective than the traditional HTTP-based spider for:
+The AJAX Spider uses a real browser to crawl sites. It is much more effective than the traditional HTTP spider for JavaScript-heavy applications, login-heavy flows, and sites that behave differently for normal browsers.
 
-## Use Cases
+## Surface Note
 
-### 1. **Bypass WAF Protection** 🛡️
-Sites like `endclothing.com` block automated tools but allow browsers:
-- Real browser User-Agent
-- JavaScript execution
-- Cookies and sessions handled automatically
-- Renders like a normal user visit
+Raw AJAX Spider tools are `expert` only:
 
-### 2. **JavaScript-Heavy Applications** ⚛️
-Modern SPAs built with React, Angular, Vue:
-- Executes JavaScript to render content
-- Handles dynamic page updates
-- Discovers AJAX endpoints
-- Crawls client-side routing
+- `zap_ajax_spider`
+- `zap_ajax_spider_status`
+- `zap_ajax_spider_stop`
+- `zap_ajax_spider_results`
+- `zap_queue_ajax_spider`
 
-### 3. **Bot Detection Bypass** 🤖
-Sites with Cloudflare, Akamai, or custom bot detection:
-- Full browser fingerprint
-- Realistic user behavior simulation
-- Passes JavaScript challenges
-- Handles CAPTCHAs better (when configured)
+If you stay on the default `guided` surface, use `zap_crawl_start` with `strategy=browser`.
 
-## Available Tools
+## When To Use It
 
-### 1. Start AJAX Spider
-```
-Tool: zap_ajax_spider
-Description: Start an AJAX Spider scan using a real browser
-Parameter: targetUrl (e.g., https://www.endclothing.com/au)
+Use AJAX Spider when:
 
-Example:
-"Use zap_ajax_spider to scan https://www.endclothing.com/au"
-```
+- the target is an SPA
+- pages depend on client-side routing or JavaScript rendering
+- the traditional spider misses navigation paths
+- you want browser-driven crawling inside the shared queue lifecycle
 
-### 2. Check Status
-```
-Tool: zap_ajax_spider_status
-Description: Get current status of AJAX Spider scan
+## Direct And Queued Options
 
-Returns:
-- Scan status (running/stopped)
-- Number of URLs discovered
-- Progress information
-```
+### Direct
 
-### 3. Get Results
-```
-Tool: zap_ajax_spider_results
-Description: Get all discovered URLs and full scan results
-```
+Use `zap_ajax_spider` for simple or single-replica workflows.
 
-### 4. Stop Scan
-```
-Tool: zap_ajax_spider_stop
-Description: Stop the currently running AJAX Spider scan
-```
+### Queue-managed
 
-## Configuration
+Use `zap_queue_ajax_spider` when:
 
-In `docker-compose.yml`, AJAX Spider is automatically installed:
-```yaml
-command:
-  - -addoninstall
-  - ajaxSpider
-```
+- you run multiple MCP replicas
+- you want AJAX Spider to appear in `zap_scan_job_status` and `zap_scan_job_list`
+- you want cancel, retry, and dead-letter behavior consistent with other queued scans
+- you want idempotent admission with `idempotencyKey`
 
-Settings (in `application.yml`):
-```yaml
-zap:
-  scan:
-    limits:
-      maxSpiderScanDurationInMins: 15  # Used by AJAX Spider
-```
+## After The Crawl
 
-## Performance Comparison
-
-| Spider Type | Speed | WAF Bypass | JavaScript | Resource Usage |
-|-------------|-------|------------|------------|----------------|
-| **Traditional Spider** | Fast | ❌ Poor | ❌ No | Low (HTTP only) |
-| **AJAX Spider** | Slower | ✅ Excellent | ✅ Full | High (Firefox + Selenium) |
-
-## Usage Example
-
-### Scanning a Protected Site
-
-```bash
-# Traditional spider fails with socket exception
-zap_spider https://www.endclothing.com/au
-# ❌ Error: SocketException - site blocks ZAP
-
-# AJAX Spider succeeds with real browser
-zap_ajax_spider https://www.endclothing.com/au
-# ✅ Success: Crawls like a normal user
-```
-
-### Monitoring Progress
-
-```bash
-# Check status every 30 seconds
-zap_ajax_spider_status
-# Output: "Status: running, Pages discovered: 45"
-
-# Get full results when done
-zap_ajax_spider_results
-# Output: All discovered URLs, forms, and endpoints
-```
-
-## Technical Details
-
-### Browser Configuration
-- **Type**: Firefox Headless
-- **Instances**: 2 parallel browsers (configurable)
-- **Duration**: 15 minutes max (configurable)
-- **User-Agent**: Chrome 131 (realistic modern browser)
-
-### What Gets Discovered
-- All URLs loaded via JavaScript
-- AJAX/Fetch API endpoints
-- WebSocket connections
-- Single Page Application routes
-- Dynamically rendered content
-- Form submissions
-
-### Resource Requirements
-```yaml
-zap:
-  environment:
-    ZAP_MEMORY: 4G  # AJAX Spider needs more RAM
-```
-
-## Troubleshooting
-
-### AJAX Spider Not Available
-```
-Error: AJAX Spider addon is not available
-Solution: Restart containers (addon installs on first start)
-```
-
-### Slow Scanning
-```
-Issue: AJAX Spider is slower than traditional spider
-Solution: This is expected - real browser emulation takes time
-Configure: Reduce maxSpiderScanDurationInMins if needed
-```
-
-### High Memory Usage
-```
-Issue: ZAP uses 2-4GB RAM during AJAX scans
-Solution: Increase ZAP_MEMORY environment variable
-```
+If the next step is findings review or report generation, follow the crawl with `zap_passive_scan_wait` so passive analysis has time to finish processing the browser-driven traffic.
 
 ## Best Practices
 
-1. **Start with AJAX Spider** for protected sites
-2. **Use Traditional Spider** for simple sites or when speed matters
-3. **Combine both** for comprehensive coverage:
-   ```
-   1. Run traditional spider first (fast baseline)
-   2. Run AJAX spider second (discover JS content)
-   ```
-4. **Monitor resources** - AJAX Spider is memory-intensive
-5. **Test with known targets** first (juice-shop, petstore)
-
-## Integration with Cursor/Claude
-
-In your Cursor chat:
-
-```
-"Scan https://www.endclothing.com/au using AJAX Spider to bypass WAF"
-
-"Check the AJAX Spider status"
-
-"Get all URLs discovered by AJAX Spider"
-
-"Stop the AJAX Spider scan"
-```
-
-The AI will automatically use the appropriate ZAP tool! 🚀
-
-## References
-
-- [OWASP ZAP AJAX Spider Documentation](https://www.zaproxy.org/docs/desktop/addons/ajax-spider/)
-- [Selenium WebDriver](https://www.selenium.dev/)
-- [WAF Bypass Techniques](https://owasp.org/www-community/Web_Application_Firewall)
+- start with the normal spider when speed matters and the site is simple
+- switch to browser crawling when coverage is clearly incomplete
+- prefer `zap_queue_ajax_spider` in HA deployments
+- use a stable `idempotencyKey` for client retries when queueing
+- watch memory usage because browser crawling is heavier than the HTTP spider

@@ -1,393 +1,35 @@
 ---
-title: "MCP Client Authentication Configuration"
+title: "MCP Client Authentication"
 editUrl: false
-description: "When your MCP server requires authentication (API key or JWT), MCP clients need to be configured to include the appropriate authentication headers in every request. This"
+description: "Configure MCP clients for API-key or bearer-token access to the streamable HTTP endpoint."
 ---
-## Overview
+This server exposes a streamable HTTP MCP endpoint at:
 
-When your MCP server requires authentication (API key or JWT), MCP clients need to be configured to include the appropriate authentication headers in every request. This guide covers how to configure popular MCP clients.
-
-## Authentication Methods
-
-Your MCP ZAP Server supports two authentication methods:
-
-1. **API Key Authentication** - Direct API key in headers
-2. **JWT Authentication** - Token-based authentication with expiration
-
-## Client Configuration Examples
-
-### 1. Claude Desktop
-
-Claude Desktop uses the MCP settings file to configure servers.
-
-#### Location
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-#### API Key Authentication
-
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "command": "node",
-      "args": ["/path/to/mcp-client-proxy.js"],
-      "env": {
-        "MCP_SERVER_URL": "http://localhost:7456",
-        "MCP_API_KEY": "your-mcp-api-key-here"
-      }
-    }
-  }
-}
+```text
+http://localhost:7456/mcp
 ```
 
-#### JWT Authentication (with Token Refresh)
+The server supports:
 
-For JWT, you'll need a proxy script that handles token refresh:
+- API key authentication via `X-API-Key`
+- bearer tokens via `Authorization: Bearer ...`
+- JWT minting and refresh on the server side
 
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "command": "node",
-      "args": ["/path/to/mcp-jwt-proxy.js"],
-      "env": {
-        "MCP_SERVER_URL": "http://localhost:7456",
-        "MCP_CLIENT_ID": "default-client",
-        "MCP_API_KEY": "your-mcp-api-key-here"
-      }
-    }
-  }
-}
-```
+The practical truth: API-key mode is still the easiest self-serve client setup. Not every MCP desktop client handles remote HTTP transport, custom auth headers, or JWT refresh the same way.
 
-**Proxy Script Example** (`mcp-jwt-proxy.js`):
+## Recommended Paths
 
-```javascript
-const http = require('http');
-const https = require('https');
+Use one of these paths:
 
-class JWTProxyServer {
-  constructor(serverUrl, clientId, apiKey) {
-    this.serverUrl = serverUrl;
-    this.clientId = clientId;
-    this.apiKey = apiKey;
-    this.accessToken = null;
-    this.refreshToken = null;
-    this.tokenExpiry = null;
-  }
+1. bundled Open WebUI for the easiest local setup
+2. Cursor or another MCP client that supports streamable HTTP plus custom headers
+3. a custom client or script that can call the MCP endpoint directly
 
-  async getAccessToken() {
-    // Check if we have a valid token
-    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry - 60000) {
-      return this.accessToken;
-    }
+This repository does not ship first-party desktop proxy helpers. Older proxy examples were fiction-by-documentation and needed to die.
 
-    // Try to refresh if we have a refresh token
-    if (this.refreshToken) {
-      try {
-        await this.refreshAccessToken();
-        return this.accessToken;
-      } catch (err) {
-        console.error('Token refresh failed:', err.message);
-      }
-    }
+## Open WebUI
 
-    // Get new tokens
-    await this.getNewTokens();
-    return this.accessToken;
-  }
-
-  async getNewTokens() {
-    const response = await this.makeRequest('/auth/token', 'POST', {
-      apiKey: this.apiKey,
-      clientId: this.clientId
-    }, false);
-
-    this.accessToken = response.accessToken;
-    this.refreshToken = response.refreshToken;
-    this.tokenExpiry = Date.now() + (response.expiresIn * 1000);
-  }
-
-  async refreshAccessToken() {
-    const response = await this.makeRequest('/auth/refresh', 'POST', {
-      refreshToken: this.refreshToken
-    }, false);
-
-    this.accessToken = response.accessToken;
-    this.refreshToken = response.refreshToken;
-    this.tokenExpiry = Date.now() + (response.expiresIn * 1000);
-  }
-
-  async makeRequest(path, method, body, useAuth = true) {
-    return new Promise(async (resolve, reject) => {
-      const url = new URL(path, this.serverUrl);
-      const isHttps = url.protocol === 'https:';
-      const client = isHttps ? https : http;
-
-      const headers = {
-        'Content-Type': 'application/json'
-      };
-
-      if (useAuth) {
-        const token = await this.getAccessToken();
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const bodyStr = body ? JSON.stringify(body) : undefined;
-      if (bodyStr) {
-        headers['Content-Length'] = Buffer.byteLength(bodyStr);
-      }
-
-      const req = client.request(url, {
-        method,
-        headers
-      }, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data));
-          } catch (err) {
-            reject(new Error(`Invalid JSON: ${data}`));
-          }
-        });
-      });
-
-      req.on('error', reject);
-      if (bodyStr) req.write(bodyStr);
-      req.end();
-    });
-  }
-
-  async proxyRequest(mcpRequest) {
-    // Forward MCP request to server with authentication
-    return await this.makeRequest('/mcp', 'POST', mcpRequest, true);
-  }
-}
-
-// Main proxy logic
-async function main() {
-  const serverUrl = process.env.MCP_SERVER_URL;
-  const clientId = process.env.MCP_CLIENT_ID;
-  const apiKey = process.env.MCP_API_KEY;
-
-  if (!serverUrl || !clientId || !apiKey) {
-    console.error('Missing required environment variables');
-    process.exit(1);
-  }
-
-  const proxy = new JWTProxyServer(serverUrl, clientId, apiKey);
-
-  // Read MCP requests from stdin, forward with auth, write responses to stdout
-  let buffer = '';
-  process.stdin.on('data', async (chunk) => {
-    buffer += chunk.toString();
-    
-    // Process complete JSON messages
-    let newlineIndex;
-    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, newlineIndex);
-      buffer = buffer.slice(newlineIndex + 1);
-
-      if (line.trim()) {
-        try {
-          const request = JSON.parse(line);
-          const response = await proxy.proxyRequest(request);
-          console.log(JSON.stringify(response));
-        } catch (err) {
-          console.error('Proxy error:', err.message);
-          console.log(JSON.stringify({ error: err.message }));
-        }
-      }
-    }
-  });
-}
-
-main().catch(console.error);
-```
-
-### 2. Cursor IDE
-
-Cursor uses similar configuration to Claude Desktop.
-
-#### Location
-- **macOS**: `~/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
-- **Windows**: `%APPDATA%\Cursor\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
-
-#### Configuration (API Key)
-
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-http-client", "http://localhost:7456"],
-      "env": {
-        "HTTP_HEADERS": "X-API-Key: your-mcp-api-key-here"
-      }
-    }
-  }
-}
-```
-
-#### Configuration (JWT)
-
-For JWT, you need the proxy script approach:
-
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "command": "node",
-      "args": ["/path/to/mcp-jwt-proxy.js"],
-      "env": {
-        "MCP_SERVER_URL": "http://localhost:7456",
-        "MCP_CLIENT_ID": "default-client",
-        "MCP_API_KEY": "your-mcp-api-key-here"
-      }
-    }
-  }
-}
-```
-
-### 3. Continue.dev
-
-Continue.dev uses `.continue/config.json` for MCP server configuration.
-
-#### Location
-- `~/.continue/config.json` (global)
-- Or `.continue/config.json` in your project root
-
-#### Configuration
-
-```json
-{
-  "mcpServers": [
-    {
-      "name": "zap-security",
-      "command": "node",
-      "args": ["/path/to/mcp-jwt-proxy.js"],
-      "env": {
-        "MCP_SERVER_URL": "http://localhost:7456",
-        "MCP_CLIENT_ID": "default-client",
-        "MCP_API_KEY": "your-mcp-api-key-here"
-      }
-    }
-  ]
-}
-```
-
-### 4. Custom MCP Client (Python)
-
-If you're building your own MCP client:
-
-```python
-import requests
-import json
-import time
-from datetime import datetime, timedelta
-
-class AuthenticatedMCPClient:
-    def __init__(self, server_url, client_id, api_key):
-        self.server_url = server_url.rstrip('/')
-        self.client_id = client_id
-        self.api_key = api_key
-        self.access_token = None
-        self.refresh_token = None
-        self.token_expiry = None
-    
-    def get_access_token(self):
-        """Get valid access token, refreshing if necessary"""
-        # Check if current token is valid
-        if self.access_token and self.token_expiry:
-            if datetime.now() < self.token_expiry - timedelta(minutes=1):
-                return self.access_token
-        
-        # Try to refresh
-        if self.refresh_token:
-            try:
-                self._refresh_token()
-                return self.access_token
-            except Exception as e:
-                print(f"Token refresh failed: {e}")
-        
-        # Get new tokens
-        self._get_new_tokens()
-        return self.access_token
-    
-    def _get_new_tokens(self):
-        """Exchange API key for JWT tokens"""
-        response = requests.post(
-            f"{self.server_url}/auth/token",
-            json={
-                "apiKey": self.api_key,
-                "clientId": self.client_id
-            }
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        self.access_token = data['accessToken']
-        self.refresh_token = data['refreshToken']
-        self.token_expiry = datetime.now() + timedelta(seconds=data['expiresIn'])
-    
-    def _refresh_token(self):
-        """Refresh access token"""
-        response = requests.post(
-            f"{self.server_url}/auth/refresh",
-            json={"refreshToken": self.refresh_token}
-        )
-        response.raise_for_status()
-        data = response.json()
-        
-        self.access_token = data['accessToken']
-        self.token_expiry = datetime.now() + timedelta(seconds=data['expiresIn'])
-    
-    def call_tool(self, tool_name, arguments):
-        """Call MCP tool with authentication"""
-        token = self.get_access_token()
-        
-        response = requests.post(
-            f"{self.server_url}/mcp",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "jsonrpc": "2.0",
-                "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                },
-                "id": 1
-            }
-        )
-        response.raise_for_status()
-        return response.json()
-
-# Usage
-client = AuthenticatedMCPClient(
-    server_url="http://localhost:7456",
-    client_id="default-client",
-    api_key="your-mcp-api-key"
-)
-
-# Call tools
-result = client.call_tool("zap_spider_scan", {
-    "url": "https://example.com",
-    "maxDepth": 5
-})
-print(result)
-```
-
-### 5. Open WebUI (Native MCP)
-
-Open WebUI can connect to this server directly over streamable HTTP MCP, so `mcpo` is not required for the default deployment.
-
-#### docker-compose.yml Configuration
+The default Compose stack already wires Open WebUI to the local MCP server:
 
 ```yaml
 services:
@@ -397,21 +39,67 @@ services:
         [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP tools exposed by the MCP server."}}]
 ```
 
-This uses Open WebUI's native MCP tool-server configuration and injects the API key via a custom `X-API-Key` header on each request.
+For the bundled Open WebUI deployment, API-key mode is the recommended authentication model.
 
-If you use JWT mode instead of API-key mode, Open WebUI can still send a pre-issued bearer token by switching to `auth_type: "bearer"` and setting `key`, but token minting and refresh are not handled automatically for this server. For the bundled Open WebUI deployment, API-key mode with `X-API-Key` remains the simplest option.
+If you switch the server to JWT mode, Open WebUI can send a pre-issued bearer token, but it does not mint or refresh tokens for you.
 
-## Simplified Approach: Use API Key Authentication
+## Cursor
 
-For most MCP clients, **API key authentication is simpler** since you don't need to handle token refresh logic. The client can just pass the API key in every request:
+Cursor supports remote MCP servers over streamable HTTP. Use Cursor's MCP configuration file and point it directly at this server.
 
-### Direct HTTP MCP Client
+Typical config locations:
+
+- project-specific: `.cursor/mcp.json`
+- user-wide: `~/.cursor/mcp.json`
+
+Example using API-key mode:
 
 ```json
 {
   "mcpServers": {
     "zap-security": {
-      "url": "http://localhost:7456",
+      "url": "http://localhost:7456/mcp",
+      "headers": {
+        "X-API-Key": "${env:MCP_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+If you prefer a static bearer token instead of `X-API-Key`:
+
+```json
+{
+  "mcpServers": {
+    "zap-security": {
+      "url": "http://localhost:7456/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:MCP_BEARER_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Use API-key mode unless you already have a reason to manage token issuance outside Cursor.
+
+## Generic Streamable HTTP Clients
+
+Any MCP client that supports:
+
+- remote streamable HTTP transport
+- custom request headers
+
+can usually connect with a config like this:
+
+```json
+{
+  "mcpServers": {
+    "zap-security": {
+      "protocol": "mcp",
+      "transport": "streamable-http",
+      "url": "http://localhost:7456/mcp",
       "headers": {
         "X-API-Key": "your-mcp-api-key-here"
       }
@@ -420,92 +108,91 @@ For most MCP clients, **API key authentication is simpler** since you don't need
 }
 ```
 
-## When to Use JWT vs API Key
+If your client cannot send custom headers for a remote MCP server, this repo does not currently provide a first-party workaround.
 
-### Use API Key When:
-- ✅ Simple MCP client setup (single config file)
-- ✅ No need for token expiration
-- ✅ Trusted environment
-- ✅ Single client application
+## Claude Desktop
 
-### Use JWT When:
-- ✅ Multiple clients with different permissions
-- ✅ Need token expiration and refresh
-- ✅ Implementing proper security lifecycle
-- ✅ Audit logging and token revocation needed
-- ✅ Exposing MCP server over internet
+Claude Desktop's remote MCP flow is different from Cursor's:
 
-## Testing Your Configuration
+- remote servers are configured through Claude's `Settings > Connectors` flow
+- Anthropic's remote MCP guidance is not the same thing as old `claude_desktop_config.json` examples floating around online
+- this repository currently ships API-key and JWT auth, not an OAuth-style Claude connector flow
 
-### Test API Key Authentication
+Because of that, Open WebUI or Cursor is the recommended self-serve path today.
+
+If you need first-class Claude Desktop remote onboarding, the right fix is not another ad hoc proxy snippet. The right fix is a supported auth path that matches Claude's connector model.
+
+## JWT Guidance
+
+JWT is supported by the server, but desktop-client ergonomics depend on the client:
+
+- if the client can send a pre-issued bearer token, it can talk to this server
+- if the client cannot mint or refresh tokens, you still need another system to manage token lifecycle
+- this repository does not currently ship token-refresh helper scripts for desktop clients
+
+That is why API-key mode remains the recommended self-serve option for local Compose, Open WebUI, and Cursor.
+
+For server-side JWT setup, see [JWT Setup](../security-modes/jwt-authentication/).
+
+## Test The Endpoint Manually
+
+API-key example:
 
 ```bash
-# Test direct API key
+SESSION_ID=$(curl -si \
+  -H "X-API-Key: your-mcp-api-key" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
+  http://localhost:7456/mcp \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl-test","version":"1.0.0"}}}' \
+  | awk -F': ' '/Mcp-Session-Id/ {print $2}' | tr -d '\r')
+
 curl -H "X-API-Key: your-mcp-api-key" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
   http://localhost:7456/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
-### Test JWT Authentication
+JWT example:
 
 ```bash
-# 1. Get token
-TOKEN_RESPONSE=$(curl -X POST http://localhost:7456/auth/token \
+TOKEN_RESPONSE=$(curl -s -X POST http://localhost:7456/auth/token \
   -H "Content-Type: application/json" \
   -d '{"apiKey":"your-mcp-api-key","clientId":"default-client"}')
 
-ACCESS_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.accessToken')
+ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.accessToken')
 
-# 2. Use token
+SESSION_ID=$(curl -si \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
+  http://localhost:7456/mcp \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl-test","version":"1.0.0"}}}' \
+  | awk -F': ' '/Mcp-Session-Id/ {print $2}' | tr -d '\r')
+
 curl -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
   http://localhost:7456/mcp \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
 ## Troubleshooting
 
-### "Missing API key" Error
+### 401 Unauthorized
 
-**Problem**: MCP client isn't sending authentication headers.
+- verify the server is in the auth mode you expect
+- verify the client is sending `X-API-Key` or `Authorization`
+- verify the MCP server URL includes `/mcp`
 
-**Solution**: Check your client configuration includes the `headers` or `env` section with the API key.
+### Client Connects But Tools Fail
 
-### "Invalid or expired JWT token"
+- initialize the MCP session first if you are testing manually
+- reuse the returned `Mcp-Session-Id` header on later requests
 
-**Problem**: Access token has expired and wasn't refreshed.
+### Claude Desktop Setup Feels Inconsistent
 
-**Solution**: 
-1. Implement automatic token refresh in your proxy script
-2. Or use API key authentication for simpler setup
-
-### MCP Client Can't Connect
-
-**Problem**: Network issues or wrong URL.
-
-**Solution**:
-1. Verify MCP server is running: `curl http://localhost:7456/actuator/health`
-2. Check Docker network if using containers
-3. Verify firewall settings
-
-### Headers Not Being Sent
-
-**Problem**: Some MCP clients may not support custom headers.
-
-**Solution**: Use a proxy script that handles authentication and forwards requests.
-
-## Recommended Setup
-
-For **development/testing**: Use **API key authentication** - simpler setup, no token refresh needed.
-
-For **production**: Use **JWT authentication** with a proper client library that handles token refresh automatically.
-
-## Next Steps
-
-1. Choose your authentication method (API key recommended for MCP clients)
-2. Configure your MCP client with appropriate headers
-3. Test the connection with a simple tool call
-4. Implement error handling and token refresh if using JWT
-
----
-
-**Need Help?** Check the [JWT Authentication Guide](../security-modes/jwt-authentication/) or [Security Documentation](../reference/security-policy/) for more details.
+That is because Claude's remote connector flow and generic JSON config examples on the internet are not the same thing. For this repository today, prefer Open WebUI or Cursor unless you are intentionally building a Claude-specific remote connector path.

@@ -19,6 +19,15 @@ This repository is the open-source `mcp-zap-server` distribution.
 
 > 🚀 **Using the OSS project in production?** [Agentic Lab](#-commercial-support) offers optional deployment, CI/CD, and support services around `mcp-zap-server`.
 
+## Latest Release (`v0.6.0`)
+
+- Added a new default guided MCP surface with an optional expert surface for raw ZAP workflows.
+- Added tool-scope authorization, abuse protection, structured correlation IDs, audit events, and Prometheus-ready observability.
+- Expanded scanning support with passive scan tools, findings snapshots and diffs, API schema imports, Automation Framework plans, and active-scan policy controls.
+- Evolved HA queue behavior toward claim-based worker ownership and recovery for multi-replica deployments.
+
+See [RELEASE_NOTES_0.6.0.md](./RELEASE_NOTES_0.6.0.md) and [CHANGELOG.md](./CHANGELOG.md) for the full upgrade and change details.
+
 ## 📚 Documentation
 
 **[📖 View Full Documentation](https://dtkmn.github.io/mcp-zap-server/)** - Complete guides, API reference, and examples
@@ -63,9 +72,12 @@ This repository is the open-source `mcp-zap-server` distribution.
 
 ## Features
 - **MCP ZAP server**: Exposes ZAP actions as MCP tools. Eliminates manual CLI calls and brittle scripts.
+- **Guided + expert tool surfaces**: Start with a smaller intent-first default surface or unlock the full raw workflow controls.
 - **OpenAPI integration**: Import remote OpenAPI specs into ZAP and kick off active scans
-- **Report generation**: Generate HTML/JSON reports and fetch contents programmatically
-- **Scan queue v1**: Queue active/spider scans with job lifecycle states, concurrency limits, cancel/retry controls, and optional durable queue state via Postgres
+- **Findings and report workflows**: Generate HTML/JSON reports, drill into findings, and compare findings snapshots across runs.
+- **Automation and API schema support**: Run ZAP Automation Framework plans and import OpenAPI, GraphQL, and SOAP/WSDL definitions.
+- **Scan queue v1**: Queue active, spider, and AJAX Spider scans with job lifecycle states, retries, dead-letter handling, and optional durable Postgres state.
+- **Operational guardrails**: Enforce tool scopes, rate limits, workspace quotas, and structured request correlation for shared deployments.
 - **Dockerized**: Runs ZAP and the MCP server in containers, orchestrated via docker-compose
 - **Secure**: Configure API keys for both ZAP (ZAP_API_KEY) and the MCP server (MCP_API_KEY)
 

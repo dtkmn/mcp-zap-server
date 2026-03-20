@@ -6,8 +6,8 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 | Version    | Supported                                |
 | ---------- | ---------------------------------------- |
-| `>= 0.4.0` | ✅ Active development; receives security fixes |
-| `< 0.4.0`  | ⚠️ Legacy versions; consider upgrading    |
+| `>= 0.6.0` | ✅ Active development; receives security fixes |
+| `< 0.6.0`  | ⚠️ Legacy versions; consider upgrading    |
 
 ## Security Features
 

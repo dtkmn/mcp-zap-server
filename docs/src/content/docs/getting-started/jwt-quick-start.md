@@ -1,60 +1,57 @@
 ---
 title: "Quick Start: JWT Authentication"
 editUrl: false
-description: "Get started with JWT authentication in 5 minutes."
+description: "Mint a JWT, initialize an MCP session, and verify authenticated access."
 ---
-Get started with JWT authentication in 5 minutes.
+Get started with JWT authentication in a few minutes.
 
 ## Prerequisites
 
-- MCP ZAP Server running (via Docker or locally)
-- curl or any HTTP client
+- MCP ZAP Server running
+- `curl`
+- `jq` if you want to use the copy-paste shell snippets as written
 
-## Step 1: Generate JWT Secret
+JWT is not the fastest local setup path. Use it when you need token expiry, refresh rotation, revocation, or a shared production auth model.
+
+## Step 1: Configure JWT Mode
+
+Set these values in `.env`:
+
+```bash
+MCP_SECURITY_MODE=jwt
+JWT_ENABLED=true
+MCP_API_KEY=your-initial-api-key
+```
+
+## Step 2: Generate JWT Secret
 
 ```bash
 openssl rand -base64 32
 ```
 
-Output example:
-```
-Xj8K3mN9pQ2rS5tU7vW8xY0zA1bC3dE4fG5hI6jK7lM=
-```
-
-## Step 2: Configure Environment
-
-Edit your `.env` file:
+Then add it to `.env`:
 
 ```bash
-# Enable JWT
-JWT_ENABLED=true
-
-# Set your generated secret (copy from Step 1)
-JWT_SECRET=Xj8K3mN9pQ2rS5tU7vW8xY0zA1bC3dE4fG5hI6jK7lM=
-
-# Optional: Customize expiration (defaults shown)
-JWT_ACCESS_TOKEN_EXPIRATION=3600    # 1 hour
-JWT_REFRESH_TOKEN_EXPIRATION=604800 # 7 days
+JWT_SECRET=your-generated-secret-key-here
 ```
 
 ## Step 3: Restart Services
 
 ```bash
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 Or if running locally:
+
 ```bash
 ./gradlew bootRun
 ```
 
 ## Step 4: Get JWT Tokens
 
-Exchange your API key for JWT tokens:
-
 ```bash
-curl -X POST http://localhost:7456/auth/token \
+curl -s -X POST http://localhost:7456/auth/token \
   -H "Content-Type: application/json" \
   -d '{
     "apiKey": "your-mcp-api-key",
@@ -62,102 +59,103 @@ curl -X POST http://localhost:7456/auth/token \
   }'
 ```
 
-Response:
+Response shape:
+
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZWZhdWx0LWNsaWVudCIsImlzcyI6Im1jcC16YXAtc2VydmVyIiwiaWF0IjoxNzA1NTc0NDAwLCJleHAiOjE3MDU1NzgwMDAsImp0aSI6IjEyMzQ1Njc4LTkwYWItY2RlZi0xMjM0LTU2Nzg5MGFiY2RlZiIsInNjb3BlcyI6W10sInR5cGUiOiJhY2Nlc3MifQ.signature",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZWZhdWx0LWNsaWVudCIsImlzcyI6Im1jcC16YXAtc2VydmVyIiwiaWF0IjoxNzA1NTc0NDAwLCJleHAiOjE3MDYxNzkyMDAsImp0aSI6Ijk4NzY1NDMyLTEwYWItY2RlZi0xMjM0LTU2Nzg5MGFiY2RlZiIsInR5cGUiOiJyZWZyZXNoIn0.signature",
+  "accessToken": "eyJ...",
+  "refreshToken": "eyJ...",
   "tokenType": "Bearer",
-  "expiresIn": 3600
+  "expiresIn": 3600,
+  "clientId": "default-client",
+  "scopes": ["*"]
 }
 ```
 
-## Step 5: Use Access Token
+## Step 5: Initialize The MCP Session
 
-Use the access token for API requests:
+Do not skip this. `/mcp` is streamable HTTP, so manual testing requires `initialize` first.
 
 ```bash
-# Save the access token
-ACCESS_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-
-# Make authenticated request
-curl -X POST http://localhost:7456/zap/spider/start \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
+TOKEN_RESPONSE=$(curl -s -X POST http://localhost:7456/auth/token \
   -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://example.com",
-    "maxDepth": 5
-  }'
+  -d '{"apiKey":"your-mcp-api-key","clientId":"default-client"}')
+
+ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.accessToken')
+
+SESSION_ID=$(curl -si \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
+  http://localhost:7456/mcp \
+  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl-test","version":"1.0.0"}}}' \
+  | awk -F': ' '/Mcp-Session-Id/ {print $2}' | tr -d '\r')
 ```
 
-## Step 6: Refresh Token (Optional)
-
-When access token expires, use refresh token (one-time use):
+## Step 6: Verify MCP Access
 
 ```bash
-REFRESH_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -H "Accept: application/json,text/event-stream" \
+  -H "Content-Type: application/json" \
+  http://localhost:7456/mcp \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+## Step 7: Refresh Token
+
+When the access token expires, use the refresh token to get a new token pair:
+
+```bash
+REFRESH_TOKEN="eyJ..."
 
 curl -X POST http://localhost:7456/auth/refresh \
   -H "Content-Type: application/json" \
   -d "{\"refreshToken\": \"$REFRESH_TOKEN\"}"
 ```
 
-Store the returned `refreshToken` from the response. The previous refresh token is consumed and cannot be reused.
+The returned refresh token replaces the old one. Refresh tokens are one-time use.
+
+## Step 8: Revoke Token
+
+```bash
+curl -X POST http://localhost:7456/auth/revoke \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "YOUR_ACCESS_OR_REFRESH_TOKEN"
+  }'
+```
 
 ## Troubleshooting
 
 ### "JWT secret is not configured"
 
-Make sure `JWT_SECRET` is set in `.env` and services are restarted.
+Set `JWT_SECRET` and restart the service.
 
 ### "JWT secret must be at least 256 bits"
 
-Your secret is too short. Generate a new one:
+Generate a stronger secret:
+
 ```bash
 openssl rand -base64 32
 ```
 
 ### "Invalid API key"
 
-Check that `MCP_API_KEY` in `.env` matches the one you're using.
+Check that `MCP_API_KEY` matches the configured client entry.
 
-### "Invalid or expired JWT token"
+### "I get 401 or 403 on /mcp even with a token"
 
-1. Check token expiration with `/auth/validate`
-2. Use `/auth/refresh` to get a new token pair (access + rotated refresh token)
-3. If refresh token is expired, get new tokens via `/auth/token`
+Common causes:
+
+- you forgot to initialize the MCP session first
+- you did not send back `Mcp-Session-Id`
+- your client scopes do not allow `tools/list` or the tool you are calling
 
 ## Next Steps
 
-- Read the [full JWT authentication guide](../security-modes/jwt-authentication/)
-- Implement automatic token refresh in your client
-- Configure custom expiration times for your use case
-- Set up multiple API keys for different clients
-
-## Validation (Optional)
-
-Test your token is valid:
-
-```bash
-curl -X GET http://localhost:7456/auth/validate \
-  -H "Authorization: Bearer $ACCESS_TOKEN"
-```
-
-Response:
-```json
-{
-  "valid": true,
-  "clientId": "default-client",
-  "scopes": [],
-  "issuer": "mcp-zap-server",
-  "issuedAt": "2025-01-18T10:30:00Z",
-  "expiresAt": "2025-01-18T11:30:00Z",
-  "tokenType": "access"
-}
-```
-
----
-
-**That's it!** You now have JWT authentication working with your MCP ZAP Server.
-
-For more details, see the [complete JWT Authentication Guide](../security-modes/jwt-authentication/).
+- read the [full JWT guide](../security-modes/jwt-authentication/)
+- configure client scopes with [Tool Scope Authorization](./tool-scope-authorization/)
+- choose the right [Tool Surface](./tool-surfaces/)
+- configure your real client with [MCP Client Authentication](./mcp-client-authentication/)

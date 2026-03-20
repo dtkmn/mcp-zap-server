@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-20
+
+### Added
+- Default guided MCP tool surface with a separate expert surface for raw ZAP workflows, controlled by `MCP_SERVER_TOOLS_SURFACE`.
+- Guided security workflow tools for target import, crawl start/status/stop, attack start/status/stop, findings summary/details, and guided report generation.
+- Expert tool groups for inventory, direct scans, queue lifecycle management, API imports, findings/reporting, authenticated scanning setup, and Automation Framework plans.
+- Passive scan status/wait tools, findings snapshots/diffs, bounded alert instance views, API schema imports for OpenAPI/GraphQL/SOAP, active-scan policy controls, and queued AJAX Spider support.
+- Tool-scope authorization with configurable `off`, `warn`, and `enforce` modes, plus startup validation for public tool scope mappings.
+- Abuse-protection controls for request throttling, workspace quotas, and overload shedding of MCP traffic.
+- Structured request correlation via `X-Correlation-Id`, centralized observability services, audit-event publishing, and Prometheus-ready metrics for auth, authorization, tools, queue, and protection flows.
+- Expanded Flyway migrations and shared-state handling for queue idempotency, claim ownership, and recovery metadata.
+- Helm enhancements including HA value presets, cloud values, migration jobs, network policies, and supporting shared database migration assets.
+- Architecture, unit, integration, and Docker/Testcontainers coverage for the expanded tool surface, queue model, schema imports, automation plans, findings/reporting, and passive scan behavior.
+
+### Changed
+- The default MCP experience now favors the smaller guided tool surface instead of exposing the full raw control plane by default.
+- Multi-replica queue execution now centers on claim-based worker ownership and recovery rather than a simple single-dispatcher leadership model.
+- `application.yml` and runtime configuration now expose broader controls for authorization, protection, observability, queue coordination, revocation, and tool-surface behavior.
+- `ScanJob`, `ScanJobStore`, `ScanJobQueueService`, and Postgres-backed queue state handling were expanded for idempotent admission, durable claims, recovery, dead-letter replay, and richer job status visibility.
+- `McpServerApplication` now assembles the MCP tool surface from guided, passive-scan, and expert tool groups instead of relying on tool annotations directly on core services.
+- README, root quick-start guidance, and the docs site were rewritten to match the current runtime, auth flow, streamable MCP session behavior, and queue semantics.
+
+### Fixed
+- Removed stale documentation examples that implied fake HTTP scan endpoints or invalid client auth patterns.
+- Corrected queue and HA documentation to match the implemented claim-based execution model.
+- Improved traceability of auth, authorization, validation, and protection failures through correlation IDs and bounded error payloads.
+
+### Documentation
+- Added public docs for tool surfaces, tool-scope authorization, abuse protection, observability, structured logging, scan execution modes, passive scan handling, API schema imports, scan policy controls, findings/reporting, and Automation Framework support.
+- Expanded legacy `.html` redirect coverage so older doc links continue to resolve to the current Astro/Starlight site.
+
 ## [0.5.0] - 2026-03-14
 
 ### Added

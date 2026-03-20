@@ -1,11 +1,11 @@
 ---
-title: "JWT & Security Implementation Summary (`v0.5.0`)"
+title: "JWT & Security Implementation Summary (`v0.6.0`)"
 editUrl: false
-description: "This document summarizes the current authentication and security implementation used by MCP ZAP Server as of v0.5.0."
+description: "This document summarizes the current authentication and security implementation used by MCP ZAP Server as of v0.6.0."
 ---
 ## Overview
 
-This document summarizes the current authentication and security implementation used by MCP ZAP Server as of `v0.5.0`.
+This document summarizes the current authentication and security implementation used by MCP ZAP Server as of `v0.6.0`.
 
 ## Current Security Model
 

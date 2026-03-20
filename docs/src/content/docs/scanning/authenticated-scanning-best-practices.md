@@ -14,6 +14,8 @@ This guide explains the recommended workflow for authenticated scanning with MCP
 - `zap_spider_as_user`
 - `zap_active_scan_as_user`
 
+This page requires the `expert` surface. Set `MCP_SERVER_TOOLS_SURFACE=expert` if you want these tools exposed.
+
 ## Why This Matters
 
 Authenticated scans are where most business-critical vulnerabilities live.
@@ -148,12 +150,18 @@ Run spider first to map authenticated paths.
 }
 ```
 
+If you need durable queue lifecycle instead of direct scans, use the queue-managed expert equivalents:
+
+- `zap_queue_spider_scan_as_user`
+- `zap_queue_active_scan_as_user`
+
 ### 9. Monitor Progress
 
 Use existing status tools:
 
 - `zap_spider_status`
 - `zap_active_scan_status`
+- `zap_scan_job_status` for queued authenticated scans
 
 ## Practical Best Practices
 

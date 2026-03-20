@@ -34,14 +34,22 @@ export default defineConfig({
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
 						{ slug: 'getting-started/authentication-quick-start' },
+						{ slug: 'getting-started/tool-surfaces' },
 						{ slug: 'getting-started/mcp-client-authentication' },
 						{ slug: 'getting-started/jwt-quick-start' },
+						{ slug: 'getting-started/tool-scope-authorization' },
 					],
 				},
 				{
 					label: 'Scanning',
 					items: [
+						{ slug: 'scanning/scan-execution-modes' },
 						{ slug: 'scanning/ajax-spider' },
+						{ slug: 'scanning/passive-scan' },
+						{ slug: 'scanning/api-schema-imports' },
+						{ slug: 'scanning/scan-policy-controls' },
+						{ slug: 'scanning/findings-and-reports' },
+						{ slug: 'scanning/automation-framework' },
 						{ slug: 'scanning/authenticated-scanning-best-practices' },
 					],
 				},
@@ -59,6 +67,9 @@ export default defineConfig({
 				{
 					label: 'Operations',
 					items: [
+						{ slug: 'operations/abuse-protection' },
+						{ slug: 'operations/observability' },
+						{ slug: 'operations/structured-logging' },
 						{ slug: 'operations/production-checklist' },
 						{ slug: 'operations/local-ha-compose' },
 						{ slug: 'operations/queue-coordinator-leader-election' },

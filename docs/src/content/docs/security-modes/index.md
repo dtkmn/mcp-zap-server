@@ -7,6 +7,8 @@ The MCP ZAP Server supports three authentication modes to balance security and e
 
 For shipped HTTP/server defaults, the base runtime uses `api-key`. `none` is reserved for explicit dev/test overrides.
 
+Authentication answers who is calling. Authorization still answers which MCP tools that caller may use. Do not confuse the two.
+
 ## 🔐 Authentication Modes
 
 ### 1. No Authentication (`none`)
@@ -204,6 +206,16 @@ curl -X POST http://localhost:7456/auth/refresh \
 - More complex client configuration
 - Requires token management (refresh, storage)
 - Higher overhead (token validation)
+
+## Authorization Still Applies
+
+Both API-key and JWT clients can be constrained with per-tool scopes.
+
+Useful follow-on docs:
+
+- [Tool Scope Authorization](../getting-started/tool-scope-authorization/)
+- [MCP Client Authentication](../getting-started/mcp-client-authentication/)
+- [Tool Surfaces](../getting-started/tool-surfaces/)
 
 ---
 

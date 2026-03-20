@@ -1,14 +1,18 @@
 ---
-title: "Queue Coordinator Leader Election"
+title: "Queue Coordinator and Worker Claims"
 editUrl: false
-description: "Environment variables: - ZAP_SCAN_QUEUE_COORDINATOR_BACKEND - ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID - ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL -"
+description: "Understand claim-based HA queue execution and the optional coordinator leadership signals."
 ---
 ## Objective
-Guarantee safe queue dispatch in multi-replica deployments by allowing only one dispatcher leader at a time.
+
+Guarantee safe multi-replica queue execution by using durable worker claims for dispatch ownership while keeping the coordinator backend available for node identity, optional maintenance leadership, and observability.
 
 ## Default Behavior
-- `single-node` backend (default): always leader (local/dev or single replica).
-- `postgres-lock` backend: replicas compete for a Postgres advisory lock; only lock holder dispatches/mutates queue state.
+
+- `single-node` backend: single-process runtime with a stable local worker identity
+- `postgres-lock` backend: replicas still compete for a Postgres advisory lock, but normal queue dispatch no longer depends on that lock
+
+That last point matters. If you still think only one leader can dispatch scans, your mental model is behind the code.
 
 ## Configuration
 
@@ -16,8 +20,9 @@ Guarantee safe queue dispatch in multi-replica deployments by allowing only one 
 zap:
   scan:
     queue:
+      claim-lease-ms: 15000
       coordinator:
-        backend: single-node # or postgres-lock
+        backend: single-node
         node-id: asg-node-1
         postgres:
           url: jdbc:postgresql://postgres:5432/mcp_zap
@@ -29,6 +34,8 @@ zap:
 ```
 
 Environment variables:
+
+- `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS`
 - `ZAP_SCAN_QUEUE_COORDINATOR_BACKEND`
 - `ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID`
 - `ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_URL`
@@ -39,60 +46,39 @@ Environment variables:
 - `ZAP_SCAN_QUEUE_COORDINATOR_POSTGRES_FAIL_FAST`
 
 ## Runtime Semantics
-- Only leader dispatches and mutates queue state (`enqueue/cancel/retry/dead-letter replay`).
-- Follower replicas return a clear mutation error: "not queue leader".
-- On leadership acquisition, replica restores queue state snapshot before processing.
-- On leader loss (heartbeat failure), replica stops dispatch immediately.
+
+- any replica can admit queued jobs into shared durable `scan_jobs` state
+- any replica can serve durable read paths and job mutations
+- any replica can claim queued work, start scans, and poll running progress once it owns the durable claim
+- running scans keep a renewable claim lease
+- if a worker disappears and the lease expires, another replica can recover polling ownership from the stored ZAP scan ID
+- if a late start result arrives after ownership moved, the stray scan is stopped instead of being adopted twice
+- queue status responses surface claim owner and claim expiry
 
 ## Observability
-Metrics emitted:
-- `asg.queue.leadership.is_leader` (gauge)
-- `asg.queue.leadership.transitions{event=acquired|lost}` (counter)
-- `asg.queue.leadership.failures{type=acquire|heartbeat}` (counter)
 
-Logs emitted:
-- leadership acquired/released
-- acquire/heartbeat failure warnings
+Metrics:
 
-## Failure Test Scenario (2+ replicas)
-1. Start 2 replicas with shared queue store + `postgres-lock` coordinator.
-2. Verify only one replica reports leader gauge as `1`.
-3. Submit queue jobs; confirm no duplicate dispatch/start.
-4. Terminate current leader process.
-5. Verify follower acquires leadership within heartbeat window and processing resumes.
+- `asg.queue.leadership.is_leader`
+- `asg.queue.leadership.transitions`
+- `asg.queue.leadership.failures`
+- `asg.queue.claim.events`
 
-## AWS Quick Reference
+Queue claim events include:
 
-Recommended baseline for AWS:
+- `queued_claimed`
+- `running_recovered`
+- `expired_claim_recovered`
+- `renewed`
+- `conflict`
+- `late_result_cleanup`
 
-1. Run `mcp-zap-server` on EKS with at least 2 replicas.
-2. Use Amazon RDS PostgreSQL for shared scan-job state and advisory-lock coordination.
-3. Run Flyway-managed schema migrations before MCP replicas scale out.
-4. Set:
-   - `ZAP_SCAN_JOBS_STORE_BACKEND=postgres`
-   - `ZAP_SCAN_QUEUE_COORDINATOR_BACKEND=postgres-lock`
-5. Provide a unique node id per pod:
-   - `ZAP_SCAN_QUEUE_COORDINATOR_NODE_ID=$(HOSTNAME)`
-6. Verify leader failover by deleting leader pod and observing transition metrics/logs.
+## Failure Test Scenario
 
-Helm users can start from `helm/mcp-zap-server/values-ha.yaml` and deploy with:
+1. start 2 replicas with shared queue state
+2. submit queued jobs and confirm no duplicate scan starts
+3. terminate the worker currently polling a running job
+4. wait for the claim lease to expire
+5. verify another replica recovers polling without starting a duplicate scan
 
-```bash
-helm upgrade --install mcp-zap ./helm/mcp-zap-server \
-  --namespace mcp-zap-prod --create-namespace \
-  --values /tmp/mcp-zap-values-ha.yaml
-```
-
-## Troubleshooting
-- MCP replicas fail with missing-schema errors:
-  - run Flyway migrations before scaling replicas
-  - verify the expected shared tables exist (`scan_jobs`, `jwt_token_revocation`)
-- No leader elected:
-  - verify coordinator backend and Postgres connectivity
-  - verify lock key consistency across replicas
-- Frequent leader flaps:
-  - increase heartbeat interval
-  - inspect Postgres network stability
-- Mutation rejected as follower:
-  - route writes to leader replica
-  - or retry via load balancer with leader-aware routing
+If you use `postgres-lock`, also verify the coordinator leadership metrics still behave as expected.

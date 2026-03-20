@@ -239,7 +239,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=0.4.0
+  --set mcp.image.tag=0.6.0
 ```
 
 ## Uninstalling
@@ -394,5 +394,5 @@ helm install mcp-zap ./helm/mcp-zap-server \
 ## Support
 
 For issues and questions:
-- GitHub: https://github.com/AgenticLab-AU/agentic-security-gateway/issues
-- Documentation: https://github.com/AgenticLab-AU/agentic-security-gateway
+- GitHub: https://github.com/dtkmn/mcp-zap-server/issues
+- Documentation: https://dtkmn.github.io/mcp-zap-server/

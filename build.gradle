@@ -36,7 +36,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework:spring-aop'
-    implementation 'org.aspectj:aspectjweaver:1.9.24'
+    implementation 'org.aspectj:aspectjweaver:1.9.25.1'
     implementation 'org.flywaydb:flyway-core'
     implementation('org.zaproxy:zap-clientapi:1.17.0') {
         exclude group: 'org.jdom', module: 'jdom'

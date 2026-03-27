@@ -40,7 +40,7 @@ jobs:
 
       - name: Upload test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-reports
           if-no-files-found: ignore
@@ -64,7 +64,7 @@ jobs:
     env:
       BRANCH_TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Get short SHA for image tagging
         id: build-tag
@@ -87,7 +87,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push branch images
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile

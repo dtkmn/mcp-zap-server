@@ -1,47 +1,88 @@
-name: For GitHub Releases, builds versioned Docker images
+name: Release
 
 env:
   IMAGE_NAME: mcp-zap-server
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to build (for tagging purposes)'
+      ref:
+        description: Git ref to build (tag, branch, or commit SHA)
         required: true
         type: string
+      version:
+        description: Version tag to publish
+        required: true
+        type: string
+      publish_latest:
+        description: Also update the latest tag
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
   docker-release:
+    name: Publish release images and SBOM
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Resolve release metadata
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "publish_latest=${{ inputs.publish_latest }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
+            echo "publish_latest=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
-          java-version: '25'
-          distribution: 'temurin'
-          server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-          settings-path: ${{ github.workspace }} # location for the settings.xml file
+          java-version: "25"
+          distribution: temurin
+          cache: gradle
+          server-id: github
+          settings-path: ${{ github.workspace }}
 
-      - name: Build with Gradle
-        run: ./gradlew build --scan --no-daemon --stacktrace --info
-
-      - name: Generate SBOM with CycloneDX
-        run: ./gradlew cyclonedxBom
+      - name: Build with Gradle and generate SBOM
+        run: ./gradlew build cyclonedxBom --scan --no-daemon --stacktrace --info
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: bom.json
+          name: sbom-${{ steps.vars.outputs.version }}
           path: build/reports/cyclonedx-direct/bom.json
+
+      - name: Compute release image tags
+        id: image-tags
+        run: |
+          version="${{ steps.vars.outputs.version }}"
+
+          {
+            echo "tags<<EOF"
+            echo "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${version}"
+            echo "${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${version}"
+
+            if [ "${{ steps.vars.outputs.publish_latest }}" = "true" ]; then
+              echo "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest"
+              echo "${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest"
+            fi
+
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -51,33 +92,21 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Login to Docker Hub
-        if: github.actor != 'dependabot[bot]'
         uses: docker/login-action@v3
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Set version and commit
-        id: vars
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push mcp-zap-server image to registry
-        uses: docker/build-push-action@v6
+      - name: Build and push release images
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
           push: true
-          platforms: linux/amd64, linux/arm64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
-            ghcr.io/${{ github.repository_owner }}/${{env.IMAGE_NAME}}:latest
-            ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:${{ steps.vars.outputs.version }}
-            ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:latest
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: ${{ steps.image-tags.outputs.tags }}

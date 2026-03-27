@@ -1,88 +1,102 @@
-name: For build/test/docker on all branches
+name: CI
+
 env:
   DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
   IMAGE_NAME: mcp-zap-server
+
 on:
   pull_request:
-    types: [ opened, reopened, synchronize, edited ]
-    branches: [ "main" ]
+    types: [opened, reopened, synchronize, edited]
+    branches: ["main", "dev"]
   push:
+    branches: ["**"]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
 
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: gradle
+          server-id: github
+          settings-path: ${{ github.workspace }}
+
+      - name: Build with Gradle
+        run: ./gradlew build --scan --no-daemon --stacktrace --info
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            build/test-results/test/**
+            build/reports/tests/test/**
+            build/reports/problems/problems-report.html
+
+  docker-publish:
+    name: Publish branch images
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') && github.actor != 'dependabot[bot]'
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
+    concurrency:
+      group: docker-publish-${{ github.ref }}
+      cancel-in-progress: true
+    env:
+      BRANCH_TAG: ${{ github.ref_name }}
     steps:
-    - uses: actions/checkout@v5
-    - name: Set up JDK 25
-      uses: actions/setup-java@v5
-      with:
-        java-version: '25'
-        distribution: 'temurin'
-        server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-        settings-path: ${{ github.workspace }} # location for the settings.xml file
+      - uses: actions/checkout@v6
 
-    - name: Build with Gradle
-      run: ./gradlew build --scan --no-daemon --stacktrace --info
+      - name: Get short SHA for image tagging
+        id: build-tag
+        run: echo "short_sha=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
 
-    - name: Upload test reports
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-reports
-        if-no-files-found: ignore
-        retention-days: 7
-        path: |
-          build/test-results/test/**
-          build/reports/tests/test/**
-          build/reports/problems/problems-report.html
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT }}
 
-    - name: Generate SBOM with CycloneDX
-      run: ./gradlew cyclonedxBom
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Upload SBOM artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: bom.json
-        path: build/reports/cyclonedx-direct/bom.json
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Get short SHA from long commit SHA for image tagging
-      id: build-tag
-      run: echo "build_number=$(git rev-parse --short ${{ github.sha }})" >> "$GITHUB_OUTPUT"
-
-    - name: Log in to GitHub Container Registry
-      if: github.actor != 'dependabot[bot]'
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GHCR_PAT }}
-
-    - name: Login to Docker Hub
-      if: github.actor != 'dependabot[bot]'
-      uses: docker/login-action@v3
-      with:
-        username: ${{ github.actor }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Build and push mcp-zap-server image to registry
-      if: github.actor != 'dependabot[bot]'
-      uses: docker/build-push-action@v6
-      with:
-        context: .
-        file: Dockerfile
-        push: true
-        platforms: linux/amd64, linux/arm64
-        tags: |
-          ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:${{ steps.build-tag.outputs.build_number }}
-          ${{ env.DOCKER_REGISTRY }}/${{env.IMAGE_NAME}}:dev
-          ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:${{ steps.build-tag.outputs.build_number }}
-          ${{ github.repository_owner }}/${{env.IMAGE_NAME}}:dev
+      - name: Build and push branch images
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH_TAG }}
+            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ steps.build-tag.outputs.short_sha }}
+            ${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH_TAG }}
+            ${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ steps.build-tag.outputs.short_sha }}

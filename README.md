@@ -1,23 +1,35 @@
 ![GitHub stars](https://img.shields.io/github/stars/dtkmn/mcp-zap-server?style=social)
 ![GitHub forks](https://img.shields.io/github/forks/dtkmn/mcp-zap-server?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/dtkmn/mcp-zap-server?style=social)
-![GitHub repo size](https://img.shields.io/github/repo-size/dtkmn/mcp-zap-server)
-![GitHub language count](https://img.shields.io/github/languages/count/dtkmn/mcp-zap-server)
-![GitHub top language](https://img.shields.io/github/languages/top/dtkmn/mcp-zap-server)
-![GitHub last commit](https://img.shields.io/github/last-commit/dtkmn/mcp-zap-server?color=red)
 ![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
 
 >**NOTE** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation.
 
 # MCP ZAP Server
 
-[![Commercial Support](https://img.shields.io/badge/Agentic_Lab-Enterprise_Support-blueviolet?style=for-the-badge&logo=shield)](mailto:agentic.lab.au@gmail.com?subject=Enterprise%20Inquiry)
-
-A Spring Boot application exposing OWASP ZAP as an MCP (Model Context Protocol) server. It lets any MCP‑compatible AI agent (e.g., Claude Desktop, Cursor) orchestrate ZAP actions—spider, active scan, and generate reports.
+`mcp-zap-server` turns OWASP ZAP into a self-hosted MCP server so AI agents can run guided or expert web security workflows without brittle glue scripts.
 
 This repository is the open-source `mcp-zap-server` distribution.
 
-> 🚀 **Using the OSS project in production?** [Agentic Lab](#-commercial-support) offers optional deployment, CI/CD, and support services around `mcp-zap-server`.
+It is designed for teams that want:
+
+- a smaller guided default tool surface, with an optional expert surface for raw ZAP control
+- self-hosted auth, queueing, findings/report workflows, and production-oriented observability
+- a documented Docker and Helm path instead of ad hoc local demos
+
+Project links:
+
+- [Documentation](https://dtkmn.github.io/mcp-zap-server/)
+- [Quick Start Security Guide](./QUICK_START_SECURITY.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Discussions](https://github.com/dtkmn/mcp-zap-server/discussions)
+- [Security Policy](./SECURITY.md)
+
+## Start Here
+
+1. Copy `.env.example` to `.env`.
+2. Run `docker compose up -d`.
+3. Open `http://localhost:3000` for the bundled Open WebUI path, or connect your MCP client to `http://localhost:7456/mcp`.
+4. Use the [Authentication Quick Start](https://dtkmn.github.io/mcp-zap-server/getting-started/authentication-quick-start/) and [Client Configuration Guide](https://dtkmn.github.io/mcp-zap-server/getting-started/mcp-client-authentication/) if you are wiring a remote client.
 
 ## Latest Release (`v0.6.0`)
 
@@ -54,6 +66,7 @@ See [RELEASE_NOTES_0.6.0.md](./RELEASE_NOTES_0.6.0.md) and [CHANGELOG.md](./CHAN
 </a>
 
 ## Table of Contents
+- [Start Here](#start-here)
 - [Features](#features)
 - [Choose Your Client](#choose-your-client)
 - [Architecture](#architecture)

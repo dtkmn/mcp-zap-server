@@ -1,0 +1,8 @@
+# Default ownership
+* @dtkmn
+
+# Higher-signal areas
+/.github/ @dtkmn
+/docs/ @dtkmn
+/helm/ @dtkmn
+/src/ @dtkmn

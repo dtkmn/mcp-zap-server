@@ -16,17 +16,21 @@ services:
       - -config
       - api.addrs.addr.regex=true
       - -addoninstall
-      - ajaxSpider
+      - spiderAjax
     ports:
       - "8090:8090"
     environment:
       ZAP_API_KEY: ${ZAP_API_KEY}
       ZAP_MEMORY: ${ZAP_MEMORY:-4G}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8090/"]
-      interval: 30s
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS \"http://127.0.0.1:8090/JSON/core/view/version/?apikey=$$ZAP_API_KEY\" >/dev/null",
+        ]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 30
       start_period: 30s
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk:/zap/wrk

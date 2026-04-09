@@ -204,10 +204,11 @@ We offer prioritized patching and private security advisories for commercial cli
 
 ## Reporting a Vulnerability
 
-If you believe you have discovered a security issue, **please do NOT open a public GitHub issue**. Instead, follow these steps:
+If you believe you have discovered a security issue, **please do NOT open a public GitHub issue**. Use one of these private channels instead:
 
-1. **Email**: Send the details to **danieltse@gmail.com**.
-2. **Details to include**:
+1. **GitHub private vulnerability reporting**: Open a private report at `https://github.com/dtkmn/mcp-zap-server/security/advisories/new`.
+2. **Email**: Send the details to **danieltse@gmail.com**.
+3. **Include**:
     - Affected version(s) (e.g. `0.1.0-SNAPSHOT` or `0.1.0`).
     - Clear description of the vulnerability and its impact.
     - Steps to reproduce, including code snippets or commands if possible.

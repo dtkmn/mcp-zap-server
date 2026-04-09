@@ -1,0 +1,42 @@
+name: Feature request
+description: Propose a scoped improvement with a clear user or operator benefit.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What pain, limitation, or missed opportunity are you seeing?
+      placeholder: Operating the queue in shared environments is hard because ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the outcome you want, not just the implementation you prefer.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: User and operator impact
+      description: Who benefits, and how would this change affect safety, maintenance, or deployment?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include workarounds, rejected approaches, or prior art when useful.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues and discussions first.
+          required: true
+        - label: This request is narrow enough to discuss and review.
+          required: true

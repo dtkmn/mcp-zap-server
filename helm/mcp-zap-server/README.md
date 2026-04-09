@@ -121,7 +121,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `zap.config.apiKey` | ZAP API key | `""` |
 | `zap.config.existingSecret.name` | Existing Secret for the ZAP API key | `""` |
 | `zap.config.api.allowedAddrRegex` | ZAP API source allowlist regex | loopback + RFC1918 |
-| `zap.config.addons` | ZAP addons installed at startup | `["ajaxSpider", "graphql", "soap", "automation"]` |
+| `zap.config.addons` | ZAP addons installed at startup | `["spiderAjax", "graphql", "soap", "automation"]` |
 | `zap.persistence.enabled` | Enable persistent storage for ZAP | `true` |
 | `zap.persistence.size` | Size of ZAP persistent volume | `10Gi` |
 

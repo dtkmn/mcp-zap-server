@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible defect in runtime behavior, docs, or deployment flow.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken, and why does it matter?
+      placeholder: The MCP server accepts the request, but queued active scans remain stuck in pending forever.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Affected version
+      description: Tag, image version, or commit SHA.
+      placeholder: v0.6.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Runtime / MCP server
+        - Authentication / authorization
+        - Scan queue / HA
+        - Docker Compose
+        - Helm / Kubernetes
+        - Docs / onboarding
+        - CI / release automation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Relevant environment details only. Sanitize secrets.
+      placeholder: |
+        OS:
+        Java:
+        Docker:
+        Client:
+        Auth mode:
+        Deployment mode:
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable path to reproduce.
+      placeholder: |
+        1. Start the stack with ...
+        2. Call ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or traces
+      description: Paste sanitized logs, stack traces, screenshots, or correlation IDs.
+      render: shell

@@ -42,7 +42,7 @@ zap:
       # hostname used by the MCP server.
       allowedAddrRegex: ""
     addons:
-      - ajaxSpider
+      - spiderAjax
       - graphql
       - soap
       - automation

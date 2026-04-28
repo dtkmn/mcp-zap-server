@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-28
+
+### Changed
+- Upgraded Spring Boot, Gradle, AspectJ, CycloneDX, Astro, and Starlight patch-level dependencies used by the runtime, build, SBOM, and docs site.
+- Updated Docker and Compose defaults, including Gradle build image alignment and container healthcheck/configuration refinements.
+- Improved CI, release, Pages, dependency-submission, and branch-image publishing workflows, including newer GitHub Actions versions, manual release inputs, release image tagging, and multi-platform release image builds.
+- Added CodeQL analysis for Java and JavaScript to improve repository security scanning coverage.
+- Aligned documented ZAP addon configuration with Helm values.
+
+### Fixed
+- Fixed streamable HTTP MCP responses returning `500 Internal Server Error` after `initialize` because the WebFlux SSE transport passed a null message id to Spring Framework 7.
+- Restored `tools/list`, `prompts/list`, and `resources/list` event-stream responses after a successful Streamable HTTP MCP handshake.
+
+### Documentation
+- Added contribution guidelines, pull request template, issue templates, CODEOWNERS, and Contributor Covenant Code of Conduct.
+- Refined README positioning, usage guidance, vulnerability reporting instructions, and security policy documentation.
+
+### Tests
+- Added regression coverage for the `initialize` -> `tools/list` streamable HTTP flow.
+
+
 ## [0.6.0] - 2026-03-20
 
 ### Added

@@ -18,7 +18,7 @@ It is designed for teams that want:
 
 Project links:
 
-- [Documentation](https://dtkmn.github.io/mcp-zap-server/)
+- [Documentation](https://danieltse.org/mcp-zap-server/)
 - [Quick Start Security Guide](./QUICK_START_SECURITY.md)
 - [Contributing](./CONTRIBUTING.md)
 - [Discussions](https://github.com/dtkmn/mcp-zap-server/discussions)
@@ -29,7 +29,7 @@ Project links:
 1. Copy `.env.example` to `.env`.
 2. Run `docker compose up -d`.
 3. Open `http://localhost:3000` for the bundled Open WebUI path, or connect your MCP client to `http://localhost:7456/mcp`.
-4. Use the [Authentication Quick Start](https://dtkmn.github.io/mcp-zap-server/getting-started/authentication-quick-start/) and [Client Configuration Guide](https://dtkmn.github.io/mcp-zap-server/getting-started/mcp-client-authentication/) if you are wiring a remote client.
+4. Use the [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/) and [Client Configuration Guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/) if you are wiring a remote client.
 
 ## Latest Release (`v0.6.1`)
 
@@ -42,24 +42,24 @@ See [RELEASE_NOTES_0.6.1.md](./RELEASE_NOTES_0.6.1.md) and [CHANGELOG.md](./CHAN
 
 ## 📚 Documentation
 
-**[📖 View Full Documentation](https://dtkmn.github.io/mcp-zap-server/)** - Complete guides, API reference, and examples
+**[📖 View Full Documentation](https://danieltse.org/mcp-zap-server/)** - Complete guides, API reference, and examples
 
 ### Quick Links
-- [Security & Authentication Guide](https://dtkmn.github.io/mcp-zap-server/SECURITY_MODES.html) - Three security modes
-- [Client Configuration Guide](https://dtkmn.github.io/mcp-zap-server/MCP_CLIENT_AUTHENTICATION.html) - Open WebUI, Cursor, Claude Desktop, and other MCP clients
-- [JWT Authentication Setup](https://dtkmn.github.io/mcp-zap-server/JWT_AUTHENTICATION.html) - Production-ready auth
+- [Security & Authentication Guide](https://danieltse.org/mcp-zap-server/security-modes/) - Three security modes
+- [Client Configuration Guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/) - Open WebUI, Cursor, Claude Desktop, and other MCP clients
+- [JWT Authentication Setup](https://danieltse.org/mcp-zap-server/security-modes/jwt-authentication/) - Production-ready auth
 - [Open WebUI Setup](#choose-your-client) - Bundled browser UX for local or remote model providers
-- [Production Readiness Checklist](https://dtkmn.github.io/mcp-zap-server/operations/production-checklist/) - Cloud and public rollout baseline
-- [Authenticated Scanning Best Practices](https://dtkmn.github.io/mcp-zap-server/AUTHENTICATED_SCANNING_BEST_PRACTICES.html) - Context/user/authenticated scan workflow
-- [AJAX Spider Guide](https://dtkmn.github.io/mcp-zap-server/AJAX_SPIDER.html) - Bypass WAF protection
-- [Queue Retry Policy](https://dtkmn.github.io/mcp-zap-server/operations/scan-queue-retry-policy/) - Default retry/backoff by scan type
-- [Queue Coordinator and Worker Claims](https://dtkmn.github.io/mcp-zap-server/operations/queue-coordinator-leader-election/) - Claim-based HA queue recovery and optional coordinator signals
-- [Local HA Compose Simulation](https://dtkmn.github.io/mcp-zap-server/operations/local-ha-compose/) - Run 3 MCP replicas with shared Postgres and a local ingress
+- [Production Readiness Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/) - Cloud and public rollout baseline
+- [Authenticated Scanning Best Practices](https://danieltse.org/mcp-zap-server/scanning/authenticated-scanning-best-practices/) - Context/user/authenticated scan workflow
+- [AJAX Spider Guide](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/) - Browser-backed crawling for JavaScript-heavy or authenticated applications
+- [Queue Retry Policy](https://danieltse.org/mcp-zap-server/operations/scan-queue-retry-policy/) - Default retry/backoff by scan type
+- [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/) - Claim-based HA queue recovery and optional coordinator signals
+- [Local HA Compose Simulation](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/) - Run 3 MCP replicas with shared Postgres and a local ingress
 - [Kubernetes Deployment](./helm/README.md) - Helm charts for production
 
 
 ### Demo on Cursor
-**[📺 Watch Demo Video](https://dtkmn.github.io/mcp-zap-server/demo.html)** | [YouTube Link](https://www.youtube.com/watch?v=9_9VqsL0lNw)
+**[📺 Watch Demo Video](https://danieltse.org/mcp-zap-server/demo.html)** | [YouTube Link](https://www.youtube.com/watch?v=9_9VqsL0lNw)
 
 <a href="https://www.youtube.com/watch?v=9_9VqsL0lNw" target="_blank" rel="noopener noreferrer">
 <img src="https://img.youtube.com/vi/9_9VqsL0lNw/0.jpg" alt="▶️ Watch the demo">
@@ -156,7 +156,7 @@ flowchart LR
   R2 -->|"if claim owner: start/poll"| ZAP
 ```
 
-For configuration and troubleshooting details, see [Queue Coordinator and Worker Claims](https://dtkmn.github.io/mcp-zap-server/operations/queue-coordinator-leader-election/) and [Local HA Compose Simulation](https://dtkmn.github.io/mcp-zap-server/operations/local-ha-compose/).
+For configuration and troubleshooting details, see [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/) and [Local HA Compose Simulation](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/).
 
 ## Cloud Setup (AWS Example)
 Reference deployment pattern for production-like HA:
@@ -232,9 +232,9 @@ Operational checks after deploy:
 3. Submit queue jobs and verify claim owner / claim expiry are populated without duplicate scan starts.
 4. Terminate a worker pod/task and confirm another replica recovers polling after claim lease expiry.
 
-Detailed coordinator behavior and troubleshooting: [Queue Coordinator and Worker Claims](https://dtkmn.github.io/mcp-zap-server/operations/queue-coordinator-leader-election/).
+Detailed coordinator behavior and troubleshooting: [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/).
 Helm-specific guide: [helm/mcp-zap-server/README.md](./helm/mcp-zap-server/README.md).
-Production baseline: [Production Readiness Checklist](https://dtkmn.github.io/mcp-zap-server/operations/production-checklist/).
+Production baseline: [Production Readiness Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/).
 
 ## Prerequisites
 
@@ -386,13 +386,13 @@ When `JWT_REVOCATION_STORE_BACKEND=postgres`, revoked tokens are enforced across
 
 **Note**: JWT mode is backward compatible—clients can still use API keys during migration.
 
-**🔐 MCP Security Compliance**: This server follows the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices). See [SECURITY.md](SECURITY.md#mcp-security-best-practices-compliance) for full compliance details and roadmap.
+**🔐 MCP Security Posture**: This server tracks the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices). See [SECURITY.md](SECURITY.md#mcp-security-best-practices-compliance) for implemented controls and operator responsibilities.
 
 📚 **Detailed Documentation**:
-- [Security Modes Guide](https://dtkmn.github.io/mcp-zap-server/security-modes/) - Complete comparison and migration guide
-- [JWT Authentication Guide](https://dtkmn.github.io/mcp-zap-server/security-modes/jwt-authentication/) - JWT implementation details
-- [JWT Key Rotation Runbook](https://dtkmn.github.io/mcp-zap-server/security-modes/jwt-key-rotation-runbook/) - Planned/emergency key rotation procedure
-- [MCP Client Configuration](https://dtkmn.github.io/mcp-zap-server/getting-started/mcp-client-authentication/) - Client setup for all modes
+- [Security Modes Guide](https://danieltse.org/mcp-zap-server/security-modes/) - Complete comparison and migration guide
+- [JWT Authentication Guide](https://danieltse.org/mcp-zap-server/security-modes/jwt-authentication/) - JWT implementation details
+- [JWT Key Rotation Runbook](https://danieltse.org/mcp-zap-server/security-modes/jwt-key-rotation-runbook/) - Planned/emergency key rotation procedure
+- [MCP Client Configuration](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/) - Client setup for all modes
 
 ### URL Security Configuration
 
@@ -470,7 +470,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 | **Best For** | **Development** | **Production** |
 ![Docker-Compose](./images/mcp-zap-server-docker-compose.png)
 
-Open http://localhost:3000 in your browser, and you should see the Open Web-UI interface.
+Open http://localhost:3000 in your browser, and you should see the Open WebUI interface. The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
 ### Set Up Custom OpenAI / Ollama API Connection
 ![Admin-Panel-Open-WebUI](./images/Admin-Panel-Open-WebUI.png)
@@ -496,18 +496,18 @@ Once your model provider is configured, you can check the [Prompt Examples](#pro
 ### Services Overview
 
 #### `zap`
-- **Image:** `zaproxy/zap-stable:${ZAP_IMAGE_TAG:-2.17.0}`
+- **Image:** `zaproxy/zap-stable`
 - **Purpose:** Runs the OWASP ZAP daemon on port 8090.
 - **Configuration:**
     - Requires an API key for security, configured via the `ZAP_API_KEY` environment variable.
-    - Restricts API callers to loopback and RFC1918 source ranges by default.
+    - Publishes the host port on `127.0.0.1` by default through `MCP_ZAP_BIND_ADDRESS`.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to the container path `/zap/wrk`.
 
 #### `open-webui`
 - **Image:** ghcr.io/open-webui/open-webui
 - **Purpose:** Provides a web interface for managing ZAP and the MCP server.
 - **Configuration:**
-    - Exposes port 3000.
+    - Publishes `http://localhost:3000` on loopback by default.
     - Preconfigures a native MCP connection to `http://mcp-server:7456/mcp` on first boot.
     - Sends the MCP credential as an `X-API-Key` header to the local MCP server.
     - Uses a named volume to persist backend data.
@@ -518,7 +518,7 @@ Once your model provider is configured, you can check the [Prompt Examples](#pro
 - **Configuration:**
     - Depends on the `zap` service and connects to it using the configured `ZAP_API_KEY`.
     - Requires `MCP_API_KEY` for client authentication (set in `.env` file).
-    - Exposes `http://localhost:7456` to host-side MCP clients in the default Docker Compose stack.
+    - Publishes `http://localhost:7456` to host-side MCP clients on loopback by default.
     - Maps the host directory `${LOCAL_ZAP_WORKPLACE_FOLDER}` to `/zap/wrk` to allow file access.
     - Supports configurable scan limits and URL validation policies.
 - **Security:**
@@ -530,13 +530,13 @@ Once your model provider is configured, you can check the [Prompt Examples](#pro
 - **Image:** bkimminich/juice-shop
 - **Purpose:** Provides a deliberately insecure web application for testing ZAP’s scanning capabilities.
 - **Configuration:**
-    - Runs on port 3001.
+    - Publishes `http://localhost:3001` on loopback by default.
 
 #### `petstore`
-- **Image:** swaggerapi/petstore3:unstable
+- **Image:** swaggerapi/petstore3:1.0.27
 - **Purpose:** Runs the Swagger Petstore sample API to demonstrate OpenAPI import and scanning.
 - **Configuration:**
-    - Runs on port 3002.
+    - Publishes `http://localhost:3002` on loopback by default.
 
 
 ### Stopping the Services

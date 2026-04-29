@@ -56,6 +56,8 @@ This starts:
 - Open WebUI on `http://localhost:3000`
 - local demo targets such as Juice Shop
 
+The default Compose stack binds published ports to `127.0.0.1`. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
+
 ### 5. Verify health
 
 ```bash
@@ -74,6 +76,7 @@ The default local Compose stack is intentionally convenient, not hardened:
 
 - MCP auth defaults to `api-key`
 - Open WebUI is preconfigured to send `X-API-Key`
+- published host ports bind to loopback by default
 - local Compose defaults allow localhost and private-network targets for development convenience
 
 That is acceptable for an isolated laptop lab. It is not a production posture.
@@ -250,4 +253,4 @@ npm install
 npm run dev
 ```
 
-- public docs site: <https://dtkmn.github.io/mcp-zap-server/>
+- public docs site: <https://danieltse.org/mcp-zap-server/>

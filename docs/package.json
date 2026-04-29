@@ -11,6 +11,7 @@
     "astro": "astro"
   },
   "dependencies": {
+    "@astrojs/sitemap": "^3.7.1",
     "@astrojs/starlight": "^0.38.3",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/rajdhani": "^5.2.7",
@@ -20,5 +21,9 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.8",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "yaml": "^2.8.3"
   }
 }

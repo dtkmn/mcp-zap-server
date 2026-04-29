@@ -1,6 +1,6 @@
 # MCP ZAP Server Documentation
 
-This directory contains the Astro + Starlight source for the public [GitHub Pages documentation site](https://dtkmn.github.io/mcp-zap-server/).
+This directory contains the Astro + Starlight source for the public documentation site at <https://danieltse.org/mcp-zap-server/>.
 
 ## Public Docs Policy
 
@@ -23,7 +23,7 @@ Do not keep these in the public docs tree:
 ## Project Layout
 
 - `src/content/docs/` - public documentation content rendered by Starlight
-- `src/styles/mr-robot.css` - theme customization for the fsociety/Mr. Robot look
+- `src/styles/terminal-ops.css` - terminal/operator visual theme customization
 - `src/pages/[legacy].html.astro` - compatibility redirects for old Jekyll `.html` URLs
 - `public/demo.html` - static demo video page
 

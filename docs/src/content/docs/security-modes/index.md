@@ -109,7 +109,7 @@ response = requests.post("http://localhost:7456/mcp", headers=headers)
 
 **Limitations:**
 - Keys don't expire (manual rotation required)
-- No fine-grained permissions
+- Scope changes require client configuration updates and redeploy/restart
 - Single authentication factor
 - Keys can be intercepted if not using HTTPS
 

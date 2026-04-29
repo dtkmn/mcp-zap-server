@@ -7,5 +7,5 @@ contact_links:
     url: https://github.com/dtkmn/mcp-zap-server/security/advisories/new
     about: Report vulnerabilities privately through GitHub private vulnerability reporting.
   - name: Documentation
-    url: https://dtkmn.github.io/mcp-zap-server/
+    url: https://danieltse.org/mcp-zap-server/
     about: Read the public docs before filing an issue about setup or configuration.

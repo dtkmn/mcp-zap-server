@@ -68,9 +68,11 @@ Response shape:
   "tokenType": "Bearer",
   "expiresIn": 3600,
   "clientId": "default-client",
-  "scopes": ["*"]
+  "scopes": ["mcp:tools:list", "zap:scan:read", "zap:report:read"]
 }
 ```
+
+If your local config still uses the legacy wildcard client, the response may show `["*"]`. Replace that with explicit scopes before shared or production use.
 
 ## Step 5: Initialize The MCP Session
 

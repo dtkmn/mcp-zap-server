@@ -185,7 +185,7 @@ class McpToolAuthorizationApiKeyIntegrationTest {
                 "2026-04-06T09:00:00Z"
         );
 
-        assertThat(contract.path("contractVersion").asText()).isEqualTo("asg.policy.dry-run/v1");
+        assertThat(contract.path("contractVersion").asText()).isEqualTo("mcp.zap.policy.dry-run/v1");
         assertThat(contract.path("decision").path("result").asText()).isEqualTo("allow");
         assertThat(contract.path("decision").path("matchedRuleId").asText()).isEqualTo("allow-sandbox-attack");
         assertThat(contract.path("request").path("normalizedHost").asText()).isEqualTo("api.sandbox.example.com");
@@ -288,7 +288,7 @@ class McpToolAuthorizationApiKeyIntegrationTest {
 
     private String policyPreviewBundleJson() throws Exception {
         return OBJECT_MAPPER.writeValueAsString(Map.of(
-                "apiVersion", "asg.policy/v1",
+                "apiVersion", "mcp.zap.policy/v1",
                 "kind", "PolicyBundle",
                 "metadata", Map.of(
                         "name", "api-key-policy-preview",

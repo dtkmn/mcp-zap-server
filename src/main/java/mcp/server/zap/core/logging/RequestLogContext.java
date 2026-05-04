@@ -10,9 +10,9 @@ import org.springframework.web.server.ServerWebExchange;
 public final class RequestLogContext {
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
     public static final String LEGACY_REQUEST_ID_HEADER = "X-Request-Id";
-    public static final String CORRELATION_ID_ATTRIBUTE = "asg.request.correlation-id";
-    public static final String CLIENT_ID_ATTRIBUTE = "asg.request.client-id";
-    public static final String WORKSPACE_ID_ATTRIBUTE = "asg.request.workspace-id";
+    public static final String CORRELATION_ID_ATTRIBUTE = "mcp.zap.request.correlation-id";
+    public static final String CLIENT_ID_ATTRIBUTE = "mcp.zap.request.client-id";
+    public static final String WORKSPACE_ID_ATTRIBUTE = "mcp.zap.request.workspace-id";
     public static final String CORRELATION_ID_MDC_KEY = "correlationId";
     public static final String CLIENT_ID_MDC_KEY = "clientId";
     public static final String WORKSPACE_ID_MDC_KEY = "workspaceId";

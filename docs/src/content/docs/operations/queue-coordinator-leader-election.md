@@ -59,10 +59,10 @@ Environment variables:
 
 Metrics:
 
-- `asg.queue.leadership.is_leader`
-- `asg.queue.leadership.transitions`
-- `asg.queue.leadership.failures`
-- `asg.queue.claim.events`
+- `mcp.zap.queue.leadership.is_leader`
+- `mcp.zap.queue.leadership.transitions`
+- `mcp.zap.queue.leadership.failures`
+- `mcp.zap.queue.claim.events`
 
 Queue claim events include:
 

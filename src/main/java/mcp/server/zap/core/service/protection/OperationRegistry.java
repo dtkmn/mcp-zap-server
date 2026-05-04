@@ -136,9 +136,9 @@ public class OperationRegistry {
             return;
         }
 
-        meterRegistry.gauge("asg.operations.active", java.util.List.of(io.micrometer.core.instrument.Tag.of("type", "direct_scan")),
+        meterRegistry.gauge("mcp.zap.operations.active", java.util.List.of(io.micrometer.core.instrument.Tag.of("type", "direct_scan")),
                 this, registry -> registry.countDirectScans());
-        meterRegistry.gauge("asg.operations.active", java.util.List.of(io.micrometer.core.instrument.Tag.of("type", "automation_plan")),
+        meterRegistry.gauge("mcp.zap.operations.active", java.util.List.of(io.micrometer.core.instrument.Tag.of("type", "automation_plan")),
                 this, registry -> registry.countAutomationPlans());
     }
 

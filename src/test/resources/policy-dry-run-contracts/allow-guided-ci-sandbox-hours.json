@@ -1,7 +1,7 @@
 {
-  "contractVersion": "asg.policy.dry-run/v1",
+  "contractVersion": "mcp.zap.policy.dry-run/v1",
   "bundle": {
-    "apiVersion": "asg.policy/v1",
+    "apiVersion": "mcp.zap.policy/v1",
     "kind": "PolicyBundle",
     "name": "ci-guided-guardrails",
     "displayName": "CI Guided Guardrails",

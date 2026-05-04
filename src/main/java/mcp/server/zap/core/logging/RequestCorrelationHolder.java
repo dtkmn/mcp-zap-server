@@ -6,7 +6,7 @@ import org.slf4j.MDC;
  * Thread-local correlation id holder mirrored into MDC for structured logging.
  */
 public final class RequestCorrelationHolder {
-    public static final String CORRELATION_ID_KEY = "asg.request.correlation-id";
+    public static final String CORRELATION_ID_KEY = "mcp.zap.request.correlation-id";
 
     private static final ThreadLocal<String> CORRELATION_ID = new ThreadLocal<>();
 

@@ -230,7 +230,7 @@ helm upgrade --install mcp-zap ./helm/mcp-zap-server \
 Operational checks after deploy:
 
 1. Confirm the migration job completed successfully before checking MCP rollout.
-2. If `postgres-lock` is enabled, confirm one replica reports `asg.queue.leadership.is_leader=1`.
+2. If `postgres-lock` is enabled, confirm one replica reports `mcp.zap.queue.leadership.is_leader=1`.
 3. Submit queue jobs and verify claim owner / claim expiry are populated without duplicate scan starts.
 4. Terminate a worker pod/task and confirm another replica recovers polling after claim lease expiry.
 

@@ -78,7 +78,7 @@ class PolicyDryRunDeterministicContractTest {
         JsonNode expected = fixture("invalid-policy-preview.json");
         String invalidBundle = """
                 {
-                  "apiVersion": "asg.policy/v1",
+                  "apiVersion": "mcp.zap.policy/v1",
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "broken-bundle",

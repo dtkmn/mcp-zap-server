@@ -71,15 +71,15 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
         assertRuntimePolicyAudit(event, "deny", false);
         assertThat(event.path("data").path("mode").asText()).isEqualTo("enforce");
 
-        EntityExchangeResult<String> auditMetric = actuator(POLICY_API_KEY, "/actuator/metrics/asg.audit.events");
+        EntityExchangeResult<String> auditMetric = actuator(POLICY_API_KEY, "/actuator/metrics/mcp.zap.audit.events");
         assertThat(auditMetric.getResponseBody())
-                .contains("\"name\":\"asg.audit.events\"")
+                .contains("\"name\":\"mcp.zap.audit.events\"")
                 .contains("\"tag\":\"type\"")
                 .contains("\"tag\":\"outcome\"");
 
         EntityExchangeResult<String> prometheus = actuator(POLICY_API_KEY, "/actuator/prometheus");
         assertThat(prometheus.getResponseBody())
-                .contains("asg_audit_events_total")
+                .contains("mcp_zap_audit_events_total")
                 .contains("type=\"policy_decision\"")
                 .contains("outcome=\"deny\"");
         assertThat(prometheus.getResponseBody()).doesNotContain(SECRET_TOKEN);

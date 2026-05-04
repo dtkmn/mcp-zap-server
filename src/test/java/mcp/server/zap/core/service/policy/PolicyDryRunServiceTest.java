@@ -96,7 +96,7 @@ class PolicyDryRunServiceTest {
     void dryRunSurfacesValidationErrorsForUnknownToolsAndInvalidRequestInputs() {
         String invalidBundle = """
                 {
-                  "apiVersion": "asg.policy/v1",
+                  "apiVersion": "mcp.zap.policy/v1",
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "broken-bundle",
@@ -172,7 +172,7 @@ class PolicyDryRunServiceTest {
 
         String bundle = """
                 {
-                  "apiVersion": "asg.policy/v1",
+                  "apiVersion": "mcp.zap.policy/v1",
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "tenant-scoped-bundle",

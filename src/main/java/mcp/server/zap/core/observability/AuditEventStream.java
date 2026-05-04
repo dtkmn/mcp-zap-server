@@ -55,7 +55,7 @@ public class AuditEventStream {
 
         auditEventRepository.add(new AuditEvent(Instant.now(), normalizedPrincipal, normalizedType, data));
         if (meterRegistry != null) {
-            meterRegistry.counter("asg.audit.events", "type", normalizedType, "outcome", normalizedOutcome).increment();
+            meterRegistry.counter("mcp.zap.audit.events", "type", normalizedType, "outcome", normalizedOutcome).increment();
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();

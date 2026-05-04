@@ -188,7 +188,7 @@ class GuidedAuthSessionServiceTest {
 
     @Test
     void missingEnvironmentCredentialReferenceHasDocumentedFailure() {
-        String envName = "ASG_AUTH_BOOTSTRAP_TEST_MISSING_ENV";
+        String envName = "MCP_ZAP_AUTH_BOOTSTRAP_TEST_MISSING_ENV";
 
         assertThatThrownBy(() -> service.prepareSession(
                 "https://api.example.com",
@@ -239,7 +239,7 @@ class GuidedAuthSessionServiceTest {
         assertThatThrownBy(() -> service.prepareSession(
                 "https://api.example.com",
                 "session-cookie",
-                "env:ASG_AUTH_BOOTSTRAP_TEST_MISSING_ENV",
+                "env:MCP_ZAP_AUTH_BOOTSTRAP_TEST_MISSING_ENV",
                 null,
                 "unsupported-auth",
                 null,

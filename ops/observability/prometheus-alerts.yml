@@ -2,7 +2,7 @@ groups:
   - name: mcp-zap-server-observability
     rules:
       - alert: AsgAuthenticationFailuresBurst
-        expr: sum(rate(asg_auth_events_total{outcome="failure"}[10m])) by (method, reason) > 0.2
+        expr: sum(rate(mcp_zap_auth_events_total{outcome="failure"}[10m])) by (method, reason) > 0.2
         for: 15m
         labels:
           severity: warning
@@ -11,7 +11,7 @@ groups:
           description: "Authentication failures have remained above the warning threshold for 15 minutes."
 
       - alert: AsgProtectionRejectionsSustained
-        expr: sum(rate(asg_protection_rejections_total[10m])) by (error, reason) > 0.1
+        expr: sum(rate(mcp_zap_protection_rejections_total[10m])) by (error, reason) > 0.1
         for: 15m
         labels:
           severity: warning
@@ -20,7 +20,7 @@ groups:
           description: "Rate limiting, workspace quotas, or overload shedding has been sustained for 15 minutes."
 
       - alert: AsgQueueBacklogSustained
-        expr: asg_queue_jobs{status="queued"} > 10
+        expr: mcp_zap_queue_jobs{status="queued"} > 10
         for: 20m
         labels:
           severity: warning
@@ -29,7 +29,7 @@ groups:
           description: "Queued scan jobs have stayed above 10 for 20 minutes."
 
       - alert: AsgToolFailuresPresent
-        expr: sum(rate(asg_tool_executions_seconds_count{outcome="failure"}[15m])) by (tool) > 0
+        expr: sum(rate(mcp_zap_tool_executions_seconds_count{outcome="failure"}[15m])) by (tool) > 0
         for: 15m
         labels:
           severity: warning

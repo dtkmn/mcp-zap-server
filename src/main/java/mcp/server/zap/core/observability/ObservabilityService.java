@@ -37,7 +37,7 @@ public class ObservabilityService {
                                   String clientId,
                                   String workspaceId,
                                   Duration duration) {
-        Timer.builder("asg.http.requests")
+        Timer.builder("mcp.zap.http.requests")
                 .description("HTTP request duration for MCP, auth, and actuator flows")
                 .tag("method", normalize(method, "unknown"))
                 .tag("path", normalizePath(path))
@@ -58,7 +58,7 @@ public class ObservabilityService {
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
-                "asg.auth.events",
+                "mcp.zap.auth.events",
                 "method", normalizedMethod,
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
@@ -87,7 +87,7 @@ public class ObservabilityService {
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
-                "asg.authorization.decisions",
+                "mcp.zap.authorization.decisions",
                 "action", normalizedAction,
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
@@ -117,7 +117,7 @@ public class ObservabilityService {
 
         String toolFamily = classifyToolFamily(decision.toolName());
         meterRegistry.counter(
-                "asg.protection.rejections",
+                "mcp.zap.protection.rejections",
                 "error", normalize(decision.errorCode(), "unknown"),
                 "reason", normalize(decision.reason(), "unknown"),
                 "toolFamily", toolFamily
@@ -147,7 +147,7 @@ public class ObservabilityService {
         String toolFamily = classifyToolFamily(normalizedTool);
         String normalizedOutcome = normalize(outcome, "unknown");
 
-        Timer.builder("asg.tool.executions")
+        Timer.builder("mcp.zap.tool.executions")
                 .description("Tool execution duration grouped by tool and family")
                 .tag("tool", normalizedTool)
                 .tag("family", toolFamily)

@@ -90,36 +90,36 @@ class ObservabilityActuatorIntegrationTest {
                 .expectBody(String.class)
                 .value(body -> assertThat(body).contains("observability integration report"));
 
-        EntityExchangeResult<String> authMetric = actuator("observer-api-key", "/actuator/metrics/asg.auth.events");
+        EntityExchangeResult<String> authMetric = actuator("observer-api-key", "/actuator/metrics/mcp.zap.auth.events");
         assertThat(authMetric.getResponseBody())
-                .contains("\"name\":\"asg.auth.events\"")
+                .contains("\"name\":\"mcp.zap.auth.events\"")
                 .contains("\"tag\":\"method\"")
                 .contains("\"tag\":\"outcome\"")
                 .contains("\"tag\":\"reason\"");
 
-        EntityExchangeResult<String> authzMetric = actuator("observer-api-key", "/actuator/metrics/asg.authorization.decisions");
+        EntityExchangeResult<String> authzMetric = actuator("observer-api-key", "/actuator/metrics/mcp.zap.authorization.decisions");
         assertThat(authzMetric.getResponseBody())
-                .contains("\"name\":\"asg.authorization.decisions\"")
+                .contains("\"name\":\"mcp.zap.authorization.decisions\"")
                 .contains("\"tag\":\"action\"")
                 .contains("\"tag\":\"outcome\"")
                 .contains("\"tag\":\"reason\"");
 
-        EntityExchangeResult<String> toolMetric = actuator("observer-api-key", "/actuator/metrics/asg.tool.executions");
+        EntityExchangeResult<String> toolMetric = actuator("observer-api-key", "/actuator/metrics/mcp.zap.tool.executions");
         assertThat(toolMetric.getResponseBody())
-                .contains("\"name\":\"asg.tool.executions\"")
+                .contains("\"name\":\"mcp.zap.tool.executions\"")
                 .contains("\"tag\":\"tool\"")
                 .contains("\"tag\":\"family\"")
                 .contains("\"tag\":\"outcome\"");
 
         EntityExchangeResult<String> prometheus = actuator("observer-api-key", "/actuator/prometheus");
         assertThat(prometheus.getResponseBody())
-                .contains("asg_http_requests_seconds_count")
-                .contains("asg_auth_events_total")
-                .contains("asg_authorization_decisions_total")
-                .contains("asg_tool_executions_seconds_count")
-                .contains("asg_audit_events_total")
-                .contains("asg_queue_jobs")
-                .contains("asg_operations_active");
+                .contains("mcp_zap_http_requests_seconds_count")
+                .contains("mcp_zap_auth_events_total")
+                .contains("mcp_zap_authorization_decisions_total")
+                .contains("mcp_zap_tool_executions_seconds_count")
+                .contains("mcp_zap_audit_events_total")
+                .contains("mcp_zap_queue_jobs")
+                .contains("mcp_zap_operations_active");
 
         EntityExchangeResult<String> auditEvents = actuator("observer-api-key", "/actuator/auditevents");
         assertThat(auditEvents.getResponseBody())
@@ -233,7 +233,7 @@ class ObservabilityActuatorIntegrationTest {
                                                         String correlationId,
                                                         String target) throws Exception {
         String bundleJson = OBJECT_MAPPER.writeValueAsString(Map.of(
-                "apiVersion", "asg.policy/v1",
+                "apiVersion", "mcp.zap.policy/v1",
                 "kind", "PolicyBundle",
                 "metadata", Map.of(
                         "name", "policy-audit-preview",

@@ -58,7 +58,7 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 
 - [ ] Monitor `/actuator/health`, queue depth, scan durations, and ZAP availability.
 - [ ] Keep `/actuator/metrics`, `/actuator/prometheus`, and `/actuator/auditevents` on private or authenticated access paths only.
-- [ ] Monitor `asg.http.requests`, `asg.auth.events`, `asg.authorization.decisions`, `asg.tool.executions`, `asg.queue.jobs`, and `asg.audit.events`.
+- [ ] Monitor `mcp.zap.http.requests`, `mcp.zap.auth.events`, `mcp.zap.authorization.decisions`, `mcp.zap.tool.executions`, `mcp.zap.queue.jobs`, and `mcp.zap.audit.events`.
 - [ ] Monitor `mcp.protection.rate_limited`, `mcp.protection.workspace_quota_rejections`, and `mcp.protection.backpressure_rejections`.
 - [ ] Alert on repeated scan retries, stuck `RUNNING` jobs, and authentication failures.
 - [ ] Alert on sustained `429` rates so you can distinguish client abuse from capacity saturation.

@@ -1,5 +1,5 @@
 {
-  "apiVersion": "asg.policy/v1",
+  "apiVersion": "mcp.zap.policy/v1",
   "kind": "PolicyBundle",
   "metadata": {
     "name": "ci-guided-guardrails",

@@ -87,7 +87,7 @@ abstract class AbstractMcpRuntimePolicyIntegrationTest extends AbstractMcpProtec
 
     protected static String runtimePolicyBundleJson() throws Exception {
         return OBJECT_MAPPER.writeValueAsString(Map.of(
-                "apiVersion", "asg.policy/v1",
+                "apiVersion", "mcp.zap.policy/v1",
                 "kind", "PolicyBundle",
                 "metadata", Map.of(
                         "name", "runtime-policy-client-proof",

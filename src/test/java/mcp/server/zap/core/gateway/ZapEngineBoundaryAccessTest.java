@@ -306,10 +306,10 @@ class ZapEngineBoundaryAccessTest {
         when(core.version()).thenReturn(element("version", "2.17.0"));
 
         String version = runtimeAccess.readVersion();
-        runtimeAccess.applyNetworkDefaults(new NetworkDefaults("Agentic Security Gateway", 30, 60));
+        runtimeAccess.applyNetworkDefaults(new NetworkDefaults("MCP ZAP Server", 30, 60));
 
         assertThat(version).isEqualTo("2.17.0");
-        verify(network).setDefaultUserAgent("Agentic Security Gateway");
+        verify(network).setDefaultUserAgent("MCP ZAP Server");
         verify(network).setConnectionTimeout("30");
         verify(network).setDnsTtlSuccessfulQueries("60");
     }

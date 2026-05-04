@@ -156,7 +156,7 @@ class BasicPolicyBundleToolExecutionPolicyHookTest {
     private String policyBundle(String defaultDecision, String ruleJson) {
         return """
                 {
-                  "apiVersion": "asg.policy/v1",
+                  "apiVersion": "mcp.zap.policy/v1",
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "basic-runtime-rules",

@@ -29,7 +29,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class PolicyDryRunService implements PolicyBundlePreviewer {
-    public static final String DRY_RUN_CONTRACT_VERSION = "asg.policy.dry-run/v1";
+    public static final String DRY_RUN_CONTRACT_VERSION = "mcp.zap.policy.dry-run/v1";
 
     private static final Set<String> RULE_DECISIONS = Set.of("allow", "deny");
     private static final Set<String> DAY_NAMES = Set.of("mon", "tue", "wed", "thu", "fri", "sat", "sun");
@@ -136,8 +136,8 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         requireExactKeys(root, TOP_LEVEL_KEYS, "bundle", errors);
 
         String apiVersion = requiredText(root, "apiVersion", "bundle", errors);
-        if (apiVersion != null && !"asg.policy/v1".equals(apiVersion)) {
-            errors.add("bundle.apiVersion must equal 'asg.policy/v1'");
+        if (apiVersion != null && !"mcp.zap.policy/v1".equals(apiVersion)) {
+            errors.add("bundle.apiVersion must equal 'mcp.zap.policy/v1'");
         }
 
         String kind = requiredText(root, "kind", "bundle", errors);

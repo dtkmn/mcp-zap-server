@@ -1,5 +1,5 @@
 {
-  "contractVersion": "asg.policy.dry-run/v1",
+  "contractVersion": "mcp.zap.policy.dry-run/v1",
   "bundle": {},
   "request": {
     "tool": "zap_unknown_tool",

@@ -52,17 +52,17 @@ public class PostgresAdvisoryLockQueueLeadershipCoordinator implements QueueLead
         this.password = postgres.getPassword();
 
         if (meterRegistry != null) {
-            meterRegistry.gauge("asg.queue.leadership.is_leader", leaderGauge);
-            this.acquiredCounter = Counter.builder("asg.queue.leadership.transitions")
+            meterRegistry.gauge("mcp.zap.queue.leadership.is_leader", leaderGauge);
+            this.acquiredCounter = Counter.builder("mcp.zap.queue.leadership.transitions")
                     .tag("event", "acquired")
                     .register(meterRegistry);
-            this.lostCounter = Counter.builder("asg.queue.leadership.transitions")
+            this.lostCounter = Counter.builder("mcp.zap.queue.leadership.transitions")
                     .tag("event", "lost")
                     .register(meterRegistry);
-            this.heartbeatFailureCounter = Counter.builder("asg.queue.leadership.failures")
+            this.heartbeatFailureCounter = Counter.builder("mcp.zap.queue.leadership.failures")
                     .tag("type", "heartbeat")
                     .register(meterRegistry);
-            this.acquisitionFailureCounter = Counter.builder("asg.queue.leadership.failures")
+            this.acquisitionFailureCounter = Counter.builder("mcp.zap.queue.leadership.failures")
                     .tag("type", "acquire")
                     .register(meterRegistry);
         } else {

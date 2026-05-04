@@ -1847,7 +1847,7 @@ public class ScanJobQueueService {
         }
 
         private static Counter counter(MeterRegistry meterRegistry, String event) {
-            return Counter.builder("asg.queue.claim.events")
+            return Counter.builder("mcp.zap.queue.claim.events")
                     .tag("event", event)
                     .register(meterRegistry);
         }
@@ -1880,7 +1880,7 @@ public class ScanJobQueueService {
             Map<ScanJobStatus, AtomicInteger> statusGauges = new LinkedHashMap<>();
             for (ScanJobStatus status : ScanJobStatus.values()) {
                 AtomicInteger gauge = meterRegistry.gauge(
-                        "asg.queue.jobs",
+                        "mcp.zap.queue.jobs",
                         List.of(io.micrometer.core.instrument.Tag.of("status", status.name().toLowerCase(Locale.ROOT))),
                         new AtomicInteger(0)
                 );
@@ -1888,12 +1888,12 @@ public class ScanJobQueueService {
             }
 
             AtomicInteger activeClaimsGauge = meterRegistry.gauge(
-                    "asg.queue.claims",
+                    "mcp.zap.queue.claims",
                     List.of(io.micrometer.core.instrument.Tag.of("state", "active")),
                     new AtomicInteger(0)
             );
             AtomicInteger expiredClaimsGauge = meterRegistry.gauge(
-                    "asg.queue.claims",
+                    "mcp.zap.queue.claims",
                     List.of(io.micrometer.core.instrument.Tag.of("state", "expired")),
                     new AtomicInteger(0)
             );

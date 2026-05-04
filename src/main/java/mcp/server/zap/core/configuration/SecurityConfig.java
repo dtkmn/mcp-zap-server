@@ -1,30 +1,28 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import mcp.server.zap.core.logging.RequestCorrelationHolder;
-import mcp.server.zap.core.logging.RequestLogContext;
-import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.JwtService;
 import mcp.server.zap.core.service.TokenBlacklistService;
+import mcp.server.zap.core.logging.RequestLogContext;
+import mcp.server.zap.core.logging.RequestCorrelationHolder;
+import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
-import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
-import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
+import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.server.ServerWebExchange;
@@ -37,6 +35,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Security configuration for the MCP ZAP Server.
@@ -92,8 +92,8 @@ public class SecurityConfig {
 
     private final JwtProperties jwtProperties;
     private final ApiKeyProperties apiKeyProperties;
-    private final JwtService jwtService;
-    private final TokenBlacklistService tokenBlacklistService;
+    private final ObjectProvider<JwtService> jwtServiceProvider;
+    private final ObjectProvider<TokenBlacklistService> tokenBlacklistServiceProvider;
     private final ObjectMapper objectMapper;
     private final ObservabilityService observabilityService;
 
@@ -102,14 +102,14 @@ public class SecurityConfig {
 
     public SecurityConfig(JwtProperties jwtProperties,
                          ApiKeyProperties apiKeyProperties,
-                         JwtService jwtService,
-                         TokenBlacklistService tokenBlacklistService,
+                         ObjectProvider<JwtService> jwtServiceProvider,
+                         ObjectProvider<TokenBlacklistService> tokenBlacklistServiceProvider,
                          ObjectProvider<ObjectMapper> objectMapperProvider,
                          ObservabilityService observabilityService) {
         this.jwtProperties = jwtProperties;
         this.apiKeyProperties = apiKeyProperties;
-        this.jwtService = jwtService;
-        this.tokenBlacklistService = tokenBlacklistService;
+        this.jwtServiceProvider = jwtServiceProvider;
+        this.tokenBlacklistServiceProvider = tokenBlacklistServiceProvider;
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         this.observabilityService = observabilityService;
     }
@@ -256,6 +256,21 @@ public class SecurityConfig {
                     RequestLogContext.correlationId(exchange)
             );
             return unauthorizedResponse(exchange, "JWT authentication is disabled");
+        }
+
+        JwtService jwtService = jwtServiceProvider.getIfAvailable();
+        TokenBlacklistService tokenBlacklistService = tokenBlacklistServiceProvider.getIfAvailable();
+        if (jwtService == null || tokenBlacklistService == null) {
+            log.error("JWT authentication requested but JWT support beans are not available");
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "jwt_unavailable",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
+            return unauthorizedResponse(exchange, "JWT authentication is unavailable");
         }
 
         try {

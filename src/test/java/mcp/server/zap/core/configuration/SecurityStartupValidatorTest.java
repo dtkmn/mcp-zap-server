@@ -10,14 +10,14 @@ class SecurityStartupValidatorTest {
 
     @Test
     void placeholderApiKeyIsAllowedWhenExplicitlyPermitted() {
-        SecurityStartupValidator validator = validator("api-key", true, true, "changeme-default-key");
+        SecurityStartupValidator validator = validator("api-key", true, true, "changeme-default-key", false, "");
 
         assertThatCode(validator::afterPropertiesSet).doesNotThrowAnyException();
     }
 
     @Test
     void placeholderApiKeyFailsFastWhenDisallowed() {
-        SecurityStartupValidator validator = validator("api-key", true, false, "changeme-default-key");
+        SecurityStartupValidator validator = validator("api-key", true, false, "changeme-default-key", false, "");
 
         assertThatThrownBy(validator::afterPropertiesSet)
                 .isInstanceOf(IllegalStateException.class)
@@ -26,7 +26,7 @@ class SecurityStartupValidatorTest {
 
     @Test
     void blankApiKeyFailsWhenSecurityRequiresAuthentication() {
-        SecurityStartupValidator validator = validator("jwt", true, false, "");
+        SecurityStartupValidator validator = validator("jwt", true, false, "", true, "a-secure-jwt-secret-with-at-least-32chars");
 
         assertThatThrownBy(validator::afterPropertiesSet)
                 .isInstanceOf(IllegalStateException.class)
@@ -35,7 +35,50 @@ class SecurityStartupValidatorTest {
 
     @Test
     void noneModeSkipsApiKeyValidation() {
-        SecurityStartupValidator validator = validator("none", true, false, "");
+        SecurityStartupValidator validator = validator("none", true, false, "", false, "");
+
+        assertThatCode(validator::afterPropertiesSet).doesNotThrowAnyException();
+    }
+
+    @Test
+    void jwtModeRequiresJwtEnabledFlag() {
+        SecurityStartupValidator validator = validator("jwt", true, false, "real-api-key", false, "a-secure-jwt-secret-with-at-least-32chars");
+
+        assertThatThrownBy(validator::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requires JWT_ENABLED=true");
+    }
+
+    @Test
+    void jwtModeRejectsBlankJwtSecret() {
+        SecurityStartupValidator validator = validator("jwt", true, false, "real-api-key", true, "");
+
+        assertThatThrownBy(validator::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requires a non-empty JWT secret");
+    }
+
+    @Test
+    void jwtModeRejectsPlaceholderJwtSecret() {
+        SecurityStartupValidator validator = validator("jwt", true, false, "real-api-key", true, "jwt-secret-key-please-change-this-to-a-secure-random-value");
+
+        assertThatThrownBy(validator::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Placeholder JWT secret detected");
+    }
+
+    @Test
+    void jwtModeRejectsShortJwtSecret() {
+        SecurityStartupValidator validator = validator("jwt", true, false, "real-api-key", true, "short-jwt-secret");
+
+        assertThatThrownBy(validator::afterPropertiesSet)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("JWT secret must be at least 32 characters");
+    }
+
+    @Test
+    void jwtModeAcceptsValidJwtConfiguration() {
+        SecurityStartupValidator validator = validator("jwt", true, false, "real-api-key", true, "a-secure-jwt-secret-with-at-least-32chars");
 
         assertThatCode(validator::afterPropertiesSet).doesNotThrowAnyException();
     }
@@ -43,7 +86,9 @@ class SecurityStartupValidatorTest {
     private SecurityStartupValidator validator(String securityMode,
                                                boolean securityEnabled,
                                                boolean allowPlaceholderApiKey,
-                                               String apiKey) {
+                                               String apiKey,
+                                               boolean jwtEnabled,
+                                               String jwtSecret) {
         ApiKeyProperties properties = new ApiKeyProperties();
         ApiKeyProperties.ApiKeyClient client = new ApiKeyProperties.ApiKeyClient();
         client.setClientId("test-client");
@@ -59,7 +104,9 @@ class SecurityStartupValidatorTest {
                 securityMode,
                 securityEnabled,
                 allowPlaceholderApiKey,
-                apiKey
+                apiKey,
+                jwtEnabled,
+                jwtSecret
         );
     }
 }

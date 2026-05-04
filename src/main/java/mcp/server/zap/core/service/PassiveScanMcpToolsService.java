@@ -28,8 +28,8 @@ public class PassiveScanMcpToolsService {
             description = "Wait for the passive scan backlog to drain before reading findings or generating reports."
     )
     public String waitForPassiveScanCompletion(
-            @ToolParam(description = "Maximum seconds to wait before returning (optional, default: 60)") Integer timeoutSeconds,
-            @ToolParam(description = "Polling interval in milliseconds (optional, default: 1000)") Integer pollIntervalMs
+            @ToolParam(required = false, description = "Maximum seconds to wait before returning (optional, default: 60)") Integer timeoutSeconds,
+            @ToolParam(required = false, description = "Polling interval in milliseconds (optional, default: 1000)") Integer pollIntervalMs
     ) {
         return passiveScanService.waitForPassiveScanCompletion(timeoutSeconds, pollIntervalMs);
     }

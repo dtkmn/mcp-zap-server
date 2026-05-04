@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.configuration.ScanLimitProperties;
+import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
@@ -73,8 +74,9 @@ public class DirectScanServicesDockerTest {
         scanLimitProperties.setSpiderMaxDepth(5);
 
         UrlValidationService urlValidationService = mock(UrlValidationService.class);
-        activeScanService = new ActiveScanService(clientApi, urlValidationService, scanLimitProperties);
-        spiderScanService = new SpiderScanService(clientApi, urlValidationService, scanLimitProperties);
+        ZapEngineScanExecution engineScanExecution = new ZapEngineScanExecution(clientApi);
+        activeScanService = new ActiveScanService(engineScanExecution, urlValidationService, scanLimitProperties);
+        spiderScanService = new SpiderScanService(engineScanExecution, urlValidationService, scanLimitProperties);
     }
 
     @Test

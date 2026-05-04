@@ -1,14 +1,13 @@
 package mcp.server.zap.core.configuration;
 
 import jakarta.annotation.PostConstruct;
-import mcp.server.zap.core.service.authz.ToolAuthorizationService;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.stereotype.Component;
-
 import java.util.Arrays;
 import java.util.Set;
 import java.util.TreeSet;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.stereotype.Component;
+import mcp.server.zap.core.service.authz.ToolAuthorizationService;
 
 /**
  * Fails fast when a public tool is exposed without an authorization mapping.

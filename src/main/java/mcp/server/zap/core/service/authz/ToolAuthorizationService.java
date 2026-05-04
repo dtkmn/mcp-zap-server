@@ -1,14 +1,13 @@
 package mcp.server.zap.core.service.authz;
 
-import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
-import org.springframework.stereotype.Service;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
+import org.springframework.stereotype.Service;
 
 /**
  * Evaluates per-tool authorization decisions from the caller's granted scopes.

@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.any;
@@ -131,6 +132,36 @@ public class ScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.RUNNING, secondJob.getStatus());
         assertEquals("A-2", secondJob.getZapScanId());
         verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
+    }
+
+    @Test
+    void listScanJobsHidesJobsRejectedByAccessBoundary() {
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-101");
+
+        service.queueActiveScan("http://example.com", null, null, null);
+        service.setScanJobAccessBoundary(job -> false);
+
+        String summary = service.listScanJobs(null);
+
+        assertTrue(summary.contains("Total jobs: 0"));
+        assertTrue(summary.contains("Queue depth: 0"));
+        assertTrue(summary.contains("No jobs match current filter."));
+    }
+
+    @Test
+    void getScanJobStatusRejectsJobsOutsideAccessBoundary() {
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-102");
+
+        String response = service.queueActiveScan("http://example.com", null, null, null);
+        String jobId = extractJobId(response);
+        service.setScanJobAccessBoundary(job -> false);
+
+        IllegalArgumentException error = assertThrowsExactly(
+                IllegalArgumentException.class,
+                () -> service.getScanJobStatus(jobId)
+        );
+
+        assertEquals("No scan job found for ID: " + jobId, error.getMessage());
     }
 
     @Test

@@ -5,6 +5,7 @@
 package io.modelcontextprotocol.server.transport;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.common.McpTransportContext;
 import io.modelcontextprotocol.server.McpTransportContextExtractor;
@@ -32,6 +33,7 @@ import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -500,7 +502,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 		public WebFluxStreamableServerTransportProvider build() {
 			Assert.notNull(mcpEndpoint, "Message endpoint must be set");
 			return new WebFluxStreamableServerTransportProvider(
-					jsonMapper == null ? McpJsonMapper.getDefault() : jsonMapper, mcpEndpoint, contextExtractor,
+					jsonMapper == null ? new JacksonMcpJsonMapper(JsonMapper.shared()) : jsonMapper, mcpEndpoint, contextExtractor,
 					disallowDelete, keepAliveInterval);
 		}
 

@@ -3,6 +3,9 @@ package mcp.server.zap.core.service.protection;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
@@ -11,10 +14,6 @@ import mcp.server.zap.core.service.ScanJobQueueService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
 
 /**
  * Evaluates MCP request throttling, workspace quotas, and overload shedding.

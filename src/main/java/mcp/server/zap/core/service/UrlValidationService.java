@@ -11,6 +11,7 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -38,6 +39,12 @@ public class UrlValidationService {
 
     private static final Pattern IPV4_LITERAL_PATTERN = Pattern.compile(
         "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}$"
+    );
+    private static final Set<String> BUILT_IN_PRIVATE_NETWORK_SAFETY_CIDRS = Set.of(
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16"
     );
 
     /**
@@ -97,8 +104,10 @@ public class UrlValidationService {
             );
         }
 
-        // Check blacklist for hostname (but not for localhost if localhost is allowed)
-        if (!(allowLocalhost && isLocalhost(host)) && isBlacklistedHost(host)) {
+        // Check blacklist for hostname/IP literals. Allowing localhost or private-network scanning
+        // should bypass only the built-in safety guardrails, not explicit administrator blocks.
+        InetAddress hostLiteral = parseIpLiteral(host);
+        if (isBlacklistedHost(host, hostLiteral)) {
             throw new IllegalArgumentException("URL host '" + host + "' is blacklisted");
         }
 
@@ -143,7 +152,7 @@ public class UrlValidationService {
 
             // Apply blacklist checks to each resolved IP as an extra defense.
             String ipAddress = normalizeHost(address.getHostAddress());
-            if (!(allowLocalhost && address.isLoopbackAddress()) && isBlacklistedHost(ipAddress)) {
+            if (isBlacklistedHost(ipAddress, address)) {
                 throw new IllegalArgumentException("Resolved address '" + ipAddress + "' is blacklisted");
             }
         }
@@ -178,22 +187,37 @@ public class UrlValidationService {
     /**
      * Check if host is in the blacklist.
      */
-    private boolean isBlacklistedHost(String host) {
+    private boolean isBlacklistedHost(String host, InetAddress hostLiteral) {
         return blacklist.stream()
             .filter(entry -> entry != null && !entry.trim().isEmpty())
             .map(String::trim)
-            .anyMatch(pattern -> matchesBlacklistEntry(host, pattern));
+            .anyMatch(pattern -> matchesBlacklistEntry(host, hostLiteral, pattern));
     }
 
     /**
      * Match host value against wildcard or CIDR blacklist entry.
      */
-    private boolean matchesBlacklistEntry(String host, String pattern) {
+    private boolean matchesBlacklistEntry(String host, InetAddress hostLiteral, String pattern) {
         if (pattern.contains("/")) {
-            InetAddress hostAddress = parseIpLiteral(host);
-            return hostAddress != null && isInCidr(hostAddress, pattern);
+            if (hostLiteral == null || !isInCidr(hostLiteral, pattern)) {
+                return false;
+            }
+            if ((allowLocalhost && hostLiteral.isLoopbackAddress())
+                || isBypassablePrivateNetworkSafetyCidr(pattern, hostLiteral)) {
+                return false;
+            }
+            return true;
+        }
+        if (allowLocalhost && isLocalhost(host)) {
+            return false;
         }
         return matchesPattern(host, pattern);
+    }
+
+    private boolean isBypassablePrivateNetworkSafetyCidr(String pattern, InetAddress hostLiteral) {
+        return allowPrivateNetworks
+            && isPrivateNetwork(hostLiteral)
+            && BUILT_IN_PRIVATE_NETWORK_SAFETY_CIDRS.contains(pattern);
     }
 
     /**

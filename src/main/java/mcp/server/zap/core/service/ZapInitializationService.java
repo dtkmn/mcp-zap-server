@@ -3,9 +3,9 @@ package mcp.server.zap.core.service;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.ZapInitializationProperties;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.NetworkDefaults;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 /**
  * Service to initialize ZAP with custom settings at application startup.
@@ -15,14 +15,14 @@ import org.zaproxy.clientapi.core.ClientApiException;
 @Service
 public class ZapInitializationService {
 
-    private final ClientApi zap;
+    private final EngineRuntimeAccess runtimeAccess;
     private final ZapInitializationProperties properties;
 
     /**
      * Build-time dependency injection constructor.
      */
-    public ZapInitializationService(ClientApi zap, ZapInitializationProperties properties) {
-        this.zap = zap;
+    public ZapInitializationService(EngineRuntimeAccess runtimeAccess, ZapInitializationProperties properties) {
+        this.runtimeAccess = runtimeAccess;
         this.properties = properties;
     }
 
@@ -34,29 +34,11 @@ public class ZapInitializationService {
         try {
             log.info("Initializing ZAP with browser-like settings to bypass WAF...");
 
-            // Set realistic User-Agent to avoid WAF blocking (Network component API)
-            try {
-                zap.network.setDefaultUserAgent(properties.getUserAgent());
-                log.info("Set User-Agent: {}", properties.getUserAgent());
-            } catch (ClientApiException e) {
-                log.warn("Could not set User-Agent: {}", e.getMessage());
-            }
-
-            // Set connection timeout (Network component API - takes String parameter)
-            try {
-                zap.network.setConnectionTimeout(String.valueOf(properties.getConnectionTimeoutInSecs()));
-                log.info("Set connection timeout to {} seconds", properties.getConnectionTimeoutInSecs());
-            } catch (ClientApiException e) {
-                log.warn("Could not set connection timeout: {}", e.getMessage());
-            }
-
-            // Enable DNS TTL to respect DNS caching (Network component API - takes String parameter)
-            try {
-                zap.network.setDnsTtlSuccessfulQueries(String.valueOf(properties.getDnsTtlSuccessfulQueries()));
-                log.info("Set DNS TTL for successful queries to {} seconds", properties.getDnsTtlSuccessfulQueries());
-            } catch (ClientApiException e) {
-                log.debug("Could not set DNS TTL: {}", e.getMessage());
-            }
+            runtimeAccess.applyNetworkDefaults(new NetworkDefaults(
+                    properties.getUserAgent(),
+                    properties.getConnectionTimeoutInSecs(),
+                    properties.getDnsTtlSuccessfulQueries()
+            ));
 
             log.info("ZAP initialization completed successfully");
 

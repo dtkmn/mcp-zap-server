@@ -1,9 +1,8 @@
 package mcp.server.zap.core.logging;
 
-import org.springframework.web.server.ServerWebExchange;
-
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.web.server.ServerWebExchange;
 
 /**
  * Shared request diagnostics constants and correlation-id helpers.

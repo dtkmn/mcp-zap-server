@@ -1,12 +1,20 @@
 package mcp.server.zap.core.service;
 
-import mcp.server.zap.core.exception.ZapApiException;
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
+import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineAdapter;
+import mcp.server.zap.core.gateway.EngineCapability;
+import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.ScanRunRecord;
+import mcp.server.zap.core.gateway.TargetDescriptor;
+import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
+import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
+import org.springframework.stereotype.Service;
 
 /**
  * Guided scan orchestration for crawl and attack flows without exposing MCP transport details.
@@ -30,24 +38,42 @@ public class GuidedScanWorkflowService {
     private final AjaxSpiderService ajaxSpiderService;
     private final ActiveScanService activeScanService;
     private final ScanJobQueueService scanJobQueueService;
+    private final GuidedAuthSessionService guidedAuthSessionService;
+    private final EngineAdapter engineAdapter;
+    private final GatewayRecordFactory gatewayRecordFactory;
 
     public GuidedScanWorkflowService(GuidedExecutionModeResolver executionModeResolver,
                                      SpiderScanService spiderScanService,
                                      AjaxSpiderService ajaxSpiderService,
                                      ActiveScanService activeScanService,
-                                     ScanJobQueueService scanJobQueueService) {
+                                     ScanJobQueueService scanJobQueueService,
+                                     GuidedAuthSessionService guidedAuthSessionService,
+                                     EngineAdapter engineAdapter,
+                                     GatewayRecordFactory gatewayRecordFactory) {
         this.executionModeResolver = executionModeResolver;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
         this.activeScanService = activeScanService;
         this.scanJobQueueService = scanJobQueueService;
+        this.guidedAuthSessionService = guidedAuthSessionService;
+        this.engineAdapter = engineAdapter;
+        this.gatewayRecordFactory = gatewayRecordFactory;
     }
 
-    public String startCrawl(String targetUrl, String strategy, String idempotencyKey) {
+    public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "guided crawl");
+        TargetDescriptor target = gatewayRecordFactory.targetFromUrl(normalizedTargetUrl, TargetDescriptor.Kind.WEB);
+        PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
         return formatStartedOperation(
                 normalizedTargetUrl,
-                startCrawlOperation(normalizedTargetUrl, normalizeCrawlStrategy(strategy), trimToNull(idempotencyKey))
+                startCrawlOperation(
+                        normalizedTargetUrl,
+                        target,
+                        normalizeCrawlStrategy(strategy),
+                        trimToNull(idempotencyKey),
+                        preparedAuthSession
+                )
         );
     }
 
@@ -59,11 +85,14 @@ public class GuidedScanWorkflowService {
         return formatStopMessage(operationId, OperationKind.CRAWL);
     }
 
-    public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey) {
+    public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "guided attack");
+        TargetDescriptor target = gatewayRecordFactory.targetFromUrl(normalizedTargetUrl, TargetDescriptor.Kind.WEB);
+        PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
         return formatStartedOperation(
                 normalizedTargetUrl,
-                startAttackOperation(normalizedTargetUrl, recurse, policy, trimToNull(idempotencyKey))
+                startAttackOperation(normalizedTargetUrl, target, recurse, policy, trimToNull(idempotencyKey), preparedAuthSession)
         );
     }
 
@@ -75,15 +104,54 @@ public class GuidedScanWorkflowService {
         return formatStopMessage(operationId, OperationKind.ATTACK);
     }
 
-    private StartedOperation startCrawlOperation(String targetUrl, String requestedStrategy, String idempotencyKey) {
+    private StartedOperation startCrawlOperation(String targetUrl,
+                                                 TargetDescriptor target,
+                                                 String requestedStrategy,
+                                                 String idempotencyKey,
+                                                 PreparedAuthSession preparedAuthSession) {
+        if (preparedAuthSession != null && STRATEGY_BROWSER.equals(requestedStrategy)) {
+            throw new IllegalArgumentException(
+                    "Authenticated guided crawl currently supports the HTTP spider only. strategy=browser is not supported with authSessionId."
+            );
+        }
+
         GuidedExecutionModeResolver.ExecutionMode executionMode = executionModeResolver.resolveDefaultMode();
         if (executionMode == GuidedExecutionModeResolver.ExecutionMode.QUEUE) {
             String effectiveStrategy = STRATEGY_BROWSER.equals(requestedStrategy) ? STRATEGY_BROWSER : STRATEGY_HTTP;
-            String delegateResponse = STRATEGY_BROWSER.equals(effectiveStrategy)
+            String delegateResponse;
+            if (preparedAuthSession != null) {
+                delegateResponse = scanJobQueueService.queueSpiderScanAsUser(
+                        preparedAuthSession.contextId(),
+                        preparedAuthSession.userId(),
+                        targetUrl,
+                        null,
+                        "true",
+                        "false",
+                        idempotencyKey
+                );
+                effectiveStrategy = STRATEGY_HTTP;
+            } else {
+                delegateResponse = STRATEGY_BROWSER.equals(effectiveStrategy)
                     ? scanJobQueueService.queueAjaxSpiderScan(targetUrl, idempotencyKey)
                     : scanJobQueueService.queueSpiderScan(targetUrl, idempotencyKey);
-            String note = STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null;
-            return queuedOperation(OperationKind.CRAWL, effectiveStrategy, delegateResponse, note);
+            }
+            String note = preparedAuthSession != null
+                    ? "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing."
+                    : (STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null);
+            return startedOperation(
+                    OperationKind.CRAWL,
+                    GuidedExecutionModeResolver.ExecutionMode.QUEUE,
+                    effectiveStrategy,
+                    extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
+                    target,
+                    delegateResponse,
+                    note,
+                    preparedAuthSession
+            );
+        }
+
+        if (preparedAuthSession != null) {
+            return directAuthenticatedHttpCrawl(targetUrl, preparedAuthSession);
         }
 
         if (STRATEGY_BROWSER.equals(requestedStrategy)) {
@@ -100,25 +168,58 @@ public class GuidedScanWorkflowService {
         }
     }
 
-    private StartedOperation startAttackOperation(String targetUrl, String recurse, String policy, String idempotencyKey) {
+    private StartedOperation startAttackOperation(String targetUrl,
+                                                  TargetDescriptor target,
+                                                  String recurse,
+                                                  String policy,
+                                                  String idempotencyKey,
+                                                  PreparedAuthSession preparedAuthSession) {
         GuidedExecutionModeResolver.ExecutionMode executionMode = executionModeResolver.resolveDefaultMode();
         if (executionMode == GuidedExecutionModeResolver.ExecutionMode.QUEUE) {
-            return queuedOperation(
+            String delegateResponse = preparedAuthSession != null
+                    ? scanJobQueueService.queueActiveScanAsUser(
+                            preparedAuthSession.contextId(),
+                            preparedAuthSession.userId(),
+                            targetUrl,
+                            recurse,
+                            policy,
+                            idempotencyKey
+                    )
+                    : scanJobQueueService.queueActiveScan(targetUrl, recurse, policy, idempotencyKey);
+            return startedOperation(
                     OperationKind.ATTACK,
+                    GuidedExecutionModeResolver.ExecutionMode.QUEUE,
                     STRATEGY_ACTIVE,
-                    scanJobQueueService.queueActiveScan(targetUrl, recurse, policy, idempotencyKey),
-                    null
+                    extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
+                    target,
+                    delegateResponse,
+                    preparedAuthSession != null
+                            ? "Authenticated guided attack applied the prepared form-login session via ZAP context/user routing."
+                            : null,
+                    preparedAuthSession
             );
         }
 
-        String delegateResponse = activeScanService.startActiveScan(targetUrl, recurse, policy);
+        String delegateResponse = preparedAuthSession != null
+                ? activeScanService.startActiveScanAsUser(
+                        preparedAuthSession.contextId(),
+                        preparedAuthSession.userId(),
+                        targetUrl,
+                        recurse,
+                        policy
+                )
+                : activeScanService.startActiveScan(targetUrl, recurse, policy);
         return startedOperation(
                 OperationKind.ATTACK,
                 executionMode,
                 STRATEGY_ACTIVE,
                 extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
+                target,
                 delegateResponse,
-                null
+                preparedAuthSession != null
+                        ? "Authenticated guided attack applied the prepared form-login session via ZAP context/user routing."
+                        : null,
+                preparedAuthSession
         );
     }
 
@@ -129,7 +230,9 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.DIRECT,
                 STRATEGY_HTTP,
                 extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
+                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
                 delegateResponse,
+                null,
                 null
         );
     }
@@ -141,8 +244,31 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.DIRECT,
                 STRATEGY_BROWSER,
                 UUID.randomUUID().toString(),
+                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
                 delegateResponse,
-                note
+                note,
+                null
+        );
+    }
+
+    private StartedOperation directAuthenticatedHttpCrawl(String targetUrl, PreparedAuthSession preparedAuthSession) {
+        String delegateResponse = spiderScanService.startSpiderScanAsUser(
+                preparedAuthSession.contextId(),
+                preparedAuthSession.userId(),
+                targetUrl,
+                null,
+                "true",
+                "false"
+        );
+        return startedOperation(
+                OperationKind.CRAWL,
+                GuidedExecutionModeResolver.ExecutionMode.DIRECT,
+                STRATEGY_HTTP,
+                extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
+                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
+                delegateResponse,
+                "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.",
+                preparedAuthSession
         );
     }
 
@@ -152,8 +278,10 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.QUEUE,
                 strategy,
                 extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, null, "All targets"),
                 delegateResponse,
-                note
+                note,
+                null
         );
     }
 
@@ -161,9 +289,26 @@ public class GuidedScanWorkflowService {
                                               GuidedExecutionModeResolver.ExecutionMode executionMode,
                                               String strategy,
                                               String backendId,
+                                              TargetDescriptor target,
                                               String delegateResponse,
-                                              String note) {
-        return new StartedOperation(new GuidedOperation(kind, executionMode, strategy, backendId), delegateResponse, note);
+                                              String note,
+                                              PreparedAuthSession preparedAuthSession) {
+        ScanRunRecord scanRun = gatewayRecordFactory.scanRun(
+                engineAdapter,
+                backendId,
+                kind.wireValue(),
+                "started",
+                target,
+                formatExecutionMode(executionMode),
+                backendId
+        );
+        return new StartedOperation(
+                new GuidedOperation(kind, executionMode, strategy, backendId),
+                scanRun,
+                delegateResponse,
+                note,
+                preparedAuthSession
+        );
     }
 
     private String getOperationStatus(GuidedOperation operation) {
@@ -202,6 +347,11 @@ public class GuidedScanWorkflowService {
                 .append("Execution Mode: ").append(formatExecutionMode(started.operation().executionMode())).append('\n')
                 .append("Strategy: ").append(started.operation().strategy()).append('\n')
                 .append("Target URL: ").append(targetUrl).append('\n');
+        if (started.preparedAuthSession() != null) {
+            output.append("Authenticated Session: ").append(started.preparedAuthSession().sessionId()).append('\n')
+                    .append("Context ID: ").append(started.preparedAuthSession().contextId()).append('\n')
+                    .append("User ID: ").append(started.preparedAuthSession().userId()).append('\n');
+        }
         if (hasText(started.note())) {
             output.append("Note: ").append(started.note().trim()).append('\n');
         }
@@ -335,6 +485,39 @@ public class GuidedScanWorkflowService {
         }
     }
 
+    private PreparedAuthSession resolvePreparedFormSession(String authSessionId, String targetUrl) {
+        if (!hasText(authSessionId)) {
+            return null;
+        }
+        PreparedAuthSession session = guidedAuthSessionService.getPreparedSession(authSessionId);
+        if (session.authKind() != AuthBootstrapKind.FORM) {
+            throw new IllegalArgumentException(
+                    "Authenticated guided scan execution currently supports form-login sessions only. Re-prepare a form session or omit authSessionId."
+            );
+        }
+        if (!session.engineBound() || !hasText(session.contextId()) || !hasText(session.userId())) {
+            throw new IllegalArgumentException(
+                    "Prepared auth session is not bound to a reusable ZAP context/user. Re-run zap_auth_session_prepare for a form-login flow."
+            );
+        }
+        if (!sameAuthority(targetUrl, session.target().baseUrl())) {
+            throw new IllegalArgumentException(
+                    "authSessionId target host does not match the requested targetUrl. Reuse the session only on the same app host."
+            );
+        }
+        return session;
+    }
+
+    private boolean sameAuthority(String left, String right) {
+        URI leftUri = URI.create(requireText(left, "targetUrl"));
+        URI rightUri = URI.create(requireText(right, "sessionTargetUrl"));
+        String leftScheme = leftUri.getScheme() == null ? "" : leftUri.getScheme().trim().toLowerCase(Locale.ROOT);
+        String rightScheme = rightUri.getScheme() == null ? "" : rightUri.getScheme().trim().toLowerCase(Locale.ROOT);
+        String leftAuthority = leftUri.getAuthority() == null ? "" : leftUri.getAuthority().trim().toLowerCase(Locale.ROOT);
+        String rightAuthority = rightUri.getAuthority() == null ? "" : rightUri.getAuthority().trim().toLowerCase(Locale.ROOT);
+        return leftScheme.equals(rightScheme) && leftAuthority.equals(rightAuthority);
+    }
+
     private record GuidedOperation(
             OperationKind kind,
             GuidedExecutionModeResolver.ExecutionMode executionMode,
@@ -343,7 +526,13 @@ public class GuidedScanWorkflowService {
     ) {
     }
 
-    private record StartedOperation(GuidedOperation operation, String delegateResponse, String note) {
+    private record StartedOperation(
+            GuidedOperation operation,
+            ScanRunRecord scanRun,
+            String delegateResponse,
+            String note,
+            PreparedAuthSession preparedAuthSession
+    ) {
     }
 
     private enum OperationKind {

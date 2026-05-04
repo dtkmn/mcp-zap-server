@@ -1,0 +1,89 @@
+{
+  "title": "Agentic Security Gateway Observability",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "title": "HTTP Request Rate",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_http_requests_seconds_count{path!=\"/actuator/health\"}[5m])) by (path, outcome)",
+          "legendFormat": "{{path}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "title": "Authentication Events",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_auth_events_total[5m])) by (method, outcome, reason)",
+          "legendFormat": "{{method}} {{outcome}} {{reason}}"
+        }
+      ]
+    },
+    {
+      "title": "Authorization Decisions",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_authorization_decisions_total[5m])) by (action, outcome)",
+          "legendFormat": "{{action}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "title": "Tool Execution Throughput",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_tool_executions_seconds_count[5m])) by (tool, outcome)",
+          "legendFormat": "{{tool}} {{outcome}}"
+        }
+      ]
+    },
+    {
+      "title": "Average Tool Duration",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_tool_executions_seconds_sum[5m])) by (tool) / sum(rate(asg_tool_executions_seconds_count[5m])) by (tool)",
+          "legendFormat": "{{tool}} avg"
+        }
+      ]
+    },
+    {
+      "title": "Protection Rejections",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_protection_rejections_total[5m])) by (error, reason, toolFamily)",
+          "legendFormat": "{{error}} {{reason}} {{toolFamily}}"
+        }
+      ]
+    },
+    {
+      "title": "Queue Jobs By Status",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "asg_queue_jobs",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "title": "Audit Event Volume",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(rate(asg_audit_events_total[5m])) by (type, outcome)",
+          "legendFormat": "{{type}} {{outcome}}"
+        }
+      ]
+    }
+  ]
+}

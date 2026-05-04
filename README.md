@@ -54,6 +54,7 @@ See [RELEASE_NOTES_0.6.1.md](./RELEASE_NOTES_0.6.1.md) and [CHANGELOG.md](./CHAN
 - [AJAX Spider Guide](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/) - Browser-backed crawling for JavaScript-heavy or authenticated applications
 - [Queue Retry Policy](https://danieltse.org/mcp-zap-server/operations/scan-queue-retry-policy/) - Default retry/backoff by scan type
 - [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/) - Claim-based HA queue recovery and optional coordinator signals
+- [Scan History Ledger](https://danieltse.org/mcp-zap-server/operations/scan-history-ledger/) - Queryable scan, queue, and report evidence
 - [Local HA Compose Simulation](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/) - Run 3 MCP replicas with shared Postgres and a local ingress
 - [Kubernetes Deployment](./helm/README.md) - Helm charts for production
 
@@ -90,6 +91,7 @@ See [RELEASE_NOTES_0.6.1.md](./RELEASE_NOTES_0.6.1.md) and [CHANGELOG.md](./CHAN
 - **Findings and report workflows**: Generate HTML/JSON reports, drill into findings, and compare findings snapshots across runs.
 - **Automation and API schema support**: Run ZAP Automation Framework plans and import OpenAPI, GraphQL, and SOAP/WSDL definitions.
 - **Scan queue v1**: Queue active, spider, and AJAX Spider scans with job lifecycle states, retries, dead-letter handling, and optional durable Postgres state.
+- **Scan history ledger**: Query queue jobs, direct scan starts, and generated report artifacts for release or handoff evidence.
 - **Operational guardrails**: Enforce tool scopes, rate limits, workspace quotas, and structured request correlation for shared deployments.
 - **Dockerized**: Runs ZAP and the MCP server in containers, orchestrated via docker-compose
 - **Secure**: Configure API keys for both ZAP (ZAP_API_KEY) and the MCP server (MCP_API_KEY)

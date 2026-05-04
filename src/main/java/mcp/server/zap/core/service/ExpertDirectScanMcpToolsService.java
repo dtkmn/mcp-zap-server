@@ -35,8 +35,8 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
     )
     public String viewScanPolicy(
             @ToolParam(description = "Exact active-scan policy name from zap_scan_policies_list") String scanPolicyName,
-            @ToolParam(description = "Optional exact rule ID or case-insensitive name fragment to narrow the rule list") String ruleFilter,
-            @ToolParam(description = "Optional max number of rules to display (default: 25, max: 100)") String limit
+            @ToolParam(required = false, description = "Optional exact rule ID or case-insensitive name fragment to narrow the rule list") String ruleFilter,
+            @ToolParam(required = false, description = "Optional max number of rules to display (default: 25, max: 100)") String limit
     ) {
         return activeScanService.viewScanPolicy(scanPolicyName, ruleFilter, limit);
     }
@@ -48,9 +48,9 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
     public String setScanPolicyRuleState(
             @ToolParam(description = "Exact active-scan policy name from zap_scan_policies_list") String scanPolicyName,
             @ToolParam(description = "Comma, whitespace, or newline separated numeric scanner rule IDs to change") String ruleIds,
-            @ToolParam(description = "Optional true to enable or false to disable the listed rules") String enabled,
-            @ToolParam(description = "Optional attack strength override") String attackStrength,
-            @ToolParam(description = "Optional alert threshold override") String alertThreshold
+            @ToolParam(required = false, description = "Optional true to enable or false to disable the listed rules") String enabled,
+            @ToolParam(required = false, description = "Optional attack strength override") String attackStrength,
+            @ToolParam(required = false, description = "Optional alert threshold override") String alertThreshold
     ) {
         return activeScanService.setScanPolicyRuleState(scanPolicyName, ruleIds, enabled, attackStrength, alertThreshold);
     }
@@ -61,8 +61,8 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
     )
     public String startActiveScan(
             @ToolParam(description = "Target URL to active scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy
+            @ToolParam(required = false, description = "Recurse into sub-paths? (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Scan policy name (optional)") String policy
     ) {
         return activeScanService.startActiveScan(targetUrl, recurse, policy);
     }
@@ -75,8 +75,8 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "ZAP user ID") String userId,
             @ToolParam(description = "Target URL to active scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy
+            @ToolParam(required = false, description = "Recurse into sub-paths? (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Scan policy name (optional)") String policy
     ) {
         return activeScanService.startActiveScanAsUser(contextId, userId, targetUrl, recurse, policy);
     }
@@ -119,9 +119,9 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "ZAP user ID") String userId,
             @ToolParam(description = "Target URL to spider") String targetUrl,
-            @ToolParam(description = "Maximum children to crawl (optional)") String maxChildren,
-            @ToolParam(description = "Recurse into sub-paths? true/false (optional, default: true)") String recurse,
-            @ToolParam(description = "Restrict to subtree only? true/false (optional, default: false)") String subtreeOnly
+            @ToolParam(required = false, description = "Maximum children to crawl (optional)") String maxChildren,
+            @ToolParam(required = false, description = "Recurse into sub-paths? true/false (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Restrict to subtree only? true/false (optional, default: false)") String subtreeOnly
     ) {
         return spiderScanService.startSpiderScanAsUser(contextId, userId, targetUrl, maxChildren, recurse, subtreeOnly);
     }

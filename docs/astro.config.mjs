@@ -75,6 +75,7 @@ export default defineConfig({
 						{ slug: 'operations/local-ha-compose' },
 						{ slug: 'operations/queue-coordinator-leader-election' },
 						{ slug: 'operations/scan-queue-retry-policy' },
+						{ slug: 'operations/scan-history-ledger' },
 						{ slug: 'operations/native-image-performance' },
 					],
 				},

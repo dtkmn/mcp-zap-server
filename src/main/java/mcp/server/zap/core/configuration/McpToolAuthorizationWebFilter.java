@@ -2,12 +2,18 @@ package mcp.server.zap.core.configuration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolAuthorizationDecision;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
@@ -28,15 +34,8 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Enforces tool-level scope authorization for MCP JSON-RPC requests.

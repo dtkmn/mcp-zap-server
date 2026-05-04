@@ -2,6 +2,7 @@ package mcp.server.zap.core.service;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import mcp.server.zap.core.gateway.ZapEngineAutomationAccess;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -29,6 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class AutomationPlanServiceDockerTest {
     private static final Pattern PLAN_ID_PATTERN = Pattern.compile("Plan ID: ([^\\n]+)");
     private static final Pattern PLAN_FILE_PATTERN = Pattern.compile("Plan File: ([^\\n]+)");
+    private static final Duration ZAP_API_READY_TIMEOUT = Duration.ofSeconds(90);
+    private static final Duration AUTOMATION_API_READY_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration AUTOMATION_PLAN_COMPLETION_TIMEOUT = Duration.ofSeconds(30);
     private static final Network NETWORK = Network.newNetwork();
     private static final Path AUTOMATION_ROOT = createAutomationRoot();
     private static final Path AUTOMATION_READINESS_PLAN = createAutomationReadinessPlan();
@@ -76,7 +80,7 @@ public class AutomationPlanServiceDockerTest {
         awaitApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 
-        service = new AutomationPlanService(clientApi);
+        service = new AutomationPlanService(new ZapEngineAutomationAccess(clientApi));
         ReflectionTestUtils.setField(service, "automationLocalDirectory", AUTOMATION_ROOT.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", AUTOMATION_ROOT.toString());
     }
@@ -128,7 +132,7 @@ public class AutomationPlanServiceDockerTest {
     }
 
     private static void awaitApiReady(ClientApi clientApi) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        long deadline = System.nanoTime() + ZAP_API_READY_TIMEOUT.toNanos();
         while (System.nanoTime() < deadline) {
             try {
                 clientApi.core.version();
@@ -137,11 +141,12 @@ public class AutomationPlanServiceDockerTest {
                 Thread.sleep(500);
             }
         }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
+        throw new IllegalStateException(
+                "ZAP API did not become ready within " + ZAP_API_READY_TIMEOUT.toSeconds() + " seconds");
     }
 
     private static void awaitAutomationApiReady(ClientApi clientApi) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(120).toNanos();
+        long deadline = System.nanoTime() + AUTOMATION_API_READY_TIMEOUT.toNanos();
         while (System.nanoTime() < deadline) {
             try {
                 ApiResponse response = clientApi.automation.runPlan(AUTOMATION_READINESS_PLAN.toString());
@@ -156,11 +161,14 @@ public class AutomationPlanServiceDockerTest {
                 throw new IllegalStateException("Automation API probe failed unexpectedly: " + e.getMessage(), e);
             }
         }
-        throw new IllegalStateException("Automation API did not become ready within 120 seconds");
+        throw new IllegalStateException(
+                "Automation API did not become ready within "
+                        + AUTOMATION_API_READY_TIMEOUT.toSeconds()
+                        + " seconds");
     }
 
     private static void awaitProbePlanCompletion(ClientApi clientApi, String planId) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        long deadline = System.nanoTime() + AUTOMATION_PLAN_COMPLETION_TIMEOUT.toNanos();
         while (System.nanoTime() < deadline) {
             ApiResponse response = clientApi.automation.planProgress(planId);
             if (response instanceof ApiResponseSet responseSet) {
@@ -171,7 +179,10 @@ public class AutomationPlanServiceDockerTest {
             }
             Thread.sleep(500);
         }
-        throw new IllegalStateException("Automation readiness probe plan did not complete in time");
+        throw new IllegalStateException(
+                "Automation readiness probe plan did not complete within "
+                        + AUTOMATION_PLAN_COMPLETION_TIMEOUT.toSeconds()
+                        + " seconds");
     }
 
     private static String awaitCompletedStatus(String planId) throws Exception {

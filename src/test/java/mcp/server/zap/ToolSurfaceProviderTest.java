@@ -1,5 +1,15 @@
 package mcp.server.zap;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
+import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.configuration.ToolSurfaceProperties;
 import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AjaxSpiderService;
@@ -11,10 +21,12 @@ import mcp.server.zap.core.service.ExpertAutomationMcpToolsService;
 import mcp.server.zap.core.service.ExpertDirectScanMcpToolsService;
 import mcp.server.zap.core.service.ExpertImportMcpToolsService;
 import mcp.server.zap.core.service.ExpertInventoryMcpToolsService;
+import mcp.server.zap.core.service.ExpertPolicyMcpToolsService;
 import mcp.server.zap.core.service.ExpertQueueMcpToolsService;
 import mcp.server.zap.core.service.ExpertResultsMcpToolsService;
 import mcp.server.zap.core.service.ExpertToolGroup;
 import mcp.server.zap.core.service.FindingsService;
+import mcp.server.zap.core.service.GuidedAuthSessionMcpToolsService;
 import mcp.server.zap.core.service.GuidedExecutionModeResolver;
 import mcp.server.zap.core.service.GuidedScanWorkflowService;
 import mcp.server.zap.core.service.GuidedSecurityToolsService;
@@ -22,29 +34,33 @@ import mcp.server.zap.core.service.OpenApiService;
 import mcp.server.zap.core.service.PassiveScanMcpToolsService;
 import mcp.server.zap.core.service.PassiveScanService;
 import mcp.server.zap.core.service.ReportService;
+import mcp.server.zap.core.service.ScanHistoryMcpToolsService;
 import mcp.server.zap.core.service.ScanJobQueueService;
 import mcp.server.zap.core.service.SpiderScanService;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.core.service.policy.PolicyDryRunService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.model.ToolContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
-import org.zaproxy.clientapi.core.ClientApi;
-
 import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class ToolSurfaceProviderTest {
 
+    private static final Path TOOL_SURFACE_SNAPSHOT_ROOT = Path.of("src/test/resources/mcp-tool-surface");
+
     private GuidedSecurityToolsService guidedSecurityToolsService;
+    private GuidedAuthSessionMcpToolsService guidedAuthSessionMcpToolsService;
     private PassiveScanMcpToolsService passiveScanMcpToolsService;
+    private ScanHistoryMcpToolsService scanHistoryMcpToolsService;
     private List<ExpertToolGroup> expertToolGroups;
 
     @BeforeEach
@@ -55,13 +71,24 @@ class ToolSurfaceProviderTest {
                         mock(SpiderScanService.class),
                         mock(AjaxSpiderService.class),
                         mock(ActiveScanService.class),
-                        mock(ScanJobQueueService.class)
+                        mock(ScanJobQueueService.class),
+                        mock(GuidedAuthSessionService.class),
+                        new ZapEngineAdapter(),
+                        new GatewayRecordFactory()
                 ),
                 mock(ReportService.class),
                 mock(FindingsService.class),
-                mock(OpenApiService.class)
+                mock(OpenApiService.class),
+                new ZapEngineAdapter(),
+                new GatewayRecordFactory()
         );
-        passiveScanMcpToolsService = new PassiveScanMcpToolsService(new PassiveScanService(mock(ClientApi.class)));
+        guidedAuthSessionMcpToolsService = new GuidedAuthSessionMcpToolsService(
+                mock(mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService.class)
+        );
+        passiveScanMcpToolsService = new PassiveScanMcpToolsService(
+                new PassiveScanService(mock(EnginePassiveScanAccess.class))
+        );
+        scanHistoryMcpToolsService = new ScanHistoryMcpToolsService(mock(ScanHistoryLedgerService.class));
         expertToolGroups = List.of(
                 new ExpertInventoryMcpToolsService(mock(CoreService.class)),
                 new ExpertDirectScanMcpToolsService(
@@ -75,50 +102,76 @@ class ToolSurfaceProviderTest {
                         mock(FindingsService.class),
                         mock(ReportService.class)
                 ),
+                new ExpertPolicyMcpToolsService(
+                        new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry())
+                ),
                 new ExpertAuthMcpToolsService(mock(ContextUserService.class)),
                 new ExpertAutomationMcpToolsService(mock(AutomationPlanService.class))
         );
     }
 
     @Test
-    void guidedSurfaceRegistersOnlyGuidedAndPassiveTools() {
+    void guidedSurfaceRegistersOnlyGuidedAndPassiveTools() throws IOException {
         ToolSurfaceProperties properties = new ToolSurfaceProperties();
         properties.setSurface(ToolSurfaceProperties.Surface.GUIDED);
 
         ToolCallbackProvider provider = new McpServerApplication().toolCallbackProvider(
                 properties,
                 guidedSecurityToolsService,
+                guidedAuthSessionMcpToolsService,
                 passiveScanMcpToolsService,
+                scanHistoryMcpToolsService,
                 expertToolGroups
         );
 
-        Set<String> toolNames = Arrays.stream(provider.getToolCallbacks())
-                .map(callback -> callback.getToolDefinition().name())
-                .collect(Collectors.toSet());
+        Set<String> toolNames = toolNames(provider);
+
+        assertThat(toolNames).containsExactlyInAnyOrderElementsOf(snapshotToolNames("guided-tools.txt"));
+    }
+
+    @Test
+    void expertSurfaceKeepsRepresentativeGuidedAndExpertZapTools() {
+        ToolSurfaceProperties properties = new ToolSurfaceProperties();
+        properties.setSurface(ToolSurfaceProperties.Surface.EXPERT);
+
+        ToolCallbackProvider provider = new McpServerApplication().toolCallbackProvider(
+                properties,
+                guidedSecurityToolsService,
+                guidedAuthSessionMcpToolsService,
+                passiveScanMcpToolsService,
+                scanHistoryMcpToolsService,
+                expertToolGroups
+        );
+
+        Set<String> toolNames = toolNames(provider);
 
         assertThat(toolNames).contains(
-                "zap_target_import",
-                "zap_crawl_start",
-                "zap_crawl_status",
-                "zap_crawl_stop",
                 "zap_attack_start",
-                "zap_attack_status",
-                "zap_attack_stop",
                 "zap_findings_summary",
-                "zap_findings_details",
                 "zap_report_generate",
-                "zap_passive_scan_status",
-                "zap_passive_scan_wait"
-        );
-        assertThat(toolNames).doesNotContain(
-                "zap_spider_start",
-                "zap_ajax_spider",
-                "zap_queue_spider_scan",
                 "zap_active_scan_start",
-                "zap_generate_report",
+                "zap_queue_active_scan",
                 "zap_get_findings_summary",
-                "zap_import_openapi_spec_url"
+                "zap_generate_report",
+                "zap_policy_dry_run"
         );
+    }
+
+    @Test
+    void expertSurfaceSnapshotRemainsStableDuringGatewayAdapterWork() throws IOException {
+        ToolSurfaceProperties properties = new ToolSurfaceProperties();
+        properties.setSurface(ToolSurfaceProperties.Surface.EXPERT);
+
+        ToolCallbackProvider provider = new McpServerApplication().toolCallbackProvider(
+                properties,
+                guidedSecurityToolsService,
+                guidedAuthSessionMcpToolsService,
+                passiveScanMcpToolsService,
+                scanHistoryMcpToolsService,
+                expertToolGroups
+        );
+
+        assertThat(toolNames(provider)).containsExactlyInAnyOrderElementsOf(snapshotToolNames("expert-tools.txt"));
     }
 
     @Test
@@ -161,15 +214,18 @@ class ToolSurfaceProviderTest {
         assertThat(hasToolContextParameters(ScanJobQueueService.class)).isFalse();
         assertThat(hasToolContextParameters(AutomationPlanService.class)).isFalse();
         assertThat(hasToolContextParameters(GuidedSecurityToolsService.class)).isFalse();
+        assertThat(hasToolContextParameters(GuidedAuthSessionMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(GuidedScanWorkflowService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertInventoryMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertDirectScanMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertQueueMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertImportMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertResultsMcpToolsService.class)).isFalse();
+        assertThat(hasToolContextParameters(ExpertPolicyMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertAuthMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(ExpertAutomationMcpToolsService.class)).isFalse();
         assertThat(hasToolContextParameters(PassiveScanMcpToolsService.class)).isFalse();
+        assertThat(hasToolContextParameters(ScanHistoryMcpToolsService.class)).isFalse();
     }
 
     @Test
@@ -178,16 +234,19 @@ class ToolSurfaceProviderTest {
                 "startCrawl",
                 String.class,
                 String.class,
+                String.class,
                 String.class
         );
 
         Tool tool = method.getAnnotation(Tool.class);
         ToolParam strategyParam = method.getParameters()[1].getAnnotation(ToolParam.class);
         ToolParam targetUrlParam = method.getParameters()[0].getAnnotation(ToolParam.class);
+        ToolParam authSessionParam = method.getParameters()[3].getAnnotation(ToolParam.class);
 
-        assertThat(tool.description()).contains("direct", "queued", "http", "browser");
+        assertThat(tool.description()).contains("direct", "queued", "http", "browser", "authSessionId", "form-login");
         assertThat(strategyParam.description()).contains("auto", "http", "browser", "SPAs");
         assertThat(targetUrlParam.description()).contains("host", "root URL");
+        assertThat(authSessionParam.description()).contains("prepared auth session ID", "form-login", "browser");
     }
 
     @Test
@@ -236,5 +295,18 @@ class ToolSurfaceProviderTest {
         return Arrays.stream(type.getDeclaredMethods())
                 .flatMap(method -> Arrays.stream(method.getParameterTypes()))
                 .anyMatch(parameterType -> parameterType == ToolContext.class);
+    }
+
+    private Set<String> toolNames(ToolCallbackProvider provider) {
+        return Arrays.stream(provider.getToolCallbacks())
+                .map(callback -> callback.getToolDefinition().name())
+                .collect(Collectors.toSet());
+    }
+
+    private List<String> snapshotToolNames(String fileName) throws IOException {
+        return Files.readAllLines(TOOL_SURFACE_SNAPSHOT_ROOT.resolve(fileName)).stream()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .toList();
     }
 }

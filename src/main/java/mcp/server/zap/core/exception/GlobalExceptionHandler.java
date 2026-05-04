@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.server.MissingRequestValueException;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.ServerWebInputException;
@@ -72,6 +73,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex, ServerWebExchange exchange) {
         log.error("Illegal state: {}", ex.getMessage(), ex);
         return buildErrorResponse(exchange, HttpStatus.INTERNAL_SERVER_ERROR, "Server Error", ex.getMessage());
+    }
+
+    /**
+     * Handle runtime policy denials as explicit forbidden responses.
+     */
+    @ExceptionHandler(ToolPolicyDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleToolPolicyDeniedException(ToolPolicyDeniedException ex,
+                                                                               ServerWebExchange exchange) {
+        log.warn("Tool policy denied request: {}", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.FORBIDDEN, "Policy Denied", ex.getMessage());
+    }
+
+    /**
+     * Preserve 404 semantics for missing routes/static resources.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFoundException(NoResourceFoundException ex,
+                                                                              ServerWebExchange exchange) {
+        log.warn("Resource not found: {}", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
     /**

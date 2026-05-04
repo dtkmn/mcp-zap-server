@@ -1,0 +1,82 @@
+{
+  "apiVersion": "asg.policy/v1",
+  "kind": "PolicyBundle",
+  "metadata": {
+    "name": "ci-guided-guardrails",
+    "displayName": "CI Guided Guardrails",
+    "description": "Allow the guided CI path on sandbox hosts during staffed hours and make production attack attempts an explicit deny.",
+    "owner": "security-platform",
+    "labels": {
+      "channel": "ci",
+      "surface": "guided"
+    }
+  },
+  "spec": {
+    "defaultDecision": "deny",
+    "evaluationOrder": "first-match",
+    "timezone": "Australia/Sydney",
+    "rules": [
+      {
+        "id": "deny-production-attack-tools",
+        "description": "Never let CI launch crawl or attack tools against production hosts.",
+        "decision": "deny",
+        "reason": "Production hosts stay outside the autonomous CI attack path.",
+        "match": {
+          "tools": [
+            "zap_crawl_start",
+            "zap_attack_start",
+            "zap_active_scan_start",
+            "zap_queue_active_scan",
+            "zap_spider_start",
+            "zap_queue_spider_scan",
+            "zap_ajax_spider",
+            "zap_queue_ajax_spider"
+          ],
+          "hosts": [
+            "*.prod.example.com",
+            "payments.example.com"
+          ]
+        }
+      },
+      {
+        "id": "allow-guided-ci-sandbox-hours",
+        "description": "Permit the guided import, crawl, attack, findings, and report path for sandbox hosts during staffed hours.",
+        "decision": "allow",
+        "reason": "Sandbox CI is approved during staffed rollout hours.",
+        "match": {
+          "tools": [
+            "zap_target_import",
+            "zap_crawl_start",
+            "zap_crawl_status",
+            "zap_attack_start",
+            "zap_attack_status",
+            "zap_findings_summary",
+            "zap_findings_details",
+            "zap_report_generate"
+          ],
+          "hosts": [
+            "*.sandbox.example.com",
+            "juice-shop",
+            "petstore"
+          ],
+          "timeWindows": [
+            {
+              "days": ["mon", "tue", "wed", "thu", "fri"],
+              "start": "08:00",
+              "end": "18:00"
+            }
+          ]
+        }
+      },
+      {
+        "id": "allow-tool-discovery",
+        "description": "Allow CI clients to discover the approved tool surface before execution.",
+        "decision": "allow",
+        "reason": "MCP clients need tool discovery before selecting the approved guided path.",
+        "match": {
+          "tools": ["mcp:tools:list"]
+        }
+      }
+    ]
+  }
+}

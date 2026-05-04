@@ -1,31 +1,26 @@
 package mcp.server.zap.core.service;
 
-import lombok.extern.slf4j.Slf4j;
-import mcp.server.zap.core.configuration.ScanLimitProperties;
-import mcp.server.zap.core.exception.ZapApiException;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.OperationRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
-
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import mcp.server.zap.core.configuration.ScanLimitProperties;
+import mcp.server.zap.core.gateway.EngineScanExecution;
+import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
+import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
+import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
+import mcp.server.zap.core.gateway.EngineScanExecution.PolicyCategorySnapshot;
+import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.OperationRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 /**
  * Service for direct and queue-managed active scan operations.
  */
-@Slf4j
 @Service
 public class ActiveScanService {
     private static final int DEFAULT_POLICY_VIEW_LIMIT = 25;
@@ -36,19 +31,20 @@ public class ActiveScanService {
     private static final Set<String> VALID_ALERT_THRESHOLDS =
             Set.of("DEFAULT", "LOW", "MEDIUM", "HIGH", "OFF");
 
-    private final ClientApi zap;
+    private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
+    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     /**
      * Build-time dependency injection constructor.
      */
-    public ActiveScanService(ClientApi zap, 
-                            UrlValidationService urlValidationService,
-                            ScanLimitProperties scanLimitProperties) {
-        this.zap = zap;
+    public ActiveScanService(EngineScanExecution engineScanExecution,
+                             UrlValidationService urlValidationService,
+                             ScanLimitProperties scanLimitProperties) {
+        this.engineScanExecution = engineScanExecution;
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
     }
@@ -61,6 +57,11 @@ public class ActiveScanService {
     @Autowired(required = false)
     void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
         this.clientWorkspaceResolver = clientWorkspaceResolver;
+    }
+
+    @Autowired(required = false)
+    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
+        this.scanHistoryLedgerService = scanHistoryLedgerService;
     }
 
     /**
@@ -142,47 +143,28 @@ public class ActiveScanService {
                     "Unknown rule IDs for policy '" + normalizedPolicyName + "': " + String.join(", ", missingRuleIds));
         }
 
-        try {
-            String joinedRuleIds = String.join(",", normalizedRuleIds);
-            if (normalizedEnabled != null) {
-                if (normalizedEnabled) {
-                    zap.ascan.enableScanners(joinedRuleIds, normalizedPolicyName);
-                } else {
-                    zap.ascan.disableScanners(joinedRuleIds, normalizedPolicyName);
-                }
-            }
-
-            for (String ruleId : normalizedRuleIds) {
-                if (normalizedAttackStrength != null) {
-                    zap.ascan.setScannerAttackStrength(ruleId, normalizedAttackStrength, normalizedPolicyName);
-                }
-                if (normalizedAlertThreshold != null) {
-                    zap.ascan.setScannerAlertThreshold(ruleId, normalizedAlertThreshold, normalizedPolicyName);
-                }
-            }
-
-            Map<String, ScannerRuleSnapshot> updatedRulesById = loadPolicyScanners(normalizedPolicyName).stream()
-                    .collect(java.util.stream.Collectors.toMap(
-                            ScannerRuleSnapshot::id,
-                            rule -> rule,
-                            (left, right) -> left,
-                            java.util.LinkedHashMap::new
-                    ));
-            return formatScanPolicyUpdateResult(
-                    normalizedPolicyName,
-                    normalizedRuleIds,
-                    normalizedEnabled,
-                    normalizedAttackStrength,
-                    normalizedAlertThreshold,
-                    updatedRulesById
-            );
-        } catch (ClientApiException e) {
-            log.error("Error updating scan policy {} for rules {}: {}", normalizedPolicyName, normalizedRuleIds, e.getMessage(), e);
-            throw new ZapApiException(
-                    "Error updating scan policy " + normalizedPolicyName + " for rules " + String.join(", ", normalizedRuleIds),
-                    e
-            );
-        }
+        engineScanExecution.updateActiveScanRuleState(new ActiveScanRuleMutation(
+                normalizedPolicyName,
+                normalizedRuleIds,
+                normalizedEnabled,
+                normalizedAttackStrength,
+                normalizedAlertThreshold
+        ));
+        Map<String, ScannerRuleSnapshot> updatedRulesById = loadPolicyScanners(normalizedPolicyName).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ScannerRuleSnapshot::id,
+                        rule -> rule,
+                        (left, right) -> left,
+                        java.util.LinkedHashMap::new
+                ));
+        return formatScanPolicyUpdateResult(
+                normalizedPolicyName,
+                normalizedRuleIds,
+                normalizedEnabled,
+                normalizedAttackStrength,
+                normalizedAlertThreshold,
+                updatedRulesById
+        );
     }
 
     public String startActiveScan(
@@ -194,6 +176,10 @@ public class ActiveScanService {
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
         String scanId = startActiveScanJob(targetUrl, effectiveRecurse, effectivePolicy);
         trackDirectScanStarted(scanId, resolveWorkspaceId());
+        recordDirectScanStarted("active_scan", scanId, targetUrl, Map.of(
+                "recurse", effectiveRecurse,
+                "policy", effectivePolicy == null ? "default" : effectivePolicy
+        ));
         return formatDirectStartMessage(scanId, targetUrl, effectiveRecurse, effectivePolicy);
     }
 
@@ -208,6 +194,11 @@ public class ActiveScanService {
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
         String scanId = startActiveScanAsUserJob(contextId, userId, targetUrl, effectiveRecurse, effectivePolicy);
         trackDirectScanStarted(scanId, resolveWorkspaceId());
+        recordDirectScanStarted("active_scan_as_user", scanId, targetUrl, Map.of(
+                "authenticated", "true",
+                "recurse", effectiveRecurse,
+                "policy", effectivePolicy == null ? "default" : effectivePolicy
+        ));
         return formatDirectAuthenticatedStartMessage(scanId, contextId, userId, targetUrl, effectiveRecurse, effectivePolicy);
     }
 
@@ -252,33 +243,14 @@ public class ActiveScanService {
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        try {
-            zap.ascan.enableAllScanners(null);
-            zap.ascan.setOptionMaxScanDurationInMins(scanLimitProperties.getMaxActiveScanDurationInMins());
-            zap.ascan.setOptionHostPerScan(scanLimitProperties.getHostPerScan());
-            zap.ascan.setOptionThreadPerHost(scanLimitProperties.getThreadPerHost());
-
-            ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scan(
-                    targetUrl,
-                    effectiveRecurse,
-                    "false",
-                    effectivePolicy,
-                    null,
-                    null
-            );
-
-            if (scanResp == null) {
-                throw new IllegalStateException("Failed to start scan on " + targetUrl + ": received null response");
-            }
-
-            String scanId = scanResp.getValue();
-            log.info("Started active scan with ID {} on {} with policy: {}, maxDuration: {} mins",
-                    scanId, targetUrl, effectivePolicy, scanLimitProperties.getMaxActiveScanDurationInMins());
-            return scanId;
-        } catch (ClientApiException e) {
-            log.error("Error starting active scan on {}: {}", targetUrl, e.getMessage(), e);
-            throw new ZapApiException("Error starting active scan on " + targetUrl + ": " + e.getMessage(), e);
-        }
+        return engineScanExecution.startActiveScan(new ActiveScanRequest(
+                targetUrl,
+                effectiveRecurse,
+                effectivePolicy,
+                scanLimitProperties.getMaxActiveScanDurationInMins(),
+                scanLimitProperties.getHostPerScan(),
+                scanLimitProperties.getThreadPerHost()
+        ));
     }
 
     /**
@@ -296,79 +268,34 @@ public class ActiveScanService {
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        try {
-            zap.ascan.enableAllScanners(null);
-            zap.ascan.setOptionMaxScanDurationInMins(scanLimitProperties.getMaxActiveScanDurationInMins());
-            zap.ascan.setOptionHostPerScan(scanLimitProperties.getHostPerScan());
-            zap.ascan.setOptionThreadPerHost(scanLimitProperties.getThreadPerHost());
-
-            ApiResponseElement scanResp = (ApiResponseElement) zap.ascan.scanAsUser(
-                    targetUrl,
-                    normalizedContextId,
-                    normalizedUserId,
-                    effectiveRecurse,
-                    effectivePolicy,
-                    null,
-                    null
-            );
-
-            if (scanResp == null) {
-                throw new IllegalStateException("Failed to start scan-as-user on " + targetUrl + ": received null response");
-            }
-
-            String scanId = scanResp.getValue();
-            log.info("Started active scan-as-user with ID {} on {} for context {}, user {}",
-                    scanId, targetUrl, normalizedContextId, normalizedUserId);
-            return scanId;
-        } catch (ClientApiException e) {
-            log.error("Error starting active scan-as-user on {}: {}", targetUrl, e.getMessage(), e);
-            throw new ZapApiException("Error starting active scan-as-user on " + targetUrl + ": " + e.getMessage(), e);
-        }
+        return engineScanExecution.startActiveScanAsUser(new AuthenticatedActiveScanRequest(
+                normalizedContextId,
+                normalizedUserId,
+                targetUrl,
+                effectiveRecurse,
+                effectivePolicy,
+                scanLimitProperties.getMaxActiveScanDurationInMins(),
+                scanLimitProperties.getHostPerScan(),
+                scanLimitProperties.getThreadPerHost()
+        ));
     }
 
     /**
      * Read current active-scan progress from ZAP.
      */
     public int getActiveScanProgressPercent(String scanId) {
-        try {
-            ApiResponse resp = zap.ascan.status(scanId);
-            if (!(resp instanceof ApiResponseElement element)) {
-                throw new IllegalStateException("Unexpected response from ascan.status(): " + resp);
-            }
-            return Integer.parseInt(element.getValue());
-        } catch (ClientApiException e) {
-            log.error("Error retrieving active scan status for {}: {}", scanId, e.getMessage(), e);
-            throw new ZapApiException("Error retrieving status for active scan " + scanId, e);
-        }
+        return engineScanExecution.readActiveScanProgressPercent(scanId);
     }
 
     /**
      * Stop a running active scan.
      */
     public void stopActiveScanJob(String scanId) {
-        try {
-            zap.ascan.stop(scanId);
-        } catch (ClientApiException e) {
-            log.error("Error stopping active scan {}: {}", scanId, e.getMessage(), e);
-            throw new ZapApiException("Error stopping active scan " + scanId, e);
-        }
+        engineScanExecution.stopActiveScan(scanId);
     }
 
     private List<String> getAvailableScanPolicyNames() {
-        try {
-            ApiResponse response = zap.ascan.scanPolicyNames();
-            ApiResponseList responseList = requireResponseList(response, "ascan.scanPolicyNames()");
-            List<String> policyNames = new ArrayList<>();
-            for (ApiResponse item : responseList.getItems()) {
-                if (item instanceof ApiResponseElement element && hasText(element.getValue())) {
-                    policyNames.add(element.getValue().trim());
-                }
-            }
-            return policyNames;
-        } catch (ClientApiException e) {
-            log.error("Error listing active-scan policies: {}", e.getMessage(), e);
-            throw new ZapApiException("Error listing active-scan policies", e);
-        }
+        return engineScanExecution.listActiveScanPolicyNames();
     }
 
     private String requireKnownScanPolicyName(String scanPolicyName) {
@@ -383,66 +310,11 @@ public class ActiveScanService {
     }
 
     private List<PolicyCategorySnapshot> loadPolicyCategories(String scanPolicyName) {
-        try {
-            ApiResponse response = zap.ascan.policies(scanPolicyName, null);
-            ApiResponseList responseList = requireResponseList(response, "ascan.policies()");
-            List<PolicyCategorySnapshot> categories = new ArrayList<>();
-            for (ApiResponse item : responseList.getItems()) {
-                if (item instanceof ApiResponseSet responseSet) {
-                    categories.add(new PolicyCategorySnapshot(
-                            responseSet.getStringValue("id"),
-                            responseSet.getStringValue("name"),
-                            isAffirmative(responseSet.getStringValue("enabled")),
-                            defaultDisplayValue(responseSet.getStringValue("attackStrength")),
-                            defaultDisplayValue(responseSet.getStringValue("alertThreshold"))
-                    ));
-                }
-            }
-            categories.sort(Comparator.comparingInt(category -> parseNumericOrder(category.id())));
-            return categories;
-        } catch (ClientApiException e) {
-            log.error("Error retrieving policy categories for {}: {}", scanPolicyName, e.getMessage(), e);
-            throw new ZapApiException("Error retrieving policy details for " + scanPolicyName, e);
-        }
+        return engineScanExecution.loadActiveScanPolicyCategories(scanPolicyName);
     }
 
     private List<ScannerRuleSnapshot> loadPolicyScanners(String scanPolicyName) {
-        try {
-            ApiResponse response = zap.ascan.scanners(scanPolicyName, null);
-            ApiResponseList responseList = requireResponseList(response, "ascan.scanners()");
-            List<ScannerRuleSnapshot> rules = new ArrayList<>();
-            for (ApiResponse item : responseList.getItems()) {
-                if (item instanceof ApiResponseSet responseSet) {
-                    rules.add(new ScannerRuleSnapshot(
-                            responseSet.getStringValue("id"),
-                            responseSet.getStringValue("name"),
-                            responseSet.getStringValue("policyId"),
-                            isAffirmative(responseSet.getStringValue("enabled")),
-                            defaultDisplayValue(responseSet.getStringValue("attackStrength")),
-                            defaultDisplayValue(responseSet.getStringValue("alertThreshold")),
-                            defaultDisplayValue(responseSet.getStringValue("quality")),
-                            defaultDisplayValue(responseSet.getStringValue("status")),
-                            parseResponseListValues(responseSet.getValue("dependencies"))
-                    ));
-                }
-            }
-            rules.sort(
-                    Comparator.comparingInt((ScannerRuleSnapshot rule) -> parseNumericOrder(rule.policyId()))
-                            .thenComparing(rule -> safeLower(rule.name()))
-                            .thenComparingInt(rule -> parseNumericOrder(rule.id()))
-            );
-            return rules;
-        } catch (ClientApiException e) {
-            log.error("Error retrieving policy rules for {}: {}", scanPolicyName, e.getMessage(), e);
-            throw new ZapApiException("Error retrieving policy rules for " + scanPolicyName, e);
-        }
-    }
-
-    private ApiResponseList requireResponseList(ApiResponse response, String operation) {
-        if (!(response instanceof ApiResponseList responseList)) {
-            throw new IllegalStateException("Unexpected response from " + operation + ": " + response);
-        }
-        return responseList;
+        return engineScanExecution.loadActiveScanPolicyRules(scanPolicyName);
     }
 
     private List<ScannerRuleSnapshot> filterPolicyRules(List<ScannerRuleSnapshot> rules, String ruleFilter) {
@@ -547,6 +419,16 @@ public class ActiveScanService {
         operationRegistry.registerDirectScan("active:" + scanId, workspaceId);
     }
 
+    private void recordDirectScanStarted(String operationKind,
+                                         String scanId,
+                                         String targetUrl,
+                                         Map<String, String> metadata) {
+        if (scanHistoryLedgerService == null) {
+            return;
+        }
+        scanHistoryLedgerService.recordDirectScanStarted(operationKind, scanId, targetUrl, metadata);
+    }
+
     private void trackDirectScanStatus(String scanId, boolean completed) {
         if (operationRegistry == null || !hasText(scanId)) {
             return;
@@ -571,20 +453,6 @@ public class ActiveScanService {
             return "default-workspace";
         }
         return clientWorkspaceResolver.resolveCurrentWorkspaceId();
-    }
-
-    private List<String> parseResponseListValues(ApiResponse response) {
-        if (!(response instanceof ApiResponseList responseList)) {
-            return List.of();
-        }
-
-        List<String> values = new ArrayList<>();
-        for (ApiResponse item : responseList.getItems()) {
-            if (item instanceof ApiResponseElement element && hasText(element.getValue())) {
-                values.add(element.getValue().trim());
-            }
-        }
-        return List.copyOf(values);
     }
 
     private String formatScanPolicyView(String scanPolicyName,
@@ -720,27 +588,8 @@ public class ActiveScanService {
         return line.toString();
     }
 
-    private boolean isAffirmative(String value) {
-        return value != null && value.equalsIgnoreCase("true");
-    }
-
-    private String defaultDisplayValue(String value) {
-        return hasText(value) ? value.trim() : "<unknown>";
-    }
-
     private String formatBoolean(boolean value) {
         return value ? "yes" : "no";
-    }
-
-    private int parseNumericOrder(String value) {
-        if (!hasText(value)) {
-            return Integer.MAX_VALUE;
-        }
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return Integer.MAX_VALUE;
-        }
     }
 
     private String safeLower(String value) {
@@ -788,30 +637,4 @@ public class ActiveScanService {
         );
     }
 
-    private record PolicyCategorySnapshot(
-            String id,
-            String name,
-            boolean enabled,
-            String attackStrength,
-            String alertThreshold
-    ) {
-    }
-
-    private record ScannerRuleSnapshot(
-            String id,
-            String name,
-            String policyId,
-            boolean enabled,
-            String attackStrength,
-            String alertThreshold,
-            String quality,
-            String status,
-            List<String> dependencies
-    ) {
-        private boolean hasOverride() {
-            return !enabled
-                    || !"DEFAULT".equalsIgnoreCase(attackStrength)
-                    || !"DEFAULT".equalsIgnoreCase(alertThreshold);
-        }
-    }
 }

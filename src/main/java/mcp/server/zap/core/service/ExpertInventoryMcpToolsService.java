@@ -1,10 +1,9 @@
 package mcp.server.zap.core.service;
 
+import java.util.List;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 /**
  * Expert MCP adapter for raw inventory and core browsing tools.
@@ -33,7 +32,7 @@ public class ExpertInventoryMcpToolsService implements ExpertToolGroup {
     }
 
     @Tool(name = "zap_urls", description = "Retrieve the list of URLs accessed through/by ZAP, optionally filtered by base URL")
-    public List<String> getUrls(@ToolParam(description = "Base URL to filter (optional)") String baseUrl) {
+    public List<String> getUrls(@ToolParam(required = false, description = "Base URL to filter (optional)") String baseUrl) {
         return coreService.getUrls(baseUrl);
     }
 }

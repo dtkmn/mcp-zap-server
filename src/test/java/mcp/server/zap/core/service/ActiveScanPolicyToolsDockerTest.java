@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.configuration.ScanLimitProperties;
+import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
@@ -46,7 +47,11 @@ public class ActiveScanPolicyToolsDockerTest {
     static void setupService() throws Exception {
         ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         awaitApiReady(clientApi);
-        service = new ActiveScanService(clientApi, mock(UrlValidationService.class), new ScanLimitProperties());
+        service = new ActiveScanService(
+                new ZapEngineScanExecution(clientApi),
+                mock(UrlValidationService.class),
+                new ScanLimitProperties()
+        );
     }
 
     @Test

@@ -1,14 +1,13 @@
 package mcp.server.zap.core.service.protection;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Tracks lightweight in-memory direct-scan and automation executions for quota and overload checks.

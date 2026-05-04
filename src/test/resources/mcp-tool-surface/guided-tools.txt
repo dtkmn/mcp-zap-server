@@ -1,0 +1,17 @@
+zap_attack_start
+zap_attack_status
+zap_attack_stop
+zap_auth_session_prepare
+zap_auth_session_validate
+zap_crawl_start
+zap_crawl_status
+zap_crawl_stop
+zap_findings_details
+zap_findings_summary
+zap_passive_scan_status
+zap_passive_scan_wait
+zap_report_generate
+zap_scan_history_export
+zap_scan_history_get
+zap_scan_history_list
+zap_target_import

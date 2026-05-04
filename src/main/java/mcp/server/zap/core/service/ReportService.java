@@ -2,20 +2,22 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineReportAccess;
+import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Service for generating ZAP reports.
@@ -27,7 +29,9 @@ public class ReportService {
     private static final int DEFAULT_REPORT_READ_MAX_CHARS = 20000;
     private static final int MAX_REPORT_READ_MAX_CHARS = 200000;
 
-    private final ClientApi zap;
+    private final EngineReportAccess engineReportAccess;
+    private ReportArtifactBoundary reportArtifactBoundary;
+    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     @Value("${zap.report.directory:/zap/wrk}")
     private String reportDirectory;
@@ -35,8 +39,18 @@ public class ReportService {
     /**
      * Build-time dependency injection constructor.
      */
-    public ReportService(ClientApi zap) {
-        this.zap = zap;
+    public ReportService(EngineReportAccess engineReportAccess) {
+        this.engineReportAccess = engineReportAccess;
+    }
+
+    @Autowired(required = false)
+    void setReportArtifactBoundary(ReportArtifactBoundary reportArtifactBoundary) {
+        this.reportArtifactBoundary = reportArtifactBoundary;
+    }
+
+    @Autowired(required = false)
+    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
+        this.scanHistoryLedgerService = scanHistoryLedgerService;
     }
 
     /**
@@ -45,20 +59,11 @@ public class ReportService {
      * @return A string representation of the available report templates
      */
     public String viewTemplates() {
-        try {
-            ApiResponse raw = zap.reports.templates();
-            if (!(raw instanceof ApiResponseList list)) {
-                throw new IllegalStateException("Getting report templates failed: " + raw);
-            }
-            StringBuilder sb = new StringBuilder();
-            for (ApiResponse item : list.getItems()) {
-                sb.append(item.toString()).append("\n");
-            }
-            return sb.toString().trim();
-        } catch (ClientApiException e) {
-            log.error("Error getting report templates: {}", e.getMessage(), e);
-            throw new ZapApiException("Error getting report templates: " + e.getMessage(), e);
+        StringBuilder sb = new StringBuilder();
+        for (String template : engineReportAccess.listReportTemplates()) {
+            sb.append(template).append("\n");
         }
+        return sb.toString().trim();
     }
 
 
@@ -76,32 +81,46 @@ public class ReportService {
             String sites
     ) {
         try {
+            Path configuredReportRoot = Paths.get(reportDirectory).toAbsolutePath().normalize();
+            Path effectiveReportRoot = resolveWriteReportDirectory(configuredReportRoot);
+            Files.createDirectories(effectiveReportRoot);
             String normalizedTheme = normalizeTheme(reportTemplate, theme);
-            ApiResponse raw = zap.reports.generate(
-                    "My ZAP Scan Report",          // title
-                    reportTemplate,                     // template ID
-                    normalizedTheme,                    // theme
-                    "",                                 // description
-                    "",                                 // contexts
-                    sites,                              // sites
-                    "",                                 // sections
-                    "",                                 // includedConfidences
-                    "",                                 // includedRisks
+            String fileName = engineReportAccess.generateReport(new ReportGenerationRequest(
+                    "My ZAP Scan Report",
+                    reportTemplate,
+                    normalizedTheme,
+                    "",
+                    "",
+                    sites,
+                    "",
+                    "",
+                    "",
                     "zap-report-" + System.currentTimeMillis(),
-                    "",                            // reportFileNamePattern
-                    reportDirectory,
-                    "false"                        // display=false means “don’t pop open a browser”
-            );
-            if (!(raw instanceof ApiResponseElement)) {
-                throw new IllegalStateException("Report generation failed: " + raw);
-            }
-            String fileName = ((ApiResponseElement) raw).getValue();
-            Path reportPath = Paths.get(fileName);
+                    "",
+                    effectiveReportRoot.toString(),
+                    "false"
+            ));
+            Path reportPath = resolveReportPath(effectiveReportRoot, fileName);
+            recordReportArtifact(reportPath.toString(), reportTemplate, normalizedTheme, sites);
             return reportPath.toString();
-        } catch (ClientApiException e) {
-            log.error("Error generating ZAP report: {}", e.getMessage(), e);
-            throw new ZapApiException("Error generating ZAP report: " + e.getMessage(), e);
+        } catch (IOException e) {
+            log.error("Error preparing report directory {}: {}", reportDirectory, e.getMessage(), e);
+            throw new ZapApiException("Error preparing report directory", e);
         }
+    }
+
+    private void recordReportArtifact(String reportPath, String reportTemplate, String theme, String sites) {
+        if (scanHistoryLedgerService == null) {
+            return;
+        }
+        Map<String, String> metadata = new LinkedHashMap<>();
+        if (hasText(reportTemplate)) {
+            metadata.put("template", reportTemplate.trim());
+        }
+        if (hasText(theme)) {
+            metadata.put("theme", theme.trim());
+        }
+        scanHistoryLedgerService.recordReportArtifact(reportPath, reportTemplate, sites, metadata);
     }
 
     private String normalizeTheme(String reportTemplate, String theme) {
@@ -122,13 +141,17 @@ public class ReportService {
                 && !normalizedTemplate.endsWith("-md");
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
     public String readReport(
             String reportPath,
             Integer maxChars
     ) {
         String normalizedReportPath = requireText(reportPath, "reportPath");
         int boundedMaxChars = validateMaxChars(maxChars);
-        Path reportRoot = Paths.get(reportDirectory).toAbsolutePath().normalize();
+        Path reportRoot = resolveReadReportDirectory(Paths.get(reportDirectory).toAbsolutePath().normalize());
         Path resolvedPath = resolveReportPath(reportRoot, normalizedReportPath);
 
         if (!resolvedPath.startsWith(reportRoot)) {
@@ -177,6 +200,20 @@ public class ReportService {
             return candidate.toAbsolutePath().normalize();
         }
         return reportRoot.resolve(candidate).normalize();
+    }
+
+    private Path resolveWriteReportDirectory(Path configuredReportRoot) {
+        if (reportArtifactBoundary == null) {
+            return configuredReportRoot;
+        }
+        return reportArtifactBoundary.resolveWriteDirectory(configuredReportRoot).toAbsolutePath().normalize();
+    }
+
+    private Path resolveReadReportDirectory(Path configuredReportRoot) {
+        if (reportArtifactBoundary == null) {
+            return configuredReportRoot;
+        }
+        return reportArtifactBoundary.resolveReadDirectory(configuredReportRoot).toAbsolutePath().normalize();
     }
 
 }

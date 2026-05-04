@@ -10,8 +10,8 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
 public class InMemoryScanJobStore implements ScanJobStore {

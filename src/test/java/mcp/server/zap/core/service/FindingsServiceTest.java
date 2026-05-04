@@ -1,44 +1,35 @@
 package mcp.server.zap.core.service;
 
+import java.util.List;
+import mcp.server.zap.core.gateway.EngineFindingAccess;
+import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.gen.Alert;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class FindingsServiceTest {
-    private Alert alertApi;
+    private EngineFindingAccess findingAccess;
     private FindingsService service;
 
     @BeforeEach
     void setup() {
-        ClientApi clientApi = new ClientApi("localhost", 0);
-        alertApi = mock(Alert.class);
-        clientApi.alert = alertApi;
-        service = new FindingsService(clientApi);
+        findingAccess = mock(EngineFindingAccess.class);
+        service = new FindingsService(findingAccess);
     }
 
     @Test
-    void getAlertDetailsReturnsGroupedSummaryWhenMultipleFamiliesMatch() throws Exception {
-        ApiResponseList list = new ApiResponseList("alerts");
-        list.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        list.addItem(createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102"));
-        list.addItem(createAlert("3", "40012", "Cross Site Scripting", "Medium", "High", "http://target/c", "103"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(list);
+    void getAlertDetailsReturnsGroupedSummaryWhenMultipleFamiliesMatch() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"),
+                createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102"),
+                createAlert("3", "40012", "Cross Site Scripting", "Medium", "High", "http://target/c", "103")
+        ));
 
         String result = service.getAlertDetails("http://target", null, null);
 
@@ -51,12 +42,12 @@ public class FindingsServiceTest {
     }
 
     @Test
-    void getFindingsSummaryReturnsGroupedMarkdown() throws Exception {
-        ApiResponseList list = new ApiResponseList("alerts");
-        list.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        list.addItem(createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102"));
-        list.addItem(createAlert("3", "40012", "Cross Site Scripting", "Medium", "High", "http://target/c", "103"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(list);
+    void getFindingsSummaryReturnsGroupedMarkdown() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"),
+                createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102"),
+                createAlert("3", "40012", "Cross Site Scripting", "Medium", "High", "http://target/c", "103")
+        ));
 
         String markdown = service.getFindingsSummary("http://target");
 
@@ -67,10 +58,10 @@ public class FindingsServiceTest {
     }
 
     @Test
-    void getAlertDetailsReturnsDetailedViewForSingleFamily() throws Exception {
-        ApiResponseList list = new ApiResponseList("alerts");
-        list.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(list);
+    void getAlertDetailsReturnsDetailedViewForSingleFamily() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101")
+        ));
 
         String result = service.getAlertDetails("http://target", "40018", null);
 
@@ -83,11 +74,11 @@ public class FindingsServiceTest {
     }
 
     @Test
-    void getAlertInstancesReturnsBoundedResults() throws Exception {
-        ApiResponseList list = new ApiResponseList("alerts");
-        list.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        list.addItem(createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(list);
+    void getAlertInstancesReturnsBoundedResults() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"),
+                createAlert("2", "40018", "SQL Injection", "High", "Medium", "http://target/b", "102")
+        ));
 
         String result = service.getAlertInstances("http://target", "40018", null, 1);
 
@@ -98,10 +89,10 @@ public class FindingsServiceTest {
     }
 
     @Test
-    void exportFindingsSnapshotReturnsStableJsonPayload() throws Exception {
-        ApiResponseList list = new ApiResponseList("alerts");
-        list.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(list);
+    void exportFindingsSnapshotReturnsStableJsonPayload() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101")
+        ));
 
         String snapshot = service.exportFindingsSnapshot("http://target");
 
@@ -112,16 +103,16 @@ public class FindingsServiceTest {
     }
 
     @Test
-    void diffFindingsHighlightsNetNewGroups() throws Exception {
-        ApiResponseList baseline = new ApiResponseList("alerts");
-        baseline.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(baseline);
+    void diffFindingsHighlightsNetNewGroups() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101")
+        ));
         String baselineSnapshot = service.exportFindingsSnapshot("http://target");
 
-        ApiResponseList current = new ApiResponseList("alerts");
-        current.addItem(createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"));
-        current.addItem(createAlert("2", "40012", "Cross Site Scripting", "Medium", "High", "http://target/b", "102"));
-        when(alertApi.alerts(anyString(), anyString(), anyString(), isNull(), isNull(), isNull())).thenReturn(current);
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "SQL Injection", "High", "Medium", "http://target/a", "101"),
+                createAlert("2", "40012", "Cross Site Scripting", "Medium", "High", "http://target/b", "102")
+        ));
 
         String diff = service.diffFindings("http://target", baselineSnapshot, 10);
 
@@ -135,29 +126,29 @@ public class FindingsServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.diffFindings("http://target", "{not-json}", 10));
     }
 
-    private ApiResponseSet createAlert(String id,
-                                       String pluginId,
-                                       String name,
-                                       String risk,
-                                       String confidence,
-                                       String url,
-                                       String messageId) {
-        Map<String, ApiResponse> values = new HashMap<>();
-        values.put("id", new ApiResponseElement("id", id));
-        values.put("pluginId", new ApiResponseElement("pluginId", pluginId));
-        values.put("name", new ApiResponseElement("name", name));
-        values.put("description", new ApiResponseElement("description", name + " description"));
-        values.put("risk", new ApiResponseElement("risk", risk));
-        values.put("confidence", new ApiResponseElement("confidence", confidence));
-        values.put("url", new ApiResponseElement("url", url));
-        values.put("param", new ApiResponseElement("param", "id"));
-        values.put("attack", new ApiResponseElement("attack", "attack payload"));
-        values.put("evidence", new ApiResponseElement("evidence", "evidence sample"));
-        values.put("reference", new ApiResponseElement("reference", "https://example.com/reference"));
-        values.put("solution", new ApiResponseElement("solution", "Apply a fix"));
-        values.put("messageId", new ApiResponseElement("messageId", messageId));
-        values.put("cweid", new ApiResponseElement("cweid", "89"));
-        values.put("wascid", new ApiResponseElement("wascid", "19"));
-        return new ApiResponseSet("alert", values);
+    private AlertSnapshot createAlert(String id,
+                                      String pluginId,
+                                      String name,
+                                      String risk,
+                                      String confidence,
+                                      String url,
+                                      String messageId) {
+        return new AlertSnapshot(
+                id,
+                pluginId,
+                name,
+                name + " description",
+                risk,
+                confidence,
+                url,
+                "id",
+                "attack payload",
+                "evidence sample",
+                "https://example.com/reference",
+                "Apply a fix",
+                messageId,
+                "89",
+                "19"
+        );
     }
 }

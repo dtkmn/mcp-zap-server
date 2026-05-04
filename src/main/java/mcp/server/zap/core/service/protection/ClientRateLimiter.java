@@ -1,11 +1,10 @@
 package mcp.server.zap.core.service.protection;
 
-import mcp.server.zap.core.configuration.AbuseProtectionProperties;
-import org.springframework.stereotype.Service;
-
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import mcp.server.zap.core.configuration.AbuseProtectionProperties;
+import org.springframework.stereotype.Service;
 
 /**
  * Simple in-memory token-bucket limiter keyed by client ID.

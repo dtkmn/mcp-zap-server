@@ -1,11 +1,10 @@
 package mcp.server.zap.core.service.authz;
 
-import org.springframework.stereotype.Component;
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.stereotype.Component;
 
 /**
  * Authoritative tool-to-scope mapping for the MCP surface.
@@ -39,6 +38,8 @@ public class ToolScopeRegistry {
         register(scopes, "zap_attack_start", "zap:scan:attack:run");
         register(scopes, "zap_attack_status", "zap:scan:read");
         register(scopes, "zap_attack_stop", "zap:scan:stop");
+        register(scopes, "zap_auth_session_prepare", "zap:auth:session:write");
+        register(scopes, "zap_auth_session_validate", "zap:auth:test");
         register(scopes, "zap_report_generate", "zap:report:generate");
 
         // Direct scan execution
@@ -69,8 +70,12 @@ public class ToolScopeRegistry {
         register(scopes, "zap_scan_job_retry", "zap:scan:queue:write");
         register(scopes, "zap_scan_job_dead_letter_list", "zap:scan:read");
         register(scopes, "zap_scan_job_dead_letter_requeue", "zap:scan:queue:write");
+        register(scopes, "zap_scan_history_list", "zap:scan:read");
+        register(scopes, "zap_scan_history_get", "zap:scan:read");
+        register(scopes, "zap_scan_history_export", "zap:scan:read");
 
         // Policy controls
+        register(scopes, "zap_policy_dry_run", "zap:policy:dry-run");
         register(scopes, "zap_scan_policies_list", "zap:scan:policy:read");
         register(scopes, "zap_scan_policy_view", "zap:scan:policy:read");
         register(scopes, "zap_scan_policy_rule_set", "zap:scan:policy:write");
@@ -86,7 +91,7 @@ public class ToolScopeRegistry {
         // Reports and automation
         register(scopes, "zap_view_templates", "zap:report:read");
         register(scopes, "zap_generate_report", "zap:report:generate");
-        register(scopes, "zap_get_findings_summary", "zap:report:read");
+        register(scopes, "zap_get_findings_summary", "zap:alerts:read");
         register(scopes, "zap_report_read", "zap:report:read");
         register(scopes, "zap_automation_plan_run", "zap:automation:run");
         register(scopes, "zap_automation_plan_status", "zap:automation:read");

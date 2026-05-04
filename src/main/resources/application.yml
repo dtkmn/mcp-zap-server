@@ -76,6 +76,8 @@ mcp:
             password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
             table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
             fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
+      bootstrap:
+        allowInlineSecrets: ${MCP_AUTH_BOOTSTRAP_ALLOW_INLINE_SECRETS:false}
     protection:
       enabled: ${MCP_PROTECTION_ENABLED:true}
       retryAfterSeconds: ${MCP_PROTECTION_RETRY_AFTER_SECONDS:30}
@@ -101,6 +103,10 @@ mcp:
       audit:
         enabled: ${MCP_OBSERVABILITY_AUDIT_ENABLED:true}
         max-events: ${MCP_OBSERVABILITY_AUDIT_MAX_EVENTS:500}
+    policy:
+      mode: ${MCP_POLICY_MODE:off}
+      bundle: ${MCP_POLICY_BUNDLE:}
+      bundle-file: ${MCP_POLICY_BUNDLE_FILE:}
 
 # ZAP Configuration
 zap:
@@ -175,6 +181,17 @@ zap:
           password: ${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:${ZAP_SCAN_QUEUE_STORE_POSTGRES_PASSWORD:}}
           table-name: ${ZAP_SCAN_JOBS_STORE_POSTGRES_TABLE_NAME:scan_jobs}
           fail-fast: ${ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST:${ZAP_SCAN_QUEUE_STORE_POSTGRES_FAIL_FAST:false}}
+    history:
+      backend: ${ZAP_SCAN_HISTORY_BACKEND:${ZAP_SCAN_JOBS_STORE_BACKEND:${ZAP_SCAN_QUEUE_STORE_BACKEND:in-memory}}}
+      retention-days: ${ZAP_SCAN_HISTORY_RETENTION_DAYS:180}
+      max-list-entries: ${ZAP_SCAN_HISTORY_MAX_LIST_ENTRIES:50}
+      max-export-entries: ${ZAP_SCAN_HISTORY_MAX_EXPORT_ENTRIES:500}
+      postgres:
+        url: ${ZAP_SCAN_HISTORY_POSTGRES_URL:${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:${ZAP_SCAN_QUEUE_STORE_POSTGRES_URL:}}}
+        username: ${ZAP_SCAN_HISTORY_POSTGRES_USERNAME:${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:${ZAP_SCAN_QUEUE_STORE_POSTGRES_USERNAME:}}}
+        password: ${ZAP_SCAN_HISTORY_POSTGRES_PASSWORD:${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:${ZAP_SCAN_QUEUE_STORE_POSTGRES_PASSWORD:}}}
+        table-name: ${ZAP_SCAN_HISTORY_POSTGRES_TABLE_NAME:scan_history_entries}
+        fail-fast: ${ZAP_SCAN_HISTORY_POSTGRES_FAIL_FAST:${ZAP_SCAN_JOBS_STORE_POSTGRES_FAIL_FAST:${ZAP_SCAN_QUEUE_STORE_POSTGRES_FAIL_FAST:false}}}
   
   report:
     directory: ${ZAP_REPORT_DIRECTORY:/zap/wrk}

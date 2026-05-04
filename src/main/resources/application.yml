@@ -40,6 +40,8 @@ mcp:
   server:
     tools:
       surface: ${MCP_SERVER_TOOLS_SURFACE:guided}
+    request:
+      maxBodyBytes: ${MCP_REQUEST_MAX_BODY_BYTES:262144}
     security:
       # Set authentication mode: none, api-key, or jwt
       mode: ${MCP_SECURITY_MODE:api-key}
@@ -78,6 +80,7 @@ mcp:
             fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
       bootstrap:
         allowInlineSecrets: ${MCP_AUTH_BOOTSTRAP_ALLOW_INLINE_SECRETS:false}
+        allowedCredentialReferences: ${MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES:}
     protection:
       enabled: ${MCP_PROTECTION_ENABLED:true}
       retryAfterSeconds: ${MCP_PROTECTION_RETRY_AFTER_SECONDS:30}

@@ -52,11 +52,14 @@ Then classify the failure:
 | `loggedInIndicatorRegex cannot be null or blank` | No success indicator for validation | Provide a regex that appears only after login. |
 | `Provide credentialReference or inlineSecret` | No secret source | Prefer `credentialReference`. |
 | `inlineSecret is disabled by default` | Inline secret used outside local mode | Use `env:NAME` or `file:/absolute/path`, or explicitly enable inline secrets only for local workflows. |
+| `credentialReference is not in the operator allowlist` | Caller selected an env var or file path that operators did not pre-approve | Add the exact `env:NAME` or `file:/absolute/path` to `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES`, or reject the workflow. |
 | `Environment variable ... is missing or blank` | Secret env var unavailable to the MCP process | Fix the deployment secret/env injection. |
 | `credentialReference file path must be absolute` | Relative secret path | Use `file:/absolute/path`. |
 | `Unable to read credentialReference file` | File missing or unreadable | Fix mount path and file permissions for the MCP runtime. |
 | `reference_missing` | Header session was prepared from inline secret | Re-prepare with `credentialReference`. |
 | `authentication_failed` | ZAP could not authenticate the configured user | Check credentials, login URL, field names, and login indicators. |
+| `loginUrl must share the same origin as targetUrl` | Form login points to a different scheme, host, or port than the scan target | Keep login and target on the same origin; do not use auth bootstrap for cross-origin credential forwarding. |
+| `usernameField contains unsupported characters` or `passwordField contains unsupported characters` | Form field name could inject extra ZAP auth config parameters | Use simple field names containing letters, numbers, dot, underscore, dash, colon, or brackets. |
 | `Unknown auth session ID` | Session ID lost or wrong | Re-run `zap_auth_session_prepare`. |
 | `form-login sessions only` | Header session passed to guided scan | Use a form-login session or omit `authSessionId`. |
 | Browser strategy rejects auth | Authenticated browser crawl is unsupported today | Use HTTP guided crawl with form-login, or treat AJAX authenticated crawl as future work. |
@@ -68,7 +71,7 @@ Form-login preparation needs all of this:
 - `targetUrl`
 - `loginUrl`
 - `username`
-- `credentialReference` or allowed local `inlineSecret`
+- operator-allowlisted `credentialReference` or allowed local `inlineSecret`
 - `loggedInIndicatorRegex`
 
 Optional but often necessary:
@@ -115,12 +118,19 @@ Inputs to prepare:
 - `authKind=form`
 - `credentialReference=env:STAGING_SCAN_PASSWORD` or
   `credentialReference=file:/absolute/path/to/mounted/secret`
+- `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES` includes the exact
+  reference, or an operator-approved prefix such as `env:STAGING_SCAN_*` or
+  `file:/var/run/secrets/mcp-zap/*`
+- file wildcards are directory containment rules; sibling-prefix paths and
+  symlink escapes are intentionally rejected
 - `sessionLabel=staging-form-auth`
 - `contextName=staging-form-auth`
 - `loginUrl=https://staging.example.test/login`
 - `username=<scan-user-name>`
 - `usernameField=<login-form-username-field>`
 - `passwordField=<login-form-password-field>`
+- field names may contain letters, numbers, dot, underscore, dash, colon, or
+  brackets only; ZAP auth config values are URL-encoded by the server
 - `loggedInIndicatorRegex=<text-only-visible-after-login>`
 - optional `loggedOutIndicatorRegex=<text-only-visible-before-login>`
 
@@ -164,6 +174,7 @@ For production-like use:
 
 - use `credentialReference=env:NAME` or `credentialReference=file:/absolute/path`
 - verify the secret is present in the MCP container or pod
+- verify the reference is allowlisted by operators
 - do not rely on inline secrets for repeatable operator workflows
 - do not present header-based bootstrap as authenticated scan execution until
   header injection is implemented in the engine path

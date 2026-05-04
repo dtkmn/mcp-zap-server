@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -42,15 +43,18 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
 
     private final ObjectMapper objectMapper;
     private final String mcpEndpoint;
+    private final int maxBodyBytes;
     private final McpAbuseProtectionService protectionService;
     private final ObservabilityService observabilityService;
 
     public McpAbuseProtectionWebFilter(ObjectProvider<ObjectMapper> objectMapperProvider,
                                        @Value("${spring.ai.mcp.server.streamable-http.mcp-endpoint:/mcp}") String mcpEndpoint,
+                                       @Value("${mcp.server.request.max-body-bytes:262144}") int maxBodyBytes,
                                        McpAbuseProtectionService protectionService,
                                        ObservabilityService observabilityService) {
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         this.mcpEndpoint = normalizeEndpoint(mcpEndpoint);
+        this.maxBodyBytes = Math.max(1024, maxBodyBytes);
         this.protectionService = protectionService;
         this.observabilityService = observabilityService;
     }
@@ -60,13 +64,16 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
         if (!isRelevantRequest(exchange) || !protectionService.isEnabled()) {
             return chain.filter(exchange);
         }
+        if (contentLengthExceedsLimit(exchange)) {
+            return writePayloadTooLarge(exchange);
+        }
 
         return exchange.getPrincipal()
                 .cast(Authentication.class)
                 .map(Optional::of)
                 .defaultIfEmpty(Optional.empty())
                 .flatMap(optionalAuthentication -> optionalAuthentication
-                        .<Mono<Void>>map(authentication -> DataBufferUtils.join(exchange.getRequest().getBody())
+                        .<Mono<Void>>map(authentication -> DataBufferUtils.join(exchange.getRequest().getBody(), maxBodyBytes)
                                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
                                 .flatMap(dataBuffer -> {
                                     byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
@@ -91,8 +98,14 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
                                     }
 
                                     return chain.filter(decorateExchange(exchange, bodyBytes));
-                                }))
+                                })
+                                .onErrorResume(DataBufferLimitException.class, ignored -> writePayloadTooLarge(exchange)))
                         .orElseGet(() -> chain.filter(exchange)));
+    }
+
+    private boolean contentLengthExceedsLimit(ServerWebExchange exchange) {
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        return contentLength > maxBodyBytes;
     }
 
     private boolean isRelevantRequest(ServerWebExchange exchange) {
@@ -143,6 +156,28 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
         } catch (Exception e) {
             byte[] fallback = ("{\"error\":\"" + decision.errorCode() + "\",\"reason\":\"" + decision.reason() + "\"}")
                     .getBytes(StandardCharsets.UTF_8);
+            return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(fallback)));
+        }
+    }
+
+    private Mono<Void> writePayloadTooLarge(ServerWebExchange exchange) {
+        exchange.getResponse().setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        body.put("error", "request_body_too_large");
+        body.put("reason", "MCP request body exceeds the configured limit");
+        body.put("maxBodyBytes", maxBodyBytes);
+        body.put("correlationId", RequestLogContext.correlationId(exchange));
+        body.put("requestId", exchange.getRequest().getId());
+
+        try {
+            byte[] bytes = objectMapper.writeValueAsBytes(body);
+            return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(bytes)));
+        } catch (Exception e) {
+            byte[] fallback = "{\"error\":\"request_body_too_large\"}".getBytes(StandardCharsets.UTF_8);
             return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(fallback)));
         }
     }

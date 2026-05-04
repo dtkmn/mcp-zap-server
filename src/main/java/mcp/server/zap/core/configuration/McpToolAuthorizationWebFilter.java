@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.core.io.buffer.DataBufferLimitException;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -48,15 +49,18 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
 
     private final ObjectMapper objectMapper;
     private final String mcpEndpoint;
+    private final int maxBodyBytes;
     private final ToolAuthorizationService toolAuthorizationService;
     private final ObservabilityService observabilityService;
 
     public McpToolAuthorizationWebFilter(ObjectProvider<ObjectMapper> objectMapperProvider,
                                          @Value("${spring.ai.mcp.server.streamable-http.mcp-endpoint:/mcp}") String mcpEndpoint,
+                                         @Value("${mcp.server.request.max-body-bytes:262144}") int maxBodyBytes,
                                          ToolAuthorizationService toolAuthorizationService,
                                          ObservabilityService observabilityService) {
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         this.mcpEndpoint = normalizeEndpoint(mcpEndpoint);
+        this.maxBodyBytes = Math.max(1024, maxBodyBytes);
         this.toolAuthorizationService = toolAuthorizationService;
         this.observabilityService = observabilityService;
     }
@@ -65,6 +69,9 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         if (!isRelevantRequest(exchange) || toolAuthorizationService.isDisabled()) {
             return chain.filter(exchange);
+        }
+        if (contentLengthExceedsLimit(exchange)) {
+            return writePayloadTooLarge(exchange);
         }
 
         return exchange.getPrincipal()
@@ -84,7 +91,7 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
     private Mono<Void> cacheAndAuthorize(ServerWebExchange exchange,
                                          WebFilterChain chain,
                                          Authentication authentication) {
-        return DataBufferUtils.join(exchange.getRequest().getBody())
+        return DataBufferUtils.join(exchange.getRequest().getBody(), maxBodyBytes)
                 .defaultIfEmpty(exchange.getResponse().bufferFactory().wrap(new byte[0]))
                 .flatMap(dataBuffer -> {
                     byte[] bodyBytes = new byte[dataBuffer.readableByteCount()];
@@ -149,7 +156,13 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
                             RequestLogContext.correlationId(exchange)
                     );
                     return chain.filter(decorateExchange(exchange, bodyBytes));
-                });
+                })
+                .onErrorResume(DataBufferLimitException.class, ignored -> writePayloadTooLarge(exchange));
+    }
+
+    private boolean contentLengthExceedsLimit(ServerWebExchange exchange) {
+        long contentLength = exchange.getRequest().getHeaders().getContentLength();
+        return contentLength > maxBodyBytes;
     }
 
     private AuthorizationRequest parseAuthorizationRequest(byte[] bodyBytes) {
@@ -228,6 +241,30 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
             log.error("Unable to serialize insufficient-scope response for {}: {}", decision.actionName(), e.getMessage(), e);
             byte[] fallback = ("{\"error\":\"insufficient_scope\",\"tool\":\"" + decision.actionName() + "\"}")
                     .getBytes(StandardCharsets.UTF_8);
+            return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(fallback)));
+        }
+    }
+
+    private Mono<Void> writePayloadTooLarge(ServerWebExchange exchange) {
+        exchange.getResponse().setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+        exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        body.put("error", "request_body_too_large");
+        body.put("reason", "MCP request body exceeds the configured limit");
+        body.put("maxBodyBytes", maxBodyBytes);
+        body.put("correlationId", RequestLogContext.correlationId(exchange));
+        body.put("requestId", exchange.getRequest().getId());
+
+        try {
+            byte[] bytes = objectMapper.writeValueAsBytes(body);
+            DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(bytes);
+            return exchange.getResponse().writeWith(Mono.just(buffer));
+        } catch (Exception e) {
+            log.error("Unable to serialize request-body-limit response: {}", e.getMessage(), e);
+            byte[] fallback = "{\"error\":\"request_body_too_large\"}".getBytes(StandardCharsets.UTF_8);
             return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(fallback)));
         }
     }

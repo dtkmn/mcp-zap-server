@@ -19,6 +19,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WebFluxStreamableTransportCompatibilityTest {
 
     @Test
+    void vendoredTransportAdvertisesLatestSupportedProtocolVersion() {
+        WebFluxStreamableServerTransportProvider provider = WebFluxStreamableServerTransportProvider.builder()
+                .messageEndpoint("/mcp")
+                .build();
+
+        assertThat(provider.protocolVersions())
+                .contains(ProtocolVersions.MCP_2025_11_25)
+                .contains(ProtocolVersions.MCP_2025_06_18);
+    }
+
+    @Test
     void listResponsesWithoutSseIdsDoNotFailAfterInitializeOnSpringFramework7() {
         WebFluxStreamableServerTransportProvider provider = WebFluxStreamableServerTransportProvider.builder()
                 .messageEndpoint("/mcp")

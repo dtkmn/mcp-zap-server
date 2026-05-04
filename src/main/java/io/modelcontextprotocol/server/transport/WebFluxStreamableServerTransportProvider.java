@@ -43,14 +43,25 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Implementation of a WebFlux based {@link McpStreamableServerTransportProvider}.
  *
+ * <p>This is a deliberately vendored compatibility copy from
+ * {@code io.modelcontextprotocol.sdk:mcp-spring-webflux:0.17.0}, adapted for
+ * the repository's current MCP SDK 2.x milestone runtime and Spring Framework 7.
+ * Keep this file isolated in the upstream package namespace until the upstream
+ * transport supports the same Spring 7 and protocol behavior without local
+ * patching.
+ *
+ * <p>Local deltas that must be rechecked during MCP SDK upgrades:
+ * <ul>
+ * <li>SDK 2.x {@link JacksonMcpJsonMapper} default mapper construction.</li>
+ * <li>Spring Framework 7 null-safe SSE id handling for direct responses.</li>
+ * <li>Protocol negotiation through {@code 2025-11-25}.</li>
+ * </ul>
+ *
  * @author Dariusz Jedrzejczyk
  */
 public class WebFluxStreamableServerTransportProvider implements McpStreamableServerTransportProvider {
 
 	private static final Logger logger = LoggerFactory.getLogger(WebFluxStreamableServerTransportProvider.class);
-
-	// Compatibility patch for Spring Framework 7: ServerSentEvent.Builder#id
-	// rejects null, while MCP SDK 0.17.0 passes null for direct responses.
 
 	public static final String MESSAGE_EVENT_TYPE = "message";
 
@@ -103,7 +114,7 @@ public class WebFluxStreamableServerTransportProvider implements McpStreamableSe
 	@Override
 	public List<String> protocolVersions() {
 		return List.of(ProtocolVersions.MCP_2024_11_05, ProtocolVersions.MCP_2025_03_26,
-				ProtocolVersions.MCP_2025_06_18);
+				ProtocolVersions.MCP_2025_06_18, ProtocolVersions.MCP_2025_11_25);
 	}
 
 	@Override

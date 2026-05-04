@@ -61,3 +61,12 @@ networkPolicy:
       - ipBlock:
           cidr: 10.0.0.0/16
           # Replace with your ingress/NLB source CIDR range.
+    egress:
+      extraEgress:
+        - to:
+            - ipBlock:
+                cidr: 10.0.0.0/16
+                # Replace with your RDS/private dependency CIDR range.
+          ports:
+            - protocol: TCP
+              port: 5432

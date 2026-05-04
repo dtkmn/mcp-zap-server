@@ -11,6 +11,7 @@ spec:
       {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Ingress
+    - Egress
   ingress:
     - from:
         - podSelector:
@@ -22,4 +23,24 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.zap.service.targetPort }}
+  {{- if or .Values.networkPolicy.zap.egress.allowDns .Values.networkPolicy.zap.egress.extraEgress }}
+  egress:
+    {{- if .Values.networkPolicy.zap.egress.allowDns }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.zap.egress.dns.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.zap.egress.dns.podSelector | nindent 12 }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    {{- with .Values.networkPolicy.zap.egress.extraEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- else }}
+  egress: []
+  {{- end }}
 {{- end }}

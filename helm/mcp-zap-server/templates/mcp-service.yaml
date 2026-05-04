@@ -1,4 +1,6 @@
 {{- if .Values.mcp.enabled }}
+{{- $sessionAffinity := .Values.mcp.streamableHttp.sessionAffinity }}
+{{- $sessionAffinityProvider := trimAll " " (default "" $sessionAffinity.provider) }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -12,6 +14,12 @@ metadata:
   {{- end }}
 spec:
   type: {{ .Values.mcp.service.type }}
+  {{- if and $sessionAffinity.enabled (eq $sessionAffinityProvider "service-client-ip") }}
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: {{ $sessionAffinity.serviceClientIp.timeoutSeconds }}
+  {{- end }}
   ports:
   - port: {{ .Values.mcp.service.port }}
     targetPort: {{ .Values.mcp.service.targetPort }}

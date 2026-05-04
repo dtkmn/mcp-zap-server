@@ -12,11 +12,11 @@ This chart deploys two main components in **separate pods**:
    - Persistent storage for scan data
    - Resource-intensive (2-4GB RAM)
 
-2. **MCP Server Pods** (3+ replicas, stateless)
+2. **MCP Server Pod(s)** (1 replica by default; 2+ only with session affinity)
    - REST API gateway to ZAP
-   - Horizontally scalable
+   - Horizontally scalable only when streamable HTTP affinity is configured
    - Lightweight (512MB-1GB RAM)
-   - Auto-scaling enabled
+   - Auto-scaling is opt-in
 
 ## Prerequisites
 
@@ -103,14 +103,16 @@ helm install mcp-zap ./helm/mcp-zap-server \
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `mcp.replicaCount` | Number of MCP server replicas | `3` |
+| `mcp.replicaCount` | Number of MCP server replicas | `1` |
 | `mcp.security.mode` | Authentication mode (none/api-key/jwt) | `api-key` |
 | `mcp.security.apiKey` | MCP API key when not using `mcp.security.existingSecret` | `""` |
 | `mcp.service.type` | Kubernetes service type | `ClusterIP` |
-| `mcp.autoscaling.enabled` | Enable horizontal pod autoscaler | `true` |
-| `mcp.autoscaling.maxReplicas` | Maximum replicas for autoscaling | `10` |
+| `mcp.autoscaling.enabled` | Enable horizontal pod autoscaler | `false` |
+| `mcp.autoscaling.maxReplicas` | Maximum replicas for autoscaling | `1` |
 | `mcp.security.allowPlaceholderApiKey` | Allow placeholder MCP API keys instead of failing startup | `false` |
-| `mcp.streamableHttp.sessionAffinity.provider` | Sticky-session preset for OSS multi-replica streamable MCP | `""` |
+| `mcp.streamableHttp.sessionAffinity.provider` | Sticky-session preset for multi-replica streamable MCP (`aws-nlb`, `ingress-nginx`, `service-client-ip`) | `""` |
+| `networkPolicy.mcp.enabled` | Enable MCP ingress and egress NetworkPolicy boundary | `true` |
+| `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |
 | `mcp.image.tag` | MCP image tag | chart `appVersion` |
 | `mcp.zapClient.url` | ZAP API hostname/service | chart-managed service (`<release>-mcp-zap-server-zap`) |
 | `mcp.security.existingSecret.name` | Existing Secret for MCP API key / JWT secret | `""` |
@@ -168,13 +170,15 @@ The private CI/CD workflow now creates `mcp-zap-runtime` before deployment and c
 The chart now ships with:
 
 - ZAP ingress restricted to MCP pods by default via `networkPolicy.zap.enabled=true`
-- optional MCP ingress restriction through `networkPolicy.mcp.enabled` and `networkPolicy.mcp.extraIngress`
+- ZAP egress restricted by default; add explicit target CIDRs/ports under `networkPolicy.zap.egress.extraEgress` for real scan traffic
+- MCP ingress and egress restricted by default via `networkPolicy.mcp.enabled=true`
+- MCP can reach ZAP and DNS by default; add Postgres, JWKS, or other operator-approved endpoints under `networkPolicy.mcp.egress.extraEgress`
 
-Use the AWS and GCP reference overlays as the starting point for ingress-controller namespace or CIDR allowlists.
+Use the AWS and GCP reference overlays as the starting point for ingress-controller namespace, CIDR, and data-store egress allowlists.
 
 ## Streamable MCP HA Exposure
 
-For the current OSS/local HA path, multi-replica `streamable-http` MCP is stateful per replica. If `mcp.replicaCount > 1`, your ingress or load balancer must keep follow-up MCP requests on the same backend replica.
+Multi-replica `streamable-http` MCP is stateful per replica. If `mcp.replicaCount > 1` or `mcp.autoscaling.minReplicas > 1`, your Kubernetes Service, ingress, or load balancer must keep follow-up MCP requests on the same backend replica. The chart fails rendering when multi-replica MCP is configured without a supported affinity preset.
 
 Supported OSS/local pattern:
 
@@ -184,15 +188,11 @@ Built-in chart presets:
 
 - `mcp.streamableHttp.sessionAffinity.provider=aws-nlb`
 - `mcp.streamableHttp.sessionAffinity.provider=ingress-nginx`
+- `mcp.streamableHttp.sessionAffinity.provider=service-client-ip`
 
 The chart still lets you add or override raw `mcp.service.annotations` and `mcp.ingress.annotations` if your controller needs different settings.
 
 Without that affinity, one MCP client can initialize on replica A and send follow-up requests to replica B, which does not have that in-memory transport session.
-
-Edition difference:
-
-- OSS/local HA: this chart documents the current sticky-session/client-affinity operating model for multi-replica `streamable-http` MCP
-- Enterprise enhancement path: targets cloud-native transport/session handling so any MCP request can be served by any healthy replica without ingress stickiness as a correctness requirement
 
 ## Accessing the Service
 

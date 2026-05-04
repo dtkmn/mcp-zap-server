@@ -108,7 +108,8 @@ User-provided annotations win over generated defaults.
 {{- define "mcp-zap-server.mcp.serviceAnnotations" -}}
 {{- $annotations := dict -}}
 {{- $sessionAffinity := .Values.mcp.streamableHttp.sessionAffinity -}}
-{{- if and $sessionAffinity.enabled (eq $sessionAffinity.provider "aws-nlb") -}}
+{{- $sessionAffinityProvider := trimAll " " (default "" $sessionAffinity.provider) -}}
+{{- if and $sessionAffinity.enabled (eq $sessionAffinityProvider "aws-nlb") -}}
 {{- $_ := set $annotations "service.beta.kubernetes.io/aws-load-balancer-type" (default "nlb" $sessionAffinity.awsLoadBalancer.type) -}}
 {{- with $sessionAffinity.awsLoadBalancer.scheme }}
 {{- $_ := set $annotations "service.beta.kubernetes.io/aws-load-balancer-scheme" . -}}
@@ -139,8 +140,18 @@ Validate security-sensitive Helm values before rendering resources.
 {{- $jwtEnabled := .Values.mcp.security.jwt.enabled -}}
 {{- $jwtSecret := trimAll " " (default "" .Values.mcp.security.jwt.secret) -}}
 {{- $effectiveZapClientApiKey := $mcpZapApiKey -}}
+{{- $sessionAffinity := .Values.mcp.streamableHttp.sessionAffinity -}}
+{{- $sessionAffinityProvider := trimAll " " (default "" $sessionAffinity.provider) -}}
+{{- $multiReplicaMcp := or (gt (int .Values.mcp.replicaCount) 1) (and .Values.mcp.autoscaling.enabled (gt (int .Values.mcp.autoscaling.minReplicas) 1)) -}}
 {{- if eq $effectiveZapClientApiKey "" -}}
 {{- $effectiveZapClientApiKey = $zapApiKey -}}
+{{- end -}}
+
+{{- if and .Values.mcp.enabled $multiReplicaMcp (not $sessionAffinity.enabled) -}}
+{{- fail "multi-replica streamable MCP requires mcp.streamableHttp.sessionAffinity.enabled=true; keep mcp.replicaCount/autoscaling.minReplicas at 1 or choose a supported affinity provider" -}}
+{{- end -}}
+{{- if and .Values.mcp.enabled $multiReplicaMcp $sessionAffinity.enabled (not (or (eq $sessionAffinityProvider "aws-nlb") (eq $sessionAffinityProvider "ingress-nginx") (eq $sessionAffinityProvider "service-client-ip"))) -}}
+{{- fail "mcp.streamableHttp.sessionAffinity.provider must be one of: aws-nlb, ingress-nginx, service-client-ip" -}}
 {{- end -}}
 
 {{- if and (eq $zapSecretName "") (eq $zapApiKey "") -}}
@@ -187,7 +198,8 @@ User-provided annotations win over generated defaults.
 {{- define "mcp-zap-server.mcp.ingressAnnotations" -}}
 {{- $annotations := dict -}}
 {{- $sessionAffinity := .Values.mcp.streamableHttp.sessionAffinity -}}
-{{- if and $sessionAffinity.enabled (eq $sessionAffinity.provider "ingress-nginx") -}}
+{{- $sessionAffinityProvider := trimAll " " (default "" $sessionAffinity.provider) -}}
+{{- if and $sessionAffinity.enabled (eq $sessionAffinityProvider "ingress-nginx") -}}
 {{- $_ := set $annotations "nginx.ingress.kubernetes.io/upstream-hash-by" (default "$http_mcp_session_id$remote_addr$http_user_agent" $sessionAffinity.ingressNginx.upstreamHashBy) -}}
 {{- $_ := set $annotations "nginx.ingress.kubernetes.io/proxy-read-timeout" (default "3600" $sessionAffinity.ingressNginx.proxyReadTimeout) -}}
 {{- $_ := set $annotations "nginx.ingress.kubernetes.io/proxy-send-timeout" (default "3600" $sessionAffinity.ingressNginx.proxySendTimeout) -}}

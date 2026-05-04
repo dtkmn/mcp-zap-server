@@ -8,8 +8,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.service.ContextUserService;
+import mcp.server.zap.core.service.UrlValidationService;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,14 +22,18 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
     private static final String DEFAULT_USERNAME_FIELD = "username";
     private static final String DEFAULT_PASSWORD_FIELD = "password";
     private static final String DEFAULT_USER_NAME = "zap-scan-user";
+    private static final Pattern SAFE_FORM_FIELD_NAME = Pattern.compile("[A-Za-z0-9._:\\-\\[\\]]{1,128}");
 
     private final ContextUserService contextUserService;
     private final CredentialReferenceResolver credentialReferenceResolver;
+    private final UrlValidationService urlValidationService;
 
     public FormLoginAuthBootstrapProvider(ContextUserService contextUserService,
-                                          CredentialReferenceResolver credentialReferenceResolver) {
+                                          CredentialReferenceResolver credentialReferenceResolver,
+                                          UrlValidationService urlValidationService) {
         this.contextUserService = contextUserService;
         this.credentialReferenceResolver = credentialReferenceResolver;
+        this.urlValidationService = urlValidationService;
     }
 
     @Override
@@ -46,25 +52,22 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
         String loginUrl = requireText(request.loginUrl(), "loginUrl");
         String username = requireText(request.username(), "username");
         String loggedInIndicatorRegex = requireText(request.loggedInIndicatorRegex(), "loggedInIndicatorRegex");
-        String resolvedSecret = credentialReferenceResolver.resolveSecret(request.credentialReference(), request.inlineSecret());
+        validateUrls(targetUrl, loginUrl);
 
         String contextName = hasText(request.contextName()) ? request.contextName().trim() : deriveContextName(targetUrl);
         String userName = hasText(request.userName()) ? request.userName().trim() : DEFAULT_USER_NAME;
         String usernameField = hasText(request.usernameField()) ? request.usernameField().trim() : DEFAULT_USERNAME_FIELD;
         String passwordField = hasText(request.passwordField()) ? request.passwordField().trim() : DEFAULT_PASSWORD_FIELD;
+        validateFormFieldName(usernameField, "usernameField");
+        validateFormFieldName(passwordField, "passwordField");
+        String resolvedSecret = credentialReferenceResolver.resolveSecret(request.credentialReference(), request.inlineSecret());
 
         List<String> includeRegexes = List.of(buildScopeRegex(targetUrl));
         List<String> excludeRegexes = List.of(buildLogoutRegex(targetUrl));
         Map<String, Object> contextSummary = contextUserService.upsertContext(contextName, includeRegexes, excludeRegexes, true);
         String contextId = stringValue(contextSummary.get("contextId"));
 
-        String authMethodConfigParams = "loginUrl="
-                + loginUrl
-                + "&loginRequestData="
-                + usernameField
-                + "={%username%}&"
-                + passwordField
-                + "={%password%}";
+        String authMethodConfigParams = buildAuthMethodConfigParams(loginUrl, usernameField, passwordField);
         contextUserService.configureContextAuthentication(
                 contextId,
                 "formBasedAuthentication",
@@ -126,12 +129,68 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
         URI uri = URI.create(targetUrl);
         String base = uri.getScheme() + "://" + uri.getAuthority();
         String path = normalizePathPrefix(uri.getPath());
-        return base + path + ".*";
+        return Pattern.quote(base + path) + ".*";
+    }
+
+    private String buildAuthMethodConfigParams(String loginUrl, String usernameField, String passwordField) {
+        String loginRequestData = usernameField
+                + "={%username%}&"
+                + passwordField
+                + "={%password%}";
+        return configParam("loginUrl", loginUrl)
+                + "&"
+                + configParam("loginRequestData", loginRequestData);
+    }
+
+    private String configParam(String key, String value) {
+        return urlEncode(key) + "=" + urlEncode(value);
+    }
+
+    private void validateFormFieldName(String fieldName, String fieldLabel) {
+        if (!SAFE_FORM_FIELD_NAME.matcher(fieldName).matches()) {
+            throw new IllegalArgumentException(
+                    fieldLabel + " contains unsupported characters. Use letters, numbers, dot, underscore, dash, colon, or brackets."
+            );
+        }
+    }
+
+    private void validateUrls(String targetUrl, String loginUrl) {
+        urlValidationService.validateUrl(targetUrl);
+        urlValidationService.validateUrl(loginUrl);
+
+        URI target = URI.create(targetUrl);
+        URI login = URI.create(loginUrl);
+        if (!sameOrigin(target, login)) {
+            throw new IllegalArgumentException("loginUrl must share the same origin as targetUrl");
+        }
+    }
+
+    private boolean sameOrigin(URI target, URI login) {
+        return stringEqualsIgnoreCase(target.getScheme(), login.getScheme())
+                && stringEqualsIgnoreCase(target.getHost(), login.getHost())
+                && effectivePort(target) == effectivePort(login);
+    }
+
+    private int effectivePort(URI uri) {
+        if (uri.getPort() >= 0) {
+            return uri.getPort();
+        }
+        if ("http".equalsIgnoreCase(uri.getScheme())) {
+            return 80;
+        }
+        if ("https".equalsIgnoreCase(uri.getScheme())) {
+            return 443;
+        }
+        return -1;
+    }
+
+    private boolean stringEqualsIgnoreCase(String left, String right) {
+        return left != null && right != null && left.equalsIgnoreCase(right);
     }
 
     private String buildLogoutRegex(String targetUrl) {
         URI uri = URI.create(targetUrl);
-        return uri.getScheme() + "://" + uri.getAuthority() + "/logout.*";
+        return Pattern.quote(uri.getScheme() + "://" + uri.getAuthority() + "/logout") + ".*";
     }
 
     private String deriveContextName(String targetUrl) {

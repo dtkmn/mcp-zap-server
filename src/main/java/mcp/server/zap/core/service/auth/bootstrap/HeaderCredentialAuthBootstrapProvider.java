@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import mcp.server.zap.core.gateway.TargetDescriptor;
+import mcp.server.zap.core.service.UrlValidationService;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,9 +15,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvider {
     private final CredentialReferenceResolver credentialReferenceResolver;
+    private final UrlValidationService urlValidationService;
 
-    public HeaderCredentialAuthBootstrapProvider(CredentialReferenceResolver credentialReferenceResolver) {
+    public HeaderCredentialAuthBootstrapProvider(CredentialReferenceResolver credentialReferenceResolver,
+                                                 UrlValidationService urlValidationService) {
         this.credentialReferenceResolver = credentialReferenceResolver;
+        this.urlValidationService = urlValidationService;
     }
 
     @Override
@@ -32,6 +36,7 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
     @Override
     public AuthSessionPrepareResult prepare(AuthBootstrapRequest request) {
         String targetUrl = requireText(request.targetUrl(), "targetUrl");
+        urlValidationService.validateUrl(targetUrl);
         credentialReferenceResolver.resolveSecret(request.credentialReference(), request.inlineSecret());
 
         PreparedAuthSession session = new PreparedAuthSession(

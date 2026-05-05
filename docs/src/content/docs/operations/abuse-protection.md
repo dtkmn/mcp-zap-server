@@ -1,7 +1,7 @@
 ---
 title: "Abuse Protection"
 editUrl: false
-description: "Rate limits, workspace quotas, and overload shedding for MCP requests."
+description: "Request body limits, rate limits, workspace quotas, and overload shedding for MCP requests."
 ---
 MCP ZAP Server includes a production-safety layer for request throttling, workspace quotas, and overload shedding.
 
@@ -12,7 +12,47 @@ These controls matter because one shared ZAP runtime is still easy to overwhelm 
 - long-running direct scans or automation plans piling up
 - queue admission that exceeds the capacity of one ZAP engine
 
-The protection layer runs before tool execution and returns HTTP `429` when the request should be rejected.
+The protection layer runs before tool execution and returns HTTP `429` when rate, quota, or capacity controls reject a request.
+
+The hard MCP request body cap runs even earlier and returns HTTP `413` when a request is too large.
+
+## MCP Request Body Cap
+
+Relevant setting:
+
+- `MCP_REQUEST_MAX_BODY_BYTES`
+
+Default behavior:
+
+- default limit is `262144` bytes
+- values below `1024` are raised to an effective minimum of `1024` bytes
+- the cap applies to `POST /mcp` before auth, authorization, or abuse-protection filters parse the request body
+
+Oversized requests return:
+
+- HTTP `413 Payload Too Large`
+- JSON body with `error=request_body_too_large`, `reason`, `maxBodyBytes`, `correlationId`, and `requestId`
+
+Example:
+
+```json
+{
+  "status": 413,
+  "error": "request_body_too_large",
+  "reason": "MCP request body exceeds the configured limit",
+  "maxBodyBytes": 262144,
+  "correlationId": "corr-123",
+  "requestId": "abc-123"
+}
+```
+
+Large policy bundles, prompts, or custom tool payloads may need a higher limit:
+
+```bash
+MCP_REQUEST_MAX_BODY_BYTES=524288
+```
+
+Raise this only with evidence. If an internet-facing deployment needs multi-megabyte MCP requests, the design probably needs to move bulky inputs into files, URLs, or operator-managed config instead of turning the MCP endpoint into a dumping ground.
 
 ## Per-client Request Rate Limiting
 
@@ -100,6 +140,8 @@ Example:
 ## Recommended Baseline
 
 ```bash
+MCP_REQUEST_MAX_BODY_BYTES=262144
+
 MCP_PROTECTION_ENABLED=true
 MCP_PROTECTION_RATE_LIMIT_CAPACITY=60
 MCP_PROTECTION_RATE_LIMIT_REFILL_TOKENS=60

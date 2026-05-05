@@ -45,18 +45,25 @@ Guided tools:
 - `zap_attack_start`
 - `zap_attack_status`
 - `zap_attack_stop`
+- `zap_auth_session_prepare`
+- `zap_auth_session_validate`
 - `zap_findings_summary`
 - `zap_findings_details`
 - `zap_report_generate`
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
+- `zap_scan_history_list`
+- `zap_scan_history_get`
+- `zap_scan_history_export`
 
 Use `guided` when:
 
 - you want a smaller, intent-first tool surface
 - you are onboarding a new client quickly
 - you want the server to choose direct versus queue execution for crawl and attack flows
-- you do not need raw queue administration, auth-context setup, scan-policy tuning, or Automation Framework control
+- you want guided form-login auth bootstrap without exposing raw ZAP context/user tools
+- you want scan history evidence without switching to the raw queue or report surfaces
+- you do not need raw queue administration, raw auth-context setup, scan-policy tuning, or Automation Framework control
 
 ## Expert Surface
 
@@ -70,10 +77,11 @@ Use `guided` when:
 - authenticated scanning setup: `zap_context_*`, `zap_user_*`, `zap_auth_test_user`
 - Automation Framework: `zap_automation_*`
 - scan-policy controls: `zap_scan_policies_list`, `zap_scan_policy_view`, `zap_scan_policy_rule_set`
+- runtime policy preview: `zap_policy_dry_run`
 
 Use `expert` when:
 
-- you need authenticated scanning workflows
+- you need low-level authenticated scanning workflows
 - you need queue job inspection, retry, or dead-letter control
 - you want raw API schema import tools instead of the guided import wrapper
 - you want findings snapshots, diffs, or raw report artifact reads
@@ -91,11 +99,12 @@ Pages that matter to almost everyone:
 - [JWT Quick Start](./jwt-quick-start/)
 - [Tool Scope Authorization](./tool-scope-authorization/)
 - [Scan Execution Modes](../scanning/scan-execution-modes/)
+- [Authenticated Scanning Best Practices](../scanning/authenticated-scanning-best-practices/)
 - [Passive Scan](../scanning/passive-scan/)
+- [Scan History Ledger](../operations/scan-history-ledger/)
 
 Pages that require `expert`:
 
-- [Authenticated Scanning Best Practices](../scanning/authenticated-scanning-best-practices/)
 - [AJAX Spider](../scanning/ajax-spider/)
 - [API Schema Imports](../scanning/api-schema-imports/)
 - [Scan Policy Controls](../scanning/scan-policy-controls/)

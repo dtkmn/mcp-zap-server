@@ -79,10 +79,12 @@ Common scopes:
 | `zap:scan:queue:write` | Retry or requeue queue jobs |
 | `zap:scan:policy:read` | View ZAP active-scan policies and rule state |
 | `zap:scan:policy:write` | Change ZAP active-scan policy rules |
+| `zap:policy:dry-run` | Preview Policy Bundle v1 decisions with `zap_policy_dry_run` |
 | `zap:automation:run` | Start Automation Framework plans |
 | `zap:automation:read` | Read Automation Framework status and artifacts |
 | `zap:context:read` / `zap:context:write` | Read or change ZAP contexts/auth config |
 | `zap:user:read` / `zap:user:write` | Read or change ZAP users |
+| `zap:auth:session:write` | Prepare guided authenticated sessions |
 | `zap:auth:test` | Run authenticated-user verification helpers |
 
 ## Deny Contract

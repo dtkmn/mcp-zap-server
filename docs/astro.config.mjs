@@ -69,6 +69,7 @@ export default defineConfig({
 					label: 'Operations',
 					items: [
 						{ slug: 'operations/abuse-protection' },
+						{ slug: 'operations/runtime-policy-bundles' },
 						{ slug: 'operations/observability' },
 						{ slug: 'operations/structured-logging' },
 						{ slug: 'operations/production-checklist' },

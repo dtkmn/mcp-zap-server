@@ -31,14 +31,14 @@ Project links:
 3. Open `http://localhost:3000` for the bundled Open WebUI path, or connect your MCP client to `http://localhost:7456/mcp`.
 4. Use the [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/) and [Client Configuration Guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/) if you are wiring a remote client.
 
-## Latest Release (`v0.6.1`)
+## Latest Release (`v0.7.0`)
 
-- Hotfix for a streamable HTTP MCP transport crash that made `tools/list`, `prompts/list`, and `resources/list` return `500 Internal Server Error` after `initialize`.
-- Restores Streamable HTTP event-stream responses for tool, prompt, and resource list requests after a successful MCP handshake.
-- Includes post-`v0.6.0` maintenance updates for Spring Boot, Spring AI, Gradle, SBOM/docs dependencies, Docker/Compose defaults, CI/release automation, CodeQL, and community templates.
-- Keeps the `v0.6.0` guided/expert tool surface, authorization, protection, observability, queue, Helm, and documentation improvements. No configuration changes are required.
+- Adds Policy Bundle v1 dry-run and runtime enforcement support, including the new `zap_policy_dry_run` tool.
+- Adds guided auth session bootstrap for form-login, bearer-token, and API-key flows with credential reference allowlisting.
+- Adds a scan history ledger with list, get, and export tools for release evidence and operations.
+- Hardens MCP request body limits, Helm HA affinity validation, MCP/ZAP egress boundaries, Docker bind defaults, and guided auth secret handling.
 
-See [RELEASE_NOTES_0.6.1.md](./RELEASE_NOTES_0.6.1.md) and [CHANGELOG.md](./CHANGELOG.md) for the full upgrade and change details.
+See [RELEASE_NOTES_0.7.0.md](./RELEASE_NOTES_0.7.0.md) and [CHANGELOG.md](./CHANGELOG.md) for the full upgrade and change details.
 
 ## 📚 Documentation
 

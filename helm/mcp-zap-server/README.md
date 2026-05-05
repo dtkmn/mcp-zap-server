@@ -239,7 +239,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=0.6.1
+  --set mcp.image.tag=0.7.0
 ```
 
 ## Uninstalling

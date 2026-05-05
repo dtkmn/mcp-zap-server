@@ -8,6 +8,7 @@ MCP ZAP Server exposes a practical observability baseline:
 - structured request logging with `X-Correlation-Id`
 - bounded audit events
 - Prometheus-ready custom metrics for request, auth, authorization, tool, queue, and protection flows
+- bundled Prometheus alert rules and a starter Grafana dashboard
 
 ## Exposed Actuator Endpoints
 
@@ -46,6 +47,7 @@ High-signal audit event types include:
 
 - `authentication`
 - `authorization`
+- `policy_decision`
 - `tool_execution`
 - `protection_rejection`
 
@@ -61,11 +63,34 @@ Recommended validation flow:
 4. search `request.completed` logs for that ID
 5. query `/actuator/auditevents` and confirm related audit entries include the same ID
 
-## Current Gap
+## Bundled Assets
 
-This repo does not currently ship bundled Grafana dashboards or Prometheus alert rules in-tree. The metrics contract is there. The example dashboards are not.
+The repo ships starter observability assets:
 
-That means the docs should tell the truth:
+- `ops/observability/grafana-dashboard.json`
+- `ops/observability/prometheus-alerts.yml`
 
-- you can scrape and alert on these metrics now
-- you still need to build or import your own dashboards and alerts
+The Grafana dashboard covers request rate, authentication events, authorization decisions, tool throughput and duration, protection rejections, queue jobs, and audit event volume.
+
+The Prometheus alert file includes warning rules for:
+
+- elevated authentication failures
+- sustained protection rejections
+- queued scan backlog
+- repeated tool execution failures
+
+Import these as release baselines, then tune thresholds from real traffic. Do not treat the starter dashboard as an SLO model; it is there to stop operators from starting with a blank screen.
+
+## Policy Decision Evidence
+
+Policy preview, runtime dry-run, and runtime enforcement emit `policy_decision` audit events with the same correlation ID as the tool request when one is available.
+
+Expected outcomes include:
+
+- `allow`
+- `deny`
+- `dry_run_allow`
+- `dry_run_deny`
+- `invalid`
+
+During rollout, watch for unexpected `dry_run_deny` and `invalid` events before switching `MCP_POLICY_MODE` to `enforce`.

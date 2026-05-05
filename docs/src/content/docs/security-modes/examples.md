@@ -75,7 +75,7 @@ MCP_CLIENT_ID=client-1
 version: '3.8'
 services:
   mcp-zap-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:latest
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.7.0
     environment:
       - MCP_SECURITY_MODE=api-key
       - MCP_API_KEY=${MCP_API_KEY}
@@ -145,7 +145,7 @@ JWT_REFRESH_TOKEN_EXPIRATION=604800
 version: '3.8'
 services:
   mcp-zap-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:latest
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.7.0
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - MCP_SECURITY_MODE=jwt

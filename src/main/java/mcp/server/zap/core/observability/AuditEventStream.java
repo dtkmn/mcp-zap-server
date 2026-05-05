@@ -2,17 +2,16 @@ package mcp.server.zap.core.observability;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.actuate.audit.AuditEvent;
 import org.springframework.boot.actuate.audit.AuditEventRepository;
 import org.springframework.stereotype.Service;
-
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;
 
 /**
  * Publishes bounded audit events to the Actuator audit endpoint and structured logs.
@@ -56,7 +55,7 @@ public class AuditEventStream {
 
         auditEventRepository.add(new AuditEvent(Instant.now(), normalizedPrincipal, normalizedType, data));
         if (meterRegistry != null) {
-            meterRegistry.counter("asg.audit.events", "type", normalizedType, "outcome", normalizedOutcome).increment();
+            meterRegistry.counter("mcp.zap.audit.events", "type", normalizedType, "outcome", normalizedOutcome).increment();
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();

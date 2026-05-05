@@ -6,10 +6,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class UrlValidationServiceTest {
 
@@ -84,6 +81,28 @@ class UrlValidationServiceTest {
     }
 
     @Test
+    void allowsPrivateNetworksWhenEnabledEvenIfDefaultBlacklistContainsPrivateCidrs() {
+        ReflectionTestUtils.setField(service, "allowPrivateNetworks", true);
+        ReflectionTestUtils.setField(
+                service,
+                "blacklist",
+                List.of("localhost", "127.0.0.1", "0.0.0.0", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+        );
+
+        assertDoesNotThrow(() -> service.validateUrl("http://10.1.2.3"));
+        assertDoesNotThrow(() -> service.validateUrl("http://172.18.0.2"));
+        assertDoesNotThrow(() -> service.validateUrl("http://192.168.1.50"));
+    }
+
+    @Test
+    void explicitPrivateIpBlacklistStillBlocksWhenPrivateNetworksEnabled() {
+        ReflectionTestUtils.setField(service, "allowPrivateNetworks", true);
+        ReflectionTestUtils.setField(service, "blacklist", List.of("10.1.2.3"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://10.1.2.3"));
+    }
+
+    @Test
     void whitelistTakesPrecedence() {
         ReflectionTestUtils.setField(service, "whitelist", List.of("example.com", "*.example.com"));
 
@@ -113,7 +132,7 @@ class UrlValidationServiceTest {
     @Test
     void blacklistSupportsCidrEntries() {
         ReflectionTestUtils.setField(service, "allowPrivateNetworks", true);
-        ReflectionTestUtils.setField(service, "blacklist", List.of("10.0.0.0/8", "2001:db8::/32"));
+        ReflectionTestUtils.setField(service, "blacklist", List.of("10.1.0.0/16", "2001:db8::/32"));
 
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://10.1.2.3"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://[2001:db8::1]"));

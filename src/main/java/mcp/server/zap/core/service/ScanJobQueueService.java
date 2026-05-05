@@ -10,13 +10,14 @@ import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.ScanJobAccessBoundary;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -26,9 +27,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -80,6 +81,7 @@ public class ScanJobQueueService {
     private ClaimMetrics claimMetrics = ClaimMetrics.noop();
     private QueueStateMetrics queueStateMetrics = QueueStateMetrics.noop();
     private ClientWorkspaceResolver clientWorkspaceResolver;
+    private ScanJobAccessBoundary scanJobAccessBoundary;
 
     private final Map<String, ScanJob> jobs = new ConcurrentHashMap<>();
     private final Deque<String> queuedJobIds = new ArrayDeque<>();
@@ -127,6 +129,11 @@ public class ScanJobQueueService {
     @Autowired(required = false)
     void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
         this.clientWorkspaceResolver = clientWorkspaceResolver;
+    }
+
+    @Autowired(required = false)
+    void setScanJobAccessBoundary(ScanJobAccessBoundary scanJobAccessBoundary) {
+        this.scanJobAccessBoundary = scanJobAccessBoundary;
     }
 
     ScanJobQueueService(ActiveScanService activeScanService,
@@ -467,9 +474,7 @@ public class ScanJobQueueService {
         processQueue();
 
         ScanJob job = scanJobStore.load(normalizedJobId).orElse(null);
-        if (job == null) {
-            throw new IllegalArgumentException("No scan job found for ID: " + normalizedJobId);
-        }
+        job = requireVisibleJob(normalizedJobId, job);
         return formatJobDetail(job, job.getQueuePosition());
     }
 
@@ -482,6 +487,7 @@ public class ScanJobQueueService {
         List<ScanJob> snapshot = scanJobStore.list().stream()
                 .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
                 .toList();
+        snapshot = filterVisibleJobs(snapshot);
         Instant now = Instant.now();
 
         StringBuilder output = new StringBuilder();
@@ -562,9 +568,7 @@ public class ScanJobQueueService {
 
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
             ScanJob job = currentState.jobs().get(normalizedJobId);
-            if (job == null) {
-                throw new IllegalArgumentException("No scan job found for ID: " + normalizedJobId);
-            }
+            job = requireVisibleJob(normalizedJobId, job);
 
             if (job.getStatus() == ScanJobStatus.QUEUED) {
                 currentState.queuedJobIds().remove(normalizedJobId);
@@ -612,9 +616,7 @@ public class ScanJobQueueService {
         String normalizedJobId = requireText(jobId, "jobId");
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
             ScanJob job = currentState.jobs().get(normalizedJobId);
-            if (job == null) {
-                throw new IllegalArgumentException("No scan job found for ID: " + normalizedJobId);
-            }
+            job = requireVisibleJob(normalizedJobId, job);
 
             if (job.getStatus() != ScanJobStatus.FAILED && job.getStatus() != ScanJobStatus.CANCELLED) {
                 throw new IllegalStateException("Only FAILED or CANCELLED jobs can be retried. Current status: " + job.getStatus());
@@ -653,6 +655,7 @@ public class ScanJobQueueService {
                 .filter(this::isDeadLetterJob)
                 .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
                 .toList();
+        deadLetterJobs = filterVisibleJobs(deadLetterJobs);
 
         StringBuilder output = new StringBuilder();
         output.append("Dead-letter jobs: ").append(deadLetterJobs.size());
@@ -685,9 +688,7 @@ public class ScanJobQueueService {
         ScanJob[] replayJob = new ScanJob[1];
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
             ScanJob deadLetterJob = currentState.jobs().get(normalizedJobId);
-            if (deadLetterJob == null) {
-                throw new IllegalArgumentException("No scan job found for ID: " + normalizedJobId);
-            }
+            deadLetterJob = requireVisibleJob(normalizedJobId, deadLetterJob);
             if (!isDeadLetterJob(deadLetterJob)) {
                 throw new IllegalStateException("Job " + normalizedJobId + " is not a dead-letter job. Current status="
                         + deadLetterJob.getStatus() + ", attempts=" + deadLetterJob.getAttempts()
@@ -894,6 +895,20 @@ public class ScanJobQueueService {
     private String submitQueuedScan(ScanJobType type, Map<String, String> parameters, String idempotencyKey) {
         AdmittedJob admission = enqueueJob(type, parameters, idempotencyKey);
         return formatSubmission(admission.job(), admission.idempotentReplay());
+    }
+
+    private List<ScanJob> filterVisibleJobs(List<ScanJob> jobs) {
+        if (scanJobAccessBoundary == null) {
+            return jobs == null ? List.of() : jobs;
+        }
+        return scanJobAccessBoundary.filterVisibleJobs(jobs);
+    }
+
+    private ScanJob requireVisibleJob(String jobId, ScanJob job) {
+        if (job == null || (scanJobAccessBoundary != null && !scanJobAccessBoundary.canCurrentRequesterAccess(job))) {
+            throw new IllegalArgumentException("No scan job found for ID: " + jobId);
+        }
+        return job;
     }
 
     private void validateIdempotentReplay(ScanJob existingJob, ScanJob requestedJob) {
@@ -1832,7 +1847,7 @@ public class ScanJobQueueService {
         }
 
         private static Counter counter(MeterRegistry meterRegistry, String event) {
-            return Counter.builder("asg.queue.claim.events")
+            return Counter.builder("mcp.zap.queue.claim.events")
                     .tag("event", event)
                     .register(meterRegistry);
         }
@@ -1865,7 +1880,7 @@ public class ScanJobQueueService {
             Map<ScanJobStatus, AtomicInteger> statusGauges = new LinkedHashMap<>();
             for (ScanJobStatus status : ScanJobStatus.values()) {
                 AtomicInteger gauge = meterRegistry.gauge(
-                        "asg.queue.jobs",
+                        "mcp.zap.queue.jobs",
                         List.of(io.micrometer.core.instrument.Tag.of("status", status.name().toLowerCase(Locale.ROOT))),
                         new AtomicInteger(0)
                 );
@@ -1873,12 +1888,12 @@ public class ScanJobQueueService {
             }
 
             AtomicInteger activeClaimsGauge = meterRegistry.gauge(
-                    "asg.queue.claims",
+                    "mcp.zap.queue.claims",
                     List.of(io.micrometer.core.instrument.Tag.of("state", "active")),
                     new AtomicInteger(0)
             );
             AtomicInteger expiredClaimsGauge = meterRegistry.gauge(
-                    "asg.queue.claims",
+                    "mcp.zap.queue.claims",
                     List.of(io.micrometer.core.instrument.Tag.of("state", "expired")),
                     new AtomicInteger(0)
             );

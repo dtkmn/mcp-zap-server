@@ -2,6 +2,7 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.service.revocation.TokenRevocationStore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -12,6 +13,7 @@ import java.time.Instant;
  */
 @Slf4j
 @Service
+@ConditionalOnProperty(prefix = "mcp.server.auth.jwt", name = "enabled", havingValue = "true")
 public class TokenBlacklistService {
 
     private final TokenRevocationStore tokenRevocationStore;

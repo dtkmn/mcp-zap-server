@@ -9,8 +9,8 @@ import org.slf4j.MDC;
  * accessors.
  */
 public final class RequestIdentityHolder {
-    public static final String CLIENT_ID_KEY = "asg.request.client-id";
-    public static final String WORKSPACE_ID_KEY = "asg.request.workspace-id";
+    public static final String CLIENT_ID_KEY = "mcp.zap.request.client-id";
+    public static final String WORKSPACE_ID_KEY = "mcp.zap.request.workspace-id";
 
     private static final ThreadLocal<String> CLIENT_ID = new ThreadLocal<>();
     private static final ThreadLocal<String> WORKSPACE_ID = new ThreadLocal<>();

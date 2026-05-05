@@ -1,11 +1,10 @@
 package mcp.server.zap.core.service;
 
+import java.util.List;
+import java.util.Map;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.Map;
 
 /**
  * Expert MCP adapter for authenticated scanning setup and diagnostics.
@@ -34,7 +33,7 @@ public class ExpertAuthMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "Context name (e.g. shop-auth)") String contextName,
             @ToolParam(description = "List of include URL regexes (max 20)") List<String> includeRegexes,
             @ToolParam(description = "List of exclude URL regexes (max 20)") List<String> excludeRegexes,
-            @ToolParam(description = "Set context in scope (true/false). Optional.") Boolean inScope
+            @ToolParam(required = false, description = "Set context in scope (true/false). Optional.") Boolean inScope
     ) {
         return contextUserService.upsertContext(contextName, includeRegexes, excludeRegexes, inScope);
     }
@@ -54,8 +53,8 @@ public class ExpertAuthMcpToolsService implements ExpertToolGroup {
     public Map<String, Object> upsertUser(
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "User name") String userName,
-            @ToolParam(description = "Authentication credentials config params string. Optional.") String authCredentialsConfigParams,
-            @ToolParam(description = "Set user enabled state (true/false). Optional.") Boolean enabled
+            @ToolParam(required = false, description = "Authentication credentials config params string. Optional.") String authCredentialsConfigParams,
+            @ToolParam(required = false, description = "Set user enabled state (true/false). Optional.") Boolean enabled
     ) {
         return contextUserService.upsertUser(contextId, userName, authCredentialsConfigParams, enabled);
     }
@@ -67,9 +66,9 @@ public class ExpertAuthMcpToolsService implements ExpertToolGroup {
     public Map<String, Object> configureContextAuthentication(
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "Authentication method name") String authMethodName,
-            @ToolParam(description = "Authentication method config params string. Optional.") String authMethodConfigParams,
-            @ToolParam(description = "Logged-in indicator regex. Optional.") String loggedInIndicatorRegex,
-            @ToolParam(description = "Logged-out indicator regex. Optional.") String loggedOutIndicatorRegex
+            @ToolParam(required = false, description = "Authentication method config params string. Optional.") String authMethodConfigParams,
+            @ToolParam(required = false, description = "Logged-in indicator regex. Optional.") String loggedInIndicatorRegex,
+            @ToolParam(required = false, description = "Logged-out indicator regex. Optional.") String loggedOutIndicatorRegex
     ) {
         return contextUserService.configureContextAuthentication(
                 contextId, authMethodName, authMethodConfigParams, loggedInIndicatorRegex, loggedOutIndicatorRegex);

@@ -36,6 +36,10 @@ jobs:
         working-directory: ./docs
         run: npm ci
 
+      - name: Audit docs dependencies
+        working-directory: ./docs
+        run: npm audit --audit-level=moderate
+
       - name: Validate Astro content
         working-directory: ./docs
         run: npm run check

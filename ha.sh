@@ -3,7 +3,7 @@ set -euo pipefail
 
 replicas="${MCP_REPLICAS:-3}"
 gateway_port="${HA_MCP_GATEWAY_PORT:-7456}"
-project_name="${COMPOSE_PROJECT_NAME:-agentic-security-gateway}"
+project_name="${COMPOSE_PROJECT_NAME:-mcp-zap-server}"
 gateway_conf="docker/nginx/mcp-ha.conf"
 gateway_template="docker/nginx/mcp-ha.conf.tmpl"
 

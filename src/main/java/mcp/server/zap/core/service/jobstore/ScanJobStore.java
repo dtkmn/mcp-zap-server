@@ -2,8 +2,8 @@ package mcp.server.zap.core.service.jobstore;
 
 import mcp.server.zap.core.model.ScanJob;
 
-import java.time.Instant;
 import java.util.Collection;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.UnaryOperator;

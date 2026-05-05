@@ -1,9 +1,10 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
+import sitemap from '@astrojs/sitemap';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-	site: 'https://dtkmn.github.io',
+	site: 'https://danieltse.org',
 	base: '/mcp-zap-server',
 	trailingSlash: 'always',
 	integrations: [
@@ -19,7 +20,7 @@ export default defineConfig({
 				'@fontsource/ibm-plex-mono/500.css',
 				'@fontsource/rajdhani/500.css',
 				'@fontsource/rajdhani/700.css',
-				'/src/styles/mr-robot.css',
+				'/src/styles/terminal-ops.css',
 			],
 			credits: false,
 			components: {
@@ -74,6 +75,7 @@ export default defineConfig({
 						{ slug: 'operations/local-ha-compose' },
 						{ slug: 'operations/queue-coordinator-leader-election' },
 						{ slug: 'operations/scan-queue-retry-policy' },
+						{ slug: 'operations/scan-history-ledger' },
 						{ slug: 'operations/native-image-performance' },
 					],
 				},
@@ -97,6 +99,9 @@ export default defineConfig({
 					],
 				},
 			],
+		}),
+		sitemap({
+			filter: (page) => !/\/[A-Z_]+\.html\/?$/.test(new URL(page).pathname),
 		}),
 	],
 });

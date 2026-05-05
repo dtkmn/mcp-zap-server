@@ -1,0 +1,60 @@
+{
+  "contractVersion": "mcp.zap.policy.dry-run/v1",
+  "bundle": {
+    "apiVersion": "mcp.zap.policy/v1",
+    "kind": "PolicyBundle",
+    "name": "ci-guided-guardrails",
+    "displayName": "CI Guided Guardrails",
+    "owner": "security-platform",
+    "timezone": "Australia/Sydney",
+    "ruleCount": 3
+  },
+  "request": {
+    "tool": "zap_attack_start",
+    "target": "https://api.sandbox.example.com/orders",
+    "normalizedHost": "api.sandbox.example.com",
+    "evaluatedAt": "2026-06-02T01:00:00Z",
+    "bundleTimezone": "Australia/Sydney",
+    "bundleLocalDay": "tue",
+    "bundleLocalTime": "11:00"
+  },
+  "validation": {
+    "valid": true,
+    "errors": []
+  },
+  "trace": [
+    {
+      "ruleId": "deny-production-attack-tools",
+      "decision": "deny",
+      "enabled": true,
+      "matched": false,
+      "matchedSelectors": [
+        "tools"
+      ],
+      "failedSelectors": [
+        "hosts"
+      ],
+      "reason": "Production hosts stay outside the autonomous CI attack path."
+    },
+    {
+      "ruleId": "allow-guided-ci-sandbox-hours",
+      "decision": "allow",
+      "enabled": true,
+      "matched": true,
+      "matchedSelectors": [
+        "tools",
+        "hosts",
+        "timeWindows"
+      ],
+      "failedSelectors": [],
+      "reason": "Sandbox CI is approved during staffed rollout hours."
+    }
+  ],
+  "decision": {
+    "result": "allow",
+    "source": "rule",
+    "matchedRuleId": "allow-guided-ci-sandbox-hours",
+    "reason": "Sandbox CI is approved during staffed rollout hours.",
+    "defaultDecision": "deny"
+  }
+}

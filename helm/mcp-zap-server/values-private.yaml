@@ -15,6 +15,10 @@ zap:
 mcp:
   service:
     type: ClusterIP
+  streamableHttp:
+    sessionAffinity:
+      enabled: true
+      provider: service-client-ip
   ingress:
     enabled: false
   security:

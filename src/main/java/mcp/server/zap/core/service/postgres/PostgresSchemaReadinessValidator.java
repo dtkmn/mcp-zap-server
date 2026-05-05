@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service.postgres;
 
 import mcp.server.zap.core.configuration.ScanJobStoreProperties;
+import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,19 +21,23 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
     private static final Pattern SQL_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private final ScanJobStoreProperties scanJobStoreProperties;
+    private final ScanHistoryLedgerProperties scanHistoryLedgerProperties;
     private final TokenRevocationStoreProperties tokenRevocationStoreProperties;
 
     public PostgresSchemaReadinessValidator(
             ScanJobStoreProperties scanJobStoreProperties,
+            ScanHistoryLedgerProperties scanHistoryLedgerProperties,
             TokenRevocationStoreProperties tokenRevocationStoreProperties
     ) {
         this.scanJobStoreProperties = scanJobStoreProperties;
+        this.scanHistoryLedgerProperties = scanHistoryLedgerProperties;
         this.tokenRevocationStoreProperties = tokenRevocationStoreProperties;
     }
 
     @Override
     public void afterPropertiesSet() {
         validateScanJobSchema();
+        validateScanHistorySchema();
         validateJwtRevocationSchema();
     }
 
@@ -75,6 +80,29 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
         );
     }
 
+    private void validateScanHistorySchema() {
+        String backend = hasText(scanHistoryLedgerProperties.getBackend())
+                ? scanHistoryLedgerProperties.getBackend()
+                : scanJobStoreProperties.getBackend();
+        if (!isPostgresBackend(backend)) {
+            return;
+        }
+
+        ScanHistoryLedgerProperties.Postgres postgres = scanHistoryLedgerProperties.getPostgres();
+        String url = hasText(postgres.getUrl()) ? postgres.getUrl() : scanJobStoreProperties.getPostgres().getUrl();
+        if (!hasText(url)) {
+            return;
+        }
+        String username = hasText(postgres.getUsername())
+                ? postgres.getUsername()
+                : scanJobStoreProperties.getPostgres().getUsername();
+        String password = hasText(postgres.getPassword())
+                ? postgres.getPassword()
+                : scanJobStoreProperties.getPostgres().getPassword();
+        String tableName = validateTableName(postgres.getTableName(), "scan history");
+        validateScanHistoryTableAccessible(url, username, password, tableName);
+    }
+
     private void validateTableAccessible(
             String url,
             String username,
@@ -115,6 +143,31 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
                             + "Apply Flyway migrations before starting MCP replicas. Expected table '"
                             + tableName + "' with columns 'queue_position', 'requester_id', 'idempotency_key', "
                             + "'claim_owner_id', 'claim_heartbeat_at', and 'claim_expires_at'.",
+                    e
+            );
+        }
+    }
+
+    private void validateScanHistoryTableAccessible(
+            String url,
+            String username,
+            String password,
+            String tableName
+    ) {
+        String sql = "SELECT ledger_id, recorded_at, evidence_type, operation_kind, status, engine_id, "
+                + "target_kind, target_url, workspace_id, metadata_json "
+                + "FROM " + tableName + " LIMIT 0";
+        try (Connection connection = openConnection(url, username, password);
+             Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+            log.info("Validated Postgres schema for scan history using table '{}'", tableName);
+        } catch (SQLException e) {
+            throw new IllegalStateException(
+                    "Required Postgres schema for scan history is missing or not accessible. "
+                            + "Apply Flyway migrations before starting MCP replicas. Expected table '"
+                            + tableName + "' with columns 'ledger_id', 'recorded_at', 'evidence_type', "
+                            + "'operation_kind', 'status', 'engine_id', 'target_kind', 'target_url', "
+                            + "'workspace_id', and 'metadata_json'.",
                     e
             );
         }

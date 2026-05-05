@@ -1,10 +1,15 @@
 package mcp.server.zap.core.service;
 
+import java.util.Locale;
+import mcp.server.zap.core.gateway.ArtifactRecord;
+import mcp.server.zap.core.gateway.EngineAdapter;
+import mcp.server.zap.core.gateway.EngineCapability;
+import mcp.server.zap.core.gateway.FindingRecord;
+import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.TargetDescriptor;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
-
-import java.util.Locale;
 
 /**
  * Intent-first MCP facade that exposes a small guided tool surface.
@@ -18,15 +23,21 @@ public class GuidedSecurityToolsService {
     private final ReportService reportService;
     private final FindingsService findingsService;
     private final OpenApiService openApiService;
+    private final EngineAdapter engineAdapter;
+    private final GatewayRecordFactory gatewayRecordFactory;
 
     public GuidedSecurityToolsService(GuidedScanWorkflowService guidedScanWorkflowService,
                                       ReportService reportService,
                                       FindingsService findingsService,
-                                      OpenApiService openApiService) {
+                                      OpenApiService openApiService,
+                                      EngineAdapter engineAdapter,
+                                      GatewayRecordFactory gatewayRecordFactory) {
         this.guidedScanWorkflowService = guidedScanWorkflowService;
         this.reportService = reportService;
         this.findingsService = findingsService;
         this.openApiService = openApiService;
+        this.engineAdapter = engineAdapter;
+        this.gatewayRecordFactory = gatewayRecordFactory;
     }
 
     @Tool(
@@ -37,9 +48,10 @@ public class GuidedSecurityToolsService {
             @ToolParam(description = "Definition type: openapi, graphql, or soap") String definitionType,
             @ToolParam(description = "Source kind: url or file") String sourceKind,
             @ToolParam(description = "Definition source URL or file path") String source,
-            @ToolParam(description = "Optional GraphQL endpoint URL when definitionType is graphql") String endpointUrl,
-            @ToolParam(description = "Optional host override when definitionType is openapi") String hostOverride
+            @ToolParam(required = false, description = "Optional GraphQL endpoint URL when definitionType is graphql") String endpointUrl,
+            @ToolParam(required = false, description = "Optional host override when definitionType is openapi") String hostOverride
     ) {
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);
         String normalizedSourceKind = normalizeSourceKind(sourceKind);
         String normalizedSource = requireText(source, "source");
@@ -55,14 +67,15 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=browser for SPAs, login-heavy flows, or JavaScript-driven apps, and strategy=auto when you want the service to pick the default crawl engine."
+            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=browser for SPAs, login-heavy flows, or JavaScript-driven apps, and strategy=auto when you want the service to pick the default crawl engine. When authSessionId is supplied, guided crawl currently supports prepared form-login sessions on the HTTP spider path only."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
-            @ToolParam(description = "Optional crawl strategy. Use auto to prefer the default guided engine, http for traditional pages and simple link discovery, or browser for SPAs, authenticated flows, and JavaScript-heavy navigation.") String strategy,
-            @ToolParam(description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey
+            @ToolParam(required = false, description = "Optional crawl strategy. Use auto to prefer the default guided engine, http for traditional pages and simple link discovery, or browser for SPAs, authenticated flows, and JavaScript-heavy navigation.") String strategy,
+            @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
+            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided crawl currently accepts form-login sessions only and rejects browser strategy when auth is supplied.") String authSessionId
     ) {
-        return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey);
+        return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
     }
 
     @Tool(
@@ -87,15 +100,16 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_attack_start",
-            description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The server decides direct versus queued execution from deployment topology."
+            description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The server decides direct versus queued execution from deployment topology. When authSessionId is supplied, guided attack currently accepts prepared form-login sessions only."
     )
     public String startAttack(
             @ToolParam(description = "Target host or base URL to attack, for example https://app.example.com or https://app.example.com/api") String targetUrl,
-            @ToolParam(description = "Optional recurse flag (default: true)") String recurse,
-            @ToolParam(description = "Optional active-scan policy name when you need a non-default rule set") String policy,
-            @ToolParam(description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey
+            @ToolParam(required = false, description = "Optional recurse flag (default: true)") String recurse,
+            @ToolParam(required = false, description = "Optional active-scan policy name when you need a non-default rule set") String policy,
+            @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
+            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided attack currently accepts form-login sessions only.") String authSessionId
     ) {
-        return guidedScanWorkflowService.startAttack(targetUrl, recurse, policy, idempotencyKey);
+        return guidedScanWorkflowService.startAttack(targetUrl, recurse, policy, idempotencyKey, authSessionId);
     }
 
     @Tool(
@@ -123,11 +137,17 @@ public class GuidedSecurityToolsService {
             description = "Get the first-pass findings view after a scan or passive-scan wait. This returns a concise grouped risk summary for fast triage. Use baseUrl to scope results to a specific host or path."
     )
     public String getGuidedFindingsSummary(
-            @ToolParam(description = "Optional base URL filter to scope findings to a specific host or path, for example https://app.example.com/admin") String baseUrl
+            @ToolParam(required = false, description = "Optional base URL filter to scope findings to a specific host or path, for example https://app.example.com/admin") String baseUrl
     ) {
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.FINDINGS_READ, "findings read");
         String normalizedBaseUrl = trimToEmpty(baseUrl);
+        FindingRecord findingRecord = gatewayRecordFactory.findingSummary(
+                engineAdapter,
+                gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB),
+                "summary"
+        );
         String findingsSummary = findingsService.getFindingsSummary(normalizedBaseUrl);
-        return formatGuidedFindingsSummary(normalizedBaseUrl, findingsSummary);
+        return formatGuidedFindingsSummary(targetScope(findingRecord.target()), findingsSummary);
     }
 
     @Tool(
@@ -135,20 +155,22 @@ public class GuidedSecurityToolsService {
             description = "Drill into findings after reading the summary. By default this returns grouped details for matching alerts. Set includeInstances=true when you need bounded raw alert occurrences with concrete URLs, params, evidence, or attack samples."
     )
     public String getGuidedFindingsDetails(
-            @ToolParam(description = "Optional base URL filter to scope findings to one host or path") String baseUrl,
-            @ToolParam(description = "Optional plugin ID filter when you already know the ZAP alert/plugin identifier to inspect") String pluginId,
-            @ToolParam(description = "Optional alert name filter when you want one alert family only") String alertName,
-            @ToolParam(description = "Optional true to include bounded raw instances with concrete URLs and evidence; false returns grouped detail blocks") Boolean includeInstances,
-            @ToolParam(description = "Optional instance limit used only when includeInstances is true") Integer limit
+            @ToolParam(required = false, description = "Optional base URL filter to scope findings to one host or path") String baseUrl,
+            @ToolParam(required = false, description = "Optional plugin ID filter when you already know the ZAP alert/plugin identifier to inspect") String pluginId,
+            @ToolParam(required = false, description = "Optional alert name filter when you want one alert family only") String alertName,
+            @ToolParam(required = false, description = "Optional true to include bounded raw instances with concrete URLs and evidence; false returns grouped detail blocks") Boolean includeInstances,
+            @ToolParam(required = false, description = "Optional instance limit used only when includeInstances is true") Integer limit
     ) {
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.FINDINGS_READ, "findings read");
         String normalizedBaseUrl = trimToEmpty(baseUrl);
         String normalizedPluginId = trimToEmpty(pluginId);
         String normalizedAlertName = trimToEmpty(alertName);
+        TargetDescriptor target = gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB);
         String findingsDetails = Boolean.TRUE.equals(includeInstances)
                 ? findingsService.getAlertInstances(normalizedBaseUrl, normalizedPluginId, normalizedAlertName, limit)
                 : findingsService.getAlertDetails(normalizedBaseUrl, normalizedPluginId, normalizedAlertName);
         return formatGuidedFindingsDetails(
-                normalizedBaseUrl,
+                targetScope(target),
                 normalizedPluginId,
                 normalizedAlertName,
                 includeInstances,
@@ -162,24 +184,27 @@ public class GuidedSecurityToolsService {
             description = "Generate a human-shareable report artifact using guided defaults. Use this after passive scan backlog drains when you want an export or handoff artifact; use findings summary/details for interactive triage."
     )
     public String generateGuidedReport(
-            @ToolParam(description = "Optional base URL filter to include only one host or path in the report") String baseUrl,
-            @ToolParam(description = "Optional report format: html for human reading or json for machine processing") String format,
-            @ToolParam(description = "Optional report theme: light or dark") String theme
+            @ToolParam(required = false, description = "Optional base URL filter to include only one host or path in the report") String baseUrl,
+            @ToolParam(required = false, description = "Optional report format: html for human reading or json for machine processing") String format,
+            @ToolParam(required = false, description = "Optional report theme: light or dark") String theme
     ) {
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.REPORT_GENERATE, "report generation");
         String normalizedFormat = normalizeReportFormat(format);
         String normalizedTheme = hasText(theme) ? theme.trim() : "light";
         String normalizedBaseUrl = trimToEmpty(baseUrl);
+        TargetDescriptor target = gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB);
         String reportPath = reportService.generateReport(
                 reportTemplateFor(normalizedFormat),
                 normalizedTheme,
                 normalizedBaseUrl
         );
+        ArtifactRecord artifact = gatewayRecordFactory.reportArtifact(engineAdapter, target, reportPath, normalizedFormat);
         return new StringBuilder()
                 .append("Guided report generated.\n")
                 .append("Format: ").append(normalizedFormat).append('\n')
                 .append("Theme: ").append(normalizedTheme).append('\n')
-                .append("Scope: ").append(hasText(normalizedBaseUrl) ? normalizedBaseUrl : "All targets").append('\n')
-                .append("Path: ").append(reportPath)
+                .append("Scope: ").append(targetScope(artifact.target())).append('\n')
+                .append("Path: ").append(artifact.location())
                 .toString();
     }
 
@@ -296,6 +321,13 @@ public class GuidedSecurityToolsService {
 
     private String trimToEmpty(String value) {
         return hasText(value) ? value.trim() : "";
+    }
+
+    private String targetScope(TargetDescriptor target) {
+        if (target == null || !hasText(target.baseUrl())) {
+            return "All targets";
+        }
+        return target.baseUrl();
     }
 
     private String requireText(String value, String fieldName) {

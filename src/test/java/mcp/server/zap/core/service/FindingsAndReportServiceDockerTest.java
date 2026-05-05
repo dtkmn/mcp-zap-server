@@ -2,6 +2,8 @@ package mcp.server.zap.core.service;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
+import mcp.server.zap.core.gateway.ZapEngineReportAccess;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -10,6 +12,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ApiResponse;
+import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
@@ -69,8 +72,8 @@ public class FindingsAndReportServiceDockerTest {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         awaitApiReady();
 
-        findingsService = new FindingsService(clientApi);
-        reportService = new ReportService(clientApi);
+        findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
+        reportService = new ReportService(new ZapEngineReportAccess(clientApi));
         ReflectionTestUtils.setField(reportService, "reportDirectory", REPORT_DIR.toString());
     }
 

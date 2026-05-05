@@ -21,7 +21,7 @@ public class ExpertImportMcpToolsService implements ExpertToolGroup {
     )
     public String importOpenApiSpec(
             @ToolParam(description = "OpenAPI/Swagger spec URL") String apiUrl,
-            @ToolParam(description = "Host override for the API spec (optional)") String hostOverride
+            @ToolParam(required = false, description = "Host override for the API spec (optional)") String hostOverride
     ) {
         return openApiService.importOpenApiSpec(apiUrl, hostOverride);
     }

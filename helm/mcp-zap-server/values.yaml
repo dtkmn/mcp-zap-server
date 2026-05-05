@@ -87,10 +87,10 @@ zap:
 # MCP Server Configuration
 mcp:
   enabled: true
-  replicaCount: 3  # Scale based on load
+  replicaCount: 1  # Streamable MCP sessions are in-memory; scale only with explicit affinity.
   
   image:
-    repository: ghcr.io/agenticlab-au/security-gateway  # Override for your own registry if needed
+    repository: ghcr.io/dtkmn/mcp-zap-server  # Override for your own registry if needed
     pullPolicy: IfNotPresent
     tag: ""  # Defaults to chart appVersion when empty
   
@@ -130,7 +130,9 @@ mcp:
   streamableHttp:
     sessionAffinity:
       enabled: false
-      provider: ""  # Supported: aws-nlb, ingress-nginx
+      provider: ""  # Supported: aws-nlb, ingress-nginx, service-client-ip
+      serviceClientIp:
+        timeoutSeconds: 10800
       ingressNginx:
         upstreamHashBy: "$http_mcp_session_id$remote_addr$http_user_agent"
         proxyReadTimeout: "3600"
@@ -152,9 +154,9 @@ mcp:
   
   # Horizontal Pod Autoscaler
   autoscaling:
-    enabled: true
-    minReplicas: 3
-    maxReplicas: 10
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 1
     targetCPUUtilizationPercentage: 70
     targetMemoryUtilizationPercentage: 80
   
@@ -336,13 +338,47 @@ podLabels: {}
 networkPolicy:
   zap:
     enabled: true
+    egress:
+      # URL validation protects the application layer, but Kubernetes egress is
+      # the hard network boundary. By default ZAP can resolve DNS only; add
+      # explicit target CIDRs/ports under extraEgress for real scan egress.
+      allowDns: true
+      dns:
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+      extraEgress: []
+        # - to:
+        #     - ipBlock:
+        #         cidr: 203.0.113.0/24
+        #   ports:
+        #     - protocol: TCP
+        #       port: 443
     extraIngress: []
       # - namespaceSelector:
       #     matchLabels:
       #       kubernetes.io/metadata.name: tools
   mcp:
-    enabled: false
+    enabled: true
     allowSameNamespace: true
+    egress:
+      # MCP should only reach ZAP, DNS, and operator-approved dependencies
+      # such as Postgres/JWKS endpoints. Add those under extraEgress.
+      allowZap: true
+      allowDns: true
+      dns:
+        namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: kube-system
+        podSelector: {}
+      extraEgress: []
+        # - to:
+        #     - ipBlock:
+        #         cidr: 10.0.0.0/16
+        #   ports:
+        #     - protocol: TCP
+        #       port: 5432
     extraIngress: []
       # - namespaceSelector:
       #     matchLabels:

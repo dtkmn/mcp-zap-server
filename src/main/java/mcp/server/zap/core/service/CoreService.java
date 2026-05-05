@@ -1,33 +1,25 @@
 package mcp.server.zap.core.service;
 
-import lombok.extern.slf4j.Slf4j;
-import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineInventoryAccess;
+import mcp.server.zap.core.gateway.EngineInventoryAccess.InventoryAlertSummary;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * CoreService provides methods to interact with the ZAP API for retrieving alerts, hosts, sites, and URLs.
- * It uses the ZAP client API to perform these operations.
+ * CoreService provides inventory methods for retrieving alerts, hosts, sites, and URLs.
  */
-@Slf4j
 @Service
 public class CoreService {
 
-    private final ClientApi zap;
+    private final EngineInventoryAccess inventoryAccess;
 
     /**
      * Build-time dependency injection constructor.
      */
-    public CoreService(ClientApi zap) {
-        this.zap = zap;
+    public CoreService(EngineInventoryAccess inventoryAccess) {
+        this.inventoryAccess = inventoryAccess;
     }
 
     /**
@@ -37,27 +29,11 @@ public class CoreService {
      * @return A list of alert summaries.
      */
     public List<String> getAlerts(String baseUrl) {
-        try {
-            String start = "0";
-            String count = "-1";
-            ApiResponseList resp = (ApiResponseList) zap.core.alerts(
-                    baseUrl != null ? baseUrl : "", start, count
-            );
-
-            // Build a list of human-readable alert summaries
-            List<String> alerts = new ArrayList<>();
-            for (ApiResponse item : resp.getItems()) {
-                ApiResponseSet set = (ApiResponseSet) item;
-                String name = set.getStringValue("alert");
-                String risk = set.getStringValue("risk");
-                String url = set.getStringValue("url");
-                alerts.add(String.format("%s (risk: %s) at %s", name, risk, url));
-            }
-            return alerts;
-        } catch (ClientApiException e) {
-            log.error("Failed to retrieve alerts for base URL: {}: {}", baseUrl, e.getMessage(), e);
-            throw new ZapApiException("Failed to retrieve alerts", e);
+        List<String> alerts = new ArrayList<>();
+        for (InventoryAlertSummary alert : inventoryAccess.loadAlertSummaries(baseUrl)) {
+            alerts.add(String.format("%s (risk: %s) at %s", alert.name(), alert.risk(), alert.url()));
         }
+        return List.copyOf(alerts);
     }
 
     /**
@@ -66,17 +42,7 @@ public class CoreService {
      * @return A list of host names.
      */
     public List<String> getHosts() {
-        try {
-            ApiResponseList resp = (ApiResponseList) zap.core.hosts();
-            List<String> hosts = new ArrayList<>();
-            for (ApiResponse item : resp.getItems()) {
-                hosts.add(((ApiResponseElement) item).getValue());
-            }
-            return hosts;
-        } catch (ClientApiException e) {
-            log.error("Failed to retrieve hosts: {}", e.getMessage(), e);
-            throw new ZapApiException("Failed to retrieve hosts", e);
-        }
+        return inventoryAccess.listHosts();
     }
 
     /**
@@ -85,17 +51,7 @@ public class CoreService {
      * @return A list of site URLs.
      */
     public List<String> getSites() {
-        try {
-            ApiResponseList resp = (ApiResponseList) zap.core.sites();
-            List<String> sites = new ArrayList<>();
-            for (ApiResponse item : resp.getItems()) {
-                sites.add(((ApiResponseElement) item).getValue());
-            }
-            return sites;
-        } catch (ClientApiException e) {
-            log.error("Failed to retrieve sites: {}", e.getMessage(), e);
-            throw new ZapApiException("Failed to retrieve sites", e);
-        }
+        return inventoryAccess.listSites();
     }
 
     /**
@@ -105,17 +61,7 @@ public class CoreService {
      * @return A list of URLs.
      */
     public List<String> getUrls(String baseUrl) {
-        try {
-            ApiResponseList resp = (ApiResponseList) zap.core.urls(baseUrl != null ? baseUrl : "");
-            List<String> urls = new ArrayList<>();
-            for (ApiResponse item : resp.getItems()) {
-                urls.add(((ApiResponseElement) item).getValue());
-            }
-            return urls;
-        } catch (ClientApiException e) {
-            log.error("Failed to retrieve URLs for base URL: {}: {}", baseUrl, e.getMessage(), e);
-            throw new ZapApiException("Failed to retrieve URLs", e);
-        }
+        return inventoryAccess.listUrls(baseUrl);
     }
 
 }

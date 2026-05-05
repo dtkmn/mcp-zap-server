@@ -1,12 +1,11 @@
 package mcp.server.zap.core.configuration;
 
 import io.micrometer.context.ContextRegistry;
+import java.util.concurrent.atomic.AtomicBoolean;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Hooks;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Enables Reactor thread-local context propagation so request authentication is

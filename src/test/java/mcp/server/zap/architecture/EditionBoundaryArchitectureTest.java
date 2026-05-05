@@ -13,25 +13,24 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EditionBoundaryArchitectureTest {
 
     private static final Path CORE_ROOT = Path.of("src/main/java/mcp/server/zap/core");
-    private static final String ENTERPRISE_PACKAGE = "mcp.server.zap.enterprise";
+    private static final Path CORE_TEST_ROOT = Path.of("src/test/java/mcp/server/zap/core");
+    private static final List<String> CLOSED_EDITION_MARKERS = List.of(
+            "enterprise",
+            "commercial",
+            "license key",
+            "licensekey",
+            "paid edition",
+            "closed edition"
+    );
 
     @Test
-    void coreSourceMustNotReferenceEnterprisePackage() throws IOException {
-        assertThat(Files.exists(CORE_ROOT))
-                .as("Core source root should exist")
-                .isTrue();
+    void coreSourceMustStayEditionNeutral() throws IOException {
+        assertNoForbiddenSnippets(CORE_ROOT, "Core source files must stay portable to OSS");
+    }
 
-        try (Stream<Path> paths = Files.walk(CORE_ROOT)) {
-            List<String> violations = paths
-                    .filter(path -> path.toString().endsWith(".java"))
-                    .filter(path -> readFile(path).contains(ENTERPRISE_PACKAGE))
-                    .map(Path::toString)
-                    .toList();
-
-            assertThat(violations)
-                    .as("Core source files must not reference enterprise package")
-                    .isEmpty();
-        }
+    @Test
+    void coreTestsMustNotOwnClosedEditionScenarios() throws IOException {
+        assertNoForbiddenSnippets(CORE_TEST_ROOT, "Core test files must not own closed-edition scenarios");
     }
 
     private String readFile(Path path) {
@@ -40,5 +39,30 @@ class EditionBoundaryArchitectureTest {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read source file: " + path, e);
         }
+    }
+
+    private void assertNoForbiddenSnippets(Path root, String message) throws IOException {
+        assertThat(Files.exists(root))
+                .as(root + " should exist")
+                .isTrue();
+
+        try (Stream<Path> paths = Files.walk(root)) {
+            List<String> violations = paths
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .flatMap(path -> forbiddenSnippetMatches(path).stream())
+                    .toList();
+
+            assertThat(violations)
+                    .as(message)
+                    .isEmpty();
+        }
+    }
+
+    private List<String> forbiddenSnippetMatches(Path path) {
+        String content = readFile(path).toLowerCase();
+        return CLOSED_EDITION_MARKERS.stream()
+                .filter(content::contains)
+                .map(snippet -> path + " contains '" + snippet + "'")
+                .toList();
     }
 }

@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
  * Resolves client and workspace identity from authentication plus configured client metadata.
  */
 @Service
-public class ClientWorkspaceResolver {
+public class ClientWorkspaceResolver implements WorkspaceIdentityResolver {
     private static final String DEFAULT_CLIENT_ID = "anonymous";
     private static final String DEFAULT_WORKSPACE_ID = "default-workspace";
 
@@ -26,6 +26,7 @@ public class ClientWorkspaceResolver {
         return resolveClientId(SecurityContextHolder.getContext().getAuthentication());
     }
 
+    @Override
     public String resolveCurrentWorkspaceId() {
         if (hasText(RequestIdentityHolder.currentWorkspaceId())) {
             return RequestIdentityHolder.currentWorkspaceId().trim();
@@ -40,6 +41,7 @@ public class ClientWorkspaceResolver {
         return authentication.getName().trim();
     }
 
+    @Override
     public String resolveWorkspaceId(String clientId) {
         if (!hasText(clientId)) {
             return DEFAULT_WORKSPACE_ID;

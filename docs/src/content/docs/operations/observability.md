@@ -23,22 +23,22 @@ MCP ZAP Server exposes a practical observability baseline:
 
 | Metric | Type | Purpose |
 | --- | --- | --- |
-| `asg.http.requests` | Timer | End-to-end HTTP timing |
-| `asg.auth.events` | Counter | Auth success and failure reasons |
-| `asg.authorization.decisions` | Counter | Scope authorization allow, deny, and warn decisions |
-| `asg.tool.executions` | Timer | MCP tool duration and outcome |
-| `asg.audit.events` | Counter | Audit-stream emission volume |
-| `asg.protection.rejections` | Counter | Rate-limit, quota, and overload rejections |
+| `mcp.zap.http.requests` | Timer | End-to-end HTTP timing |
+| `mcp.zap.auth.events` | Counter | Auth success and failure reasons |
+| `mcp.zap.authorization.decisions` | Counter | Scope authorization allow, deny, and warn decisions |
+| `mcp.zap.tool.executions` | Timer | MCP tool duration and outcome |
+| `mcp.zap.audit.events` | Counter | Audit-stream emission volume |
+| `mcp.zap.protection.rejections` | Counter | Rate-limit, quota, and overload rejections |
 | `mcp.protection.rate_limited` | Counter | Legacy/shared rate-limit rejection count |
 | `mcp.protection.workspace_quota_rejections` | Counter | Legacy/shared workspace-quota rejection count |
 | `mcp.protection.backpressure_rejections` | Counter | Legacy/shared overload rejection count |
-| `asg.queue.jobs` | Gauge | Durable queue depth by status |
-| `asg.queue.claims` | Gauge | Active versus expired job claims |
-| `asg.queue.claim.events` | Counter | Claim, renewal, conflict, and recovery events |
-| `asg.queue.leadership.is_leader` | Gauge | Optional coordinator leadership state |
-| `asg.queue.leadership.transitions` | Counter | Coordinator acquisition and loss |
-| `asg.queue.leadership.failures` | Counter | Coordinator acquire and heartbeat failures |
-| `asg.operations.active` | Gauge | In-memory direct-scan and automation activity |
+| `mcp.zap.queue.jobs` | Gauge | Durable queue depth by status |
+| `mcp.zap.queue.claims` | Gauge | Active versus expired job claims |
+| `mcp.zap.queue.claim.events` | Counter | Claim, renewal, conflict, and recovery events |
+| `mcp.zap.queue.leadership.is_leader` | Gauge | Optional coordinator leadership state |
+| `mcp.zap.queue.leadership.transitions` | Counter | Coordinator acquisition and loss |
+| `mcp.zap.queue.leadership.failures` | Counter | Coordinator acquire and heartbeat failures |
+| `mcp.zap.operations.active` | Gauge | In-memory direct-scan and automation activity |
 
 ## Audit Event Stream
 

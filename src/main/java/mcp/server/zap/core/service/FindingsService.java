@@ -3,22 +3,20 @@ package mcp.server.zap.core.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import mcp.server.zap.core.exception.ZapApiException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import mcp.server.zap.core.gateway.EngineFindingAccess;
+import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * MCP tools for detailed alert inspection beyond the high-level findings summary.
@@ -29,16 +27,16 @@ public class FindingsService {
     private static final int MAX_INSTANCE_LIMIT = 100;
     private static final Logger log = LoggerFactory.getLogger(FindingsService.class);
 
-    private final ClientApi zap;
+    private final EngineFindingAccess engineFindingAccess;
     private final ObjectMapper objectMapper;
 
-    public FindingsService(ClientApi zap) {
-        this.zap = zap;
+    public FindingsService(EngineFindingAccess engineFindingAccess) {
+        this.engineFindingAccess = engineFindingAccess;
         this.objectMapper = new ObjectMapper();
     }
 
     public String getFindingsSummary(String baseUrl) {
-        List<org.zaproxy.clientapi.core.Alert> alerts = loadAlerts(baseUrl);
+        List<AlertSnapshot> alerts = loadAlerts(baseUrl);
         if (alerts.isEmpty()) {
             return "✅ **Scan Complete**: No alerts found.";
         }
@@ -46,12 +44,12 @@ public class FindingsService {
         Map<String, Map<String, Integer>> riskGroups = new LinkedHashMap<>();
         Map<String, String> alertDescriptions = new LinkedHashMap<>();
 
-        for (org.zaproxy.clientapi.core.Alert alert : alerts) {
-            String risk = displayValue(alert.getRisk());
-            String alertName = displayValue(alert.getName());
+        for (AlertSnapshot alert : alerts) {
+            String risk = displayValue(alert.risk());
+            String alertName = displayValue(alert.name());
             riskGroups.computeIfAbsent(risk, ignored -> new LinkedHashMap<>())
                     .merge(alertName, 1, Integer::sum);
-            alertDescriptions.putIfAbsent(alertName, summarizeDescription(alert.getDescription()));
+            alertDescriptions.putIfAbsent(alertName, summarizeDescription(alert.description()));
         }
 
         StringBuilder output = new StringBuilder();
@@ -72,14 +70,14 @@ public class FindingsService {
             String pluginId,
             String alertName
     ) {
-        List<org.zaproxy.clientapi.core.Alert> alerts = filterAlerts(loadAlerts(baseUrl), pluginId, alertName);
+        List<AlertSnapshot> alerts = filterAlerts(loadAlerts(baseUrl), pluginId, alertName);
         if (alerts.isEmpty()) {
             return "No alerts matched the current filter.";
         }
 
-        Map<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>> groupedAlerts = groupAlerts(alerts);
-        List<Map.Entry<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>>> groups = groupedAlerts.entrySet().stream()
-                .sorted(Comparator.<Map.Entry<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>>>comparingInt(entry -> riskRank(entry.getKey().risk()))
+        Map<AlertGroupKey, List<AlertSnapshot>> groupedAlerts = groupAlerts(alerts);
+        List<Map.Entry<AlertGroupKey, List<AlertSnapshot>>> groups = groupedAlerts.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<AlertGroupKey, List<AlertSnapshot>>>comparingInt(entry -> riskRank(entry.getKey().risk()))
                         .reversed()
                         .thenComparing(entry -> entry.getKey().alertName(), String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -103,18 +101,18 @@ public class FindingsService {
         }
         output.append('\n');
 
-        for (Map.Entry<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>> entry : groups) {
+        for (Map.Entry<AlertGroupKey, List<AlertSnapshot>> entry : groups) {
             AlertGroupKey key = entry.getKey();
-            List<org.zaproxy.clientapi.core.Alert> instances = entry.getValue();
-            org.zaproxy.clientapi.core.Alert sample = instances.getFirst();
+            List<AlertSnapshot> instances = entry.getValue();
+            AlertSnapshot sample = instances.getFirst();
             output.append("- Alert Name: ").append(key.alertName()).append('\n')
                     .append("  Plugin ID: ").append(displayValue(key.pluginId())).append('\n')
                     .append("  Instances: ").append(instances.size()).append('\n')
                     .append("  Risk: ").append(displayValue(key.risk())).append('\n')
                     .append("  Confidence: ").append(displayValue(key.confidence())).append('\n')
-                    .append("  CWE ID: ").append(sample.getCweId()).append('\n')
-                    .append("  WASC ID: ").append(sample.getWascId()).append('\n')
-                    .append("  Sample URL: ").append(displayValue(sample.getUrl())).append('\n');
+                    .append("  CWE ID: ").append(displayValue(sample.cweId())).append('\n')
+                    .append("  WASC ID: ").append(displayValue(sample.wascId())).append('\n')
+                    .append("  Sample URL: ").append(displayValue(sample.url())).append('\n');
         }
 
         output.append('\n')
@@ -129,11 +127,11 @@ public class FindingsService {
             Integer limit
     ) {
         int boundedLimit = validateLimit(limit);
-        List<org.zaproxy.clientapi.core.Alert> filteredAlerts = filterAlerts(loadAlerts(baseUrl), pluginId, alertName).stream()
-                .sorted(Comparator.comparingInt((org.zaproxy.clientapi.core.Alert alert) -> riskRank(alert.getRisk()))
+        List<AlertSnapshot> filteredAlerts = filterAlerts(loadAlerts(baseUrl), pluginId, alertName).stream()
+                .sorted(Comparator.comparingInt((AlertSnapshot alert) -> riskRank(alert.risk()))
                         .reversed()
-                        .thenComparing(org.zaproxy.clientapi.core.Alert::getName, String.CASE_INSENSITIVE_ORDER)
-                        .thenComparing(alert -> displayValue(alert.getUrl()), String.CASE_INSENSITIVE_ORDER))
+                        .thenComparing(AlertSnapshot::name, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(alert -> displayValue(alert.url()), String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
         if (filteredAlerts.isEmpty()) {
@@ -141,7 +139,7 @@ public class FindingsService {
         }
 
         int returnedCount = Math.min(boundedLimit, filteredAlerts.size());
-        List<org.zaproxy.clientapi.core.Alert> selectedAlerts = filteredAlerts.subList(0, returnedCount);
+        List<AlertSnapshot> selectedAlerts = filteredAlerts.subList(0, returnedCount);
 
         StringBuilder output = new StringBuilder();
         output.append("Alert instances returned: ")
@@ -160,18 +158,18 @@ public class FindingsService {
         }
         output.append('\n');
 
-        for (org.zaproxy.clientapi.core.Alert alert : selectedAlerts) {
-            output.append("- Alert ID: ").append(displayValue(alert.getId()))
-                    .append(" | Plugin ID: ").append(displayValue(alert.getPluginId()))
-                    .append(" | Name: ").append(displayValue(alert.getName()))
-                    .append(" | Risk: ").append(displayValue(alert.getRisk()))
-                    .append(" | Confidence: ").append(displayValue(alert.getConfidence()))
+        for (AlertSnapshot alert : selectedAlerts) {
+            output.append("- Alert ID: ").append(displayValue(alert.id()))
+                    .append(" | Plugin ID: ").append(displayValue(alert.pluginId()))
+                    .append(" | Name: ").append(displayValue(alert.name()))
+                    .append(" | Risk: ").append(displayValue(alert.risk()))
+                    .append(" | Confidence: ").append(displayValue(alert.confidence()))
                     .append('\n')
-                    .append("  URL: ").append(displayValue(alert.getUrl())).append('\n')
-                    .append("  Param: ").append(displayValue(alert.getParam())).append('\n')
-                    .append("  Attack: ").append(compact(alert.getAttack())).append('\n')
-                    .append("  Evidence: ").append(compact(alert.getEvidence())).append('\n')
-                    .append("  Message ID: ").append(displayValue(alert.getMessageId())).append('\n');
+                    .append("  URL: ").append(displayValue(alert.url())).append('\n')
+                    .append("  Param: ").append(displayValue(alert.param())).append('\n')
+                    .append("  Attack: ").append(compact(alert.attack())).append('\n')
+                    .append("  Evidence: ").append(compact(alert.evidence())).append('\n')
+                    .append("  Message ID: ").append(displayValue(alert.messageId())).append('\n');
         }
 
         if (filteredAlerts.size() > returnedCount) {
@@ -258,45 +256,30 @@ public class FindingsService {
         return output.toString().trim();
     }
 
-    private List<org.zaproxy.clientapi.core.Alert> loadAlerts(String baseUrl) {
-        try {
-            ApiResponse response = zap.alert.alerts(trimToNull(baseUrl), "0", "-1", null, null, null);
-            if (!(response instanceof ApiResponseList list)) {
-                throw new IllegalStateException("Unexpected response from alert.alerts(): " + response);
-            }
-            List<org.zaproxy.clientapi.core.Alert> alerts = new ArrayList<>();
-            for (ApiResponse item : list.getItems()) {
-                if (item instanceof ApiResponseSet set) {
-                    alerts.add(new org.zaproxy.clientapi.core.Alert(set));
-                }
-            }
-            return alerts;
-        } catch (ClientApiException e) {
-            log.error("Error retrieving alerts for base URL {}: {}", baseUrl, e.getMessage(), e);
-            throw new ZapApiException("Error retrieving detailed alerts", e);
-        }
+    private List<AlertSnapshot> loadAlerts(String baseUrl) {
+        return engineFindingAccess.loadAlerts(trimToNull(baseUrl));
     }
 
-    private List<org.zaproxy.clientapi.core.Alert> filterAlerts(List<org.zaproxy.clientapi.core.Alert> alerts,
-                                                                String pluginId,
-                                                                String alertName) {
+    private List<AlertSnapshot> filterAlerts(List<AlertSnapshot> alerts,
+                                             String pluginId,
+                                             String alertName) {
         String normalizedPluginId = trimToNull(pluginId);
         String normalizedAlertName = trimToNull(alertName);
         return alerts.stream()
-                .filter(alert -> normalizedPluginId == null || normalizedPluginId.equals(alert.getPluginId()))
+                .filter(alert -> normalizedPluginId == null || normalizedPluginId.equals(alert.pluginId()))
                 .filter(alert -> normalizedAlertName == null
-                        || (alert.getName() != null && alert.getName().equalsIgnoreCase(normalizedAlertName)))
+                        || (alert.name() != null && alert.name().equalsIgnoreCase(normalizedAlertName)))
                 .toList();
     }
 
-    private Map<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>> groupAlerts(List<org.zaproxy.clientapi.core.Alert> alerts) {
-        Map<AlertGroupKey, List<org.zaproxy.clientapi.core.Alert>> grouped = new LinkedHashMap<>();
-        for (org.zaproxy.clientapi.core.Alert alert : alerts) {
+    private Map<AlertGroupKey, List<AlertSnapshot>> groupAlerts(List<AlertSnapshot> alerts) {
+        Map<AlertGroupKey, List<AlertSnapshot>> grouped = new LinkedHashMap<>();
+        for (AlertSnapshot alert : alerts) {
             AlertGroupKey key = new AlertGroupKey(
-                    trimToNull(alert.getPluginId()),
-                    displayValue(alert.getName()),
-                    displayValue(alert.getRisk()),
-                    displayValue(alert.getConfidence())
+                    trimToNull(alert.pluginId()),
+                    displayValue(alert.name()),
+                    displayValue(alert.risk()),
+                    displayValue(alert.confidence())
             );
             grouped.computeIfAbsent(key, ignored -> new ArrayList<>()).add(alert);
         }
@@ -325,9 +308,9 @@ public class FindingsService {
     }
 
     private String formatDetailedGroup(AlertGroupKey key,
-                                       List<org.zaproxy.clientapi.core.Alert> instances,
+                                       List<AlertSnapshot> instances,
                                        String baseUrl) {
-        org.zaproxy.clientapi.core.Alert sample = instances.getFirst();
+        AlertSnapshot sample = instances.getFirst();
         return new StringBuilder()
                 .append("Alert details").append('\n')
                 .append("Target: ").append(hasText(baseUrl) ? baseUrl.trim() : "All targets").append('\n')
@@ -336,15 +319,15 @@ public class FindingsService {
                 .append("Instances: ").append(instances.size()).append('\n')
                 .append("Risk: ").append(displayValue(key.risk())).append('\n')
                 .append("Confidence: ").append(displayValue(key.confidence())).append('\n')
-                .append("CWE ID: ").append(sample.getCweId()).append('\n')
-                .append("WASC ID: ").append(sample.getWascId()).append('\n')
-                .append("Description: ").append(compact(sample.getDescription())).append('\n')
-                .append("Solution: ").append(compact(sample.getSolution())).append('\n')
-                .append("Reference: ").append(compact(sample.getReference())).append('\n')
-                .append("Sample URL: ").append(displayValue(sample.getUrl())).append('\n')
-                .append("Sample Param: ").append(displayValue(sample.getParam())).append('\n')
-                .append("Sample Attack: ").append(compact(sample.getAttack())).append('\n')
-                .append("Sample Evidence: ").append(compact(sample.getEvidence())).append('\n')
+                .append("CWE ID: ").append(displayValue(sample.cweId())).append('\n')
+                .append("WASC ID: ").append(displayValue(sample.wascId())).append('\n')
+                .append("Description: ").append(compact(sample.description())).append('\n')
+                .append("Solution: ").append(compact(sample.solution())).append('\n')
+                .append("Reference: ").append(compact(sample.reference())).append('\n')
+                .append("Sample URL: ").append(displayValue(sample.url())).append('\n')
+                .append("Sample Param: ").append(displayValue(sample.param())).append('\n')
+                .append("Sample Attack: ").append(compact(sample.attack())).append('\n')
+                .append("Sample Evidence: ").append(compact(sample.evidence())).append('\n')
                 .append("Inspect bounded instances when you need per-occurrence URLs, params, evidence, and message IDs.")
                 .toString();
     }
@@ -357,27 +340,17 @@ public class FindingsService {
         return Math.min(effectiveLimit, MAX_INSTANCE_LIMIT);
     }
 
-    private int riskRank(org.zaproxy.clientapi.core.Alert.Risk risk) {
-        if (risk == null) {
-            return -1;
-        }
-        return switch (risk) {
-            case Informational -> 0;
-            case Low -> 1;
-            case Medium -> 2;
-            case High -> 3;
-        };
-    }
-
     private int riskRank(String risk) {
         if (risk == null || risk.isBlank() || "<none>".equals(risk)) {
             return -1;
         }
-        try {
-            return riskRank(org.zaproxy.clientapi.core.Alert.Risk.valueOf(risk));
-        } catch (IllegalArgumentException e) {
-            return -1;
-        }
+        return switch (risk.trim().toLowerCase(Locale.ROOT)) {
+            case "informational" -> 0;
+            case "low" -> 1;
+            case "medium" -> 2;
+            case "high" -> 3;
+            default -> -1;
+        };
     }
 
     private String displayValue(Object value) {
@@ -416,12 +389,12 @@ public class FindingsService {
         List<FindingFingerprint> fingerprints = loadAlerts(baseUrl).stream()
                 .map(alert -> new FindingFingerprint(
                         fingerprintFor(alert),
-                        trimToNull(alert.getPluginId()),
-                        displayValue(alert.getName()),
-                        displayValue(alert.getRisk()),
-                        displayValue(alert.getConfidence()),
-                        displayValue(alert.getUrl()),
-                        displayValue(alert.getParam())
+                        trimToNull(alert.pluginId()),
+                        displayValue(alert.name()),
+                        displayValue(alert.risk()),
+                        displayValue(alert.confidence()),
+                        displayValue(alert.url()),
+                        displayValue(alert.param())
                 ))
                 .sorted(Comparator.comparingInt((FindingFingerprint fingerprint) -> riskRank(fingerprint.risk()))
                         .reversed()
@@ -503,14 +476,14 @@ public class FindingsService {
         output.append('\n');
     }
 
-    private String fingerprintFor(org.zaproxy.clientapi.core.Alert alert) {
+    private String fingerprintFor(AlertSnapshot alert) {
         return String.join("||",
-                displayValue(trimToNull(alert.getPluginId())),
-                displayValue(alert.getName()),
-                displayValue(alert.getRisk()),
-                displayValue(alert.getConfidence()),
-                displayValue(alert.getUrl()),
-                displayValue(alert.getParam()));
+                displayValue(trimToNull(alert.pluginId())),
+                displayValue(alert.name()),
+                displayValue(alert.risk()),
+                displayValue(alert.confidence()),
+                displayValue(alert.url()),
+                displayValue(alert.param()));
     }
 
     private record AlertGroupKey(String pluginId, String alertName, String risk, String confidence) {

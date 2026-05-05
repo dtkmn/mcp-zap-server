@@ -17,6 +17,7 @@ All security vulnerabilities in this project should be reported responsibly and 
 - **API Key Authentication**: Simple bearer token authentication for trusted environments
 - **JWT Authentication**: Token-based authentication with expiration and refresh capabilities
 - **Header-based Auth**: Supports both `X-API-Key` header and `Authorization: Bearer` token
+- **Tool-Scope Authorization**: Per-tool scope checks for API-key and JWT callers, including `mcp:tools:list` and `zap:*` scopes
 - **CSRF Protection**: 
   - **Intentionally disabled** for all authentication modes
   - **Reason**: This is an API-only server using token-based authentication (JWT/API keys), not session cookies
@@ -136,38 +137,38 @@ Instead of CSRF protection (which doesn't apply), this server uses:
 - ✅ Token expiration (1 hour access tokens)
 - ✅ Refresh token rotation
 - ✅ Token blacklisting for logout
+- ✅ Per-tool authorization scopes with startup validation for missing MCP tool mappings
 - ✅ HTTPS in production (via reverse proxy)
 - ✅ Input validation and URL whitelisting
-- ✅ Rate limiting (recommended for production)
+- ✅ Rate limiting, workspace quotas, and backpressure controls
 
 ## MCP Security Best Practices Compliance
 
-This server follows the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/specification/draft/basic/security_best_practices) with the following implementation status:
+This server tracks the [Model Context Protocol Security Best Practices](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices) with the following implementation status:
 
-### ✅ Fully Compliant
+### ✅ Implemented Controls
 
 - **Token Passthrough Prevention**: Server validates JWT tokens issued specifically for this server (custom issuer `mcp-zap-server`), not accepting arbitrary third-party tokens
-- **Session Hijacking Prevention**: Uses stateless JWT authentication, no HTTP session state or cookies that could be hijacked
-- **Local Server Authorization**: HTTP transport requires authentication via JWT or API key for all protected endpoints (`/mcp`)
+- **Session Authentication Boundary**: MCP session IDs are transport state only. Authentication is checked from request credentials, not from the session ID alone.
+- **Local Server Authorization**: HTTP transport requires authentication via JWT or API key for protected endpoints (`/mcp`)
 - **Secure Token Storage**: Tokens are transmitted via HTTP headers only, never in URLs or request bodies
+- **Scope Minimization**: API-key and JWT clients can be constrained with per-tool scopes. The server has an authoritative tool-to-scope registry and fails startup if an exposed MCP tool lacks a mapping.
+- **Wildcard Migration Control**: Legacy `*` scopes remain available only when `MCP_SECURITY_AUTHORIZATION_ALLOW_WILDCARD=true`. Shared or production deployments should disable wildcard scopes after explicit client grants are configured.
+- **Abuse Protection**: Rate limiting, workspace quotas, backpressure decisions, and audit events are available for shared deployments.
+- **SSRF Reduction for Scan Targets**: URL validation blocks localhost/private network targets by default and supports allowlists/blacklists. Operators should still enforce network egress policy for defense in depth.
 
-### 🔄 Planned for SaaS Version
+### ⚠️ Operator Responsibilities
 
-- **Granular Scopes**: Current implementation uses wildcard scope `["*"]` for all operations. When offering this as a cloud service, granular scopes will be implemented:
-  - `mcp:tools-list`: List available tools
-  - `zap:scan-active`: Run active security scans
-  - `zap:scan-spider`: Run spider scans
-  - `zap:scan-openapi`: Import and scan OpenAPI specs
-  - `zap:reports-read`: Generate and retrieve reports
-  - `zap:context-manage`: Manage ZAP contexts and authentication
-- **Progressive Scope Request**: OAuth-style scope elevation with `WWW-Authenticate` challenges
-- **Scope-Based Rate Limiting**: Different rate limits per scope category
-
-**Rationale for Current Design**: For self-hosted open-source deployments, users control both the ZAP instance and MCP clients in a trusted environment. Granular scopes add complexity without security benefit in this model. When transitioning to a multi-tenant SaaS offering, scopes become essential for isolation and access control.
+- Use HTTPS in front of `/mcp` for any non-local deployment.
+- Keep the ZAP API private and reachable only from the MCP server.
+- Keep streamable HTTP session affinity enabled when routing to multiple MCP replicas.
+- Disable wildcard scopes and assign least-privilege scope sets per client.
+- Keep actuator metrics, Prometheus, and audit endpoints on private or authenticated access paths.
+- Use network egress controls where scan-target validation alone is not enough.
 
 ### ⚠️ Not Applicable
 
-- **Confused Deputy Problem**: This server does not act as an OAuth proxy to third-party APIs, so confused deputy attacks are not relevant. The server directly controls its own ZAP instance.
+- **OAuth Confused Deputy Flow**: This server does not act as an OAuth proxy to third-party APIs and does not provide dynamic client registration for third-party authorization servers. If you add an OAuth proxy layer around it, that layer needs its own consent, redirect URI, state, and CSRF controls.
 
 ## Known Security Considerations
 
@@ -181,6 +182,7 @@ This server follows the [Model Context Protocol Security Best Practices](https:/
 ### Network Security
 
 - By default, the server blocks internal network scanning
+- The default Docker Compose stack publishes host ports on loopback only
 - Review and configure URL validation settings for your environment
 - Consider network-level isolation (VPCs, firewalls) for additional protection
 
@@ -238,4 +240,4 @@ This policy is modeled after GitHub’s recommended [Security Policy template](h
 
 ---
 
-*Last updated: 2026-03-05*
+*Last updated: 2026-04-29*

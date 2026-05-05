@@ -2,6 +2,7 @@ package mcp.server.zap.core.service;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import mcp.server.zap.core.gateway.ZapEngineApiImportAccess;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -72,7 +73,7 @@ public class ApiSchemaImportServiceDockerTest {
     static void setupService() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         awaitApiReady();
-        service = new OpenApiService(clientApi, mock(UrlValidationService.class));
+        service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
     }
 
     @Test

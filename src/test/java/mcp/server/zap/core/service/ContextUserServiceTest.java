@@ -1,65 +1,48 @@
 package mcp.server.zap.core.service;
 
-import mcp.server.zap.core.exception.ZapApiException;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
-import org.zaproxy.clientapi.gen.Authentication;
-import org.zaproxy.clientapi.gen.Context;
-import org.zaproxy.clientapi.gen.Users;
-
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineContextAccess;
+import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigRequest;
+import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigResult;
+import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationDiagnostics;
+import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutation;
+import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutationResult;
+import mcp.server.zap.core.gateway.EngineContextAccess.ContextSnapshot;
+import mcp.server.zap.core.gateway.EngineContextAccess.UserMutation;
+import mcp.server.zap.core.gateway.EngineContextAccess.UserMutationResult;
+import mcp.server.zap.core.gateway.EngineContextAccess.UserSnapshot;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ContextUserServiceTest {
 
-    private Context context;
-    private Users users;
-    private Authentication authentication;
+    private EngineContextAccess contextAccess;
     private ContextUserService service;
 
     @BeforeEach
     void setup() {
-        ClientApi clientApi = new ClientApi("localhost", 0);
-        context = mock(Context.class);
-        users = mock(Users.class);
-        authentication = mock(Authentication.class);
-
-        clientApi.context = context;
-        clientApi.users = users;
-        clientApi.authentication = authentication;
-
-        service = new ContextUserService(clientApi);
+        contextAccess = mock(EngineContextAccess.class);
+        service = new ContextUserService(contextAccess);
     }
 
     @Test
-    void listContextsReturnsDetailedContextSummaries() throws Exception {
-        when(context.contextList()).thenReturn(list("contextList", element("context", "shop-auth")));
-        when(context.context("shop-auth")).thenReturn(set("context", Map.of(
-                "id", element("id", "7"),
-                "inScope", element("inScope", "true")
+    void listContextsReturnsDetailedContextSummaries() {
+        when(contextAccess.listContexts()).thenReturn(List.of(new ContextSnapshot(
+                "shop-auth",
+                "7",
+                Boolean.TRUE,
+                List.of("https://shop.example.com/.*"),
+                List.of("https://shop.example.com/logout.*")
         )));
-        when(context.includeRegexs("shop-auth")).thenReturn(list("includeRegexs",
-                element("regex", "https://shop.example.com/.*")));
-        when(context.excludeRegexs("shop-auth")).thenReturn(list("excludeRegexs",
-                element("regex", "https://shop.example.com/logout.*")));
 
         List<Map<String, Object>> result = service.listContexts();
 
@@ -73,16 +56,20 @@ class ContextUserServiceTest {
     }
 
     @Test
-    void upsertContextCreatesAndAppliesRegexesAndScope() throws Exception {
-        when(context.contextList()).thenReturn(list("contextList"));
-        when(context.context("api-auth")).thenReturn(set("context", Map.of(
-                "id", element("id", "11"),
-                "inScope", element("inScope", "false")
-        )));
-        when(context.includeRegexs("api-auth")).thenReturn(list("includeRegexs",
-                element("regex", "https://api.example.com/.*")));
-        when(context.excludeRegexs("api-auth")).thenReturn(list("excludeRegexs",
-                element("regex", "https://api.example.com/logout.*")));
+    void upsertContextValidatesAndDelegatesToBoundary() {
+        ContextMutation mutation = new ContextMutation(
+                "api-auth",
+                List.of("https://api.example.com/.*"),
+                List.of("https://api.example.com/logout.*"),
+                true
+        );
+        when(contextAccess.upsertContext(mutation)).thenReturn(new ContextMutationResult(new ContextSnapshot(
+                "api-auth",
+                "11",
+                Boolean.TRUE,
+                mutation.includeRegexes(),
+                mutation.excludeRegexes()
+        ), true));
 
         Map<String, Object> result = service.upsertContext(
                 "api-auth",
@@ -92,28 +79,15 @@ class ContextUserServiceTest {
         );
 
         assertEquals(Boolean.TRUE, result.get("created"));
-        verify(context).newContext("api-auth");
-        verify(context).setContextRegexs(
-                "api-auth",
-                "[\"https://api.example.com/.*\"]",
-                "[\"https://api.example.com/logout.*\"]"
-        );
-        verify(context).setContextInScope("api-auth", "true");
+        assertEquals("11", result.get("contextId"));
+        verify(contextAccess).upsertContext(mutation);
     }
 
     @Test
-    void listUsersReturnsContextUsers() throws Exception {
-        when(users.usersList("9")).thenReturn(list("usersList",
-                set("user", Map.of(
-                        "id", element("id", "101"),
-                        "name", element("name", "scan-bot"),
-                        "enabled", element("enabled", "true")
-                )),
-                set("user", Map.of(
-                        "id", element("id", "102"),
-                        "name", element("name", "qa-bot"),
-                        "enabled", element("enabled", "false")
-                ))
+    void listUsersReturnsContextUsers() {
+        when(contextAccess.listUsers("9")).thenReturn(List.of(
+                new UserSnapshot("9", "101", "scan-bot", Boolean.TRUE),
+                new UserSnapshot("9", "102", "qa-bot", Boolean.FALSE)
         ));
 
         List<Map<String, Object>> result = service.listUsers("9");
@@ -127,63 +101,54 @@ class ContextUserServiceTest {
     }
 
     @Test
-    void upsertUserUpdatesExistingUserWithoutCreatingNewOne() throws Exception {
-        when(users.usersList("5")).thenReturn(list("usersList",
-                set("user", Map.of(
-                        "id", element("id", "77"),
-                        "name", element("name", "scan-user"),
-                        "enabled", element("enabled", "false")
-                ))
+    void upsertUserDelegatesWithNormalizedCredentials() {
+        UserMutation mutation = new UserMutation("5", "scan-user", "username=scan-user&password=s3cr3t", true);
+        when(contextAccess.upsertUser(mutation)).thenReturn(new UserMutationResult(
+                "5",
+                "77",
+                "scan-user",
+                Boolean.TRUE,
+                false
         ));
-        when(users.getUserById("5", "77")).thenReturn(set("user", Map.of(
-                "id", element("id", "77"),
-                "name", element("name", "scan-user"),
-                "enabled", element("enabled", "true")
-        )));
 
         Map<String, Object> result = service.upsertUser(
                 "5",
                 "scan-user",
-                "username=scan-user&password=s3cr3t",
+                " username=scan-user&password=s3cr3t ",
                 true
         );
 
-        assertFalse((Boolean) result.get("created"));
+        assertEquals(Boolean.FALSE, result.get("created"));
         assertEquals("77", result.get("userId"));
         assertEquals(Boolean.TRUE, result.get("enabled"));
-
-        verify(users, never()).newUser(anyString(), anyString());
-        verify(users).setAuthenticationCredentials("5", "77", "username=scan-user&password=s3cr3t");
-        verify(users).setUserEnabled("5", "77", "true");
+        verify(contextAccess).upsertUser(mutation);
     }
 
     @Test
-    void upsertUserCreatesUserWhenMissing() throws Exception {
-        when(users.usersList("3")).thenReturn(list("usersList"));
-        when(users.newUser("3", "api-user")).thenReturn(element("userId", "88"));
-        when(users.getUserById("3", "88")).thenReturn(set("user", Map.of(
-                "id", element("id", "88"),
-                "name", element("name", "api-user"),
-                "enabled", element("enabled", "true")
-        )));
+    void listContextsWrapsBoundaryException() {
+        when(contextAccess.listContexts())
+                .thenThrow(new ZapApiException("Failed to list contexts", new RuntimeException("boom")));
 
-        Map<String, Object> result = service.upsertUser("3", "api-user", null, true);
-
-        assertTrue((Boolean) result.get("created"));
-        assertEquals("88", result.get("userId"));
-        assertEquals("api-user", result.get("userName"));
-        assertNotNull(result.get("enabled"));
-        verify(users).newUser("3", "api-user");
-    }
-
-    @Test
-    void listContextsWrapsZapException() throws Exception {
-        when(context.contextList()).thenThrow(new ClientApiException("boom"));
         assertThrowsExactly(ZapApiException.class, () -> service.listContexts());
     }
 
     @Test
-    void configureContextAuthenticationAppliesMethodAndIndicators() throws Exception {
+    void configureContextAuthenticationValidatesIndicatorsAndDelegates() {
+        AuthenticationConfigRequest request = new AuthenticationConfigRequest(
+                "1",
+                "formBasedAuthentication",
+                "loginUrl=https://app.example.com/login",
+                ".*Logout.*",
+                ".*Login.*"
+        );
+        when(contextAccess.configureContextAuthentication(request)).thenReturn(new AuthenticationConfigResult(
+                "1",
+                "formBasedAuthentication",
+                true,
+                true,
+                true
+        ));
+
         Map<String, Object> result = service.configureContextAuthentication(
                 "1",
                 "formBasedAuthentication",
@@ -197,21 +162,18 @@ class ContextUserServiceTest {
         assertEquals(Boolean.TRUE, result.get("authMethodConfigParamsProvided"));
         assertEquals(Boolean.TRUE, result.get("loggedInIndicatorSet"));
         assertEquals(Boolean.TRUE, result.get("loggedOutIndicatorSet"));
-
-        verify(authentication).setAuthenticationMethod("1", "formBasedAuthentication", "loginUrl=https://app.example.com/login");
-        verify(authentication).setLoggedInIndicator("1", ".*Logout.*");
-        verify(authentication).setLoggedOutIndicator("1", ".*Login.*");
+        verify(contextAccess).configureContextAuthentication(request);
     }
 
     @Test
-    void testUserAuthenticationReturnsDiagnostics() throws Exception {
-        when(users.authenticateAsUser("1", "7")).thenReturn(set("auth", Map.of(
-                "authSuccessful", element("authSuccessful", "true"),
-                "message", element("message", "ok")
-        )));
-        when(users.getAuthenticationState("1", "7")).thenReturn(set("state", Map.of(
-                "lastPollResult", element("lastPollResult", "true")
-        )));
+    void testUserAuthenticationReturnsDiagnostics() {
+        when(contextAccess.testUserAuthentication("1", "7")).thenReturn(new AuthenticationDiagnostics(
+                "1",
+                "7",
+                Boolean.TRUE,
+                "authSuccessful=true",
+                "lastPollResult=true"
+        ));
 
         Map<String, Object> result = service.testUserAuthentication("1", "7");
 
@@ -220,17 +182,5 @@ class ContextUserServiceTest {
         assertEquals(Boolean.TRUE, result.get("likelyAuthenticated"));
         assertTrue(result.get("authResponse").toString().contains("authSuccessful"));
         assertTrue(result.get("authState").toString().contains("lastPollResult"));
-    }
-
-    private ApiResponseElement element(String name, String value) {
-        return new ApiResponseElement(name, value);
-    }
-
-    private ApiResponseList list(String name, ApiResponse... items) {
-        return new ApiResponseList(name, items);
-    }
-
-    private ApiResponseSet set(String name, Map<String, ApiResponse> values) {
-        return new ApiResponseSet(name, new LinkedHashMap<>(values));
     }
 }

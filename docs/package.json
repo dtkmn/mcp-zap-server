@@ -11,14 +11,19 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.38.3",
+    "@astrojs/sitemap": "^3.7.2",
+    "@astrojs/starlight": "^0.38.4",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/rajdhani": "^5.2.7",
-    "astro": "^6.1.9",
+    "astro": "^6.2.2",
     "sharp": "^0.34.2"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.8",
+    "@astrojs/check": "^0.9.9",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "yaml": "^2.8.3"
   }
 }

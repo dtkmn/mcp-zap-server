@@ -1,79 +1,99 @@
 package mcp.server.zap.core.service;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.gen.Reports;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
+import mcp.server.zap.core.gateway.EngineReportAccess;
+import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
+import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class ReportServiceTest {
-    private Reports reports;
+    private EngineReportAccess reportAccess;
     private ReportService service;
 
     @BeforeEach
     void setup() {
-        ClientApi clientApi = new ClientApi("localhost", 0);
-        reports = mock(Reports.class);
-        clientApi.reports = reports;
-        service = new ReportService(clientApi);
+        reportAccess = mock(EngineReportAccess.class);
+        service = new ReportService(reportAccess);
         ReflectionTestUtils.setField(service, "reportDirectory", "/tmp");
     }
 
     @Test
-    void viewTemplatesReturnsList() throws Exception {
-        ApiResponseList list = new ApiResponseList("templates", new ApiResponseElement[]{
-                new ApiResponseElement("t", "template1"),
-                new ApiResponseElement("t", "template2")});
-        when(reports.templates()).thenReturn(list);
+    void viewTemplatesReturnsList() {
+        when(reportAccess.listReportTemplates()).thenReturn(java.util.List.of("template1", "template2"));
+
         String result = service.viewTemplates();
+
         assertEquals("template1\ntemplate2", result);
     }
 
     @Test
-    void generateReportReturnsPath() throws Exception {
-        when(reports.generate(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ApiResponseElement("file", "/tmp/report.html"));
+    void generateReportReturnsPath() {
+        when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
+                .thenReturn("/tmp/report.html");
+
         String result = service.generateReport("modern", "light", "site");
+
         assertTrue(result.endsWith("report.html"));
     }
 
     @Test
-    void generateReportOmitsThemeForJsonTemplates() throws Exception {
-        when(reports.generate(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ApiResponseElement("file", "/tmp/report.json"));
+    void generateReportOmitsThemeForJsonTemplates() {
+        when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
+                .thenReturn("/tmp/report.json");
 
         String result = service.generateReport("traditional-json-plus", "light", "site");
 
         assertTrue(result.endsWith("report.json"));
-        verify(reports).generate(
-                any(),
-                eq("traditional-json-plus"),
-                eq(""),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any(),
-                any()
-        );
+        ArgumentCaptor<ReportGenerationRequest> captor = ArgumentCaptor.forClass(ReportGenerationRequest.class);
+        verify(reportAccess).generateReport(captor.capture());
+        assertEquals("traditional-json-plus", captor.getValue().template());
+        assertEquals("", captor.getValue().theme());
+    }
+
+    @Test
+    void generateReportUsesBoundaryScopedDirectory() throws Exception {
+        Path reportRoot = Files.createTempDirectory("report-service-root");
+        Path scopedRoot = reportRoot.resolve("tenants/tenant-alpha/workspaces/workspace-one");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportRoot.toString());
+        service.setReportArtifactBoundary(new ReportArtifactBoundary() {
+            @Override
+            public Path resolveWriteDirectory(Path defaultDirectory) {
+                return scopedRoot;
+            }
+
+            @Override
+            public Path resolveReadDirectory(Path defaultDirectory) {
+                return scopedRoot;
+            }
+        });
+
+        when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    ReportGenerationRequest request = invocation.getArgument(0, ReportGenerationRequest.class);
+                    Path reportPath = Path.of(request.reportDirectory()).resolve(request.reportFileName() + ".json");
+                    Files.createDirectories(reportPath.getParent());
+                    Files.writeString(reportPath, "{\"tenant\":\"tenant-alpha\"}");
+                    return reportPath.toString();
+                });
+
+        String result = service.generateReport("traditional-json-plus", "light", "site");
+
+        assertTrue(result.startsWith(scopedRoot.toString()));
+        assertTrue(Files.exists(Path.of(result)));
+        ArgumentCaptor<ReportGenerationRequest> captor = ArgumentCaptor.forClass(ReportGenerationRequest.class);
+        verify(reportAccess).generateReport(captor.capture());
+        assertEquals(scopedRoot.toString(), captor.getValue().reportDirectory());
     }
 
     @Test

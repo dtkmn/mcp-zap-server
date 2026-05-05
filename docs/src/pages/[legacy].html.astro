@@ -29,13 +29,19 @@ export function getStaticPaths() {
 		TOOL_SCOPE_AUTHORIZATION: 'getting-started/tool-scope-authorization/',
 	};
 
+	const basePath = '/mcp-zap-server/';
+	const siteUrl = 'https://danieltse.org';
+
 	return Object.entries(redirects).map(([legacy, target]) => ({
 		params: { legacy },
-		props: { target: `/mcp-zap-server/${target}` },
+		props: {
+			target: `${basePath}${target}`,
+			canonical: `${siteUrl}${basePath}${target}`,
+		},
 	}));
 }
 
-const { target } = Astro.props;
+const { canonical, target } = Astro.props;
 ---
 
 <!doctype html>
@@ -45,7 +51,7 @@ const { target } = Astro.props;
 		<title>Redirecting...</title>
 		<meta http-equiv="refresh" content={`0; url=${target}`} />
 		<meta name="robots" content="noindex" />
-		<link rel="canonical" href={target} />
+		<link rel="canonical" href={canonical} />
 	</head>
 	<body>
 		<p>Redirecting to <a href={target}>{target}</a>...</p>

@@ -18,7 +18,7 @@ services:
       - -addoninstall
       - spiderAjax
     ports:
-      - "8090:8090"
+      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:8090:8090"
     environment:
       ZAP_API_KEY: ${ZAP_API_KEY}
       ZAP_MEMORY: ${ZAP_MEMORY:-4G}
@@ -42,7 +42,7 @@ services:
       mcp-server:
         condition: service_started
     ports:
-      - "3000:8080"
+      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3000:8080"
     environment:
       TOOL_SERVER_CONNECTIONS: >-
         [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY:-change-me-to-secure-random-key}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP scanning and reporting tools exposed by the local MCP server."}}]
@@ -65,7 +65,7 @@ services:
       zap:
         condition: service_healthy
     ports:
-      - "7456:7456"
+      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:7456:7456"
     environment:
       ZAP_API_URL: zap
       ZAP_API_PORT: 8090
@@ -113,13 +113,13 @@ services:
     image: bkimminich/juice-shop:v19.1.1
     restart: always
     ports:
-      - "3001:3000"
+      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3001:3000"
 
   petstore:
     image: swaggerapi/petstore3:1.0.27
     restart: always
     ports:
-      - "3002:8080"
+      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3002:8080"
 
 volumes:
   open-webui:

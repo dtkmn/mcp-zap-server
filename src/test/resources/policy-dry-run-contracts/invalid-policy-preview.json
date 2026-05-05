@@ -1,0 +1,26 @@
+{
+  "contractVersion": "mcp.zap.policy.dry-run/v1",
+  "bundle": {},
+  "request": {
+    "tool": "zap_unknown_tool",
+    "target": "://bad-target",
+    "normalizedHost": null,
+    "evaluatedAt": "1970-01-01T00:00:00Z"
+  },
+  "validation": {
+    "valid": false,
+    "errors": [
+      "toolName must be an exact known MCP tool or action",
+      "target must be a valid absolute URL or hostname",
+      "evaluatedAt must be a valid ISO-8601 instant or offset datetime",
+      "bundle.spec.rules[0].match.tools contains unknown tool 'zap:not:real'"
+    ]
+  },
+  "decision": {
+    "result": "invalid",
+    "source": "validation",
+    "matchedRuleId": null,
+    "reason": "The request or policy bundle is invalid."
+  },
+  "trace": []
+}

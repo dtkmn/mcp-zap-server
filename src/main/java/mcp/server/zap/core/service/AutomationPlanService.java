@@ -2,6 +2,8 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineAutomationAccess;
+import mcp.server.zap.core.gateway.EngineAutomationAccess.AutomationPlanProgress;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,12 +11,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +39,7 @@ public class AutomationPlanService {
     private static final int MAX_ARTIFACT_PREVIEW_CHARS = 50000;
     private static final int MAX_PREVIEW_PER_FILE = 2000;
 
-    private final ClientApi zap;
+    private final EngineAutomationAccess automationAccess;
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
 
@@ -53,8 +49,8 @@ public class AutomationPlanService {
     @Value("${zap.automation.zap-directory:/zap/wrk/automation}")
     private String automationZapDirectory;
 
-    public AutomationPlanService(ClientApi zap) {
-        this.zap = zap;
+    public AutomationPlanService(EngineAutomationAccess automationAccess) {
+        this.automationAccess = automationAccess;
     }
 
     @Autowired(required = false)
@@ -74,15 +70,9 @@ public class AutomationPlanService {
     ) {
         PreparedAutomationPlan preparedPlan = preparePlan(planPath, planYaml, planFileName);
 
-        try {
-            ApiResponse response = zap.automation.runPlan(preparedPlan.zapPlanPath().toString());
-            String returnedPlanId = requireResponseElementValue(response, "automation.runPlan()");
-            trackAutomationPlanStarted(returnedPlanId, resolveWorkspaceId());
-            return formatRunResponse(returnedPlanId, preparedPlan);
-        } catch (ClientApiException e) {
-            log.error("Error running automation plan {}: {}", preparedPlan.zapPlanPath(), e.getMessage(), e);
-            throw automationException("Error running automation plan. Ensure the ZAP 'automation' add-on is installed.", e);
-        }
+        String returnedPlanId = automationAccess.runAutomationPlan(preparedPlan.zapPlanPath().toString());
+        trackAutomationPlanStarted(returnedPlanId, resolveWorkspaceId());
+        return formatRunResponse(returnedPlanId, preparedPlan);
     }
 
     public String getAutomationPlanStatus(
@@ -92,44 +82,29 @@ public class AutomationPlanService {
         String normalizedPlanId = requireText(planId, "planId");
         int boundedMaxMessages = validateBoundedPositive(maxMessages, DEFAULT_STATUS_MESSAGE_LIMIT, MAX_STATUS_MESSAGE_LIMIT, "maxMessages");
 
-        try {
-            ApiResponse response = zap.automation.planProgress(normalizedPlanId);
-            if (!(response instanceof ApiResponseSet responseSet)) {
-                throw new IllegalStateException("Unexpected response from automation.planProgress(): " + response);
-            }
+        AutomationPlanProgress progress = automationAccess.loadAutomationPlanProgress(normalizedPlanId);
+        boolean completed = progress.completed();
+        trackAutomationPlanStatus(normalizedPlanId, completed);
 
-            List<String> info = extractStringList(responseSet.getValue("info"));
-            List<String> warnings = extractStringList(responseSet.getValue("warn"));
-            List<String> errors = extractStringList(responseSet.getValue("error"));
-            String started = defaultDisplayValue(responseSet.getStringValue("started"));
-            String finished = trimToNull(responseSet.getStringValue("finished"));
-            boolean completed = finished != null;
-            boolean successful = completed && errors.isEmpty();
-            trackAutomationPlanStatus(normalizedPlanId, completed);
+        StringBuilder output = new StringBuilder()
+                .append("Automation plan status:\n")
+                .append("Plan ID: ").append(normalizedPlanId).append('\n')
+                .append("Started: ").append(progress.started()).append('\n')
+                .append("Finished: ").append(completed ? progress.finished() : "<running>").append('\n')
+                .append("Completed: ").append(completed ? "yes" : "no").append('\n')
+                .append("Successful: ").append(progress.successful() ? "yes" : "no").append('\n')
+                .append("Info Messages: ").append(progress.info().size()).append('\n')
+                .append("Warnings: ").append(progress.warnings().size()).append('\n')
+                .append("Errors: ").append(progress.errors().size()).append('\n');
 
-            StringBuilder output = new StringBuilder()
-                    .append("Automation plan status:\n")
-                    .append("Plan ID: ").append(normalizedPlanId).append('\n')
-                    .append("Started: ").append(started).append('\n')
-                    .append("Finished: ").append(completed ? finished : "<running>").append('\n')
-                    .append("Completed: ").append(completed ? "yes" : "no").append('\n')
-                    .append("Successful: ").append(successful ? "yes" : "no").append('\n')
-                    .append("Info Messages: ").append(info.size()).append('\n')
-                    .append("Warnings: ").append(warnings.size()).append('\n')
-                    .append("Errors: ").append(errors.size()).append('\n');
+        appendMessages(output, "Info", progress.info(), boundedMaxMessages);
+        appendMessages(output, "Warnings", progress.warnings(), boundedMaxMessages);
+        appendMessages(output, "Errors", progress.errors(), boundedMaxMessages);
 
-            appendMessages(output, "Info", info, boundedMaxMessages);
-            appendMessages(output, "Warnings", warnings, boundedMaxMessages);
-            appendMessages(output, "Errors", errors, boundedMaxMessages);
-
-            if (!completed) {
-                output.append("Use 'zap_automation_plan_artifacts' with the returned plan file path to inspect generated files while the plan is running.");
-            }
-            return output.toString();
-        } catch (ClientApiException e) {
-            log.error("Error retrieving automation plan progress for {}: {}", normalizedPlanId, e.getMessage(), e);
-            throw automationException("Error retrieving automation plan status. Ensure the ZAP 'automation' add-on is installed.", e);
+        if (!completed) {
+            output.append("Use 'zap_automation_plan_artifacts' with the returned plan file path to inspect generated files while the plan is running.");
         }
+        return output.toString();
     }
 
     public String getAutomationPlanArtifacts(
@@ -454,27 +429,6 @@ public class AutomationPlanService {
         }
     }
 
-    private List<String> extractStringList(ApiResponse response) {
-        if (!(response instanceof ApiResponseList responseList)) {
-            return List.of();
-        }
-
-        List<String> values = new ArrayList<>();
-        for (ApiResponse item : responseList.getItems()) {
-            if (item instanceof ApiResponseElement element && hasText(element.getValue())) {
-                values.add(element.getValue().trim());
-            }
-        }
-        return List.copyOf(values);
-    }
-
-    private String requireResponseElementValue(ApiResponse response, String operation) {
-        if (!(response instanceof ApiResponseElement element) || !hasText(element.getValue())) {
-            throw new IllegalStateException("Unexpected response from " + operation + ": " + response);
-        }
-        return element.getValue().trim();
-    }
-
     private int appendArtifactEntry(StringBuilder output,
                                     String type,
                                     Path artifactPath,
@@ -632,10 +586,6 @@ public class AutomationPlanService {
             log.error("Error creating automation directory {}: {}", path, e.getMessage(), e);
             throw new ZapApiException("Error preparing automation workspace", e);
         }
-    }
-
-    private ZapApiException automationException(String message, Exception cause) {
-        return new ZapApiException(message, cause);
     }
 
     private String requireText(String value, String fieldName) {

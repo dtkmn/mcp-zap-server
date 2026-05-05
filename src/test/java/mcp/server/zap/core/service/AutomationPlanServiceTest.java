@@ -1,18 +1,14 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.EngineAutomationAccess;
+import mcp.server.zap.core.gateway.EngineAutomationAccess.AutomationPlanProgress;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.gen.Automation;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,17 +18,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class AutomationPlanServiceTest {
-    private Automation automation;
+    private EngineAutomationAccess automationAccess;
     private AutomationPlanService service;
     private Path automationRoot;
 
     @BeforeEach
     void setup() throws Exception {
-        ClientApi clientApi = new ClientApi("localhost", 0);
-        automation = mock(Automation.class);
-        clientApi.automation = automation;
-
-        service = new AutomationPlanService(clientApi);
+        automationAccess = mock(EngineAutomationAccess.class);
+        service = new AutomationPlanService(automationAccess);
         automationRoot = Files.createTempDirectory("automation-plan-service-test");
         ReflectionTestUtils.setField(service, "automationLocalDirectory", automationRoot.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", "/zap/automation");
@@ -40,7 +33,7 @@ public class AutomationPlanServiceTest {
 
     @Test
     void runAutomationPlanMaterializesNormalizedPlanAndStartsIt() throws Exception {
-        when(automation.runPlan(anyString())).thenReturn(new ApiResponseElement("planId", "7"));
+        when(automationAccess.runAutomationPlan(anyString())).thenReturn("7");
 
         String result = service.runAutomationPlan(
                 null,
@@ -60,7 +53,7 @@ public class AutomationPlanServiceTest {
                 "example plan.yaml"
         );
 
-        verify(automation).runPlan(anyString());
+        verify(automationAccess).runAutomationPlan(anyString());
         Path runDirectory = Files.list(automationRoot.resolve("runs")).findFirst().orElseThrow();
         Path normalizedPlan = runDirectory.resolve("example-plan.yaml");
         String normalizedYaml = Files.readString(normalizedPlan);
@@ -86,19 +79,13 @@ public class AutomationPlanServiceTest {
 
     @Test
     void getAutomationPlanStatusFormatsProgressState() throws Exception {
-        when(automation.planProgress("11")).thenReturn(new ApiResponseSet("planProgress", Map.of(
-                "planId", new ApiResponseElement("planId", "11"),
-                "started", new ApiResponseElement("started", "2026-03-14T09:00:00Z"),
-                "finished", new ApiResponseElement("finished", ""),
-                "info", new ApiResponseList("info", List.of(
-                        new ApiResponseElement("info", "Job requestor started"),
-                        new ApiResponseElement("info", "Job requestor finished")
-                )),
-                "warn", new ApiResponseList("warn", List.of(
-                        new ApiResponseElement("warn", "Report directory was empty before run")
-                )),
-                "error", new ApiResponseList("error", List.of())
-        )));
+        when(automationAccess.loadAutomationPlanProgress("11")).thenReturn(new AutomationPlanProgress(
+                "2026-03-14T09:00:00Z",
+                null,
+                List.of("Job requestor started", "Job requestor finished"),
+                List.of("Report directory was empty before run"),
+                List.of()
+        ));
 
         String result = service.getAutomationPlanStatus("11", 10);
 

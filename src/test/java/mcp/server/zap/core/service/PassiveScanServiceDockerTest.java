@@ -2,12 +2,13 @@ package mcp.server.zap.core.service;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import mcp.server.zap.core.gateway.ZapEnginePassiveScanAccess;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
-import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 
@@ -57,7 +58,7 @@ public class PassiveScanServiceDockerTest {
     static void setupClient() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         awaitApiReady();
-        service = new PassiveScanService(clientApi);
+        service = new PassiveScanService(new ZapEnginePassiveScanAccess(clientApi));
     }
 
     @Test

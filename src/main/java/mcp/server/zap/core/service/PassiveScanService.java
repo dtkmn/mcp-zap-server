@@ -1,28 +1,22 @@
 package mcp.server.zap.core.service;
 
-import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
+import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
 import org.springframework.stereotype.Service;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ApiResponseSet;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 /**
  * MCP-facing tools for passive scan backlog visibility and completion waits.
  */
-@Slf4j
 @Service
 public class PassiveScanService {
     private static final int DEFAULT_WAIT_TIMEOUT_SECONDS = 60;
     private static final int DEFAULT_WAIT_POLL_INTERVAL_MS = 1000;
 
-    private final ClientApi zap;
+    private final EnginePassiveScanAccess passiveScanAccess;
 
-    public PassiveScanService(ClientApi zap) {
-        this.zap = zap;
+    public PassiveScanService(EnginePassiveScanAccess passiveScanAccess) {
+        this.passiveScanAccess = passiveScanAccess;
     }
 
     public String getPassiveScanStatus() {
@@ -91,52 +85,7 @@ public class PassiveScanService {
     }
 
     private PassiveScanSnapshot readPassiveScanSnapshot() {
-        try {
-            int recordsToScan = readIntElement(zap.pscan.recordsToScan(), "recordsToScan");
-            boolean scanOnlyInScope = Boolean.parseBoolean(readElementValue(zap.pscan.scanOnlyInScope(), "scanOnlyInScope"));
-            int activeTasks = readCurrentTaskCount();
-            return new PassiveScanSnapshot(recordsToScan, activeTasks, scanOnlyInScope, recordsToScan == 0);
-        } catch (ClientApiException e) {
-            log.error("Error retrieving passive scan status: {}", e.getMessage(), e);
-            throw new ZapApiException("Error retrieving passive scan status", e);
-        }
-    }
-
-    private int readCurrentTaskCount() throws ClientApiException {
-        try {
-            ApiResponse response = zap.pscan.currentTasks();
-            if (response instanceof ApiResponseList list) {
-                return list.getItems().size();
-            }
-            if (response instanceof ApiResponseSet set) {
-                return set.getValues().size();
-            }
-            if (response instanceof ApiResponseElement element) {
-                return Integer.parseInt(element.getValue());
-            }
-            return -1;
-        } catch (NumberFormatException e) {
-            log.debug("Unable to parse passive scan currentTasks response; reporting as unknown", e);
-            return -1;
-        } catch (ClientApiException e) {
-            log.debug("Passive scan currentTasks view unavailable; reporting active task count as unknown: {}", e.getMessage());
-            return -1;
-        }
-    }
-
-    private int readIntElement(ApiResponse response, String operationName) {
-        try {
-            return Integer.parseInt(readElementValue(response, operationName));
-        } catch (NumberFormatException e) {
-            throw new IllegalStateException("Unexpected numeric response from pscan." + operationName, e);
-        }
-    }
-
-    private String readElementValue(ApiResponse response, String operationName) {
-        if (!(response instanceof ApiResponseElement element)) {
-            throw new IllegalStateException("Unexpected response from pscan." + operationName + "(): " + response);
-        }
-        return element.getValue();
+        return passiveScanAccess.loadPassiveScanSnapshot();
     }
 
     private int positiveOrDefault(Integer value, int defaultValue, String fieldName) {
@@ -164,6 +113,4 @@ public class PassiveScanService {
         return value ? "yes" : "no";
     }
 
-    private record PassiveScanSnapshot(int recordsToScan, int activeTasks, boolean scanOnlyInScope, boolean completed) {
-    }
 }

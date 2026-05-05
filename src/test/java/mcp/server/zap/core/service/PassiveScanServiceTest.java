@@ -1,14 +1,10 @@
 package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
+import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
-import org.zaproxy.clientapi.core.ApiResponseList;
-import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
-import org.zaproxy.clientapi.gen.Pscan;
 
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,22 +12,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class PassiveScanServiceTest {
-    private Pscan pscan;
+    private EnginePassiveScanAccess passiveScanAccess;
     private PassiveScanService service;
 
     @BeforeEach
     void setup() {
-        ClientApi clientApi = new ClientApi("localhost", 0);
-        pscan = mock(Pscan.class);
-        clientApi.pscan = pscan;
-        service = new PassiveScanService(clientApi);
+        passiveScanAccess = mock(EnginePassiveScanAccess.class);
+        service = new PassiveScanService(passiveScanAccess);
     }
 
     @Test
     void getPassiveScanStatusReturnsBacklogSummary() throws Exception {
-        when(pscan.recordsToScan()).thenReturn(new ApiResponseElement("recordsToScan", "5"));
-        when(pscan.scanOnlyInScope()).thenReturn(new ApiResponseElement("scanOnlyInScope", "false"));
-        when(pscan.currentTasks()).thenReturn(taskList("task-1", "task-2"));
+        when(passiveScanAccess.loadPassiveScanSnapshot()).thenReturn(new PassiveScanSnapshot(5, 2, false));
 
         String result = service.getPassiveScanStatus();
 
@@ -43,13 +35,9 @@ public class PassiveScanServiceTest {
 
     @Test
     void waitForPassiveScanCompletionReturnsCompletionMessage() throws Exception {
-        when(pscan.recordsToScan())
-                .thenReturn(new ApiResponseElement("recordsToScan", "2"))
-                .thenReturn(new ApiResponseElement("recordsToScan", "0"));
-        when(pscan.scanOnlyInScope()).thenReturn(new ApiResponseElement("scanOnlyInScope", "true"));
-        when(pscan.currentTasks())
-                .thenReturn(taskList("task-1"))
-                .thenReturn(taskList());
+        when(passiveScanAccess.loadPassiveScanSnapshot())
+                .thenReturn(new PassiveScanSnapshot(2, 1, true))
+                .thenReturn(new PassiveScanSnapshot(0, 0, true));
 
         String result = service.waitForPassiveScanCompletion(1, 1);
 
@@ -61,9 +49,7 @@ public class PassiveScanServiceTest {
 
     @Test
     void waitForPassiveScanCompletionTimesOutWhenBacklogPersists() throws Exception {
-        when(pscan.recordsToScan()).thenReturn(new ApiResponseElement("recordsToScan", "3"));
-        when(pscan.scanOnlyInScope()).thenReturn(new ApiResponseElement("scanOnlyInScope", "false"));
-        when(pscan.currentTasks()).thenReturn(taskList("task-1"));
+        when(passiveScanAccess.loadPassiveScanSnapshot()).thenReturn(new PassiveScanSnapshot(3, 1, false));
 
         String result = service.waitForPassiveScanCompletion(1, 100);
 
@@ -79,16 +65,9 @@ public class PassiveScanServiceTest {
 
     @Test
     void getPassiveScanStatusWrapsZapErrors() throws Exception {
-        when(pscan.recordsToScan()).thenThrow(new ClientApiException("boom", null));
+        when(passiveScanAccess.loadPassiveScanSnapshot())
+                .thenThrow(new ZapApiException("boom", new RuntimeException("boom")));
 
         assertThrowsExactly(ZapApiException.class, service::getPassiveScanStatus);
-    }
-
-    private ApiResponseList taskList(String... taskIds) {
-        ApiResponse[] tasks = new ApiResponse[taskIds.length];
-        for (int i = 0; i < taskIds.length; i++) {
-            tasks[i] = new ApiResponseElement("task", taskIds[i]);
-        }
-        return new ApiResponseList("tasks", tasks);
     }
 }

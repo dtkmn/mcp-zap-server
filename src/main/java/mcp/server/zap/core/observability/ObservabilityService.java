@@ -3,16 +3,15 @@ package mcp.server.zap.core.observability;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.McpAbuseProtectionDecision;
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.McpAbuseProtectionDecision;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Service;
 
 /**
  * Centralizes low-cardinality metrics and audit emission for request, auth,
@@ -38,7 +37,7 @@ public class ObservabilityService {
                                   String clientId,
                                   String workspaceId,
                                   Duration duration) {
-        Timer.builder("asg.http.requests")
+        Timer.builder("mcp.zap.http.requests")
                 .description("HTTP request duration for MCP, auth, and actuator flows")
                 .tag("method", normalize(method, "unknown"))
                 .tag("path", normalizePath(path))
@@ -59,7 +58,7 @@ public class ObservabilityService {
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
-                "asg.auth.events",
+                "mcp.zap.auth.events",
                 "method", normalizedMethod,
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
@@ -88,7 +87,7 @@ public class ObservabilityService {
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
-                "asg.authorization.decisions",
+                "mcp.zap.authorization.decisions",
                 "action", normalizedAction,
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
@@ -118,7 +117,7 @@ public class ObservabilityService {
 
         String toolFamily = classifyToolFamily(decision.toolName());
         meterRegistry.counter(
-                "asg.protection.rejections",
+                "mcp.zap.protection.rejections",
                 "error", normalize(decision.errorCode(), "unknown"),
                 "reason", normalize(decision.reason(), "unknown"),
                 "toolFamily", toolFamily
@@ -148,7 +147,7 @@ public class ObservabilityService {
         String toolFamily = classifyToolFamily(normalizedTool);
         String normalizedOutcome = normalize(outcome, "unknown");
 
-        Timer.builder("asg.tool.executions")
+        Timer.builder("mcp.zap.tool.executions")
                 .description("Tool execution duration grouped by tool and family")
                 .tag("tool", normalizedTool)
                 .tag("family", toolFamily)
@@ -175,10 +174,27 @@ public class ObservabilityService {
         );
     }
 
+    public void recordPolicyDecision(String outcome,
+                                     Map<String, Object> details,
+                                     String correlationId) {
+        String clientId = clientWorkspaceResolver.resolveCurrentClientId();
+        String workspaceId = clientWorkspaceResolver.resolveCurrentWorkspaceId();
+
+        auditEventStream.publish(
+                "policy_decision",
+                clientId,
+                normalize(outcome, "unknown"),
+                auditDetails(correlationId, clientId, workspaceId, details == null ? Map.of() : details)
+        );
+    }
+
     public String classifyToolFamily(String toolName) {
         String normalizedTool = normalize(toolName, "unknown");
         if (normalizedTool.startsWith("zap_queue_")) {
             return "scan_queue";
+        }
+        if (normalizedTool.startsWith("zap_scan_history_")) {
+            return "scan_history";
         }
         if (normalizedTool.startsWith("zap_automation_")) {
             return "automation";
@@ -194,6 +210,9 @@ public class ObservabilityService {
         }
         if (normalizedTool.startsWith("zap_scan_policy_")) {
             return "scan_policy";
+        }
+        if (normalizedTool.startsWith("zap_policy_")) {
+            return "policy_engine";
         }
         if (normalizedTool.startsWith("zap_active_scan_")
                 || normalizedTool.startsWith("zap_attack_")

@@ -23,9 +23,9 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
             description = "Get grouped alert metadata for a target, plugin ID, or alert name."
     )
     public String getAlertDetails(
-            @ToolParam(description = "Base URL to filter alerts (optional)") String baseUrl,
-            @ToolParam(description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
-            @ToolParam(description = "Alert name to narrow to a single alert family (optional)") String alertName
+            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl,
+            @ToolParam(required = false, description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
+            @ToolParam(required = false, description = "Alert name to narrow to a single alert family (optional)") String alertName
     ) {
         return findingsService.getAlertDetails(baseUrl, pluginId, alertName);
     }
@@ -35,10 +35,10 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
             description = "Get bounded alert instances for a target, plugin ID, or alert name."
     )
     public String getAlertInstances(
-            @ToolParam(description = "Base URL to filter alerts (optional)") String baseUrl,
-            @ToolParam(description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
-            @ToolParam(description = "Alert name to narrow to a single alert family (optional)") String alertName,
-            @ToolParam(description = "Maximum instances to return (optional, default: 20, max: 100)") Integer limit
+            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl,
+            @ToolParam(required = false, description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
+            @ToolParam(required = false, description = "Alert name to narrow to a single alert family (optional)") String alertName,
+            @ToolParam(required = false, description = "Maximum instances to return (optional, default: 20, max: 100)") Integer limit
     ) {
         return findingsService.getAlertInstances(baseUrl, pluginId, alertName, limit);
     }
@@ -48,7 +48,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
             description = "Export a normalized findings snapshot as JSON so CI or release workflows can save a stable baseline."
     )
     public String exportFindingsSnapshot(
-            @ToolParam(description = "Base URL to filter alerts (optional)") String baseUrl
+            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl
     ) {
         return findingsService.exportFindingsSnapshot(baseUrl);
     }
@@ -58,7 +58,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
             description = "Compare the current findings set against a previously exported findings snapshot."
     )
     public String diffFindings(
-            @ToolParam(description = "Base URL to filter current alerts (optional)") String baseUrl,
+            @ToolParam(required = false, description = "Base URL to filter current alerts (optional)") String baseUrl,
             @ToolParam(description = "JSON findings snapshot returned earlier by zap_findings_snapshot") String baselineSnapshot,
             @ToolParam(description = "Maximum grouped result lines to render") Integer maxGroups
     ) {
@@ -86,7 +86,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
             name = "zap_get_findings_summary",
             description = "Get a high-level markdown summary of scan findings, grouped by risk and alert type."
     )
-    public String getFindingsSummary(@ToolParam(description = "Base URL to filter (optional)") String baseUrl) {
+    public String getFindingsSummary(@ToolParam(required = false, description = "Base URL to filter (optional)") String baseUrl) {
         return findingsService.getFindingsSummary(baseUrl);
     }
 
@@ -96,7 +96,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
     )
     public String readReport(
             @ToolParam(description = "Report path returned by zap_generate_report") String reportPath,
-            @ToolParam(description = "Maximum characters to return (optional, default: 20000, max: 200000)") Integer maxChars
+            @ToolParam(required = false, description = "Maximum characters to return (optional, default: 20000, max: 200000)") Integer maxChars
     ) {
         return reportService.readReport(reportPath, maxChars);
     }

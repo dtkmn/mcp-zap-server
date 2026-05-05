@@ -21,9 +21,9 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
     )
     public String queueActiveScan(
             @ToolParam(description = "Target URL to scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy,
-            @ToolParam(description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
+            @ToolParam(required = false, description = "Recurse into sub-paths? (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Scan policy name (optional)") String policy,
+            @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
         return scanJobQueueService.queueActiveScan(targetUrl, recurse, policy, idempotencyKey);
     }
@@ -36,9 +36,9 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "ZAP user ID") String userId,
             @ToolParam(description = "Target URL to scan") String targetUrl,
-            @ToolParam(description = "Recurse into sub-paths? (optional, default: true)") String recurse,
-            @ToolParam(description = "Scan policy name (optional)") String policy,
-            @ToolParam(description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
+            @ToolParam(required = false, description = "Recurse into sub-paths? (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Scan policy name (optional)") String policy,
+            @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
         return scanJobQueueService.queueActiveScanAsUser(contextId, userId, targetUrl, recurse, policy, idempotencyKey);
     }
@@ -49,7 +49,7 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
     )
     public String queueSpiderScan(
             @ToolParam(description = "Target URL to spider") String targetUrl,
-            @ToolParam(description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
+            @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
         return scanJobQueueService.queueSpiderScan(targetUrl, idempotencyKey);
     }
@@ -60,7 +60,7 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
     )
     public String queueAjaxSpiderScan(
             @ToolParam(description = "Target URL to crawl with AJAX Spider") String targetUrl,
-            @ToolParam(description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
+            @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
         return scanJobQueueService.queueAjaxSpiderScan(targetUrl, idempotencyKey);
     }
@@ -73,10 +73,10 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP context ID") String contextId,
             @ToolParam(description = "ZAP user ID") String userId,
             @ToolParam(description = "Target URL to spider") String targetUrl,
-            @ToolParam(description = "Maximum children to crawl (optional)") String maxChildren,
-            @ToolParam(description = "Recurse into sub-paths? true/false (optional, default: true)") String recurse,
-            @ToolParam(description = "Restrict to subtree only? true/false (optional, default: false)") String subtreeOnly,
-            @ToolParam(description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
+            @ToolParam(required = false, description = "Maximum children to crawl (optional)") String maxChildren,
+            @ToolParam(required = false, description = "Recurse into sub-paths? true/false (optional, default: true)") String recurse,
+            @ToolParam(required = false, description = "Restrict to subtree only? true/false (optional, default: false)") String subtreeOnly,
+            @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
         return scanJobQueueService.queueSpiderScanAsUser(
                 contextId, userId, targetUrl, maxChildren, recurse, subtreeOnly, idempotencyKey);
@@ -95,7 +95,7 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
             description = "List scan jobs and current queue state"
     )
     public String listScanJobs(
-            @ToolParam(description = "Optional status filter: QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED") String statusFilter
+            @ToolParam(required = false, description = "Optional status filter: QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED") String statusFilter
     ) {
         return scanJobQueueService.listScanJobs(statusFilter);
     }

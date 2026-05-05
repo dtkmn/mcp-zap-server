@@ -181,7 +181,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             if (!labelsNode.isObject()) {
                 errors.add("bundle.metadata.labels must be an object");
             } else {
-                labelsNode.fields().forEachRemaining(entry -> {
+                labelsNode.properties().forEach(entry -> {
                     String key = entry.getKey();
                     if (!isKebabCase(key)) {
                         errors.add("bundle.metadata.labels key '" + key + "' must be lowercase kebab-case");

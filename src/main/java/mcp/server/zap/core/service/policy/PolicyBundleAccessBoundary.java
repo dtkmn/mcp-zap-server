@@ -12,6 +12,9 @@ public interface PolicyBundleAccessBoundary {
      * Validate whether the current requester can evaluate the supplied policy bundle labels.
      */
     default List<String> validateCurrentRequesterAccess(Map<String, String> bundleLabels) {
+        if (bundleLabels == null) {
+            return List.of("bundle.metadata.labels must be available for access validation");
+        }
         return List.of();
     }
 

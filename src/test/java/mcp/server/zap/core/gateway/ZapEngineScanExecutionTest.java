@@ -3,6 +3,7 @@ package mcp.server.zap.core.gateway;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
@@ -19,6 +20,7 @@ import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Spider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -82,6 +84,28 @@ class ZapEngineScanExecutionTest {
         verify(ascan).setOptionHostPerScan(5);
         verify(ascan).setOptionThreadPerHost(10);
         verify(ascan).scan("http://example.com", "true", "false", "Default Policy", null, null);
+    }
+
+    @Test
+    void rejectsNonNumericSpiderProgressValues() throws Exception {
+        when(spider.status("spider-1")).thenReturn(new ApiResponseElement("status", "running"));
+
+        assertThatThrownBy(() -> execution.readSpiderProgressPercent("spider-1"))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessageContaining("spider.status()")
+                .hasMessageNotContaining("running")
+                .hasCauseInstanceOf(NumberFormatException.class);
+    }
+
+    @Test
+    void rejectsNonNumericActiveScanProgressValues() throws Exception {
+        when(ascan.status("active-1")).thenReturn(new ApiResponseElement("status", "running"));
+
+        assertThatThrownBy(() -> execution.readActiveScanProgressPercent("active-1"))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessageContaining("ascan.status()")
+                .hasMessageNotContaining("running")
+                .hasCauseInstanceOf(NumberFormatException.class);
     }
 
     @Test

@@ -19,6 +19,8 @@ import org.zaproxy.clientapi.core.ClientApiException;
 @Slf4j
 @Component
 public class ZapEngineScanExecution implements EngineScanExecution {
+    private static final int TARGET_ACCESS_MAX_ATTEMPTS = 3;
+    private static final long TARGET_ACCESS_RETRY_DELAY_MS = 2000L;
 
     private final ClientApi zap;
 
@@ -91,7 +93,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     public int readSpiderProgressPercent(String scanId) {
         try {
             ApiResponse response = zap.spider.status(scanId);
-            return Integer.parseInt(responseValue(response, "spider.status()"));
+            return parseProgressPercent(response, "spider.status()", scanId);
         } catch (ClientApiException e) {
             log.error("Error retrieving spider status for ID {}: {}", scanId, e.getMessage(), e);
             throw new ZapApiException("Error retrieving spider status for ID " + scanId, e);
@@ -167,7 +169,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     public int readActiveScanProgressPercent(String scanId) {
         try {
             ApiResponse response = zap.ascan.status(scanId);
-            return Integer.parseInt(responseValue(response, "ascan.status()"));
+            return parseProgressPercent(response, "ascan.status()", scanId);
         } catch (ClientApiException e) {
             log.error("Error retrieving active scan status for {}: {}", scanId, e.getMessage(), e);
             throw new ZapApiException("Error retrieving status for active scan " + scanId, e);
@@ -291,23 +293,32 @@ public class ZapEngineScanExecution implements EngineScanExecution {
         }
     }
 
-    private void accessTargetWithRetry(String targetUrl) throws ClientApiException, InterruptedException {
-        int maxRetries = 3;
-        for (int i = 0; i < maxRetries; i++) {
+    private void accessTargetWithRetry(String targetUrl) throws InterruptedException {
+        ClientApiException lastFailure = null;
+        for (int attempt = 1; attempt <= TARGET_ACCESS_MAX_ATTEMPTS; attempt++) {
             try {
                 zap.core.accessUrl(targetUrl, "true");
                 return;
             } catch (ClientApiException e) {
-                if (i == maxRetries - 1) {
-                    log.error("Failed to access URL after {} retries: {}", maxRetries, e.getMessage());
-                    throw new ZapApiException("Target website is blocking ZAP requests or is unreachable. "
-                            + "This could be due to WAF protection, IP blocking, or network issues. "
-                            + "Original error: " + e.getMessage(), e);
+                lastFailure = e;
+                if (attempt < TARGET_ACCESS_MAX_ATTEMPTS) {
+                    log.warn("Retry {}/{} - Failed to access URL {}: {}",
+                            attempt, TARGET_ACCESS_MAX_ATTEMPTS, targetUrl, e.getMessage());
+                    Thread.sleep(TARGET_ACCESS_RETRY_DELAY_MS);
                 }
-                log.warn("Retry {}/{} - Failed to access URL {}: {}", i + 1, maxRetries, targetUrl, e.getMessage());
-                Thread.sleep(2000);
             }
         }
+
+        if (lastFailure == null) {
+            throw new ZapApiException("Target website could not be accessed because no ZAP access attempt was made",
+                    new IllegalStateException("No ZAP access attempts were made"));
+        }
+
+        log.error("Failed to access URL after {} attempts: {}",
+                TARGET_ACCESS_MAX_ATTEMPTS, lastFailure.getMessage());
+        throw new ZapApiException("Target website is blocking ZAP requests or is unreachable. "
+                + "This could be due to WAF protection, IP blocking, or network issues. "
+                + "Original error: " + lastFailure.getMessage(), lastFailure);
     }
 
     private void configureActiveScan(int maxDurationMinutes, int hostPerScan, int threadPerHost)
@@ -330,6 +341,21 @@ public class ZapEngineScanExecution implements EngineScanExecution {
             throw new IllegalStateException(nullResponseMessage);
         }
         return responseValue(response, operation);
+    }
+
+    private int parseProgressPercent(ApiResponse response, String operation, String scanId) {
+        String value = responseValue(response, operation);
+        if (!hasText(value)) {
+            throw new ZapApiException("Unexpected blank progress value from " + operation
+                    + " for scan " + scanId, new IllegalStateException("Blank ZAP progress response"));
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            log.warn("Unexpected non-numeric progress value from {} for scan {}: {}", operation, scanId, value);
+            throw new ZapApiException("Unexpected non-numeric progress value from " + operation
+                    + " for scan " + scanId, e);
+        }
     }
 
     private ApiResponseList requireResponseList(ApiResponse response, String operation) {

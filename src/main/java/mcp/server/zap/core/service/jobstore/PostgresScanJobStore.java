@@ -8,6 +8,7 @@ import mcp.server.zap.core.configuration.ScanJobStoreProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -163,12 +164,15 @@ public class PostgresScanJobStore implements ScanJobStore {
                 connection.setAutoCommit(false);
                 try {
                     List<ScanJob> claimedJobs = loadClaimableRunningJobs(connection, workerId, now);
+                    ArrayList<ScanJob> committedClaimedJobs = new ArrayList<>();
                     for (ScanJob job : claimedJobs) {
                         job.claim(workerId, now, claimUntil);
                         upsertJob(connection, job);
+                        loadById(connection, job.getId(), false).ifPresent(committedClaimedJobs::add);
                     }
                     connection.commit();
-                    return claimedJobs;
+                    committedClaimedJobs.sort(JOB_ORDER);
+                    return committedClaimedJobs;
                 } catch (Exception e) {
                     connection.rollback();
                     if (shouldRetryTransactionalUpdate(e, attempt)) {
@@ -204,6 +208,8 @@ public class PostgresScanJobStore implements ScanJobStore {
             try (Connection connection = openConnection()) {
                 connection.setAutoCommit(false);
                 try {
+                    lockTableForQueueMutation(connection);
+
                     int activeSlotsRemaining = Math.max(0,
                             maxConcurrentActiveScans - countCapacityInUse(connection, true, now));
                     int spiderSlotsRemaining = Math.max(0,
@@ -226,7 +232,7 @@ public class PostgresScanJobStore implements ScanJobStore {
 
                         job.claim(workerId, now, claimUntil);
                         upsertJob(connection, job);
-                        claimedJobs.add(job);
+                        loadById(connection, job.getId(), false).ifPresent(claimedJobs::add);
 
                         if (activeFamily) {
                             activeSlotsRemaining -= 1;
@@ -263,9 +269,9 @@ public class PostgresScanJobStore implements ScanJobStore {
     }
 
     @Override
-    public void renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil) {
+    public int renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil) {
         if (jobIds == null || jobIds.isEmpty()) {
-            return;
+            return 0;
         }
 
         int attempt = 1;
@@ -273,19 +279,24 @@ public class PostgresScanJobStore implements ScanJobStore {
             try (Connection connection = openConnection()) {
                 connection.setAutoCommit(false);
                 try {
+                    int renewedCount = 0;
                     for (String jobId : jobIds) {
                         if (!hasText(jobId)) {
                             continue;
                         }
                         ScanJob job = loadById(connection, jobId, true).orElse(null);
-                        if (job == null || !job.isClaimedBy(workerId) || job.getStatus().isTerminal()) {
+                        if (job == null
+                                || !job.isClaimedBy(workerId)
+                                || !job.hasLiveClaim(now)
+                                || job.getStatus().isTerminal()) {
                             continue;
                         }
                         job.claim(workerId, now, claimUntil);
                         upsertJob(connection, job);
+                        renewedCount += 1;
                     }
                     connection.commit();
-                    return;
+                    return renewedCount;
                 } catch (Exception e) {
                     connection.rollback();
                     if (shouldRetryTransactionalUpdate(e, attempt)) {
@@ -300,20 +311,28 @@ public class PostgresScanJobStore implements ScanJobStore {
                 }
             } catch (Exception e) {
                 handleFailure("claim renewal", e);
-                return;
+                return 0;
             }
         }
     }
 
     @Override
-    public Optional<ScanJob> updateClaimedJob(String jobId, String workerId, UnaryOperator<ScanJob> updater) {
+    public Optional<ScanJob> updateClaimedJob(
+            String jobId,
+            ScanJobClaimToken claimToken,
+            Instant now,
+            UnaryOperator<ScanJob> updater
+    ) {
         int attempt = 1;
         while (true) {
             try (Connection connection = openConnection()) {
                 connection.setAutoCommit(false);
                 try {
                     ScanJob current = loadById(connection, jobId, true).orElse(null);
-                    if (current == null || !current.isClaimedBy(workerId)) {
+                    if (current == null
+                            || claimToken == null
+                            || !claimToken.matches(current)
+                            || !current.hasLiveClaim(now)) {
                         connection.commit();
                         return Optional.empty();
                     }
@@ -419,8 +438,8 @@ public class PostgresScanJobStore implements ScanJobStore {
         String sql = "INSERT INTO " + tableName + " ("
                 + "job_id, job_type, parameters_json, status, attempt_count, max_attempts, requester_id, idempotency_key, "
                 + "zap_scan_id, last_error, created_at, started_at, completed_at, next_attempt_at, last_known_progress, "
-                + "queue_position, claim_owner_id, claim_heartbeat_at, claim_expires_at, updated_at"
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "queue_position, claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, updated_at"
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (job_id) DO UPDATE SET "
                 + "job_type = EXCLUDED.job_type, "
                 + "parameters_json = EXCLUDED.parameters_json, "
@@ -438,6 +457,7 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "last_known_progress = EXCLUDED.last_known_progress, "
                 + "queue_position = EXCLUDED.queue_position, "
                 + "claim_owner_id = EXCLUDED.claim_owner_id, "
+                + "claim_fence_id = EXCLUDED.claim_fence_id, "
                 + "claim_heartbeat_at = EXCLUDED.claim_heartbeat_at, "
                 + "claim_expires_at = EXCLUDED.claim_expires_at, "
                 + "updated_at = EXCLUDED.updated_at";
@@ -460,9 +480,10 @@ public class PostgresScanJobStore implements ScanJobStore {
             statement.setInt(15, job.getLastKnownProgress());
             statement.setInt(16, job.getQueuePosition());
             statement.setString(17, job.getClaimOwnerId());
-            setTimestamp(statement, 18, job.getClaimHeartbeatAt());
-            setTimestamp(statement, 19, job.getClaimExpiresAt());
-            statement.setTimestamp(20, Timestamp.from(Instant.now()));
+            statement.setString(18, job.getClaimFenceId());
+            setTimestamp(statement, 19, job.getClaimHeartbeatAt());
+            setTimestamp(statement, 20, job.getClaimExpiresAt());
+            statement.setTimestamp(21, Timestamp.from(Instant.now()));
             statement.executeUpdate();
         }
     }
@@ -657,6 +678,7 @@ public class PostgresScanJobStore implements ScanJobStore {
                 resultSet.getInt("last_known_progress"),
                 resultSet.getInt("queue_position"),
                 resultSet.getString("claim_owner_id"),
+                resultSet.getString("claim_fence_id"),
                 toInstant(resultSet.getTimestamp("claim_heartbeat_at")),
                 toInstant(resultSet.getTimestamp("claim_expires_at"))
         );

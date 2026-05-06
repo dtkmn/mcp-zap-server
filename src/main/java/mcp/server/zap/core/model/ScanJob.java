@@ -2,6 +2,7 @@ package mcp.server.zap.core.model;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Mutable queue job state used by scan orchestration and persistence.
@@ -25,6 +26,7 @@ public class ScanJob {
     private int lastKnownProgress;
     private int queuePosition;
     private String claimOwnerId;
+    private String claimFenceId;
     private Instant claimHeartbeatAt;
     private Instant claimExpiresAt;
 
@@ -64,6 +66,7 @@ public class ScanJob {
                 0,
                 null,
                 null,
+                null,
                 null
         );
     }
@@ -85,6 +88,7 @@ public class ScanJob {
                     int lastKnownProgress,
                     int queuePosition,
                     String claimOwnerId,
+                    String claimFenceId,
                     Instant claimHeartbeatAt,
                     Instant claimExpiresAt) {
         this.id = id;
@@ -104,6 +108,7 @@ public class ScanJob {
         this.lastKnownProgress = lastKnownProgress;
         this.queuePosition = Math.max(queuePosition, 0);
         this.claimOwnerId = normalizeClaimOwnerId(claimOwnerId);
+        this.claimFenceId = normalizeClaimFenceId(claimFenceId);
         this.claimHeartbeatAt = claimHeartbeatAt;
         this.claimExpiresAt = claimExpiresAt;
     }
@@ -128,6 +133,7 @@ public class ScanJob {
                                   int lastKnownProgress,
                                   int queuePosition,
                                   String claimOwnerId,
+                                  String claimFenceId,
                                   Instant claimHeartbeatAt,
                                   Instant claimExpiresAt) {
         return new ScanJob(
@@ -148,6 +154,53 @@ public class ScanJob {
                 lastKnownProgress,
                 queuePosition,
                 claimOwnerId,
+                claimFenceId,
+                claimHeartbeatAt,
+                claimExpiresAt
+        );
+    }
+
+    /**
+     * Restore a job from persisted snapshot state without stable claim fence metadata.
+     */
+    public static ScanJob restore(String id,
+                                  ScanJobType type,
+                                  Map<String, String> parameters,
+                                  Instant createdAt,
+                                  int maxAttempts,
+                                  String requesterId,
+                                  String idempotencyKey,
+                                  ScanJobStatus status,
+                                  int attempts,
+                                  String zapScanId,
+                                  String lastError,
+                                  Instant startedAt,
+                                  Instant completedAt,
+                                  Instant nextAttemptAt,
+                                  int lastKnownProgress,
+                                  int queuePosition,
+                                  String claimOwnerId,
+                                  Instant claimHeartbeatAt,
+                                  Instant claimExpiresAt) {
+        return restore(
+                id,
+                type,
+                parameters,
+                createdAt,
+                maxAttempts,
+                requesterId,
+                idempotencyKey,
+                status,
+                attempts,
+                zapScanId,
+                lastError,
+                startedAt,
+                completedAt,
+                nextAttemptAt,
+                lastKnownProgress,
+                queuePosition,
+                claimOwnerId,
+                null,
                 claimHeartbeatAt,
                 claimExpiresAt
         );
@@ -187,6 +240,7 @@ public class ScanJob {
                 nextAttemptAt,
                 lastKnownProgress,
                 queuePosition,
+                null,
                 null,
                 null,
                 null
@@ -313,6 +367,13 @@ public class ScanJob {
     }
 
     /**
+     * Return the stable claim fence ID for the current ownership lease.
+     */
+    public String getClaimFenceId() {
+        return claimFenceId;
+    }
+
+    /**
      * Return the last claim heartbeat timestamp.
      */
     public Instant getClaimHeartbeatAt() {
@@ -351,6 +412,14 @@ public class ScanJob {
      */
     public void updateProgress(int progress) {
         this.lastKnownProgress = Math.max(0, Math.min(progress, 100));
+        this.lastError = null;
+    }
+
+    /**
+     * Record a recoverable runtime error without changing scan ownership.
+     */
+    public void recordTransientError(String errorMessage) {
+        this.lastError = errorMessage;
     }
 
     /**
@@ -359,6 +428,7 @@ public class ScanJob {
     public void markSucceeded(int progress) {
         this.status = ScanJobStatus.SUCCEEDED;
         this.lastKnownProgress = Math.max(100, progress);
+        this.lastError = null;
         this.completedAt = Instant.now();
         this.nextAttemptAt = null;
         this.queuePosition = 0;
@@ -414,7 +484,15 @@ public class ScanJob {
      * Claim ownership of this job for a replica until the supplied expiry time.
      */
     public void claim(String claimOwnerId, Instant heartbeatAt, Instant claimExpiresAt) {
-        this.claimOwnerId = normalizeClaimOwnerId(claimOwnerId);
+        String normalizedOwnerId = normalizeClaimOwnerId(claimOwnerId);
+        if (normalizedOwnerId == null) {
+            clearClaim();
+            return;
+        }
+        if (requiresNewClaimFence(normalizedOwnerId, heartbeatAt)) {
+            this.claimFenceId = UUID.randomUUID().toString();
+        }
+        this.claimOwnerId = normalizedOwnerId;
         this.claimHeartbeatAt = heartbeatAt;
         this.claimExpiresAt = claimExpiresAt;
     }
@@ -452,8 +530,16 @@ public class ScanJob {
      */
     public void clearClaim() {
         this.claimOwnerId = null;
+        this.claimFenceId = null;
         this.claimHeartbeatAt = null;
         this.claimExpiresAt = null;
+    }
+
+    private boolean requiresNewClaimFence(String normalizedOwnerId, Instant heartbeatAt) {
+        return normalizedOwnerId == null
+                || claimFenceId == null
+                || !normalizedOwnerId.equals(claimOwnerId)
+                || claimExpiredAt(heartbeatAt);
     }
 
     private String normalizeRequesterId(String value) {
@@ -471,6 +557,13 @@ public class ScanJob {
     }
 
     private String normalizeClaimOwnerId(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private String normalizeClaimFenceId(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
         }

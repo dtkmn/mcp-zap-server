@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service.jobstore;
 
 import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 
 import java.util.Collection;
 import java.time.Instant;
@@ -28,9 +29,14 @@ public interface ScanJobStore {
             int maxConcurrentSpiderScans
     );
 
-    void renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil);
+    int renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil);
 
-    Optional<ScanJob> updateClaimedJob(String jobId, String workerId, UnaryOperator<ScanJob> updater);
+    Optional<ScanJob> updateClaimedJob(
+            String jobId,
+            ScanJobClaimToken claimToken,
+            Instant now,
+            UnaryOperator<ScanJob> updater
+    );
 
     List<ScanJob> list();
 

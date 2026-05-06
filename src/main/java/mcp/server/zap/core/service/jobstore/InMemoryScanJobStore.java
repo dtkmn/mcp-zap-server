@@ -3,6 +3,7 @@ package mcp.server.zap.core.service.jobstore;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -145,30 +146,41 @@ public class InMemoryScanJobStore implements ScanJobStore {
     }
 
     @Override
-    public void renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil) {
+    public int renewClaims(String workerId, Collection<String> jobIds, Instant now, Instant claimUntil) {
         if (jobIds == null || jobIds.isEmpty()) {
-            return;
+            return 0;
         }
         lock.lock();
         try {
+            int renewedCount = 0;
             for (String jobId : jobIds) {
                 ScanJob job = jobs.get(jobId);
-                if (job == null || !job.isClaimedBy(workerId) || job.getStatus().isTerminal()) {
+                if (job == null
+                        || !job.isClaimedBy(workerId)
+                        || !job.hasLiveClaim(now)
+                        || job.getStatus().isTerminal()) {
                     continue;
                 }
                 job.claim(workerId, now, claimUntil);
+                renewedCount += 1;
             }
+            return renewedCount;
         } finally {
             lock.unlock();
         }
     }
 
     @Override
-    public Optional<ScanJob> updateClaimedJob(String jobId, String workerId, UnaryOperator<ScanJob> updater) {
+    public Optional<ScanJob> updateClaimedJob(
+            String jobId,
+            ScanJobClaimToken claimToken,
+            Instant now,
+            UnaryOperator<ScanJob> updater
+    ) {
         lock.lock();
         try {
             ScanJob job = jobs.get(jobId);
-            if (job == null || !job.isClaimedBy(workerId)) {
+            if (job == null || claimToken == null || !claimToken.matches(job) || !job.hasLiveClaim(now)) {
                 return Optional.empty();
             }
 

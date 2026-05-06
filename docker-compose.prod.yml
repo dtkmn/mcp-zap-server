@@ -6,6 +6,18 @@ services:
     image: mcp-zap-server:native
     environment:
       # Production defaults
+      MCP_API_KEY: ${MCP_API_KEY:?MCP_API_KEY is required for production}
+      ZAP_API_KEY: ${ZAP_API_KEY:?ZAP_API_KEY is required for production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required for production}
       MCP_SECURITY_ENABLED: "true"
       MCP_SECURITY_MODE: jwt
+      MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: "false"
+      JWT_ENABLED: "true"
       SPRING_PROFILES_ACTIVE: prod
+      ZAP_URL_VALIDATION_ENABLED: ${ZAP_URL_VALIDATION_ENABLED:-true}
+      ZAP_ALLOW_LOCALHOST: ${ZAP_ALLOW_LOCALHOST:-false}
+      ZAP_ALLOW_PRIVATE_NETWORKS: ${ZAP_ALLOW_PRIVATE_NETWORKS:-false}
+      ZAP_MAX_ACTIVE_SCAN_DURATION: "30"
+      ZAP_MAX_SPIDER_SCAN_DURATION: "15"
+      ZAP_MAX_CONCURRENT_ACTIVE_SCANS: "3"
+      ZAP_MAX_CONCURRENT_SPIDER_SCANS: "5"

@@ -77,6 +77,8 @@ export default defineConfig({
 						{ slug: 'operations/queue-coordinator-leader-election' },
 						{ slug: 'operations/scan-queue-retry-policy' },
 						{ slug: 'operations/scan-history-ledger' },
+						{ slug: 'operations/release-evidence-handoff-runbook' },
+						{ slug: 'operations/production-simulation-runbook' },
 						{ slug: 'operations/native-image-performance' },
 					],
 				},

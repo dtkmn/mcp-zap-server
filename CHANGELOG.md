@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Added HA queue claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica queue execution.
+- Added `zap_scan_history_release_evidence` and `zap_scan_history_customer_handoff` for internal evidence bundles and customer-safe Markdown handoff summaries.
+
+### Changed
+- Tightened scan-history and production-readiness docs around durable scan-job state, raw evidence redaction, and customer-facing handoff packaging.
+
 ## [0.7.0] - 2026-05-05
 
 ### Added

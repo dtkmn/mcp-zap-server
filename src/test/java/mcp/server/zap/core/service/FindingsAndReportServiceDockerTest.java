@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
 import mcp.server.zap.core.gateway.ZapEngineReportAccess;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -12,7 +13,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ApiResponse;
-import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
@@ -25,6 +25,8 @@ import java.time.Duration;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class FindingsAndReportServiceDockerTest {
@@ -73,6 +75,9 @@ public class FindingsAndReportServiceDockerTest {
         awaitApiReady();
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
+        ScanHistoryLedgerService scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
+        when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("http://findings-target/")).thenReturn(true);
+        findingsService.setScanHistoryLedgerService(scanHistoryLedgerService);
         reportService = new ReportService(new ZapEngineReportAccess(clientApi));
         ReflectionTestUtils.setField(reportService, "reportDirectory", REPORT_DIR.toString());
     }

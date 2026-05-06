@@ -11,6 +11,8 @@ import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.RequestIdentityHolder;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +26,7 @@ class ScanHistoryLedgerServiceTest {
 
     @BeforeEach
     void setUp() {
+        RequestIdentityHolder.set("client-a", "client-a");
         scanJobStore = new InMemoryScanJobStore();
         objectMapper = new ObjectMapper().findAndRegisterModules();
         ScanHistoryLedgerProperties properties = new ScanHistoryLedgerProperties();
@@ -38,6 +41,11 @@ class ScanHistoryLedgerServiceTest {
                 new GatewayRecordFactory(),
                 objectMapper
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        RequestIdentityHolder.clear();
     }
 
     @Test
@@ -98,6 +106,31 @@ class ScanHistoryLedgerServiceTest {
         assertThat(root.path("entryCount").asInt()).isEqualTo(2);
         assertThat(root.path("entries").findValuesAsText("evidenceType"))
                 .contains("scan_run", "report_artifact");
+    }
+
+    @Test
+    void defaultWorkspaceBoundaryFiltersStoredAndJobDerivedHistory() {
+        service.recordDirectScanStarted("spider", "spider-client-a", "https://a.example.com", Map.of());
+
+        RequestIdentityHolder.set("client-b", "client-b");
+        service.recordDirectScanStarted("spider", "spider-client-b", "https://b.example.com", Map.of());
+        ScanJob clientBJob = new ScanJob(
+                "job-client-b",
+                ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "https://b.example.com/queued"),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                3,
+                "client-b",
+                "idem-b"
+        );
+        scanJobStore.upsertAll(java.util.List.of(clientBJob));
+
+        RequestIdentityHolder.set("client-a", "client-a");
+        String list = service.listHistory(null, null, null, 10);
+
+        assertThat(list)
+                .contains("spider-client-a")
+                .doesNotContain("spider-client-b", "job:job-client-b", "b.example.com");
     }
 
     @Test

@@ -99,7 +99,8 @@ public class ReportServiceTest {
     @Test
     void readReportReturnsFileContents() throws Exception {
         Path reportDir = Files.createTempDirectory("report-service-test");
-        Path reportFile = reportDir.resolve("sample-report.json");
+        Path reportFile = reportDir.resolve("workspaces/default-workspace/sample-report.json");
+        Files.createDirectories(reportFile.getParent());
         Files.writeString(reportFile, "{\"status\":\"ok\"}");
         ReflectionTestUtils.setField(service, "reportDirectory", reportDir.toString());
 
@@ -108,6 +109,17 @@ public class ReportServiceTest {
         assertTrue(result.contains("Report artifact"));
         assertTrue(result.contains("Truncated: no"));
         assertTrue(result.contains("{\"status\":\"ok\"}"));
+    }
+
+    @Test
+    void readReportRejectsOtherWorkspaceReportPath() throws Exception {
+        Path reportDir = Files.createTempDirectory("report-service-test");
+        Path otherWorkspaceReport = reportDir.resolve("workspaces/other-workspace/report.json");
+        Files.createDirectories(otherWorkspaceReport.getParent());
+        Files.writeString(otherWorkspaceReport, "{\"status\":\"other\"}");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportDir.toString());
+
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.readReport(otherWorkspaceReport.toString(), 1000));
     }
 
     @Test

@@ -6,6 +6,7 @@ import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.PostgresScanJobStore;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import org.flywaydb.core.Flyway;
@@ -20,6 +21,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -265,6 +268,198 @@ class PostgresBackedScanJobQueueServiceTest {
         verify(activeScanService).getActiveScanProgressPercent("A-recover");
     }
 
+    @Test
+    void staleClaimTokenCannotUpdateReclaimedPostgresJob() {
+        PostgresScanJobStore store = newStore();
+        ScanJob job = queuedJob("job-pg-stale", ScanJobType.ACTIVE_SCAN, "http://example.com/stale", "pg-stale-token");
+        store.admitQueuedJob(job);
+
+        Instant firstClaimAt = Instant.parse("2026-05-06T00:00:10Z");
+        ScanJob firstClaim = store.claimQueuedJobs(
+                "node-a",
+                firstClaimAt,
+                firstClaimAt.plusSeconds(10),
+                1,
+                1
+        ).getFirst();
+        ScanJobClaimToken staleToken = ScanJobClaimToken.from(firstClaim);
+
+        Instant secondClaimAt = Instant.parse("2026-05-06T00:00:30Z");
+        ScanJob secondClaim = store.claimQueuedJobs(
+                "node-a",
+                secondClaimAt,
+                secondClaimAt.plusSeconds(30),
+                1,
+                1
+        ).getFirst();
+        ScanJobClaimToken currentToken = ScanJobClaimToken.from(secondClaim);
+
+        assertTrue(store.updateClaimedJob("job-pg-stale", staleToken, secondClaimAt.plusSeconds(1), claimedJob -> {
+            claimedJob.markRunning("A-stale");
+            return claimedJob;
+        }).isEmpty());
+        assertEquals(ScanJobStatus.QUEUED, store.load("job-pg-stale").orElseThrow().getStatus());
+
+        assertTrue(store.updateClaimedJob("job-pg-stale", currentToken, secondClaimAt.plusSeconds(1), claimedJob -> {
+            claimedJob.markRunning("A-current");
+            return claimedJob;
+        }).isPresent());
+        ScanJob runningJob = store.load("job-pg-stale").orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, runningJob.getStatus());
+        assertEquals("A-current", runningJob.getZapScanId());
+    }
+
+    @Test
+    void concurrentQueuedClaimsRespectActiveCapacityOnPostgres() throws Exception {
+        PostgresScanJobStore store = newStore();
+        store.admitQueuedJob(queuedJob(
+                "job-pg-active-race-1",
+                ScanJobType.ACTIVE_SCAN,
+                "http://example.com/race-1",
+                "pg-active-race-1"
+        ));
+        store.admitQueuedJob(queuedJob(
+                "job-pg-active-race-2",
+                ScanJobType.ACTIVE_SCAN,
+                "http://example.com/race-2",
+                "pg-active-race-2"
+        ));
+
+        Instant claimAt = Instant.parse("2026-05-06T00:02:00Z");
+        List<ScanJob> claimedJobs = runConcurrentClaims(
+                () -> newStore().claimQueuedJobs("node-a", claimAt, claimAt.plusSeconds(30), 1, 1),
+                () -> newStore().claimQueuedJobs("node-b", claimAt, claimAt.plusSeconds(30), 1, 1)
+        );
+
+        List<ScanJob> liveActiveClaims = newStore().list().stream()
+                .filter(job -> job.getType().isActiveFamily())
+                .filter(job -> job.getStatus() == ScanJobStatus.QUEUED)
+                .filter(job -> job.hasLiveClaim(claimAt.plusSeconds(1)))
+                .toList();
+
+        assertEquals(1, claimedJobs.size());
+        assertEquals(1, liveActiveClaims.size());
+        assertEquals(claimedJobs.getFirst().getId(), liveActiveClaims.getFirst().getId());
+        assertNotNull(liveActiveClaims.getFirst().getClaimFenceId());
+    }
+
+    @Test
+    void concurrentExpiredRunningRecoveryClaimsSingleOwnerOnPostgres() throws Exception {
+        PostgresScanJobStore store = newStore();
+        ScanJob runningJob = queuedJob(
+                "job-pg-running-race",
+                ScanJobType.ACTIVE_SCAN,
+                "http://example.com/running-race",
+                "pg-running-race"
+        );
+        runningJob.incrementAttempts();
+        runningJob.markRunning("A-running-race");
+        runningJob.claim(
+                "node-old",
+                Instant.parse("2026-05-06T00:01:00Z"),
+                Instant.parse("2026-05-06T00:01:10Z")
+        );
+        store.upsertAll(List.of(runningJob));
+
+        Instant reclaimAt = Instant.parse("2026-05-06T00:02:00Z");
+        List<ScanJob> claimedJobs = runConcurrentClaims(
+                () -> newStore().claimRunningJobs("node-a", reclaimAt, reclaimAt.plusSeconds(30)),
+                () -> newStore().claimRunningJobs("node-b", reclaimAt, reclaimAt.plusSeconds(30))
+        );
+
+        ScanJob persistedJob = newStore().load("job-pg-running-race").orElseThrow();
+        assertEquals(1, claimedJobs.size());
+        assertEquals(ScanJobStatus.RUNNING, persistedJob.getStatus());
+        assertEquals("A-running-race", persistedJob.getZapScanId());
+        assertEquals(claimedJobs.getFirst().getClaimOwnerId(), persistedJob.getClaimOwnerId());
+        assertEquals(ScanJobClaimToken.from(claimedJobs.getFirst()), ScanJobClaimToken.from(persistedJob));
+    }
+
+    @Test
+    void postgresRenewalPreservesFenceAndKeepsInFlightTokenUsable() {
+        PostgresScanJobStore store = newStore();
+        store.admitQueuedJob(queuedJob(
+                "job-pg-renew-fence",
+                ScanJobType.ACTIVE_SCAN,
+                "http://example.com/renew-fence",
+                "pg-renew-fence"
+        ));
+
+        Instant claimAt = Instant.parse("2026-05-06T00:03:00Z");
+        ScanJob claimedJob = store.claimQueuedJobs(
+                "node-a",
+                claimAt,
+                claimAt.plusSeconds(30),
+                1,
+                1
+        ).getFirst();
+        ScanJobClaimToken inFlightToken = ScanJobClaimToken.from(claimedJob);
+
+        Instant renewAt = claimAt.plusSeconds(5);
+        int renewedCount = store.renewClaims("node-a", List.of("job-pg-renew-fence"), renewAt, renewAt.plusSeconds(45));
+
+        ScanJob renewedJob = store.load("job-pg-renew-fence").orElseThrow();
+        assertEquals(1, renewedCount);
+        assertEquals(inFlightToken, ScanJobClaimToken.from(renewedJob));
+        assertEquals(renewAt, renewedJob.getClaimHeartbeatAt());
+        assertEquals(renewAt.plusSeconds(45), renewedJob.getClaimExpiresAt());
+
+        assertTrue(store.updateClaimedJob(
+                "job-pg-renew-fence",
+                inFlightToken,
+                renewAt.plusSeconds(1),
+                job -> {
+                    job.markRunning("A-renewed-token");
+                    return job;
+                }
+        ).isPresent());
+        assertEquals("A-renewed-token", store.load("job-pg-renew-fence").orElseThrow().getZapScanId());
+    }
+
+    @Test
+    void expiredPostgresClaimCannotRenewOrApplyResultWithoutReclaim() {
+        PostgresScanJobStore store = newStore();
+        store.admitQueuedJob(queuedJob(
+                "job-pg-expired-update",
+                ScanJobType.ACTIVE_SCAN,
+                "http://example.com/expired-update",
+                "pg-expired-update"
+        ));
+
+        Instant claimAt = Instant.parse("2026-05-06T00:04:00Z");
+        ScanJob claimedJob = store.claimQueuedJobs(
+                "node-a",
+                claimAt,
+                claimAt.plusSeconds(10),
+                1,
+                1
+        ).getFirst();
+        ScanJobClaimToken expiredToken = ScanJobClaimToken.from(claimedJob);
+
+        Instant afterExpiry = claimAt.plusSeconds(15);
+        int renewedCount = store.renewClaims(
+                "node-a",
+                List.of("job-pg-expired-update"),
+                afterExpiry,
+                afterExpiry.plusSeconds(30)
+        );
+        assertEquals(0, renewedCount);
+        assertTrue(store.updateClaimedJob(
+                "job-pg-expired-update",
+                expiredToken,
+                afterExpiry,
+                job -> {
+                    job.markRunning("A-expired-should-not-apply");
+                    return job;
+                }
+        ).isEmpty());
+
+        ScanJob unchangedJob = store.load("job-pg-expired-update").orElseThrow();
+        assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
+        assertEquals(claimAt, unchangedJob.getClaimHeartbeatAt());
+        assertEquals(claimAt.plusSeconds(10), unchangedJob.getClaimExpiresAt());
+    }
+
     private PostgresScanJobStore newStore() {
         mcp.server.zap.core.configuration.ScanJobStoreProperties.Postgres properties =
                 new mcp.server.zap.core.configuration.ScanJobStoreProperties.Postgres();
@@ -275,6 +470,40 @@ class PostgresBackedScanJobQueueServiceTest {
         return new PostgresScanJobStore(properties, new ObjectMapper());
     }
 
+    private ScanJob queuedJob(String id, ScanJobType type, String targetUrl, String idempotencyKey) {
+        return new ScanJob(
+                id,
+                type,
+                Map.of("targetUrl", targetUrl, "recurse", "true", "policy", ""),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                3,
+                "client-a",
+                idempotencyKey
+        );
+    }
+
+    private List<ScanJob> runConcurrentClaims(ClaimCallable firstClaim, ClaimCallable secondClaim) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            CyclicBarrier barrier = new CyclicBarrier(2);
+            Future<List<ScanJob>> firstResult = executor.submit(() -> {
+                barrier.await();
+                return firstClaim.call();
+            });
+            Future<List<ScanJob>> secondResult = executor.submit(() -> {
+                barrier.await();
+                return secondClaim.call();
+            });
+
+            ArrayList<ScanJob> claimedJobs = new ArrayList<>();
+            claimedJobs.addAll(firstResult.get());
+            claimedJobs.addAll(secondResult.get());
+            return claimedJobs;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private String extractJobId(String response) {
         for (String line : response.split("\\R")) {
             if (line.startsWith("Job ID: ")) {
@@ -282,6 +511,11 @@ class PostgresBackedScanJobQueueServiceTest {
             }
         }
         throw new AssertionError("Unable to extract job ID from response: " + response);
+    }
+
+    @FunctionalInterface
+    private interface ClaimCallable {
+        List<ScanJob> call() throws Exception;
     }
 
     private static final class SharedLeadershipState {

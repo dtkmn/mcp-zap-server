@@ -47,9 +47,11 @@ zap_queue_spider_scan
 zap_queue_spider_scan_as_user
 zap_report_generate
 zap_report_read
+zap_scan_history_customer_handoff
 zap_scan_history_export
 zap_scan_history_get
 zap_scan_history_list
+zap_scan_history_release_evidence
 zap_scan_job_cancel
 zap_scan_job_dead_letter_list
 zap_scan_job_dead_letter_requeue

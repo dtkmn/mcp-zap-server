@@ -15,12 +15,14 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -963,6 +965,32 @@ public class ScanJobQueueServiceTest {
         verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
     }
 
+    @Test
+    void successfulStartIsStoppedWhenFailFastPersistenceThrows() {
+        FailingUpdateScanJobStore failingStore = new FailingUpdateScanJobStore();
+        ScanJobQueueService failFastService = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
+                urlValidationService,
+                scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1.0),
+                new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0),
+                false,
+                failingStore,
+                new SingleNodeQueueLeadershipCoordinator()
+        );
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-orphan");
+
+        assertThrows(IllegalStateException.class, () ->
+                failFastService.queueActiveScan("http://example.com/orphan", "true", null, null)
+        );
+
+        verify(activeScanService).stopActiveScanJob("A-orphan");
+        ScanJob queuedJob = failingStore.list().getFirst();
+        assertEquals(ScanJobStatus.QUEUED, queuedJob.getStatus());
+    }
+
     private String extractJobId(String response) {
         for (String line : response.split("\\R")) {
             if (line.startsWith("Job ID: ")) {
@@ -981,6 +1009,18 @@ public class ScanJobQueueServiceTest {
         }
         fail("Unable to extract value with prefix '" + prefix + "' from response: " + response);
         return null;
+    }
+
+    private static final class FailingUpdateScanJobStore extends InMemoryScanJobStore {
+        @Override
+        public Optional<ScanJob> updateClaimedJob(
+                String jobId,
+                mcp.server.zap.core.service.queue.ScanJobClaimToken claimToken,
+                Instant now,
+                UnaryOperator<ScanJob> updater
+        ) {
+            throw new IllegalStateException("durable write failed");
+        }
     }
 
     private static final class SharedLeadershipState {

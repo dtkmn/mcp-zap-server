@@ -2,6 +2,7 @@ package mcp.server.zap.core.history;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -322,6 +323,40 @@ public class ScanHistoryLedgerService {
         return output.toString().trim();
     }
 
+    public boolean hasVisibleScanEvidenceForTarget(String targetUrl) {
+        if (!hasText(targetUrl)) {
+            return false;
+        }
+        TargetDescriptor requestedTarget = gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB);
+        int limit = Math.max(properties.getMaxListEntries(), properties.getMaxExportEntries());
+        return queryEntries(null, null, null, limit).stream()
+                .filter(this::isScanEvidence)
+                .map(ScanHistoryEntry::target)
+                .anyMatch(entryTarget -> targetContains(entryTarget, requestedTarget));
+    }
+
+    public List<String> visibleScanTargetBaseUrls() {
+        int limit = Math.max(properties.getMaxListEntries(), properties.getMaxExportEntries());
+        return queryEntries(null, null, null, limit).stream()
+                .filter(this::isScanEvidence)
+                .map(ScanHistoryEntry::target)
+                .map(target -> target == null ? null : target.baseUrl())
+                .filter(this::hasText)
+                .map(String::trim)
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    public List<String> visibleScanTargetHosts() {
+        return visibleScanTargetBaseUrls().stream()
+                .map(this::hostLabel)
+                .filter(this::hasText)
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
     private Map<String, Object> releaseEvidenceFilters(String targetContains, int limit) {
         Map<String, Object> filters = new LinkedHashMap<>();
         filters.put("targetContains", normalizeNullable(targetContains));
@@ -614,7 +649,9 @@ public class ScanHistoryLedgerService {
                     .map(this::fromScanJob)
                     .orElse(null);
         }
-        return historyStore.load(entryId).orElse(null);
+        return historyStore.load(entryId)
+                .filter(this::canReadEntry)
+                .orElse(null);
     }
 
     private List<ScanHistoryEntry> queryEntries(String evidenceType,
@@ -626,7 +663,7 @@ public class ScanHistoryLedgerService {
                 normalizeNullable(evidenceType),
                 normalizeNullable(status),
                 normalizeNullable(targetContains),
-                null
+                currentWorkspaceId()
         );
         ArrayList<ScanHistoryEntry> entries = new ArrayList<>();
         entries.addAll(visibleStoredEntries(historyStore.list(query, limit)));
@@ -639,18 +676,18 @@ public class ScanHistoryLedgerService {
     }
 
     private List<ScanHistoryEntry> visibleStoredEntries(List<ScanHistoryEntry> entries) {
-        if (scanHistoryAccessBoundary == null) {
-            return entries;
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
         }
-        return scanHistoryAccessBoundary.filterVisibleEntries(entries);
+        return entries.stream()
+                .filter(this::canReadEntry)
+                .toList();
     }
 
     private List<ScanHistoryEntry> visibleJobEntries(ScanHistoryQuery query) {
         List<ScanJob> jobs = scanJobStore.list();
-        if (scanJobAccessBoundary != null) {
-            jobs = scanJobAccessBoundary.filterVisibleJobs(jobs);
-        }
         return jobs.stream()
+                .filter(this::canReadJob)
                 .map(this::fromScanJob)
                 .filter(entry -> matches(query, entry))
                 .toList();
@@ -706,6 +743,9 @@ public class ScanHistoryLedgerService {
         if (hasText(query.status()) && !query.status().equalsIgnoreCase(entry.status())) {
             return false;
         }
+        if (hasText(query.workspaceId()) && !query.workspaceId().equals(entry.workspaceId())) {
+            return false;
+        }
         if (hasText(query.targetContains())) {
             String needle = query.targetContains().trim().toLowerCase(Locale.ROOT);
             String haystack = String.join(" ",
@@ -719,7 +759,79 @@ public class ScanHistoryLedgerService {
     }
 
     private boolean canReadJob(ScanJob job) {
-        return scanJobAccessBoundary == null || scanJobAccessBoundary.canCurrentRequesterAccess(job);
+        if (job == null) {
+            return false;
+        }
+        if (scanJobAccessBoundary != null) {
+            return scanJobAccessBoundary.canCurrentRequesterAccess(job);
+        }
+        return currentWorkspaceId().equals(workspaceIdForRequester(job.getRequesterId()));
+    }
+
+    private boolean canReadEntry(ScanHistoryEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        if (scanHistoryAccessBoundary != null) {
+            return scanHistoryAccessBoundary.canCurrentRequesterAccess(entry);
+        }
+        String entryWorkspaceId = hasText(entry.workspaceId())
+                ? entry.workspaceId().trim()
+                : workspaceIdForRequester(entry.clientId());
+        return currentWorkspaceId().equals(entryWorkspaceId);
+    }
+
+    private boolean targetContains(TargetDescriptor entryTarget, TargetDescriptor requestedTarget) {
+        if (entryTarget == null || requestedTarget == null
+                || !hasText(entryTarget.baseUrl()) || !hasText(requestedTarget.baseUrl())) {
+            return false;
+        }
+        try {
+            URI entryUri = URI.create(entryTarget.baseUrl().trim());
+            URI requestedUri = URI.create(requestedTarget.baseUrl().trim());
+            String entryAuthority = authorityKey(entryUri);
+            String requestedAuthority = authorityKey(requestedUri);
+            if (!entryAuthority.equals(requestedAuthority)) {
+                return false;
+            }
+            String entryPath = normalizedPath(entryUri);
+            String requestedPath = normalizedPath(requestedUri);
+            return requestedPath.equals(entryPath)
+                    || requestedPath.startsWith(entryPath.endsWith("/") ? entryPath : entryPath + "/");
+        } catch (IllegalArgumentException ignored) {
+            return requestedTarget.baseUrl().trim().equalsIgnoreCase(entryTarget.baseUrl().trim());
+        }
+    }
+
+    private String authorityKey(URI uri) {
+        String scheme = valueOrDefault(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+        String host = valueOrDefault(uri.getHost(), "").toLowerCase(Locale.ROOT);
+        int port = uri.getPort();
+        return scheme + "://" + host + (port >= 0 ? ":" + port : "");
+    }
+
+    private String normalizedPath(URI uri) {
+        String path = uri.getPath();
+        if (!hasText(path)) {
+            return "/";
+        }
+        return path.trim();
+    }
+
+    private String hostLabel(String baseUrl) {
+        try {
+            URI uri = URI.create(baseUrl);
+            if (hasText(uri.getHost())) {
+                return uri.getHost().toLowerCase(Locale.ROOT);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Fall through to the raw label for non-URI target descriptors.
+        }
+        return hasText(baseUrl) ? baseUrl.trim().toLowerCase(Locale.ROOT) : null;
+    }
+
+    private String workspaceIdForRequester(String requesterId) {
+        return valueOrDefault(clientWorkspaceResolver.resolveWorkspaceId(requesterId), "default-workspace");
     }
 
     private Instant effectiveRecordedAt(ScanJob job) {

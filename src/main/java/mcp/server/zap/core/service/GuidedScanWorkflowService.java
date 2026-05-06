@@ -2,9 +2,13 @@ package mcp.server.zap.core.service;
 
 import java.nio.charset.StandardCharsets;
 import java.net.URI;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
@@ -14,6 +18,9 @@ import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +29,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class GuidedScanWorkflowService {
     private static final String PREFIX_OPERATION_ID = "zop_";
+    private static final byte[] PROCESS_OPERATION_SIGNING_SECRET =
+            UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8);
     private static final String STRATEGY_ACTIVE = "active";
     private static final String STRATEGY_AUTO = "auto";
     private static final String STRATEGY_BROWSER = "browser";
@@ -41,6 +50,10 @@ public class GuidedScanWorkflowService {
     private final GuidedAuthSessionService guidedAuthSessionService;
     private final EngineAdapter engineAdapter;
     private final GatewayRecordFactory gatewayRecordFactory;
+    private ClientWorkspaceResolver clientWorkspaceResolver;
+
+    @Value("${mcp.server.guided.operation-signing-secret:${JWT_SECRET:}}")
+    private String operationSigningSecret;
 
     public GuidedScanWorkflowService(GuidedExecutionModeResolver executionModeResolver,
                                      SpiderScanService spiderScanService,
@@ -58,6 +71,11 @@ public class GuidedScanWorkflowService {
         this.guidedAuthSessionService = guidedAuthSessionService;
         this.engineAdapter = engineAdapter;
         this.gatewayRecordFactory = gatewayRecordFactory;
+    }
+
+    @Autowired(required = false)
+    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
@@ -433,14 +451,18 @@ public class GuidedScanWorkflowService {
 
     private String encodeOperation(GuidedOperation operation) {
         String payload = String.join("|",
-                "v1",
-                operation.kind().wireValue(),
-                formatExecutionMode(operation.executionMode()),
-                operation.strategy(),
-                operation.backendId() == null ? "" : operation.backendId());
+                "v2",
+                encodePart(operation.kind().wireValue()),
+                encodePart(formatExecutionMode(operation.executionMode())),
+                encodePart(operation.strategy()),
+                encodePart(operation.backendId()),
+                encodePart(currentClientId()),
+                encodePart(currentWorkspaceId()),
+                encodePart(UUID.randomUUID().toString()));
+        String signedPayload = payload + "|" + signPayload(payload);
         return PREFIX_OPERATION_ID + Base64.getUrlEncoder()
                 .withoutPadding()
-                .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+                .encodeToString(signedPayload.getBytes(StandardCharsets.UTF_8));
     }
 
     private GuidedOperation decodeOperation(String operationId, OperationKind expectedKind) {
@@ -459,20 +481,90 @@ public class GuidedScanWorkflowService {
         }
 
         String[] parts = payload.split("\\|", -1);
-        if (parts.length != 5 || !"v1".equals(parts[0])) {
+        if (parts.length != 9 || !"v2".equals(parts[0])) {
             throw new IllegalArgumentException("operationId has an unsupported format");
+        }
+        String signedPayload = String.join("|",
+                parts[0],
+                parts[1],
+                parts[2],
+                parts[3],
+                parts[4],
+                parts[5],
+                parts[6],
+                parts[7]
+        );
+        if (!MessageDigest.isEqual(
+                signPayload(signedPayload).getBytes(StandardCharsets.UTF_8),
+                parts[8].getBytes(StandardCharsets.UTF_8))) {
+            throw new IllegalArgumentException("operationId signature is invalid");
+        }
+
+        String operationClientId = decodePart(parts[5], "clientId");
+        String operationWorkspaceId = decodePart(parts[6], "workspaceId");
+        if (!operationClientId.equals(currentClientId()) || !operationWorkspaceId.equals(currentWorkspaceId())) {
+            throw new IllegalArgumentException("operationId is not visible to the current requester");
         }
 
         GuidedOperation operation = new GuidedOperation(
-                OperationKind.fromWireValue(parts[1]),
-                parseExecutionMode(parts[2]),
-                parts[3],
-                parts[4]
+                OperationKind.fromWireValue(decodePart(parts[1], "operationKind")),
+                parseExecutionMode(decodePart(parts[2], "executionMode")),
+                decodePart(parts[3], "strategy"),
+                decodePart(parts[4], "backendId")
         );
         if (operation.kind() != expectedKind) {
             throw new IllegalArgumentException("operationId belongs to a different guided flow");
         }
         return operation;
+    }
+
+    private String encodePart(String value) {
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString((value == null ? "" : value).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String decodePart(String value, String fieldName) {
+        try {
+            return new String(Base64.getUrlDecoder().decode(value), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("operationId has malformed " + fieldName, e);
+        }
+    }
+
+    private String signPayload(String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(operationSigningSecretBytes(), "HmacSHA256"));
+            return Base64.getUrlEncoder()
+                    .withoutPadding()
+                    .encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Unable to sign guided operation ID", e);
+        }
+    }
+
+    private byte[] operationSigningSecretBytes() {
+        if (hasText(operationSigningSecret)) {
+            return operationSigningSecret.trim().getBytes(StandardCharsets.UTF_8);
+        }
+        return PROCESS_OPERATION_SIGNING_SECRET;
+    }
+
+    private String currentClientId() {
+        if (clientWorkspaceResolver == null) {
+            return "anonymous";
+        }
+        String clientId = clientWorkspaceResolver.resolveCurrentClientId();
+        return hasText(clientId) ? clientId.trim() : "anonymous";
+    }
+
+    private String currentWorkspaceId() {
+        if (clientWorkspaceResolver == null) {
+            return "default-workspace";
+        }
+        String workspaceId = clientWorkspaceResolver.resolveCurrentWorkspaceId();
+        return hasText(workspaceId) ? workspaceId.trim() : "default-workspace";
     }
 
     private GuidedExecutionModeResolver.ExecutionMode parseExecutionMode(String executionMode) {

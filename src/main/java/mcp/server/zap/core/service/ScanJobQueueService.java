@@ -820,17 +820,31 @@ public class ScanJobQueueService {
     }
 
     private List<ScanJob> filterVisibleJobs(List<ScanJob> jobs) {
-        if (scanJobAccessBoundary == null) {
-            return jobs == null ? List.of() : jobs;
+        if (jobs == null || jobs.isEmpty()) {
+            return List.of();
         }
-        return scanJobAccessBoundary.filterVisibleJobs(jobs);
+        return jobs.stream()
+                .filter(this::canCurrentRequesterAccess)
+                .toList();
     }
 
     private ScanJob requireVisibleJob(String jobId, ScanJob job) {
-        if (job == null || (scanJobAccessBoundary != null && !scanJobAccessBoundary.canCurrentRequesterAccess(job))) {
+        if (!canCurrentRequesterAccess(job)) {
             throw new IllegalArgumentException("No scan job found for ID: " + jobId);
         }
         return job;
+    }
+
+    private boolean canCurrentRequesterAccess(ScanJob job) {
+        if (job == null) {
+            return false;
+        }
+        if (scanJobAccessBoundary != null) {
+            return scanJobAccessBoundary.canCurrentRequesterAccess(job);
+        }
+        String currentWorkspaceId = resolveCurrentWorkspaceId();
+        String jobWorkspaceId = resolveWorkspaceId(job.getRequesterId());
+        return currentWorkspaceId.equals(jobWorkspaceId);
     }
 
     private void validateIdempotentReplay(ScanJob existingJob, ScanJob requestedJob) {
@@ -932,6 +946,27 @@ public class ScanJobQueueService {
             return DEFAULT_REQUESTER_ID;
         }
         return clientWorkspaceResolver.resolveCurrentClientId();
+    }
+
+    private String resolveCurrentWorkspaceId() {
+        if (clientWorkspaceResolver == null) {
+            return resolveWorkspaceId(resolveRequesterId());
+        }
+        return normalizeWorkspaceId(clientWorkspaceResolver.resolveCurrentWorkspaceId());
+    }
+
+    private String resolveWorkspaceId(String requesterId) {
+        if (clientWorkspaceResolver == null) {
+            return normalizeWorkspaceId(requesterId);
+        }
+        return normalizeWorkspaceId(clientWorkspaceResolver.resolveWorkspaceId(requesterId));
+    }
+
+    private String normalizeWorkspaceId(String value) {
+        if (!hasText(value)) {
+            return DEFAULT_REQUESTER_ID;
+        }
+        return value.trim();
     }
 
     /**

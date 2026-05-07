@@ -2,6 +2,7 @@
   "name": "docs",
   "type": "module",
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
@@ -23,7 +24,7 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.12",
     "yaml": "^2.8.3"
   }
 }

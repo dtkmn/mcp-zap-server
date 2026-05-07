@@ -69,6 +69,12 @@ npm run build
 4. Update docs when the user-facing contract changes.
 5. Explain the operational impact in the PR description.
 
+## Contribution License
+
+Unless explicitly stated otherwise, any contribution intentionally submitted
+for inclusion in this repository is submitted under the Apache License 2.0,
+without additional terms or conditions.
+
 ## Pull Request Expectations
 
 Every pull request should include:

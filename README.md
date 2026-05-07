@@ -166,6 +166,8 @@ The boundary is intentional:
 - [Discussions](https://github.com/dtkmn/mcp-zap-server/discussions)
 - [Demo video](https://danieltse.org/mcp-zap-server/demo.html)
 
+If this project saves you time or becomes part of your security workflow, you can [sponsor the maintainer](https://github.com/sponsors/dtkmn) to support ongoing maintenance.
+
 Agentic Lab offers optional paid support for teams adopting the public core in production. Commercial support is separate from the Apache-2.0-licensed OSS distribution, and the public core should remain usable without private extensions or paid services.
 
 [Contact Agentic Lab](mailto:agentic.lab.au@gmail.com?subject=Inquiry:%20MCP%20ZAP%20Server%20Commercial%20Support)

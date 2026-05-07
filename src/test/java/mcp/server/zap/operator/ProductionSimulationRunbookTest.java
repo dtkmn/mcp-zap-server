@@ -67,6 +67,8 @@ class ProductionSimulationRunbookTest {
                 "Queued scan jobs are not terminal",
                 "Evidence entry count reached the export limit",
                 "curated summary",
+                "Acceptance Checklist",
+                "Customer-Safe Redaction Contract",
                 "Pass / Caveat / Fail",
                 "Sign-Off Template"
         );

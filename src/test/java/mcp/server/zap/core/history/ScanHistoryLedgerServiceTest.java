@@ -239,7 +239,23 @@ class ScanHistoryLedgerServiceTest {
                 .contains("Queued Scan: Spider Scan")
                 .contains("Succeeded, progress 100%")
                 .contains("HTML report generated")
-                .contains("Attach reviewed report files separately")
+                .contains(
+                        "Acceptance Checklist",
+                        "- [x] Evidence window has entries",
+                        "- [x] Scan evidence is included",
+                        "- [x] Report evidence is included",
+                        "- [x] At least one target has scan and report evidence",
+                        "- [x] Terminal queued scan evidence is included",
+                        "- [x] No target relies only on direct scan launch evidence",
+                        "- [x] No unfinished queued scans",
+                        "- [x] Evidence window stayed within export limit",
+                        "Customer-Safe Redaction Contract",
+                        "- Raw ledger IDs: excluded",
+                        "- Internal artifact paths: excluded",
+                        "- Raw metadata and idempotency keys: excluded",
+                        "- Internal filter selector: excluded",
+                        "Customer Package Contents",
+                        "Attach reviewed report files separately")
                 .doesNotContain(
                         "job-customer-safe",
                         "job:",
@@ -251,9 +267,153 @@ class ScanHistoryLedgerServiceTest {
                         "customer-idem-key",
                         "idempotencyKey",
                         "/zap/wrk",
-                        "SEC-123",
-                        "metadata"
+                        "SEC-123"
                 );
+    }
+
+    @Test
+    void customerHandoffChecklistFlagsMissingReportAndLimitRisk() {
+        service.recordDirectScanStarted(
+                "spider",
+                "spider-checklist-1",
+                "https://checklist.example.com",
+                Map.of()
+        );
+
+        String handoff = service.exportCustomerHandoff("pilot-checklist", "checklist.example.com", 1);
+
+        assertThat(handoff)
+                .contains(
+                        "Readiness: FAIL",
+                        "Acceptance Checklist",
+                        "- [x] Evidence window has entries",
+                        "- [x] Scan evidence is included",
+                        "- [ ] Report evidence is included",
+                        "- [ ] At least one target has scan and report evidence",
+                        "- [ ] Terminal queued scan evidence is included",
+                        "- [ ] No target relies only on direct scan launch evidence",
+                        "- [x] No unfinished queued scans",
+                        "- [ ] Evidence window stayed within export limit",
+                        "No report evidence was included",
+                        "The handoff reached the export limit")
+                .doesNotContain("spider-checklist-1");
+    }
+
+    @Test
+    void customerHandoffFailsWhenScanAndReportTargetsDoNotMatch() {
+        ScanJob job = new ScanJob(
+                "job-target-a",
+                ScanJobType.SPIDER_SCAN,
+                Map.of("targetUrl", "https://scan-only.example.com"),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                2,
+                "client-a",
+                "target-mismatch-idem"
+        );
+        job.incrementAttempts();
+        job.markRunning("zap-spider-target-a");
+        job.markSucceeded(100);
+        scanJobStore.upsertAll(java.util.List.of(job));
+        service.recordReportArtifact(
+                "/zap/wrk/report-target-b.html",
+                "traditional-html-plus",
+                "https://report-only.example.com",
+                Map.of("template", "traditional-html-plus")
+        );
+
+        String handoff = service.exportCustomerHandoff("pilot-mismatch", "example.com", 10);
+
+        assertThat(handoff)
+                .contains(
+                        "Readiness: FAIL",
+                        "- [x] Scan evidence is included",
+                        "- [x] Report evidence is included",
+                        "- [ ] At least one target has scan and report evidence",
+                        "No target has both scan evidence and report evidence")
+                .doesNotContain("job-target-a", "zap-spider-target-a", "target-mismatch-idem", "/zap/wrk");
+    }
+
+    @Test
+    void customerHandoffCorrelatesDefaultPortsAndTrailingSlashes() {
+        ScanJob job = new ScanJob(
+                "job-normalized-target",
+                ScanJobType.SPIDER_SCAN,
+                Map.of("targetUrl", "https://normalize.example.com/"),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                2,
+                "client-a",
+                "normalized-idem"
+        );
+        job.incrementAttempts();
+        job.markRunning("zap-spider-normalized");
+        job.markSucceeded(100);
+        scanJobStore.upsertAll(java.util.List.of(job));
+        service.recordReportArtifact(
+                "/zap/wrk/normalized.html",
+                "traditional-html-plus",
+                "https://normalize.example.com:443",
+                Map.of("template", "traditional-html-plus")
+        );
+
+        String handoff = service.exportCustomerHandoff("pilot-normalized", "normalize.example.com", 10);
+
+        assertThat(handoff)
+                .contains(
+                        "Readiness: PASS",
+                        "- [x] At least one target has scan and report evidence",
+                        "- [x] Terminal queued scan evidence is included");
+    }
+
+    @Test
+    void customerHandoffCaveatsMixedDirectAndQueuedTargetProof() {
+        service.recordDirectScanStarted(
+                "spider",
+                "spider-direct-target",
+                "https://direct-only.example.com",
+                Map.of()
+        );
+        service.recordReportArtifact(
+                "/zap/wrk/direct-only.html",
+                "traditional-html-plus",
+                "https://direct-only.example.com",
+                Map.of("template", "traditional-html-plus")
+        );
+        ScanJob queuedJob = new ScanJob(
+                "job-queued-target",
+                ScanJobType.SPIDER_SCAN,
+                Map.of("targetUrl", "https://queued-complete.example.com"),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                2,
+                "client-a",
+                "queued-complete-idem"
+        );
+        queuedJob.incrementAttempts();
+        queuedJob.markRunning("zap-spider-queued-complete");
+        queuedJob.markSucceeded(100);
+        scanJobStore.upsertAll(java.util.List.of(queuedJob));
+        service.recordReportArtifact(
+                "/zap/wrk/queued-complete.html",
+                "traditional-html-plus",
+                "https://queued-complete.example.com",
+                Map.of("template", "traditional-html-plus")
+        );
+
+        String handoff = service.exportCustomerHandoff("pilot-mixed-proof", "example.com", 10);
+
+        assertThat(handoff)
+                .contains(
+                        "Readiness: CAVEAT",
+                        "- [x] At least one target has scan and report evidence",
+                        "- [x] Terminal queued scan evidence is included",
+                        "- [ ] No target relies only on direct scan launch evidence",
+                        "Some targets only have direct scan launch evidence",
+                        "https://direct-only.example.com")
+                .doesNotContain(
+                        "spider-direct-target",
+                        "job-queued-target",
+                        "zap-spider-queued-complete",
+                        "queued-complete-idem",
+                        "/zap/wrk");
     }
 
     @Test
@@ -308,7 +468,9 @@ class ScanHistoryLedgerServiceTest {
 
         assertThat(handoff)
                 .contains("Readiness: CAVEAT")
-                .contains("Direct scan starts prove launch only")
+                .contains("Some targets only have direct scan launch evidence")
+                .contains("- [ ] Terminal queued scan evidence is included")
+                .contains("- [ ] No target relies only on direct scan launch evidence")
                 .contains("Direct Scan Start: Active Scan")
                 .doesNotContain("active-direct-1", "/zap/wrk/direct-report.html");
     }

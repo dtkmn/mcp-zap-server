@@ -33,8 +33,8 @@ services:
       retries: 30
       start_period: 30s
     volumes:
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk:/zap/wrk
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-home:/home/zap/.ZAP
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-wrk:/zap/wrk
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-home:/home/zap/.ZAP
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -107,7 +107,7 @@ services:
       ZAP_ALLOW_PRIVATE_NETWORKS: ${ZAP_ALLOW_PRIVATE_NETWORKS:-true}
       ZAP_URL_WHITELIST: ${ZAP_URL_WHITELIST:-}
     volumes:
-      - ${LOCAL_ZAP_WORKPLACE_FOLDER}:/zap/wrk
+      - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-wrk:/zap/wrk
 
   juice-shop:
     image: bkimminich/juice-shop:v19.1.1

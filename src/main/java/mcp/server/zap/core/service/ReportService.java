@@ -16,12 +16,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -96,6 +98,7 @@ public class ReportService {
             Path configuredReportRoot = Paths.get(reportDirectory).toAbsolutePath().normalize();
             Path effectiveReportRoot = resolveWriteReportDirectory(configuredReportRoot);
             Files.createDirectories(effectiveReportRoot);
+            inheritConfiguredRootPermissions(configuredReportRoot, effectiveReportRoot);
             String normalizedTheme = normalizeTheme(reportTemplate, theme);
             String fileName = engineReportAccess.generateReport(new ReportGenerationRequest(
                     "My ZAP Scan Report",
@@ -233,6 +236,28 @@ public class ReportService {
                 .resolve("workspaces")
                 .resolve(workspacePathSegment(currentWorkspaceId()))
                 .normalize();
+    }
+
+    private void inheritConfiguredRootPermissions(Path configuredReportRoot, Path effectiveReportRoot) throws IOException {
+        Path normalizedRoot = configuredReportRoot.toAbsolutePath().normalize();
+        Path normalizedEffectiveRoot = effectiveReportRoot.toAbsolutePath().normalize();
+        if (normalizedRoot.equals(normalizedEffectiveRoot) || !Files.exists(normalizedRoot)) {
+            return;
+        }
+        try {
+            Set<PosixFilePermission> rootPermissions = Files.getPosixFilePermissions(normalizedRoot);
+            if (!normalizedEffectiveRoot.startsWith(normalizedRoot)) {
+                Files.setPosixFilePermissions(normalizedEffectiveRoot, rootPermissions);
+                return;
+            }
+            Path current = normalizedRoot;
+            for (Path segment : normalizedRoot.relativize(normalizedEffectiveRoot)) {
+                current = current.resolve(segment);
+                Files.setPosixFilePermissions(current, rootPermissions);
+            }
+        } catch (UnsupportedOperationException ignored) {
+            // Non-POSIX file systems do not expose permissions through java.nio.
+        }
     }
 
     private String currentWorkspaceId() {

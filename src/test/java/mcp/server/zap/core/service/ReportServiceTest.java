@@ -2,6 +2,8 @@ package mcp.server.zap.core.service;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
 import mcp.server.zap.core.gateway.EngineReportAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
@@ -94,6 +96,45 @@ public class ReportServiceTest {
         ArgumentCaptor<ReportGenerationRequest> captor = ArgumentCaptor.forClass(ReportGenerationRequest.class);
         verify(reportAccess).generateReport(captor.capture());
         assertEquals(scopedRoot.toString(), captor.getValue().reportDirectory());
+    }
+
+    @Test
+    void generateReportCopiesConfiguredRootPermissionsToWorkspaceDirectoryPath() throws Exception {
+        Path reportRoot = Files.createTempDirectory("report-service-root-permissions");
+        Path workspaceParent = reportRoot.resolve("workspaces");
+        Path workspaceDirectory = workspaceParent.resolve("default-workspace");
+        Set<PosixFilePermission> rootPermissions = Set.of(
+                PosixFilePermission.OWNER_READ,
+                PosixFilePermission.OWNER_WRITE,
+                PosixFilePermission.OWNER_EXECUTE,
+                PosixFilePermission.GROUP_READ,
+                PosixFilePermission.GROUP_WRITE,
+                PosixFilePermission.GROUP_EXECUTE,
+                PosixFilePermission.OTHERS_READ,
+                PosixFilePermission.OTHERS_WRITE,
+                PosixFilePermission.OTHERS_EXECUTE
+        );
+        try {
+            Files.setPosixFilePermissions(reportRoot, rootPermissions);
+        } catch (UnsupportedOperationException ignored) {
+            return;
+        }
+        ReflectionTestUtils.setField(service, "reportDirectory", reportRoot.toString());
+        when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(invocation -> {
+                    ReportGenerationRequest request = invocation.getArgument(0, ReportGenerationRequest.class);
+                    Path reportDirectory = Path.of(request.reportDirectory());
+                    assertEquals(rootPermissions, Files.getPosixFilePermissions(reportDirectory));
+                    Path reportPath = reportDirectory.resolve(request.reportFileName() + ".json");
+                    Files.writeString(reportPath, "{\"status\":\"ok\"}");
+                    return reportPath.toString();
+                });
+
+        String result = service.generateReport("traditional-json-plus", "light", "site");
+
+        assertEquals(rootPermissions, Files.getPosixFilePermissions(workspaceParent));
+        assertEquals(rootPermissions, Files.getPosixFilePermissions(workspaceDirectory));
+        assertTrue(result.startsWith(workspaceDirectory.toString()));
     }
 
     @Test

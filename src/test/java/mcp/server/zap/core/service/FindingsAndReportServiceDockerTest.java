@@ -13,6 +13,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ApiResponse;
+import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
@@ -22,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -68,6 +70,7 @@ public class FindingsAndReportServiceDockerTest {
     private static ClientApi clientApi;
     private static FindingsService findingsService;
     private static ReportService reportService;
+    private static ZapEngineReportAccess reportAccess;
 
     @BeforeAll
     static void setupServices() throws Exception {
@@ -78,7 +81,8 @@ public class FindingsAndReportServiceDockerTest {
         ScanHistoryLedgerService scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
         when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("http://findings-target/")).thenReturn(true);
         findingsService.setScanHistoryLedgerService(scanHistoryLedgerService);
-        reportService = new ReportService(new ZapEngineReportAccess(clientApi));
+        reportAccess = new ZapEngineReportAccess(clientApi);
+        reportService = new ReportService(reportAccess);
         ReflectionTestUtils.setField(reportService, "reportDirectory", REPORT_DIR.toString());
     }
 
@@ -110,7 +114,9 @@ public class FindingsAndReportServiceDockerTest {
         assertTrue(details.contains("Codex Test Alert"));
         assertTrue(instances.contains("Message ID: " + messageId));
 
-        String reportPath = reportService.generateReport("traditional-json-plus", "light", targetUrl);
+        String reportTemplate = awaitReportTemplate();
+        String reportSite = awaitReportSite(targetUrl);
+        String reportPath = reportService.generateReport(reportTemplate, "light", reportSite);
         awaitReportExists(Path.of(reportPath));
         String reportContents = reportService.readReport(reportPath, 50000);
 
@@ -147,6 +153,70 @@ public class FindingsAndReportServiceDockerTest {
             Thread.sleep(500);
         }
         throw new IllegalStateException("No HTTP messages found for base URL " + baseUrl);
+    }
+
+    private static String awaitReportTemplate() throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        List<String> lastTemplates = List.of();
+        while (System.nanoTime() < deadline) {
+            lastTemplates = reportAccess.listReportTemplates();
+            if (lastTemplates.contains("traditional-json-plus")) {
+                return "traditional-json-plus";
+            }
+            String jsonTemplate = firstTemplateContaining(lastTemplates, "json");
+            if (jsonTemplate != null) {
+                return jsonTemplate;
+            }
+            String anyTemplate = firstTemplateContaining(lastTemplates, "");
+            if (anyTemplate != null) {
+                return anyTemplate;
+            }
+            Thread.sleep(500);
+        }
+        throw new IllegalStateException("No report templates available from ZAP: " + lastTemplates);
+    }
+
+    private static String awaitReportSite(String targetUrl) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+        String normalizedTargetUrl = stripTrailingSlash(targetUrl);
+        List<String> lastSites = List.of();
+        while (System.nanoTime() < deadline) {
+            ApiResponse response = clientApi.core.sites();
+            if (response instanceof ApiResponseList list) {
+                lastSites = list.getItems().stream()
+                        .map(FindingsAndReportServiceDockerTest::apiResponseValue)
+                        .toList();
+                for (String site : lastSites) {
+                    if (normalizedTargetUrl.equals(stripTrailingSlash(site))) {
+                        return site;
+                    }
+                }
+            }
+            Thread.sleep(500);
+        }
+        throw new IllegalStateException("No matching ZAP report site for " + targetUrl + ": " + lastSites);
+    }
+
+    private static String apiResponseValue(ApiResponse item) {
+        if (item instanceof ApiResponseElement element) {
+            return element.getValue();
+        }
+        return item.toString();
+    }
+
+    private static String stripTrailingSlash(String value) {
+        String normalized = value == null ? "" : value.trim();
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
+    }
+
+    private static String firstTemplateContaining(List<String> templates, String value) {
+        return templates.stream()
+                .filter(template -> template != null && template.contains(value))
+                .findFirst()
+                .orElse(null);
     }
 
     private static void awaitReportExists(Path reportPath) throws Exception {

@@ -75,6 +75,23 @@ public class ObservabilityService {
         );
     }
 
+    public void recordAuthRateLimitRejection(String endpoint, String correlationId) {
+        String normalizedEndpoint = normalizeAuthEndpoint(endpoint);
+        meterRegistry.counter(
+                "mcp.zap.auth.rate_limit.rejections",
+                "endpoint", normalizedEndpoint
+        ).increment();
+
+        auditEventStream.publish(
+                "auth_rate_limit_rejection",
+                "anonymous",
+                "rate_limited",
+                auditDetails(correlationId, "anonymous", "default-workspace", Map.of(
+                        "endpoint", normalizedEndpoint
+                ))
+        );
+    }
+
     public void recordAuthorization(String action,
                                     String outcome,
                                     String reason,
@@ -256,6 +273,14 @@ public class ObservabilityService {
             return "/actuator/metrics/{name}";
         }
         return normalized;
+    }
+
+    private String normalizeAuthEndpoint(String path) {
+        String normalized = normalizePath(path);
+        return switch (normalized) {
+            case "/auth/token", "/auth/refresh", "/auth/revoke" -> normalized;
+            default -> "/auth/unknown";
+        };
     }
 
     private String normalizeHttpOutcome(int status) {

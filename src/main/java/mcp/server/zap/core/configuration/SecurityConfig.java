@@ -5,6 +5,7 @@ import mcp.server.zap.core.service.TokenBlacklistService;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.core.service.protection.AuthEndpointRateLimiter;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -34,6 +36,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,22 +99,27 @@ public class SecurityConfig {
     private final ObjectProvider<TokenBlacklistService> tokenBlacklistServiceProvider;
     private final ObjectMapper objectMapper;
     private final ObservabilityService observabilityService;
+    private final AuthEndpointRateLimiter authEndpointRateLimiter;
 
     private static final String API_KEY_HEADER = "X-API-Key";
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    private static final List<String> PUBLIC_AUTH_PATHS = List.of("/auth/token", "/auth/refresh", "/auth/revoke");
+    private static final List<String> PUBLIC_ACTUATOR_PATHS = List.of("/actuator/health", "/actuator/info");
 
     public SecurityConfig(JwtProperties jwtProperties,
                          ApiKeyProperties apiKeyProperties,
                          ObjectProvider<JwtService> jwtServiceProvider,
                          ObjectProvider<TokenBlacklistService> tokenBlacklistServiceProvider,
                          ObjectProvider<ObjectMapper> objectMapperProvider,
-                         ObservabilityService observabilityService) {
+                         ObservabilityService observabilityService,
+                         AuthEndpointRateLimiter authEndpointRateLimiter) {
         this.jwtProperties = jwtProperties;
         this.apiKeyProperties = apiKeyProperties;
         this.jwtServiceProvider = jwtServiceProvider;
         this.tokenBlacklistServiceProvider = tokenBlacklistServiceProvider;
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         this.observabilityService = observabilityService;
+        this.authEndpointRateLimiter = authEndpointRateLimiter;
     }
 
     /**
@@ -143,6 +151,7 @@ public class SecurityConfig {
                 .pathMatchers("/actuator/health", "/actuator/info", "/auth/token", "/auth/refresh", "/auth/revoke").permitAll()
                 .anyExchange().authenticated()
             )
+            .addFilterAt(authEndpointRateLimitFilter(), SecurityWebFiltersOrder.FIRST)
             .addFilterAt(authenticationFilter(), SecurityWebFiltersOrder.AUTHENTICATION);
 
         return http.build();
@@ -175,9 +184,7 @@ public class SecurityConfig {
 
             // Skip authentication for public endpoints
             String path = exchange.getRequest().getPath().value();
-            if (path.startsWith("/actuator/health") || path.startsWith("/actuator/info")
-                || path.startsWith("/auth/token") || path.startsWith("/auth/refresh")
-                || path.startsWith("/auth/revoke")) {
+            if (isPublicEndpoint(path)) {
                 return chain.filter(exchange);
             }
 
@@ -188,6 +195,40 @@ public class SecurityConfig {
                 default -> chain.filter(exchange); // Should not reach here
             };
         };
+    }
+
+    private WebFilter authEndpointRateLimitFilter() {
+        return (exchange, chain) -> {
+            String path = exchange.getRequest().getPath().value();
+            if (!isPublicAuthPath(path)) {
+                return chain.filter(exchange);
+            }
+
+            String key = authRateLimitKey(exchange, path);
+            if (authEndpointRateLimiter.tryConsume(key)) {
+                return chain.filter(exchange);
+            }
+
+            long retryAfterSeconds = authEndpointRateLimiter.retryAfterSeconds(key);
+            observabilityService.recordAuthRateLimitRejection(path, RequestLogContext.correlationId(exchange));
+            return tooManyAuthRequestsResponse(exchange, retryAfterSeconds);
+        };
+    }
+
+    private boolean isPublicEndpoint(String path) {
+        return PUBLIC_ACTUATOR_PATHS.contains(path) || isPublicAuthPath(path);
+    }
+
+    private boolean isPublicAuthPath(String path) {
+        return PUBLIC_AUTH_PATHS.contains(path);
+    }
+
+    private String authRateLimitKey(ServerWebExchange exchange, String path) {
+        String remoteAddress = Optional.ofNullable(exchange.getRequest().getRemoteAddress())
+                .map(address -> address.getAddress() != null ? address.getAddress().getHostAddress() : address.getHostString())
+                .filter(value -> value != null && !value.isBlank())
+                .orElse("unknown");
+        return remoteAddress + ":" + path;
     }
     
     /**
@@ -473,6 +514,34 @@ public class SecurityConfig {
             String escapedMessage = message == null ? "Unauthorized" : message.replace("\"", "\\\"");
             String escapedCorrelationId = correlationId == null ? "" : correlationId.replace("\"", "\\\"");
             String fallback = "{\"error\":\"" + escapedMessage + "\",\"correlationId\":\"" + escapedCorrelationId + "\"}";
+            return exchange.getResponse().writeWith(
+                    Mono.just(exchange.getResponse().bufferFactory().wrap(fallback.getBytes()))
+            );
+        }
+    }
+
+    private Mono<Void> tooManyAuthRequestsResponse(ServerWebExchange exchange, long retryAfterSeconds) {
+        exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
+        exchange.getResponse().getHeaders().set(HttpHeaders.RETRY_AFTER, Long.toString(Math.max(1L, retryAfterSeconds)));
+        exchange.getResponse().getHeaders().set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+
+        String correlationId = RequestLogContext.correlationId(exchange);
+        if (correlationId != null && !correlationId.isBlank()) {
+            exchange.getResponse().getHeaders().set(RequestLogContext.CORRELATION_ID_HEADER, correlationId);
+        }
+
+        try {
+            byte[] bytes = objectMapper.writeValueAsBytes(Map.of(
+                    "error", "Too Many Requests",
+                    "message", "Too many authentication requests. Try again later.",
+                    "correlationId", correlationId != null ? correlationId : RequestCorrelationHolder.currentCorrelationId(),
+                    "requestId", exchange.getRequest().getId()
+            ));
+            return exchange.getResponse().writeWith(
+                    Mono.just(exchange.getResponse().bufferFactory().wrap(bytes))
+            );
+        } catch (Exception e) {
+            String fallback = "{\"error\":\"Too Many Requests\",\"message\":\"Too many authentication requests. Try again later.\"}";
             return exchange.getResponse().writeWith(
                     Mono.just(exchange.getResponse().bufferFactory().wrap(fallback.getBytes()))
             );

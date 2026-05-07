@@ -193,11 +193,11 @@ This server tracks the [Model Context Protocol Security Best Practices](https://
 - Implement file system permissions to protect report data
 - Consider encrypting stored reports at rest
 
-## 🛡️ Commercial & Private Reporting
+## 🛡️ Commercial & Private Coordination
 
-If you are an enterprise user and require a **Non-Disclosure Agreement (NDA)** or a private remediation timeline, please contact our commercial security team at **[agentic.lab.au@gmail.com](mailto:agentic.lab.au@gmail.com)**.
+Commercial users who need **Non-Disclosure Agreement (NDA)** based coordination or private remediation timelines can contact **[Agentic Lab](mailto:agentic.lab.au@gmail.com)** for optional paid support.
 
-We offer prioritized patching and private security advisories for commercial clients.
+Public security reports for the OSS project remain welcome through the normal vulnerability reporting process below.
 
 ---
 

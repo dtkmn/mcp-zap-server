@@ -57,6 +57,35 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
+      - name: Validate Docker Compose manifests
+        run: |
+          repo_root="$PWD"
+          assert_bind_count() {
+            local file="$1"
+            local needle="$2"
+            local expected="$3"
+            local actual
+            actual="$(grep -F -c "$needle" "$file" || true)"
+            if [ "$actual" -ne "$expected" ]; then
+              echo "Expected $needle to appear $expected time(s) in $file, found $actual." >&2
+              exit 1
+            fi
+          }
+          ZAP_API_KEY="" docker compose --env-file /dev/null -f docker-compose.yml config >/tmp/compose-default-no-env.yaml
+          assert_bind_count /tmp/compose-default-no-env.yaml "${repo_root}/zap-workplace/zap-wrk" 2
+          assert_bind_count /tmp/compose-default-no-env.yaml "${repo_root}/zap-workplace/zap-home" 1
+          docker compose --env-file .env.example -f docker-compose.yml config >/tmp/compose-default-env-example.yaml
+          assert_bind_count /tmp/compose-default-env-example.yaml "${repo_root}/zap-workplace/zap-wrk" 2
+          assert_bind_count /tmp/compose-default-env-example.yaml "${repo_root}/zap-workplace/zap-home" 1
+          export LOCAL_ZAP_WORKPLACE_FOLDER="${RUNNER_TEMP}/zap-workplace"
+          export ZAP_API_KEY="ci-zap-api-key"
+          export MCP_API_KEY="ci-mcp-api-key"
+          export JWT_SECRET="ci-jwt-secret-minimum-32-characters"
+          mkdir -p "${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk" "${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-home"
+          docker compose -f docker-compose.yml config >/tmp/compose-default.yaml
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml config >/tmp/compose-dev.yaml
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config >/tmp/compose-prod.yaml
+
       - name: Build with Gradle and generate SBOM
         run: ./gradlew build cyclonedxBom --scan --no-daemon --stacktrace --info
 

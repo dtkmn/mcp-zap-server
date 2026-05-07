@@ -279,7 +279,8 @@ public class ScanHistoryLedgerService {
     public String exportCustomerHandoff(String handoffName, String targetContains, Integer requestedLimit) {
         int limit = boundedLimit(requestedLimit, properties.getMaxExportEntries());
         List<ScanHistoryEntry> entries = queryEntries(null, null, targetContains, limit);
-        List<String> notes = customerHandoffNotes(entries, limit);
+        CustomerEvidenceCoverage coverage = customerEvidenceCoverage(entries);
+        List<String> notes = customerHandoffNotes(entries, limit, coverage);
         List<String> targets = releaseEvidenceTargets(entries);
 
         StringBuilder output = new StringBuilder();
@@ -287,7 +288,7 @@ public class ScanHistoryLedgerService {
                 .append("Handoff: ").append(valueOrDefault(handoffName, "unnamed-handoff")).append('\n')
                 .append("Generated At: ").append(Instant.now()).append('\n')
                 .append("Evidence Window: ").append(customerEvidenceWindowLabel(targetContains)).append('\n')
-                .append("Readiness: ").append(customerReadiness(entries, notes)).append('\n');
+                .append("Readiness: ").append(customerReadiness(entries, notes, coverage)).append('\n');
 
         output.append('\n').append("Targets\n");
         if (targets.isEmpty()) {
@@ -303,6 +304,8 @@ public class ScanHistoryLedgerService {
                 .append("- Finished queued scans: ").append(entries.stream().filter(this::isTerminalScanJob).count()).append('\n')
                 .append("- Unfinished queued scans: ").append(entries.stream().filter(this::isNonTerminalScanJob).count()).append('\n');
 
+        appendCustomerAcceptanceChecklist(output, entries, limit, coverage);
+
         output.append('\n').append("Review Notes\n");
         if (notes.isEmpty()) {
             output.append("- none\n");
@@ -317,9 +320,22 @@ public class ScanHistoryLedgerService {
             entries.forEach(entry -> appendCustomerEvidenceLine(output, entry));
         }
 
-        output.append('\n').append("Operator Reminder\n")
+        output.append('\n').append("Customer-Safe Redaction Contract\n")
+                .append("- Raw ledger IDs: excluded\n")
+                .append("- Backend scan references: excluded\n")
+                .append("- Internal client and tenancy IDs: excluded\n")
+                .append("- Internal artifact paths: excluded\n")
+                .append("- Raw metadata and idempotency keys: excluded\n")
+                .append("- Internal filter selector: excluded\n");
+
+        output.append('\n').append("Customer Package Contents\n")
+                .append("- Include this summary.\n")
                 .append("- Attach reviewed report files separately.\n")
                 .append("- Keep raw ledger JSON internal unless it has been explicitly reviewed and redacted.\n");
+
+        output.append('\n').append("Operator Reminder\n")
+                .append("- Use the readiness value and checklist as the package gate.\n")
+                .append("- Record accepted caveats in the internal release or pilot record.\n");
         return output.toString().trim();
     }
 
@@ -470,17 +486,114 @@ public class ScanHistoryLedgerService {
                 || "cancelled".equalsIgnoreCase(status);
     }
 
-    private List<String> customerHandoffNotes(List<ScanHistoryEntry> entries, int limit) {
+    private CustomerEvidenceCoverage customerEvidenceCoverage(List<ScanHistoryEntry> entries) {
+        Map<String, TargetEvidenceBuilder> targetCoverage = new TreeMap<>();
+        for (ScanHistoryEntry entry : entries) {
+            if (!isScanEvidence(entry) && !isReportArtifact(entry)) {
+                continue;
+            }
+            String key = customerTargetKey(entry.target());
+            TargetEvidenceBuilder builder = targetCoverage.computeIfAbsent(
+                    key,
+                    ignored -> new TargetEvidenceBuilder(targetLabel(entry.target()))
+            );
+            if (isScanEvidence(entry)) {
+                builder.hasScanEvidence = true;
+            }
+            if (isTerminalScanJob(entry)) {
+                builder.hasTerminalQueuedScanEvidence = true;
+            }
+            if (isDirectScanRun(entry)) {
+                builder.hasDirectScanEvidence = true;
+            }
+            if (isReportArtifact(entry)) {
+                builder.hasReportArtifact = true;
+            }
+        }
+        List<TargetEvidenceCoverage> targets = targetCoverage.values().stream()
+                .map(TargetEvidenceBuilder::build)
+                .toList();
+        return new CustomerEvidenceCoverage(targets);
+    }
+
+    private String customerTargetKey(TargetDescriptor target) {
+        if (target == null) {
+            return "target:all";
+        }
+        if (hasText(target.baseUrl())) {
+            return "url:" + canonicalTargetUrl(target.baseUrl());
+        }
+        if (hasText(target.displayName())) {
+            return "label:" + target.displayName().trim().toLowerCase(Locale.ROOT);
+        }
+        return "target:all";
+    }
+
+    private String canonicalTargetUrl(String value) {
+        String normalizedValue = value.trim();
+        try {
+            URI uri = URI.create(normalizedValue);
+            String scheme = valueOrDefault(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+            String host = valueOrDefault(uri.getHost(), "").toLowerCase(Locale.ROOT);
+            if (!hasText(scheme) || !hasText(host)) {
+                return normalizedValue.toLowerCase(Locale.ROOT);
+            }
+            int port = normalizedPort(scheme, uri.getPort());
+            return scheme + "://" + host + (port >= 0 ? ":" + port : "") + normalizedTargetPath(uri);
+        } catch (IllegalArgumentException ignored) {
+            return normalizedValue.toLowerCase(Locale.ROOT);
+        }
+    }
+
+    private int normalizedPort(String scheme, int port) {
+        if (port == 80 && "http".equalsIgnoreCase(scheme)) {
+            return -1;
+        }
+        if (port == 443 && "https".equalsIgnoreCase(scheme)) {
+            return -1;
+        }
+        return port;
+    }
+
+    private String normalizedTargetPath(URI uri) {
+        String path = uri.normalize().getPath();
+        if (!hasText(path)) {
+            return "/";
+        }
+        String trimmed = path.trim();
+        while (trimmed.length() > 1 && trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private List<String> customerHandoffNotes(
+            List<ScanHistoryEntry> entries,
+            int limit,
+            CustomerEvidenceCoverage coverage
+    ) {
         ArrayList<String> notes = new ArrayList<>();
         if (entries.isEmpty()) {
             notes.add("No scan or report evidence matched the selected handoff window.");
             return notes;
         }
-        if (entries.stream().noneMatch(this::isScanEvidence)) {
+        boolean hasScanEvidence = entries.stream().anyMatch(this::isScanEvidence);
+        boolean hasReportArtifact = entries.stream().anyMatch(this::isReportArtifact);
+        if (!hasScanEvidence) {
             notes.add("No scan evidence was included; run or queue at least one scan before customer sign-off.");
         }
-        if (entries.stream().noneMatch(this::isReportArtifact)) {
+        if (!hasReportArtifact) {
             notes.add("No report evidence was included; generate and review a report before customer handoff.");
+        }
+        if (hasScanEvidence && hasReportArtifact && !coverage.hasCompleteScanReportTarget()) {
+            notes.add("No target has both scan evidence and report evidence; use a tighter target filter or add the missing evidence before customer sign-off.");
+        } else if (coverage.hasIncompleteTargets()) {
+            notes.add("Some targets are missing either scan evidence or report evidence: "
+                    + String.join(", ", coverage.incompleteTargetLabels()) + ".");
+        }
+        if (coverage.hasDirectOnlyScanTargets()) {
+            notes.add("Some targets only have direct scan launch evidence; terminal queued completion is not proven for: "
+                    + String.join(", ", coverage.directOnlyScanTargetLabels()) + ".");
         }
         long unfinishedJobs = entries.stream().filter(this::isNonTerminalScanJob).count();
         if (unfinishedJobs > 0) {
@@ -489,10 +602,6 @@ public class ScanHistoryLedgerService {
         long failedOrCancelledJobs = entries.stream().filter(this::isFailedOrCancelledScanJob).count();
         if (failedOrCancelledJobs > 0) {
             notes.add(failedOrCancelledJobs + " queued scan job(s) ended failed or cancelled; do not present this as clean evidence without explanation.");
-        }
-        if (entries.stream().anyMatch(this::isDirectScanRun)
-                && entries.stream().noneMatch(this::isTerminalScanJob)) {
-            notes.add("Direct scan starts prove launch only; use queued scan evidence or separate operator confirmation for final customer sign-off.");
         }
         if (entries.size() >= limit) {
             notes.add("The handoff reached the export limit; narrow the target filter or increase the limit before final packaging.");
@@ -504,14 +613,106 @@ public class ScanHistoryLedgerService {
         return hasText(targetContains) ? "filtered selection" : "all visible evidence";
     }
 
-    private String customerReadiness(List<ScanHistoryEntry> entries, List<String> notes) {
+    private String customerReadiness(
+            List<ScanHistoryEntry> entries,
+            List<String> notes,
+            CustomerEvidenceCoverage coverage
+    ) {
         if (entries.isEmpty()
                 || entries.stream().noneMatch(this::isScanEvidence)
                 || entries.stream().noneMatch(this::isReportArtifact)
+                || !coverage.hasCompleteScanReportTarget()
                 || entries.stream().anyMatch(this::isFailedOrCancelledScanJob)) {
             return "FAIL";
         }
         return notes.isEmpty() ? "PASS" : "CAVEAT";
+    }
+
+    private void appendCustomerAcceptanceChecklist(
+            StringBuilder output,
+            List<ScanHistoryEntry> entries,
+            int limit,
+            CustomerEvidenceCoverage coverage
+    ) {
+        output.append('\n').append("Acceptance Checklist\n");
+        appendChecklistLine(output, "Evidence window has entries", !entries.isEmpty());
+        appendChecklistLine(output, "Scan evidence is included", entries.stream().anyMatch(this::isScanEvidence));
+        appendChecklistLine(output, "Report evidence is included", entries.stream().anyMatch(this::isReportArtifact));
+        appendChecklistLine(output, "At least one target has scan and report evidence", coverage.hasCompleteScanReportTarget());
+        appendChecklistLine(output, "Terminal queued scan evidence is included", entries.stream().anyMatch(this::isTerminalScanJob));
+        appendChecklistLine(output, "No target relies only on direct scan launch evidence", !coverage.hasDirectOnlyScanTargets());
+        appendChecklistLine(output, "No unfinished queued scans", entries.stream().noneMatch(this::isNonTerminalScanJob));
+        appendChecklistLine(output, "Evidence window stayed within export limit", entries.size() < limit);
+    }
+
+    private void appendChecklistLine(StringBuilder output, String label, boolean passed) {
+        output.append("- [").append(passed ? 'x' : ' ').append("] ").append(label).append('\n');
+    }
+
+    private record CustomerEvidenceCoverage(List<TargetEvidenceCoverage> targets) {
+        boolean hasCompleteScanReportTarget() {
+            return targets.stream().anyMatch(TargetEvidenceCoverage::hasScanAndReportEvidence);
+        }
+
+        boolean hasIncompleteTargets() {
+            return targets.stream().anyMatch(target -> !target.hasScanAndReportEvidence());
+        }
+
+        List<String> incompleteTargetLabels() {
+            return targets.stream()
+                    .filter(target -> !target.hasScanAndReportEvidence())
+                    .map(TargetEvidenceCoverage::label)
+                    .toList();
+        }
+
+        boolean hasDirectOnlyScanTargets() {
+            return targets.stream().anyMatch(TargetEvidenceCoverage::hasDirectOnlyScanEvidence);
+        }
+
+        List<String> directOnlyScanTargetLabels() {
+            return targets.stream()
+                    .filter(TargetEvidenceCoverage::hasDirectOnlyScanEvidence)
+                    .map(TargetEvidenceCoverage::label)
+                    .toList();
+        }
+    }
+
+    private record TargetEvidenceCoverage(
+            String label,
+            boolean hasScanEvidence,
+            boolean hasReportArtifact,
+            boolean hasTerminalQueuedScanEvidence,
+            boolean hasDirectScanEvidence
+    ) {
+        boolean hasScanAndReportEvidence() {
+            return hasScanEvidence && hasReportArtifact;
+        }
+
+        boolean hasDirectOnlyScanEvidence() {
+            return hasDirectScanEvidence && !hasTerminalQueuedScanEvidence;
+        }
+    }
+
+    private static final class TargetEvidenceBuilder {
+        private final String label;
+        private boolean hasScanEvidence;
+        private boolean hasReportArtifact;
+        private boolean hasTerminalQueuedScanEvidence;
+        private boolean hasDirectScanEvidence;
+
+        private TargetEvidenceBuilder(String label) {
+            this.label = label;
+        }
+
+        private TargetEvidenceCoverage build() {
+            return new TargetEvidenceCoverage(
+                    label,
+                    hasScanEvidence,
+                    hasReportArtifact,
+                    hasTerminalQueuedScanEvidence,
+                    hasDirectScanEvidence
+            );
+        }
     }
 
     private void appendCustomerEvidenceLine(StringBuilder output, ScanHistoryEntry entry) {

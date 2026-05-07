@@ -35,6 +35,10 @@ Project links:
 
 - Adds Policy Bundle v1 dry-run and runtime enforcement support, including the new `zap_policy_dry_run` tool.
 - Adds guided auth session bootstrap for form-login, bearer-token, and API-key flows with credential reference allowlisting.
+- Adds a scan history ledger with list, get, and export tools for release evidence and operations.
+- Hardens MCP request body limits, Helm HA affinity validation, MCP/ZAP egress boundaries, Docker bind defaults, and guided auth secret handling.
+- Adds Policy Bundle v1 dry-run and runtime enforcement support, including the new `zap_policy_dry_run` tool.
+- Adds guided auth session bootstrap for form-login, bearer-token, and API-key flows with credential reference allowlisting.
 - Adds a scan history ledger with list, get, export, internal release-evidence, and customer-safe handoff tools.
 - Hardens MCP request body limits, Helm HA affinity validation, MCP/ZAP egress boundaries, Docker bind defaults, and guided auth secret handling.
 

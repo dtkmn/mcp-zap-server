@@ -104,6 +104,14 @@ workspace/client IDs, artifact paths, idempotency keys, and raw metadata. Attach
 reviewed report files separately; do not hand raw ledger JSON to a customer
 unless it has been explicitly reviewed and redacted.
 
+The customer handoff includes an acceptance checklist for the evidence window:
+scan evidence present, report evidence present, at least one target with both
+scan and report evidence, terminal queued scan evidence, no direct-only scan
+targets, no unfinished queued scans, non-empty selection, and no export-limit
+truncation risk. It also prints the customer-safe redaction contract so the
+reviewer can confirm that internal selectors and raw ledger fields are not part
+of the external package.
+
 Do not treat the export as a full compliance data warehouse. It is a compact
 gateway evidence snapshot. Extensions can add longer retention, tenant-specific
 exports, reporting overlays, and review workflows on top of the same shared

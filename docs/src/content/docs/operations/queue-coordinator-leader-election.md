@@ -23,7 +23,7 @@ zap:
       claim-lease-ms: 15000
       coordinator:
         backend: single-node
-        node-id: asg-node-1
+        node-id: mcp-zap-node-1
         postgres:
           url: jdbc:postgresql://postgres:5432/mcp_zap
           username: mcp
@@ -52,7 +52,11 @@ Environment variables:
 - any replica can claim queued work, start scans, and poll running progress once it owns the durable claim
 - running scans keep a renewable claim lease
 - if a worker disappears and the lease expires, another replica can recover polling ownership from the stored ZAP scan ID
-- if a late start result arrives after ownership moved, the stray scan is stopped instead of being adopted twice
+- queue workers only apply start/poll results if they still own the same fenced claim
+- lease renewal keeps the same fence; reclaim after expiry creates a new fence
+- if a late start result arrives after ownership moved, the stale result is rejected and the stray scan is stopped instead of being adopted twice
+- queued active/spider capacity is checked under the Postgres queue mutation boundary so replicas cannot over-claim the same global capacity slot
+- queue admission supports an optional client-generated `idempotencyKey`; a safe retry returns the existing durable job rather than creating a duplicate
 - queue status responses surface claim owner and claim expiry
 
 ## Observability
@@ -82,3 +86,16 @@ Queue claim events include:
 5. verify another replica recovers polling without starting a duplicate scan
 
 If you use `postgres-lock`, also verify the coordinator leadership metrics still behave as expected.
+
+## Troubleshooting
+
+- MCP replicas fail with missing-schema errors:
+  - run Flyway migrations before scaling replicas
+  - verify the expected shared tables exist (`scan_jobs`, `jwt_token_revocation`, and `scan_history_entries` when the ledger is Postgres-backed)
+- Claims are not recovering:
+  - verify worker clocks are reasonably in sync
+  - confirm Flyway/schema readiness completed and `claim_owner_id`, `claim_fence_id`, `claim_heartbeat_at`, and `claim_expires_at` columns are present in `scan_jobs`
+  - increase `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS` if startup or polling calls can legitimately run longer
+- Duplicate queued jobs after client retry:
+  - provide a stable `idempotencyKey` when submitting queued scans
+  - reuse the same key only for the same logical request payload

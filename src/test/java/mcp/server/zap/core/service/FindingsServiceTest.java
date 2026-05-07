@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import java.util.List;
 import mcp.server.zap.core.gateway.EngineFindingAccess;
 import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,12 +16,16 @@ import static org.mockito.Mockito.when;
 
 public class FindingsServiceTest {
     private EngineFindingAccess findingAccess;
+    private ScanHistoryLedgerService scanHistoryLedgerService;
     private FindingsService service;
 
     @BeforeEach
     void setup() {
         findingAccess = mock(EngineFindingAccess.class);
+        scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
         service = new FindingsService(findingAccess);
+        service.setScanHistoryLedgerService(scanHistoryLedgerService);
+        when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("http://target")).thenReturn(true);
     }
 
     @Test
@@ -124,6 +129,36 @@ public class FindingsServiceTest {
     @Test
     void diffFindingsRejectsInvalidBaselinePayload() {
         assertThrows(IllegalArgumentException.class, () -> service.diffFindings("http://target", "{not-json}", 10));
+    }
+
+    @Test
+    void findingsRejectGlobalReads() {
+        assertThrows(IllegalArgumentException.class, () -> service.getFindingsSummary(null));
+    }
+
+    @Test
+    void findingsRejectTargetsWithoutVisibleScanEvidence() {
+        assertThrows(IllegalArgumentException.class, () -> service.getFindingsSummary("http://other"));
+    }
+
+    @Test
+    void findingsPostFilterReturnedAlertsWithCanonicalScope() {
+        when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("https://target/app")).thenReturn(true);
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "40018", "Allowed", "High", "Medium", "https://target/app/page", "101"),
+                createAlert("2", "40018", "Default Port", "High", "Medium", "https://target:443/app/deeper", "102"),
+                createAlert("3", "40018", "Path Prefix Bypass", "High", "Medium", "https://target/app2", "103"),
+                createAlert("4", "40018", "Host Prefix Bypass", "High", "Medium", "https://target.evil/app", "104"),
+                createAlert("5", "40018", "Malformed", "High", "Medium", "not-a-url", "105")
+        ));
+
+        String result = service.getAlertInstances("https://target/app", null, null, 10);
+
+        assertTrue(result.contains("Allowed"));
+        assertTrue(result.contains("Default Port"));
+        assertFalse(result.contains("Path Prefix Bypass"));
+        assertFalse(result.contains("Host Prefix Bypass"));
+        assertFalse(result.contains("Malformed"));
     }
 
     private AlertSnapshot createAlert(String id,

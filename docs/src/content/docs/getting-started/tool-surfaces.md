@@ -55,6 +55,8 @@ Guided tools:
 - `zap_scan_history_list`
 - `zap_scan_history_get`
 - `zap_scan_history_export`
+- `zap_scan_history_release_evidence`
+- `zap_scan_history_customer_handoff`
 
 Use `guided` when:
 

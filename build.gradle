@@ -27,6 +27,9 @@ repositories {
 ext {
     set('springAiVersion', "2.0.0-M5")
     set('testcontainersVersion', "1.20.6")
+    set('netty.version', "4.2.13.Final")
+    set('postgresql.version', "42.7.11")
+    set('commonsCompressVersion', "1.28.0")
 }
 
 dependencies {
@@ -55,6 +58,12 @@ dependencies {
     testImplementation 'org.testcontainers:postgresql'
     testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    constraints {
+        testImplementation("org.apache.commons:commons-compress:${commonsCompressVersion}") {
+            because 'Testcontainers pulls commons-compress onto the test SBOM; keep the test classpath off vulnerable versions.'
+        }
+    }
 }
 
 dependencyManagement {

@@ -26,8 +26,10 @@ the existing scan/report tools as before. The new query tools expose the ledger:
 - `zap_scan_history_list`
 - `zap_scan_history_get`
 - `zap_scan_history_export`
+- `zap_scan_history_release_evidence`
+- `zap_scan_history_customer_handoff`
 
-All three use the existing `zap:scan:read` scope.
+All five use the existing `zap:scan:read` scope.
 
 ## Storage Backends
 
@@ -85,6 +87,23 @@ Use `zap_scan_history_export` to produce a bounded JSON evidence snapshot for:
 - incident review
 - upgrade and rollback comparison
 
+Use `zap_scan_history_release_evidence` when the reviewer needs a handoff-ready
+internal bundle rather than a raw ledger slice. It includes the bounded entries
+plus:
+
+- release or pilot label
+- summary counts by evidence type and status
+- target coverage
+- first/last recorded timestamps
+- warnings when scan evidence, report artifacts, non-terminal included queue
+  jobs, or export-limit headroom need reviewer attention
+
+Use `zap_scan_history_customer_handoff` for the external package. It generates a
+customer-safe Markdown summary that omits raw ledger IDs, backend references,
+workspace/client IDs, artifact paths, idempotency keys, and raw metadata. Attach
+reviewed report files separately; do not hand raw ledger JSON to a customer
+unless it has been explicitly reviewed and redacted.
+
 Do not treat the export as a full compliance data warehouse. It is a compact
 gateway evidence snapshot. Extensions can add longer retention, tenant-specific
 exports, reporting overlays, and review workflows on top of the same shared
@@ -105,4 +124,10 @@ Before relying on the ledger for release evidence:
 2. Confirm `zap_scan_history_list` returns queue jobs after a queued scan.
 3. Confirm direct scan starts appear as `scan_run` entries.
 4. Generate a report and confirm a `report_artifact` entry appears.
-5. Export a JSON snapshot and attach it to the release or pilot evidence bundle.
+5. Export `zap_scan_history_release_evidence` and attach it to the release or
+   pilot handoff record.
+6. Generate `zap_scan_history_customer_handoff` for the external package when a
+   customer, design partner, or pilot reviewer needs a readable summary.
+
+For the exact handoff sequence and sign-off template, use
+[Release Evidence Handoff Runbook](./release-evidence-handoff-runbook/).

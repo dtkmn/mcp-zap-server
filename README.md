@@ -37,6 +37,10 @@ Project links:
 - Adds guided auth session bootstrap for form-login, bearer-token, and API-key flows with credential reference allowlisting.
 - Adds a scan history ledger with list, get, and export tools for release evidence and operations.
 - Hardens MCP request body limits, Helm HA affinity validation, MCP/ZAP egress boundaries, Docker bind defaults, and guided auth secret handling.
+- Adds Policy Bundle v1 dry-run and runtime enforcement support, including the new `zap_policy_dry_run` tool.
+- Adds guided auth session bootstrap for form-login, bearer-token, and API-key flows with credential reference allowlisting.
+- Adds a scan history ledger with list, get, export, internal release-evidence, and customer-safe handoff tools.
+- Hardens MCP request body limits, Helm HA affinity validation, MCP/ZAP egress boundaries, Docker bind defaults, and guided auth secret handling.
 
 See [RELEASE_NOTES_0.7.0.md](./RELEASE_NOTES_0.7.0.md) and [CHANGELOG.md](./CHANGELOG.md) for the full upgrade and change details.
 
@@ -91,7 +95,7 @@ See [RELEASE_NOTES_0.7.0.md](./RELEASE_NOTES_0.7.0.md) and [CHANGELOG.md](./CHAN
 - **Findings and report workflows**: Generate HTML/JSON reports, drill into findings, and compare findings snapshots across runs.
 - **Automation and API schema support**: Run ZAP Automation Framework plans and import OpenAPI, GraphQL, and SOAP/WSDL definitions.
 - **Scan queue v1**: Queue active, spider, and AJAX Spider scans with job lifecycle states, retries, dead-letter handling, and optional durable Postgres state.
-- **Scan history ledger**: Query queue jobs, direct scan starts, and generated report artifacts for release or handoff evidence.
+- **Scan history ledger**: Query queue jobs, direct scan starts, generated report artifacts, internal release-evidence bundles, and customer-safe handoff summaries.
 - **Operational guardrails**: Enforce tool scopes, rate limits, workspace quotas, and structured request correlation for shared deployments.
 - **Dockerized**: Runs ZAP and the MCP server in containers, orchestrated via docker-compose
 - **Secure**: Configure API keys for both ZAP (ZAP_API_KEY) and the MCP server (MCP_API_KEY)

@@ -51,4 +51,28 @@ public class ScanHistoryMcpToolsService {
     ) {
         return scanHistoryLedgerService.exportHistory(evidenceType, status, target, limit);
     }
+
+    @Tool(
+            name = "zap_scan_history_release_evidence",
+            description = "Export a release or pilot handoff evidence bundle with summary counts, target coverage, warnings, and bounded ledger entries."
+    )
+    public String exportReleaseEvidence(
+            @ToolParam(required = false, description = "Optional release, pilot, or handoff label included in the exported bundle") String releaseName,
+            @ToolParam(required = false, description = "Optional target or artifact substring filter for the evidence window") String target,
+            @ToolParam(required = false, description = "Optional maximum entries to export, bounded by server configuration") Integer limit
+    ) {
+        return scanHistoryLedgerService.exportReleaseEvidence(releaseName, target, limit);
+    }
+
+    @Tool(
+            name = "zap_scan_history_customer_handoff",
+            description = "Generate a customer-safe Markdown handoff summary from scan history without raw internal IDs, backend references, workspace IDs, or metadata."
+    )
+    public String exportCustomerHandoff(
+            @ToolParam(required = false, description = "Optional release, pilot, or customer handoff label included in the summary") String handoffName,
+            @ToolParam(required = false, description = "Optional evidence-window selector used internally; the raw selector is never echoed in customer-facing output") String target,
+            @ToolParam(required = false, description = "Optional maximum entries to review, bounded by server configuration") Integer limit
+    ) {
+        return scanHistoryLedgerService.exportCustomerHandoff(handoffName, target, limit);
+    }
 }

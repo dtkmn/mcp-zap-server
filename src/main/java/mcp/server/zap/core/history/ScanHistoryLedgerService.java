@@ -2,6 +2,7 @@ package mcp.server.zap.core.history;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -9,7 +10,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Function;
 import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.gateway.ArtifactRecord;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
@@ -250,6 +255,352 @@ public class ScanHistoryLedgerService {
         }
     }
 
+    public String exportReleaseEvidence(String releaseName, String targetContains, Integer requestedLimit) {
+        int limit = boundedLimit(requestedLimit, properties.getMaxExportEntries());
+        List<ScanHistoryEntry> entries = queryEntries(null, null, targetContains, limit);
+
+        Map<String, Object> export = new LinkedHashMap<>();
+        export.put("version", 1);
+        export.put("purpose", "release_evidence");
+        export.put("releaseName", valueOrDefault(releaseName, "unnamed-release"));
+        export.put("generatedAt", Instant.now().toString());
+        export.put("retentionDays", retentionDays());
+        export.put("filters", releaseEvidenceFilters(targetContains, limit));
+        export.put("summary", releaseEvidenceSummary(entries));
+        export.put("warnings", releaseEvidenceWarnings(entries, limit));
+        export.put("entries", entries.stream().map(this::exportEntry).toList());
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(export);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to export release evidence bundle", e);
+        }
+    }
+
+    public String exportCustomerHandoff(String handoffName, String targetContains, Integer requestedLimit) {
+        int limit = boundedLimit(requestedLimit, properties.getMaxExportEntries());
+        List<ScanHistoryEntry> entries = queryEntries(null, null, targetContains, limit);
+        List<String> notes = customerHandoffNotes(entries, limit);
+        List<String> targets = releaseEvidenceTargets(entries);
+
+        StringBuilder output = new StringBuilder();
+        output.append("Customer Evidence Handoff\n")
+                .append("Handoff: ").append(valueOrDefault(handoffName, "unnamed-handoff")).append('\n')
+                .append("Generated At: ").append(Instant.now()).append('\n')
+                .append("Evidence Window: ").append(customerEvidenceWindowLabel(targetContains)).append('\n')
+                .append("Readiness: ").append(customerReadiness(entries, notes)).append('\n');
+
+        output.append('\n').append("Targets\n");
+        if (targets.isEmpty()) {
+            output.append("- none matched\n");
+        } else {
+            targets.forEach(target -> output.append("- ").append(target).append('\n'));
+        }
+
+        output.append('\n').append("Coverage Summary\n")
+                .append("- Evidence entries reviewed: ").append(entries.size()).append('\n')
+                .append("- Scan evidence included: ").append(yesNo(entries.stream().anyMatch(this::isScanEvidence))).append('\n')
+                .append("- Report evidence included: ").append(yesNo(entries.stream().anyMatch(this::isReportArtifact))).append('\n')
+                .append("- Finished queued scans: ").append(entries.stream().filter(this::isTerminalScanJob).count()).append('\n')
+                .append("- Unfinished queued scans: ").append(entries.stream().filter(this::isNonTerminalScanJob).count()).append('\n');
+
+        output.append('\n').append("Review Notes\n");
+        if (notes.isEmpty()) {
+            output.append("- none\n");
+        } else {
+            notes.forEach(note -> output.append("- ").append(note).append('\n'));
+        }
+
+        output.append('\n').append("Evidence Included\n");
+        if (entries.isEmpty()) {
+            output.append("- No evidence matched this handoff window.\n");
+        } else {
+            entries.forEach(entry -> appendCustomerEvidenceLine(output, entry));
+        }
+
+        output.append('\n').append("Operator Reminder\n")
+                .append("- Attach reviewed report files separately.\n")
+                .append("- Keep raw ledger JSON internal unless it has been explicitly reviewed and redacted.\n");
+        return output.toString().trim();
+    }
+
+    public boolean hasVisibleScanEvidenceForTarget(String targetUrl) {
+        if (!hasText(targetUrl)) {
+            return false;
+        }
+        TargetDescriptor requestedTarget = gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB);
+        int limit = Math.max(properties.getMaxListEntries(), properties.getMaxExportEntries());
+        return queryEntries(null, null, null, limit).stream()
+                .filter(this::isScanEvidence)
+                .map(ScanHistoryEntry::target)
+                .anyMatch(entryTarget -> targetContains(entryTarget, requestedTarget));
+    }
+
+    public List<String> visibleScanTargetBaseUrls() {
+        int limit = Math.max(properties.getMaxListEntries(), properties.getMaxExportEntries());
+        return queryEntries(null, null, null, limit).stream()
+                .filter(this::isScanEvidence)
+                .map(ScanHistoryEntry::target)
+                .map(target -> target == null ? null : target.baseUrl())
+                .filter(this::hasText)
+                .map(String::trim)
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    public List<String> visibleScanTargetHosts() {
+        return visibleScanTargetBaseUrls().stream()
+                .map(this::hostLabel)
+                .filter(this::hasText)
+                .distinct()
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList();
+    }
+
+    private Map<String, Object> releaseEvidenceFilters(String targetContains, int limit) {
+        Map<String, Object> filters = new LinkedHashMap<>();
+        filters.put("targetContains", normalizeNullable(targetContains));
+        filters.put("limit", limit);
+        return filters;
+    }
+
+    private Map<String, Object> releaseEvidenceSummary(List<ScanHistoryEntry> entries) {
+        List<String> targets = releaseEvidenceTargets(entries);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("entryCount", entries.size());
+        summary.put("byEvidenceType", countBy(entries, ScanHistoryEntry::evidenceType));
+        summary.put("byStatus", countBy(entries, ScanHistoryEntry::status));
+        summary.put("targetCount", targets.size());
+        summary.put("targets", targets);
+        summary.put("firstRecordedAt", recordedAtBound(entries, true));
+        summary.put("lastRecordedAt", recordedAtBound(entries, false));
+        summary.put("hasScanEvidence", entries.stream().anyMatch(this::isScanEvidence));
+        summary.put("hasReportArtifact", entries.stream().anyMatch(this::isReportArtifact));
+        summary.put("nonTerminalScanJobs", entries.stream().filter(this::isNonTerminalScanJob).count());
+        return summary;
+    }
+
+    private Map<String, Integer> countBy(
+            List<ScanHistoryEntry> entries,
+            Function<ScanHistoryEntry, String> classifier
+    ) {
+        TreeMap<String, Integer> counts = new TreeMap<>();
+        for (ScanHistoryEntry entry : entries) {
+            String key = valueOrDefault(classifier.apply(entry), "unknown");
+            counts.merge(key, 1, Integer::sum);
+        }
+        return counts;
+    }
+
+    private List<String> releaseEvidenceTargets(List<ScanHistoryEntry> entries) {
+        TreeSet<String> targets = new TreeSet<>();
+        for (ScanHistoryEntry entry : entries) {
+            String target = targetLabel(entry.target());
+            if (hasText(target)) {
+                targets.add(target);
+            }
+        }
+        return List.copyOf(targets);
+    }
+
+    private String recordedAtBound(List<ScanHistoryEntry> entries, boolean first) {
+        return entries.stream()
+                .map(ScanHistoryEntry::recordedAt)
+                .filter(Objects::nonNull)
+                .reduce((left, right) -> first
+                        ? (left.isBefore(right) ? left : right)
+                        : (left.isAfter(right) ? left : right))
+                .map(Instant::toString)
+                .orElse(null);
+    }
+
+    private List<String> releaseEvidenceWarnings(List<ScanHistoryEntry> entries, int limit) {
+        ArrayList<String> warnings = new ArrayList<>();
+        if (entries.isEmpty()) {
+            warnings.add("No scan history entries matched the requested evidence window.");
+            return warnings;
+        }
+        if (entries.stream().noneMatch(this::isScanEvidence)) {
+            warnings.add("No scan evidence entries were included; run or queue at least one scan before using this for release sign-off.");
+        }
+        if (entries.stream().noneMatch(this::isReportArtifact)) {
+            warnings.add("No report artifact entries were included; generate a report before attaching this to a release or pilot handoff.");
+        }
+        long nonTerminalScanJobs = entries.stream().filter(this::isNonTerminalScanJob).count();
+        if (nonTerminalScanJobs > 0) {
+            warnings.add(nonTerminalScanJobs + " queued scan job(s) are not terminal; wait for completion or use a tighter filter before final sign-off.");
+        }
+        if (entries.size() >= limit) {
+            warnings.add("Evidence entry count reached the export limit; increase limit if the reviewer needs the full evidence window.");
+        }
+        return warnings;
+    }
+
+    private boolean isScanEvidence(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
+                || TYPE_SCAN_RUN.equalsIgnoreCase(entry.evidenceType());
+    }
+
+    private boolean isReportArtifact(ScanHistoryEntry entry) {
+        return TYPE_REPORT_ARTIFACT.equalsIgnoreCase(entry.evidenceType());
+    }
+
+    private boolean isNonTerminalScanJob(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
+                && !isTerminalStatus(entry.status());
+    }
+
+    private boolean isTerminalScanJob(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
+                && isTerminalStatus(entry.status());
+    }
+
+    private boolean isFailedOrCancelledScanJob(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
+                && ("failed".equalsIgnoreCase(entry.status()) || "cancelled".equalsIgnoreCase(entry.status()));
+    }
+
+    private boolean isDirectScanRun(ScanHistoryEntry entry) {
+        return TYPE_SCAN_RUN.equalsIgnoreCase(entry.evidenceType());
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return "succeeded".equalsIgnoreCase(status)
+                || "failed".equalsIgnoreCase(status)
+                || "cancelled".equalsIgnoreCase(status);
+    }
+
+    private List<String> customerHandoffNotes(List<ScanHistoryEntry> entries, int limit) {
+        ArrayList<String> notes = new ArrayList<>();
+        if (entries.isEmpty()) {
+            notes.add("No scan or report evidence matched the selected handoff window.");
+            return notes;
+        }
+        if (entries.stream().noneMatch(this::isScanEvidence)) {
+            notes.add("No scan evidence was included; run or queue at least one scan before customer sign-off.");
+        }
+        if (entries.stream().noneMatch(this::isReportArtifact)) {
+            notes.add("No report evidence was included; generate and review a report before customer handoff.");
+        }
+        long unfinishedJobs = entries.stream().filter(this::isNonTerminalScanJob).count();
+        if (unfinishedJobs > 0) {
+            notes.add(unfinishedJobs + " queued scan job(s) are not finished; wait for completion or document the caveat.");
+        }
+        long failedOrCancelledJobs = entries.stream().filter(this::isFailedOrCancelledScanJob).count();
+        if (failedOrCancelledJobs > 0) {
+            notes.add(failedOrCancelledJobs + " queued scan job(s) ended failed or cancelled; do not present this as clean evidence without explanation.");
+        }
+        if (entries.stream().anyMatch(this::isDirectScanRun)
+                && entries.stream().noneMatch(this::isTerminalScanJob)) {
+            notes.add("Direct scan starts prove launch only; use queued scan evidence or separate operator confirmation for final customer sign-off.");
+        }
+        if (entries.size() >= limit) {
+            notes.add("The handoff reached the export limit; narrow the target filter or increase the limit before final packaging.");
+        }
+        return notes;
+    }
+
+    private String customerEvidenceWindowLabel(String targetContains) {
+        return hasText(targetContains) ? "filtered selection" : "all visible evidence";
+    }
+
+    private String customerReadiness(List<ScanHistoryEntry> entries, List<String> notes) {
+        if (entries.isEmpty()
+                || entries.stream().noneMatch(this::isScanEvidence)
+                || entries.stream().noneMatch(this::isReportArtifact)
+                || entries.stream().anyMatch(this::isFailedOrCancelledScanJob)) {
+            return "FAIL";
+        }
+        return notes.isEmpty() ? "PASS" : "CAVEAT";
+    }
+
+    private void appendCustomerEvidenceLine(StringBuilder output, ScanHistoryEntry entry) {
+        String target = targetLabel(entry.target());
+        if (isReportArtifact(entry)) {
+            output.append("- Report: ")
+                    .append(formatMediaType(entry.mediaType()))
+                    .append(" report generated for ").append(target)
+                    .append(" at ").append(entry.recordedAt())
+                    .append(". Attach the reviewed report file separately.\n");
+            return;
+        }
+        if (TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())) {
+            output.append("- Queued Scan: ")
+                    .append(formatOperation(entry.operationKind()))
+                    .append(" for ").append(target)
+                    .append(" - ").append(formatStatus(entry.status()));
+            String progress = entry.metadata().get("lastKnownProgress");
+            if (hasText(progress)) {
+                output.append(", progress ").append(progress).append('%');
+            }
+            if ("true".equalsIgnoreCase(entry.metadata().get("authenticated"))) {
+                output.append(", authenticated");
+            }
+            output.append(", recorded ").append(entry.recordedAt()).append('\n');
+            return;
+        }
+        if (isDirectScanRun(entry)) {
+            output.append("- Direct Scan Start: ")
+                    .append(formatOperation(entry.operationKind()))
+                    .append(" for ").append(target)
+                    .append(" - launch recorded at ").append(entry.recordedAt())
+                    .append("; terminal completion is not proven by this entry.\n");
+            return;
+        }
+        output.append("- Evidence: ")
+                .append(formatOperation(entry.operationKind()))
+                .append(" for ").append(target)
+                .append(" - ").append(formatStatus(entry.status()))
+                .append(", recorded ").append(entry.recordedAt()).append('\n');
+    }
+
+    private String formatOperation(String value) {
+        String normalized = valueOrDefault(value, "scan")
+                .replace('-', '_')
+                .replace(' ', '_')
+                .toLowerCase(Locale.ROOT);
+        StringBuilder output = new StringBuilder();
+        for (String part : normalized.split("_+")) {
+            if (!hasText(part)) {
+                continue;
+            }
+            if (!output.isEmpty()) {
+                output.append(' ');
+            }
+            output.append(part.substring(0, 1).toUpperCase(Locale.ROOT));
+            if (part.length() > 1) {
+                output.append(part.substring(1));
+            }
+        }
+        return output.isEmpty() ? "Scan" : output.toString();
+    }
+
+    private String formatStatus(String value) {
+        String normalized = valueOrDefault(value, "unknown").toLowerCase(Locale.ROOT);
+        return normalized.substring(0, 1).toUpperCase(Locale.ROOT) + normalized.substring(1);
+    }
+
+    private String formatMediaType(String mediaType) {
+        String normalized = valueOrDefault(mediaType, "report").toLowerCase(Locale.ROOT);
+        if (normalized.contains("json")) {
+            return "JSON";
+        }
+        if (normalized.contains("html")) {
+            return "HTML";
+        }
+        if (normalized.contains("xml")) {
+            return "XML";
+        }
+        if (normalized.contains("markdown")) {
+            return "Markdown";
+        }
+        return "Generated";
+    }
+
+    private String yesNo(boolean value) {
+        return value ? "yes" : "no";
+    }
+
     private Map<String, Object> exportEntry(ScanHistoryEntry entry) {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("id", entry.id());
@@ -298,7 +649,9 @@ public class ScanHistoryLedgerService {
                     .map(this::fromScanJob)
                     .orElse(null);
         }
-        return historyStore.load(entryId).orElse(null);
+        return historyStore.load(entryId)
+                .filter(this::canReadEntry)
+                .orElse(null);
     }
 
     private List<ScanHistoryEntry> queryEntries(String evidenceType,
@@ -310,7 +663,7 @@ public class ScanHistoryLedgerService {
                 normalizeNullable(evidenceType),
                 normalizeNullable(status),
                 normalizeNullable(targetContains),
-                null
+                currentWorkspaceId()
         );
         ArrayList<ScanHistoryEntry> entries = new ArrayList<>();
         entries.addAll(visibleStoredEntries(historyStore.list(query, limit)));
@@ -323,18 +676,18 @@ public class ScanHistoryLedgerService {
     }
 
     private List<ScanHistoryEntry> visibleStoredEntries(List<ScanHistoryEntry> entries) {
-        if (scanHistoryAccessBoundary == null) {
-            return entries;
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
         }
-        return scanHistoryAccessBoundary.filterVisibleEntries(entries);
+        return entries.stream()
+                .filter(this::canReadEntry)
+                .toList();
     }
 
     private List<ScanHistoryEntry> visibleJobEntries(ScanHistoryQuery query) {
         List<ScanJob> jobs = scanJobStore.list();
-        if (scanJobAccessBoundary != null) {
-            jobs = scanJobAccessBoundary.filterVisibleJobs(jobs);
-        }
         return jobs.stream()
+                .filter(this::canReadJob)
                 .map(this::fromScanJob)
                 .filter(entry -> matches(query, entry))
                 .toList();
@@ -390,6 +743,9 @@ public class ScanHistoryLedgerService {
         if (hasText(query.status()) && !query.status().equalsIgnoreCase(entry.status())) {
             return false;
         }
+        if (hasText(query.workspaceId()) && !query.workspaceId().equals(entry.workspaceId())) {
+            return false;
+        }
         if (hasText(query.targetContains())) {
             String needle = query.targetContains().trim().toLowerCase(Locale.ROOT);
             String haystack = String.join(" ",
@@ -403,7 +759,79 @@ public class ScanHistoryLedgerService {
     }
 
     private boolean canReadJob(ScanJob job) {
-        return scanJobAccessBoundary == null || scanJobAccessBoundary.canCurrentRequesterAccess(job);
+        if (job == null) {
+            return false;
+        }
+        if (scanJobAccessBoundary != null) {
+            return scanJobAccessBoundary.canCurrentRequesterAccess(job);
+        }
+        return currentWorkspaceId().equals(workspaceIdForRequester(job.getRequesterId()));
+    }
+
+    private boolean canReadEntry(ScanHistoryEntry entry) {
+        if (entry == null) {
+            return false;
+        }
+        if (scanHistoryAccessBoundary != null) {
+            return scanHistoryAccessBoundary.canCurrentRequesterAccess(entry);
+        }
+        String entryWorkspaceId = hasText(entry.workspaceId())
+                ? entry.workspaceId().trim()
+                : workspaceIdForRequester(entry.clientId());
+        return currentWorkspaceId().equals(entryWorkspaceId);
+    }
+
+    private boolean targetContains(TargetDescriptor entryTarget, TargetDescriptor requestedTarget) {
+        if (entryTarget == null || requestedTarget == null
+                || !hasText(entryTarget.baseUrl()) || !hasText(requestedTarget.baseUrl())) {
+            return false;
+        }
+        try {
+            URI entryUri = URI.create(entryTarget.baseUrl().trim());
+            URI requestedUri = URI.create(requestedTarget.baseUrl().trim());
+            String entryAuthority = authorityKey(entryUri);
+            String requestedAuthority = authorityKey(requestedUri);
+            if (!entryAuthority.equals(requestedAuthority)) {
+                return false;
+            }
+            String entryPath = normalizedPath(entryUri);
+            String requestedPath = normalizedPath(requestedUri);
+            return requestedPath.equals(entryPath)
+                    || requestedPath.startsWith(entryPath.endsWith("/") ? entryPath : entryPath + "/");
+        } catch (IllegalArgumentException ignored) {
+            return requestedTarget.baseUrl().trim().equalsIgnoreCase(entryTarget.baseUrl().trim());
+        }
+    }
+
+    private String authorityKey(URI uri) {
+        String scheme = valueOrDefault(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+        String host = valueOrDefault(uri.getHost(), "").toLowerCase(Locale.ROOT);
+        int port = uri.getPort();
+        return scheme + "://" + host + (port >= 0 ? ":" + port : "");
+    }
+
+    private String normalizedPath(URI uri) {
+        String path = uri.getPath();
+        if (!hasText(path)) {
+            return "/";
+        }
+        return path.trim();
+    }
+
+    private String hostLabel(String baseUrl) {
+        try {
+            URI uri = URI.create(baseUrl);
+            if (hasText(uri.getHost())) {
+                return uri.getHost().toLowerCase(Locale.ROOT);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Fall through to the raw label for non-URI target descriptors.
+        }
+        return hasText(baseUrl) ? baseUrl.trim().toLowerCase(Locale.ROOT) : null;
+    }
+
+    private String workspaceIdForRequester(String requesterId) {
+        return valueOrDefault(clientWorkspaceResolver.resolveWorkspaceId(requesterId), "default-workspace");
     }
 
     private Instant effectiveRecordedAt(ScanJob job) {

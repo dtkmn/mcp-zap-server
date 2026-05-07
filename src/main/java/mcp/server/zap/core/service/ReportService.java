@@ -5,6 +5,7 @@ import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineReportAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,9 +16,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Service for generating ZAP reports.
@@ -28,8 +35,10 @@ import java.util.Map;
 public class ReportService {
     private static final int DEFAULT_REPORT_READ_MAX_CHARS = 20000;
     private static final int MAX_REPORT_READ_MAX_CHARS = 200000;
+    private static final Pattern SAFE_WORKSPACE_SEGMENT = Pattern.compile("^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$");
 
     private final EngineReportAccess engineReportAccess;
+    private ClientWorkspaceResolver clientWorkspaceResolver;
     private ReportArtifactBoundary reportArtifactBoundary;
     private ScanHistoryLedgerService scanHistoryLedgerService;
 
@@ -41,6 +50,11 @@ public class ReportService {
      */
     public ReportService(EngineReportAccess engineReportAccess) {
         this.engineReportAccess = engineReportAccess;
+    }
+
+    @Autowired(required = false)
+    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     @Autowired(required = false)
@@ -84,6 +98,7 @@ public class ReportService {
             Path configuredReportRoot = Paths.get(reportDirectory).toAbsolutePath().normalize();
             Path effectiveReportRoot = resolveWriteReportDirectory(configuredReportRoot);
             Files.createDirectories(effectiveReportRoot);
+            inheritConfiguredRootPermissions(configuredReportRoot, effectiveReportRoot);
             String normalizedTheme = normalizeTheme(reportTemplate, theme);
             String fileName = engineReportAccess.generateReport(new ReportGenerationRequest(
                     "My ZAP Scan Report",
@@ -204,16 +219,67 @@ public class ReportService {
 
     private Path resolveWriteReportDirectory(Path configuredReportRoot) {
         if (reportArtifactBoundary == null) {
-            return configuredReportRoot;
+            return workspaceScopedDirectory(configuredReportRoot);
         }
         return reportArtifactBoundary.resolveWriteDirectory(configuredReportRoot).toAbsolutePath().normalize();
     }
 
     private Path resolveReadReportDirectory(Path configuredReportRoot) {
         if (reportArtifactBoundary == null) {
-            return configuredReportRoot;
+            return workspaceScopedDirectory(configuredReportRoot);
         }
         return reportArtifactBoundary.resolveReadDirectory(configuredReportRoot).toAbsolutePath().normalize();
+    }
+
+    private Path workspaceScopedDirectory(Path configuredReportRoot) {
+        return configuredReportRoot
+                .resolve("workspaces")
+                .resolve(workspacePathSegment(currentWorkspaceId()))
+                .normalize();
+    }
+
+    private void inheritConfiguredRootPermissions(Path configuredReportRoot, Path effectiveReportRoot) throws IOException {
+        Path normalizedRoot = configuredReportRoot.toAbsolutePath().normalize();
+        Path normalizedEffectiveRoot = effectiveReportRoot.toAbsolutePath().normalize();
+        if (normalizedRoot.equals(normalizedEffectiveRoot) || !Files.exists(normalizedRoot)) {
+            return;
+        }
+        try {
+            Set<PosixFilePermission> rootPermissions = Files.getPosixFilePermissions(normalizedRoot);
+            if (!normalizedEffectiveRoot.startsWith(normalizedRoot)) {
+                Files.setPosixFilePermissions(normalizedEffectiveRoot, rootPermissions);
+                return;
+            }
+            Path current = normalizedRoot;
+            for (Path segment : normalizedRoot.relativize(normalizedEffectiveRoot)) {
+                current = current.resolve(segment);
+                Files.setPosixFilePermissions(current, rootPermissions);
+            }
+        } catch (UnsupportedOperationException ignored) {
+            // Non-POSIX file systems do not expose permissions through java.nio.
+        }
+    }
+
+    private String currentWorkspaceId() {
+        if (clientWorkspaceResolver == null) {
+            return "default-workspace";
+        }
+        String workspaceId = clientWorkspaceResolver.resolveCurrentWorkspaceId();
+        return hasText(workspaceId) ? workspaceId.trim() : "default-workspace";
+    }
+
+    private String workspacePathSegment(String workspaceId) {
+        String normalized = hasText(workspaceId) ? workspaceId.trim() : "default-workspace";
+        if (SAFE_WORKSPACE_SEGMENT.matcher(normalized).matches()) {
+            return normalized;
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return "ws-" + HexFormat.of().formatHex(digest, 0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required for workspace report paths", e);
+        }
     }
 
 }

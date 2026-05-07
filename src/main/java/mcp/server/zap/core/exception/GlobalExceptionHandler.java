@@ -72,7 +72,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalStateException(IllegalStateException ex, ServerWebExchange exchange) {
         log.error("Illegal state: {}", ex.getMessage(), ex);
-        return buildErrorResponse(exchange, HttpStatus.INTERNAL_SERVER_ERROR, "Server Error", ex.getMessage());
+        return buildErrorResponse(
+                exchange,
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Server Error",
+                "The server could not complete the request."
+        );
     }
 
     /**

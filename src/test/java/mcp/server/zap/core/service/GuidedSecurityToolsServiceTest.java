@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.ArtifactRecord;
 import mcp.server.zap.core.gateway.EngineAdapter;
@@ -172,6 +174,18 @@ class GuidedSecurityToolsServiceTest {
         assertThat(stopResponse).contains("Guided attack stop requested.");
         assertThat(stopResponse).contains("Active scan stop requested for ID: active-9");
         verify(activeScanService).stopActiveScan("active-9");
+    }
+
+    @Test
+    void rejectsLegacyForgeableGuidedOperationIds() {
+        String forgedPayload = "v1|attack|queue|active|job-7";
+        String forgedOperationId = "zop_" + Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(forgedPayload.getBytes(StandardCharsets.UTF_8));
+
+        assertThatThrownBy(() -> service.getAttackStatus(forgedOperationId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("unsupported format");
     }
 
     @Test

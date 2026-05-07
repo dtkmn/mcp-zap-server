@@ -73,6 +73,8 @@ public class ToolScopeRegistry {
         register(scopes, "zap_scan_history_list", "zap:scan:read");
         register(scopes, "zap_scan_history_get", "zap:scan:read");
         register(scopes, "zap_scan_history_export", "zap:scan:read");
+        register(scopes, "zap_scan_history_release_evidence", "zap:scan:read");
+        register(scopes, "zap_scan_history_customer_handoff", "zap:scan:read");
 
         // Policy controls
         register(scopes, "zap_policy_dry_run", "zap:policy:dry-run");

@@ -1,26 +1,32 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.RequestIdentityHolder;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -65,6 +71,11 @@ public class ScanJobQueueServiceTest {
                 3,
                 false
         );
+    }
+
+    @AfterEach
+    void tearDown() {
+        RequestIdentityHolder.clear();
     }
 
     private ScanJobQueueService newServiceWithPolicies(
@@ -162,6 +173,35 @@ public class ScanJobQueueServiceTest {
         );
 
         assertEquals("No scan job found for ID: " + jobId, error.getMessage());
+    }
+
+    @Test
+    void defaultWorkspaceBoundaryRejectsOtherWorkspaceQueueObjects() {
+        ApiKeyProperties apiKeyProperties = new ApiKeyProperties();
+        ApiKeyProperties.ApiKeyClient clientA = new ApiKeyProperties.ApiKeyClient();
+        clientA.setClientId("client-a");
+        clientA.setWorkspaceId("workspace-a");
+        ApiKeyProperties.ApiKeyClient clientB = new ApiKeyProperties.ApiKeyClient();
+        clientB.setClientId("client-b");
+        clientB.setWorkspaceId("workspace-b");
+        apiKeyProperties.setApiKeys(List.of(clientA, clientB));
+        service.setClientWorkspaceResolver(new ClientWorkspaceResolver(apiKeyProperties));
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+                .thenReturn("A-client-a", "A-client-b");
+
+        RequestIdentityHolder.set("client-a", "workspace-a");
+        String clientAJobId = extractJobId(service.queueActiveScan("http://a.example.com", null, null, null));
+
+        RequestIdentityHolder.set("client-b", "workspace-b");
+        String clientBJobId = extractJobId(service.queueActiveScan("http://b.example.com", null, null, null));
+
+        String clientBList = service.listScanJobs(null);
+        assertTrue(clientBList.contains(clientBJobId));
+        assertTrue(!clientBList.contains(clientAJobId));
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.getScanJobStatus(clientAJobId));
+
+        RequestIdentityHolder.set("client-a", "workspace-a");
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.cancelScanJob(clientBJobId));
     }
 
     @Test
@@ -963,6 +1003,32 @@ public class ScanJobQueueServiceTest {
         verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
     }
 
+    @Test
+    void successfulStartIsStoppedWhenFailFastPersistenceThrows() {
+        FailingUpdateScanJobStore failingStore = new FailingUpdateScanJobStore();
+        ScanJobQueueService failFastService = new ScanJobQueueService(
+                activeScanService,
+                spiderScanService,
+                ajaxSpiderService,
+                urlValidationService,
+                scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1.0),
+                new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0),
+                false,
+                failingStore,
+                new SingleNodeQueueLeadershipCoordinator()
+        );
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-orphan");
+
+        assertThrows(IllegalStateException.class, () ->
+                failFastService.queueActiveScan("http://example.com/orphan", "true", null, null)
+        );
+
+        verify(activeScanService).stopActiveScanJob("A-orphan");
+        ScanJob queuedJob = failingStore.list().getFirst();
+        assertEquals(ScanJobStatus.QUEUED, queuedJob.getStatus());
+    }
+
     private String extractJobId(String response) {
         for (String line : response.split("\\R")) {
             if (line.startsWith("Job ID: ")) {
@@ -981,6 +1047,18 @@ public class ScanJobQueueServiceTest {
         }
         fail("Unable to extract value with prefix '" + prefix + "' from response: " + response);
         return null;
+    }
+
+    private static final class FailingUpdateScanJobStore extends InMemoryScanJobStore {
+        @Override
+        public Optional<ScanJob> updateClaimedJob(
+                String jobId,
+                mcp.server.zap.core.service.queue.ScanJobClaimToken claimToken,
+                Instant now,
+                UnaryOperator<ScanJob> updater
+        ) {
+            throw new IllegalStateException("durable write failed");
+        }
     }
 
     private static final class SharedLeadershipState {

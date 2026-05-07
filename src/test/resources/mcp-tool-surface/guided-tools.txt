@@ -11,7 +11,9 @@ zap_findings_summary
 zap_passive_scan_status
 zap_passive_scan_wait
 zap_report_generate
+zap_scan_history_customer_handoff
 zap_scan_history_export
 zap_scan_history_get
 zap_scan_history_list
+zap_scan_history_release_evidence
 zap_target_import

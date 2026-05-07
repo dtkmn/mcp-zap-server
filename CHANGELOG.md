@@ -41,6 +41,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added release notes for `0.7.0`.
 - Added scan history ledger documentation and updated production, observability, JWT, tool-scope authorization, security mode, security policy, and Helm docs.
 
+### Added
+- Added HA queue claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica queue execution.
+- Added `zap_scan_history_release_evidence` and `zap_scan_history_customer_handoff` for internal evidence bundles and customer-safe Markdown handoff summaries.
+
+### Changed
+- Tightened scan-history and production-readiness docs around durable scan-job state, raw evidence redaction, and customer-facing handoff packaging.
+
+## [0.7.0] - 2026-05-05
+
+### Added
+- Added Policy Bundle v1 dry-run and runtime enforcement support, including `zap_policy_dry_run`, policy preview contracts, shared-core enforcement hooks, and example policy bundles.
+- Added guided auth session bootstrap tools for form-login, bearer-token, and API-key flows, with prepared session validation.
+- Added a scan history ledger with in-memory and Postgres backends, release-evidence export tools, and the `V5__create_scan_history_entries.sql` migration.
+- Added a gateway boundary layer around ZAP engine access, including capability-specific interfaces and record types for scans, findings, targets, and artifacts.
+- Added production and auth-bootstrap runbooks, Prometheus alerts, a Grafana dashboard, and expanded architecture, unit, and integration coverage.
+
+### Changed
+- Bumped the runtime, MCP server, and Helm chart release metadata to `0.7.0`.
+- Removed the vendored WebFlux streamable MCP transport shim and expanded streamable HTTP regression coverage.
+- Refactored core services to use explicit gateway capability interfaces instead of direct ZAP client coupling.
+- Upgraded Gradle to `9.5.0` and refreshed docs dependencies, including Astro and `@astrojs/compiler`.
+- Bound Docker Compose-published ports to loopback by default via `MCP_ZAP_BIND_ADDRESS`.
+
+### Security
+- Added early MCP request body limiting through `McpRequestBodyLimitWebFilter`.
+- Hardened guided auth credential references with operator-managed allowlists, path containment checks, and inline-secret controls.
+- Added same-origin form-login validation, URL-encoded ZAP auth config serialization, stricter field-name validation, and quoted context regex literals.
+- Added stricter Helm session-affinity validation and MCP/ZAP egress NetworkPolicy boundaries.
+- Kept malformed upstream ZAP progress values out of client-visible exception messages.
+
+### Fixed
+- Fixed multi-replica Helm defaults that could break streamable MCP sessions without sticky affinity.
+- Fixed credential allowlist wildcard sibling-prefix and symlink escape handling.
+- Fixed mixed-case Helm session affinity provider values silently rendering no affinity.
+- Fixed ZAP form-auth parameter injection and context scope regex overmatching risks.
+- Fixed CodeQL findings around deprecated JSON field iteration and ignored access-boundary parameters.
+
+### Documentation
+- Added release notes for `0.7.0`.
+- Added scan history ledger documentation and updated production, observability, JWT, tool-scope authorization, security mode, security policy, and Helm docs.
+
 ## [0.6.1] - 2026-04-28
 
 ### Changed

@@ -93,6 +93,21 @@ class ToolAuthorizationServiceTest {
     }
 
     @Test
+    void releaseEvidenceExportRequiresScanReadScope() {
+        ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
+
+        ToolAuthorizationDecision denied = service.authorizeToolCall(List.of("zap:report:read"), "zap_scan_history_release_evidence");
+        ToolAuthorizationDecision allowed = service.authorizeToolCall(List.of("zap:scan:read"), "zap_scan_history_release_evidence");
+        ToolAuthorizationDecision customerHandoffAllowed =
+                service.authorizeToolCall(List.of("zap:scan:read"), "zap_scan_history_customer_handoff");
+
+        assertThat(denied.allowed()).isFalse();
+        assertThat(denied.requiredScopes()).containsExactly("zap:scan:read");
+        assertThat(allowed.allowed()).isTrue();
+        assertThat(customerHandoffAllowed.allowed()).isTrue();
+    }
+
+    @Test
     void unmappedToolIsDeniedByDefault() {
         ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
 

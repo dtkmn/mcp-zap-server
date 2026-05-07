@@ -49,6 +49,7 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 
 - [ ] Use durable queue state for multi-replica MCP deployments.
 - [ ] Use Postgres-backed scan history when scan evidence must survive restart, failover, or release handoff.
+- [ ] Use Postgres-backed scan-job state when queued jobs are part of release or pilot evidence.
 - [ ] Set a sane queue claim lease with `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS`.
 - [ ] If you expose streamable HTTP through multiple replicas, enable sticky ingress or equivalent client affinity.
 - [ ] Test failover by terminating a worker with a claimed running job and confirming another replica recovers polling after lease expiry.
@@ -70,6 +71,6 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 
 - [ ] Run `docker compose config` or `helm template` in CI.
 - [ ] Smoke-test crawl, attack, report generation, and authenticated scanning against a staging target.
-- [ ] Run `zap_scan_history_list` and `zap_scan_history_export` after the smoke test and attach the exported evidence to the release or pilot record.
+- [ ] Run `zap_scan_history_list`, `zap_scan_history_release_evidence`, and `zap_scan_history_customer_handoff` after the smoke test. Attach raw JSON only to the internal record, and attach the curated summary to customer-facing packages.
 - [ ] Confirm the deployed MCP endpoint requires auth and the ZAP endpoint is not reachable from untrusted networks.
 - [ ] Re-run this checklist whenever you change image tags, add-ons, exposure model, or queue backend.

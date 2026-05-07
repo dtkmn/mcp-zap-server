@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineFindingAccess;
 import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
+import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -29,10 +31,16 @@ public class FindingsService {
 
     private final EngineFindingAccess engineFindingAccess;
     private final ObjectMapper objectMapper;
+    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     public FindingsService(EngineFindingAccess engineFindingAccess) {
         this.engineFindingAccess = engineFindingAccess;
         this.objectMapper = new ObjectMapper();
+    }
+
+    @Autowired(required = false)
+    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
+        this.scanHistoryLedgerService = scanHistoryLedgerService;
     }
 
     public String getFindingsSummary(String baseUrl) {
@@ -257,7 +265,23 @@ public class FindingsService {
     }
 
     private List<AlertSnapshot> loadAlerts(String baseUrl) {
-        return engineFindingAccess.loadAlerts(trimToNull(baseUrl));
+        String normalizedBaseUrl = requireAuthorizedBaseUrl(baseUrl);
+        UrlScope scope = UrlScope.parse(normalizedBaseUrl);
+        return engineFindingAccess.loadAlerts(normalizedBaseUrl).stream()
+                .filter(alert -> scope.contains(alert.url()))
+                .toList();
+    }
+
+    private String requireAuthorizedBaseUrl(String baseUrl) {
+        String normalizedBaseUrl = trimToNull(baseUrl);
+        if (normalizedBaseUrl == null) {
+            throw new IllegalArgumentException("baseUrl is required for findings reads; global ZAP findings are not exposed to ordinary clients.");
+        }
+        if (scanHistoryLedgerService == null
+                || !scanHistoryLedgerService.hasVisibleScanEvidenceForTarget(normalizedBaseUrl)) {
+            throw new IllegalArgumentException("No visible scan evidence exists for baseUrl: " + normalizedBaseUrl);
+        }
+        return normalizedBaseUrl;
     }
 
     private List<AlertSnapshot> filterAlerts(List<AlertSnapshot> alerts,

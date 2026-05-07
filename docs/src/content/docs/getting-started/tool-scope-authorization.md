@@ -74,7 +74,7 @@ Common scopes:
 | `zap:scan:active:run` | Start direct or queued active scans |
 | `zap:scan:spider:run` | Start direct or queued spider scans |
 | `zap:scan:ajax:run` | Start direct or queued AJAX Spider scans |
-| `zap:scan:read` | Read scan status, passive backlog, queue job state, and scan history evidence |
+| `zap:scan:read` | Read scan status, passive backlog, queue job state, scan history evidence, and evidence handoff summaries |
 | `zap:scan:stop` | Stop direct scans or cancel queue jobs |
 | `zap:scan:queue:write` | Retry or requeue queue jobs |
 | `zap:scan:policy:read` | View ZAP active-scan policies and rule state |

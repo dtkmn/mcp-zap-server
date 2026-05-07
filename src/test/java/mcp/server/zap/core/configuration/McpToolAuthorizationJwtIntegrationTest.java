@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ActiveProfiles("test")
 class McpToolAuthorizationJwtIntegrationTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static Path reportDirectory;
     private static Path reportFile;
 
     @LocalServerPort
@@ -46,13 +47,18 @@ class McpToolAuthorizationJwtIntegrationTest {
 
     @BeforeAll
     static void createReportFile() throws Exception {
-        reportFile = Files.createTempFile("mcp-authz-report", ".txt");
+        reportDirectory = Files.createTempDirectory("mcp-authz-reports");
+        reportFile = reportDirectory
+                .resolve("workspaces")
+                .resolve("reporter-client")
+                .resolve("mcp-authz-report.txt");
+        Files.createDirectories(reportFile.getParent());
         Files.writeString(reportFile, "jwt integration report");
     }
 
     @DynamicPropertySource
     static void registerReportDirectory(DynamicPropertyRegistry registry) {
-        registry.add("zap.report.directory", () -> reportFile.getParent().toString());
+        registry.add("zap.report.directory", () -> reportDirectory.toString());
     }
 
     private WebTestClient client() {

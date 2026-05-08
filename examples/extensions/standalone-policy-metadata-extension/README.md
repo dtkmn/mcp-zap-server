@@ -12,10 +12,10 @@ It depends on only:
 
 ## Build
 
-First publish the local experimental API artifact from the repository root:
+First verify the local experimental API publication from the repository root:
 
 ```bash
-./gradlew publishExtensionApiPublicationToMavenLocal
+./gradlew verifyExtensionApiPublication
 ```
 
 Then build the standalone sample:
@@ -25,9 +25,12 @@ Then build the standalone sample:
 ```
 
 Inside this repository, the sample derives the default API version from the
-root `build.gradle` so the compatibility proof tracks the current project
-version. Outside this repository, pass `-PextensionApiVersion=<version>` when
-you want to target a specific API release.
+root `build.gradle` and reads the API artifact from
+`build/extension-api-publication` so the compatibility proof tracks the current
+project version without relying on stale `mavenLocal()` state. Outside this
+repository, pass `-PextensionApiVersion=<version>` and
+`-PextensionApiRepositoryUrl=<maven-repository-url>` when you want to target a
+specific API release.
 
 This is still an experimental path. It proves the decoupled extension shape,
 not a public binary compatibility promise.

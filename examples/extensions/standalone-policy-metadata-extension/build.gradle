@@ -11,11 +11,6 @@ java {
     }
 }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
 def defaultExtensionApiVersion = '0.7.0'
 def rootBuildFile = file('../../../build.gradle')
 if (rootBuildFile.isFile()) {
@@ -26,6 +21,24 @@ if (rootBuildFile.isFile()) {
 }
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion).get()
 def extensionApiCoordinate = "mcp.server.zap:mcp-zap-extension-api:${extensionApiVersion}"
+def defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-publication').toURI().toString()
+def extensionApiRepositoryUrl = providers.gradleProperty('extensionApiRepositoryUrl')
+        .orElse(defaultExtensionApiRepositoryUrl)
+        .get()
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri(extensionApiRepositoryUrl)
+            }
+        }
+        filter {
+            includeGroup 'mcp.server.zap'
+        }
+    }
+    mavenCentral()
+}
 
 dependencies {
     compileOnly extensionApiCoordinate

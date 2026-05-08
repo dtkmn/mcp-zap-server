@@ -89,6 +89,12 @@ jobs:
       - name: Build with Gradle and generate SBOM
         run: ./gradlew build cyclonedxBom --scan --no-daemon --stacktrace --info
 
+      - name: Verify extension API publication
+        run: ./gradlew verifyExtensionApiPublication --scan --no-daemon --stacktrace --info
+
+      - name: Verify standalone extension against staged API
+        run: ./gradlew -p examples/extensions/standalone-policy-metadata-extension clean build --scan --no-daemon --stacktrace --info
+
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v7
         with:

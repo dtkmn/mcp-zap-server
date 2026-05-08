@@ -83,6 +83,12 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'Extensions',
+					items: [
+						{ slug: 'extensions/extension-api-release-policy' },
+					],
+				},
+				{
 					label: 'Reference',
 					collapsed: true,
 					items: [{ slug: 'reference/security-policy' }],

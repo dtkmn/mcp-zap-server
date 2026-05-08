@@ -136,6 +136,7 @@ The repository includes a compile-checked and wiring-tested sample:
 - [Standalone Policy Metadata Extension](../../examples/extensions/standalone-policy-metadata-extension/README.md)
 - [Build Your Own Extension](./BUILD_YOUR_OWN_EXTENSION.md)
 - [Extension API Compatibility](./EXTENSION_API_COMPATIBILITY.md)
+- [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md)
 
 The in-repo sample implements `PolicyBundleAccessBoundary`, registers a
 conditional Spring Boot auto-configuration, and packages separately from the
@@ -225,6 +226,7 @@ runtime binary compatibility to external builders.
 ## Related Docs
 
 - [Extension API Compatibility](./EXTENSION_API_COMPATIBILITY.md)
+- [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md)
 - [Build Your Own Extension](./BUILD_YOUR_OWN_EXTENSION.md)
 - [Standalone Policy Metadata Extension](../../examples/extensions/standalone-policy-metadata-extension/README.md)
 - [Sample Policy Metadata Extension](../../examples/extensions/policy-metadata-extension/README.md)

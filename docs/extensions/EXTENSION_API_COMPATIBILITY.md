@@ -24,6 +24,9 @@ mcp.server.zap:mcp-zap-extension-api:<version>
 That group is the current project-local coordinate. Treat it as experimental
 until a public artifact repository and support window are declared.
 
+The release rules for moving beyond local staging live in
+[Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md).
+
 ## Publication Proof
 
 Every normal build now verifies the extension API can be published to a local
@@ -88,6 +91,9 @@ Graduating this API requires:
 - migration notes for any breaking API change
 - a public artifact repository and release workflow
 - explicit support policy for how long old API versions are supported
+
+Do not publish a public artifact or advertise compatibility until the release
+policy checklist is satisfied.
 
 ## Internal Boundaries Not Yet Public
 

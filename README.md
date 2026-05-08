@@ -134,6 +134,8 @@ public extension work is intentionally small:
   extension boundary.
 - [Build your own extension](./docs/extensions/BUILD_YOUR_OWN_EXTENSION.md)
   shows the target standalone repository shape.
+- [Extension API release policy](./docs/extensions/EXTENSION_API_RELEASE_POLICY.md)
+  explains publication stages and compatibility gates.
 - [Standalone sample extension](./examples/extensions/standalone-policy-metadata-extension/README.md)
   proves a separate project can compile against the API artifact.
 

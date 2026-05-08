@@ -264,6 +264,9 @@ An extension should pass these checks before anyone treats it as credible:
 If a behavior is unsupported, fail closed with a clear operator-facing reason.
 See [Extension API Compatibility](./EXTENSION_API_COMPATIBILITY.md) for the
 current versioning policy.
+See [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md) for the
+rules that must be satisfied before a public artifact or compatibility promise
+exists.
 
 ## How The In-Repo Sample Fits
 
@@ -303,5 +306,6 @@ and the external builder path is the next platform step.
 
 - [OSS Extension Model](./README.md)
 - [Extension API Compatibility](./EXTENSION_API_COMPATIBILITY.md)
+- [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md)
 - [Sample Policy Metadata Extension](../../examples/extensions/policy-metadata-extension/README.md)
 - [Standalone Policy Metadata Extension](../../examples/extensions/standalone-policy-metadata-extension/README.md)

@@ -21,8 +21,34 @@ The Maven publication is:
 mcp.server.zap:mcp-zap-extension-api:<version>
 ```
 
-That group is not guaranteed to be the final public coordinate. The public
-coordinate should be confirmed before publishing outside the project.
+That group is the current project-local coordinate. Treat it as experimental
+until a public artifact repository and support window are declared.
+
+## Publication Proof
+
+Every normal build now verifies the extension API can be published to a local
+Maven-style staging repository:
+
+```bash
+./gradlew verifyExtensionApiPublication
+```
+
+The staged artifacts are written under:
+
+```text
+build/extension-api-publication/mcp/server/zap/mcp-zap-extension-api/<version>/
+```
+
+This is a release gate, not an external publication. It proves the public JAR
+and POM are shaped correctly before we wire a remote Maven repository into the
+release workflow.
+
+The verification requires:
+
+- the API JAR is present
+- the generated POM is present
+- the generated POM does not publish runtime dependencies or dependency
+  management
 
 ## Current Scope
 
@@ -60,7 +86,7 @@ Graduating this API requires:
 - a standalone sample extension repository or fixture
 - compatibility tests that use only the published API artifact
 - migration notes for any breaking API change
-- an agreed public Maven coordinate
+- a public artifact repository and release workflow
 - explicit support policy for how long old API versions are supported
 
 ## Internal Boundaries Not Yet Public

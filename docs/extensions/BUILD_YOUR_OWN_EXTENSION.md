@@ -111,19 +111,36 @@ runtime if Spring has no registration metadata or import hook.
 An external extension should depend on the API artifact instead of depending on
 the full application.
 
-Target shape:
+Current local proof shape:
 
 ```gradle
 plugins {
     id 'java-library'
 }
 
+def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
+        .orElse('0.7.0')
+        .get()
+def extensionApiRepositoryUrl = providers.gradleProperty('extensionApiRepositoryUrl')
+        .orElse('../mcp-zap-server/build/extension-api-publication')
+        .get()
+
 repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri(extensionApiRepositoryUrl)
+            }
+        }
+        filter {
+            includeGroup 'mcp.server.zap'
+        }
+    }
     mavenCentral()
 }
 
 dependencies {
-    compileOnly 'mcp.server.zap:mcp-zap-extension-api:0.7.0'
+    compileOnly "mcp.server.zap:mcp-zap-extension-api:${extensionApiVersion}"
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.6'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'
@@ -136,10 +153,16 @@ tasks.named('test') {
 }
 ```
 
-This coordinate describes the current local/publication shape. Treat it as
-experimental until the project publishes a public release and declares a stable
-compatibility level. The group may still change before a public artifact is
-published.
+First run `./gradlew verifyExtensionApiPublication` from the gateway repository
+so `build/extension-api-publication` exists. The `exclusiveContent` block is
+intentional: it prevents `mcp.server.zap:mcp-zap-extension-api` from resolving
+from Maven Central or a stale public mirror while this proof is supposed to use
+the freshly staged artifact.
+
+This coordinate describes the current staged publication shape. Treat it as
+experimental until the project publishes a public artifact repository and
+declares a stable compatibility level. The group may still change before a
+public artifact is published.
 
 The explicit Spring, JUnit, and AssertJ versions are shown so those third-party
 dependencies are resolvable without relying on this repository's build. A

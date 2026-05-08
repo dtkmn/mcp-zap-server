@@ -65,6 +65,7 @@ Client setup:
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
 - **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
 - **Scan queue and history**: queued active, spider, and AJAX Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
+- **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, production-oriented Compose, and Helm charts for Kubernetes.
 
@@ -122,11 +123,30 @@ For multi-replica queueing, durable Postgres state, claim recovery, and ingress 
 - [Scan History Ledger](https://danieltse.org/mcp-zap-server/operations/scan-history-ledger/)
 - [Helm Deployment](./helm/mcp-zap-server/README.md)
 
+### Extension Model
+
+ZAP is the first scanner engine, not the whole product boundary. The current
+public extension work is intentionally small:
+
+- `mcp-zap-extension-api` packages selected policy, protection, evidence, and
+  metadata contracts without core runtime internals.
+- [How extensions work](./docs/extensions/README.md) explains the core versus
+  extension boundary.
+- [Build your own extension](./docs/extensions/BUILD_YOUR_OWN_EXTENSION.md)
+  shows the target standalone repository shape.
+- [Standalone sample extension](./examples/extensions/standalone-policy-metadata-extension/README.md)
+  proves a separate project can compile against the API artifact.
+
+This is not runtime multi-engine support yet. Additional scanner engines need
+an adapter design and explicit fail-closed capability boundaries before they
+become product claims.
+
 ## Documentation Map
 
 Start here:
 
 - [Full documentation](https://danieltse.org/mcp-zap-server/)
+- [OSS Extension Model](./docs/extensions/README.md)
 - [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Authentication](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 - [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)

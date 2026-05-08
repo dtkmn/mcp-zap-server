@@ -30,11 +30,15 @@ class StandaloneExtensionExampleArchitectureTest {
 
         assertThat(build)
                 .contains("id 'java-library'")
-                .contains("mavenLocal()")
                 .contains("rootBuildFile = file('../../../build.gradle')")
                 .contains("defaultExtensionApiVersion = matcher.group(1)")
                 .contains("providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion)")
+                .contains("defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-publication')")
+                .contains("providers.gradleProperty('extensionApiRepositoryUrl')")
                 .contains("extensionApiCoordinate = \"mcp.server.zap:mcp-zap-extension-api:${extensionApiVersion}\"")
+                .contains("exclusiveContent")
+                .contains("includeGroup 'mcp.server.zap'")
+                .doesNotContain("mavenLocal()")
                 .doesNotContain("mcp-zap-extension-api:" + staleApiVersion())
                 .doesNotContain("mcp-zap-server-core")
                 .doesNotContain("sourceSets.main.output");

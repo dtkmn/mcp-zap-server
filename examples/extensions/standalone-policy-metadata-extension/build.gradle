@@ -1,0 +1,42 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'com.example.mcpzap'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+def defaultExtensionApiVersion = '0.7.0'
+def rootBuildFile = file('../../../build.gradle')
+if (rootBuildFile.isFile()) {
+    def matcher = rootBuildFile.text =~ /(?m)^version = '([^']+)'$/
+    if (matcher.find()) {
+        defaultExtensionApiVersion = matcher.group(1)
+    }
+}
+def extensionApiVersion = providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion).get()
+def extensionApiCoordinate = "mcp.server.zap:mcp-zap-extension-api:${extensionApiVersion}"
+
+dependencies {
+    compileOnly extensionApiCoordinate
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.6'
+
+    testImplementation extensionApiCoordinate
+    testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'
+    testImplementation 'org.assertj:assertj-core:3.27.6'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:6.0.1'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

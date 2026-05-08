@@ -1,7 +1,7 @@
-package mcp.server.zap.core.service.policy;
+package mcp.server.zap.extension.api.policy;
 
 /**
- * Shared runtime policy hook input for tool execution checks.
+ * Extension API input for tool execution policy checks.
  */
 public record ToolExecutionPolicyContext(
         String toolName,

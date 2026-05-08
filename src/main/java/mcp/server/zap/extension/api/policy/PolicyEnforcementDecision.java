@@ -1,4 +1,4 @@
-package mcp.server.zap.core.service.policy;
+package mcp.server.zap.extension.api.policy;
 
 import java.util.Map;
 

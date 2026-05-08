@@ -1,10 +1,10 @@
-package mcp.server.zap.core.service.policy;
+package mcp.server.zap.extension.api.policy;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Optional boundary for requester-scoped policy preview access.
+ * Extension API boundary for requester-scoped policy preview access and metadata enrichment.
  */
 public interface PolicyBundleAccessBoundary {
 

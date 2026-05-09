@@ -145,7 +145,7 @@ class ScanJobRuntimeExecutorTest {
         );
 
         when(ajaxSpiderService.startAjaxSpiderJob("https://example.com")).thenReturn("ajax-1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent("ajax-1")).thenReturn(10);
+        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(10);
 
         String scanId = executor.startScan(
                 ScanJobType.AJAX_SPIDER,
@@ -156,6 +156,6 @@ class ScanJobRuntimeExecutorTest {
 
         assertEquals("ajax-1", scanId);
         assertEquals(10, progress);
-        verify(ajaxSpiderService).stopAjaxSpiderJob("ajax-1");
+        verify(ajaxSpiderService).stopAjaxSpiderJob();
     }
 }

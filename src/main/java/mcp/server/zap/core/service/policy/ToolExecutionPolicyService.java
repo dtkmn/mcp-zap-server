@@ -4,9 +4,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
 import mcp.server.zap.core.exception.ToolPolicyDeniedException;
 import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
+import mcp.server.zap.extension.api.policy.ToolExecutionPolicyContext;
+import mcp.server.zap.extension.api.policy.ToolExecutionPolicyHook;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +19,15 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ToolExecutionPolicyService {
+    private static final Set<String> CORE_AUDIT_DETAIL_KEYS = Set.of(
+            "tool",
+            "targetProvided",
+            "mode",
+            "allowed",
+            "reason",
+            "extensionDetails"
+    );
+
     private final PolicyEnforcementProperties policyEnforcementProperties;
     private final ObjectProvider<ToolExecutionPolicyHook> toolExecutionPolicyHookProvider;
     private final ObservabilityService observabilityService;
@@ -44,9 +57,7 @@ public class ToolExecutionPolicyService {
         details.put("mode", mode.name().toLowerCase());
         details.put("allowed", decision.allowed());
         details.put("reason", decision.reason());
-        if (decision.details() != null && !decision.details().isEmpty()) {
-            details.putAll(decision.details());
-        }
+        addExtensionDetails(details, decision.details());
 
         String outcome = decision.allowed()
                 ? (mode == PolicyEnforcementProperties.Mode.DRY_RUN ? "dry_run_allow" : "allow")
@@ -129,6 +140,24 @@ public class ToolExecutionPolicyService {
             return PolicyEnforcementDecision.allow(decision.reason(), details);
         }
         return PolicyEnforcementDecision.deny(decision.reason(), details);
+    }
+
+    private void addExtensionDetails(Map<String, Object> auditDetails, Map<String, Object> policyDetails) {
+        if (policyDetails == null || policyDetails.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> reservedDetails = new LinkedHashMap<>();
+        policyDetails.forEach((key, value) -> {
+            if (CORE_AUDIT_DETAIL_KEYS.contains(key) || auditDetails.containsKey(key)) {
+                reservedDetails.put(key, value);
+            } else {
+                auditDetails.put(key, value);
+            }
+        });
+        if (!reservedDetails.isEmpty()) {
+            auditDetails.put("extensionDetails", reservedDetails);
+        }
     }
 
     private Map<String, Object> abstentionDetails(PolicyEnforcementDecision decision) {

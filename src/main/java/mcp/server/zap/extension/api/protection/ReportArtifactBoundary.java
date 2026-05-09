@@ -1,9 +1,9 @@
-package mcp.server.zap.core.service.protection;
+package mcp.server.zap.extension.api.protection;
 
 import java.nio.file.Path;
 
 /**
- * Optional boundary for tenant or workspace scoped report artifact directories.
+ * Extension API boundary for tenant or workspace scoped report artifact directories.
  */
 public interface ReportArtifactBoundary {
 

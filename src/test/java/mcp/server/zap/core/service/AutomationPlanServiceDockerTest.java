@@ -1,5 +1,9 @@
 package mcp.server.zap.core.service;
 
+import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.Volume;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineAutomationAccess;
@@ -25,6 +29,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Testcontainers(disabledWithoutDocker = true)
 public class AutomationPlanServiceDockerTest {
@@ -51,7 +56,6 @@ public class AutomationPlanServiceDockerTest {
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
-                    .withFileSystemBind(AUTOMATION_ROOT.toString(), AUTOMATION_ROOT.toString())
                     .withCommand(
                             "zap.sh",
                             "-daemon",
@@ -68,7 +72,10 @@ public class AutomationPlanServiceDockerTest {
                             "-addoninstall",
                             "automation"
                     )
-                    .withCreateContainerCmdModifier(cmd -> cmd.withUser("0:0"))
+                    .withCreateContainerCmdModifier(cmd -> {
+                        cmd.withUser("0:0");
+                        addHostBind(cmd, AUTOMATION_ROOT);
+                    })
                     .waitingFor(Wait.forListeningPort())
                     .withStartupTimeout(Duration.ofMinutes(2));
 
@@ -257,12 +264,24 @@ public class AutomationPlanServiceDockerTest {
                     PosixFilePermission.OTHERS_EXECUTE
             ));
         } catch (UnsupportedOperationException ignored) {
-            directory.toFile().setReadable(true, false);
-            directory.toFile().setWritable(true, false);
-            directory.toFile().setExecutable(true, false);
+            boolean readable = directory.toFile().setReadable(true, false);
+            boolean writable = directory.toFile().setWritable(true, false);
+            boolean executable = directory.toFile().setExecutable(true, false);
+            if (!readable || !writable || !executable) {
+                fail("Unable to make automation workspace accessible to ZAP");
+            }
         } catch (Exception e) {
             throw new IllegalStateException("Unable to make automation workspace accessible to ZAP", e);
         }
         return directory;
+    }
+
+    private static void addHostBind(CreateContainerCmd cmd, Path directory) {
+        HostConfig hostConfig = cmd.getHostConfig();
+        if (hostConfig == null) {
+            hostConfig = new HostConfig();
+            cmd.withHostConfig(hostConfig);
+        }
+        hostConfig.withBinds(new Bind(directory.toString(), new Volume(directory.toString())));
     }
 }

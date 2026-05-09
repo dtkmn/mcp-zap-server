@@ -1,5 +1,9 @@
 package mcp.server.zap.core.service;
 
+import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.model.Bind;
+import com.github.dockerjava.api.model.HostConfig;
+import com.github.dockerjava.api.model.Volume;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
@@ -26,6 +30,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -49,7 +54,7 @@ public class FindingsAndReportServiceDockerTest {
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
-                    .withFileSystemBind(REPORT_DIR.toString(), REPORT_DIR.toString())
+                    .withCreateContainerCmdModifier(cmd -> addHostBind(cmd, REPORT_DIR))
                     .withCommand(
                             "zap.sh",
                             "-daemon",
@@ -252,12 +257,24 @@ public class FindingsAndReportServiceDockerTest {
                     PosixFilePermission.OTHERS_EXECUTE
             ));
         } catch (UnsupportedOperationException ignored) {
-            directory.toFile().setReadable(true, false);
-            directory.toFile().setWritable(true, false);
-            directory.toFile().setExecutable(true, false);
+            boolean readable = directory.toFile().setReadable(true, false);
+            boolean writable = directory.toFile().setWritable(true, false);
+            boolean executable = directory.toFile().setExecutable(true, false);
+            if (!readable || !writable || !executable) {
+                fail("Unable to make report directory accessible to ZAP");
+            }
         } catch (Exception e) {
             throw new IllegalStateException("Unable to make report directory accessible to ZAP", e);
         }
         return directory;
+    }
+
+    private static void addHostBind(CreateContainerCmd cmd, Path directory) {
+        HostConfig hostConfig = cmd.getHostConfig();
+        if (hostConfig == null) {
+            hostConfig = new HostConfig();
+            cmd.withHostConfig(hostConfig);
+        }
+        hostConfig.withBinds(new Bind(directory.toString(), new Volume(directory.toString())));
     }
 }

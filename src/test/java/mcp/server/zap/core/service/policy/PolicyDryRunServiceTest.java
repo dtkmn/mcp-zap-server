@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

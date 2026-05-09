@@ -6,7 +6,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.Set;
 import mcp.server.zap.core.gateway.EngineReportAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
-import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
+import mcp.server.zap.extension.api.protection.ReportArtifactBoundary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -96,6 +96,49 @@ public class ReportServiceTest {
         ArgumentCaptor<ReportGenerationRequest> captor = ArgumentCaptor.forClass(ReportGenerationRequest.class);
         verify(reportAccess).generateReport(captor.capture());
         assertEquals(scopedRoot.toString(), captor.getValue().reportDirectory());
+    }
+
+    @Test
+    void generateReportRejectsBoundaryWriteDirectoryOutsideConfiguredRoot() throws Exception {
+        Path reportRoot = Files.createTempDirectory("report-service-root");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportRoot.toString());
+        service.setReportArtifactBoundary(new ReportArtifactBoundary() {
+            @Override
+            public Path resolveWriteDirectory(Path defaultDirectory) {
+                return Path.of("/");
+            }
+
+            @Override
+            public Path resolveReadDirectory(Path defaultDirectory) {
+                return defaultDirectory;
+            }
+        });
+
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.generateReport("traditional-json-plus", "light", "site"));
+    }
+
+    @Test
+    void readReportRejectsBoundaryReadDirectoryOutsideConfiguredRoot() throws Exception {
+        Path reportRoot = Files.createTempDirectory("report-service-root");
+        Path siblingRoot = Files.createTempDirectory("report-service-sibling");
+        Path siblingReport = siblingRoot.resolve("report.json");
+        Files.writeString(siblingReport, "{\"status\":\"bad\"}");
+        ReflectionTestUtils.setField(service, "reportDirectory", reportRoot.toString());
+        service.setReportArtifactBoundary(new ReportArtifactBoundary() {
+            @Override
+            public Path resolveWriteDirectory(Path defaultDirectory) {
+                return defaultDirectory;
+            }
+
+            @Override
+            public Path resolveReadDirectory(Path defaultDirectory) {
+                return siblingRoot;
+            }
+        });
+
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.readReport(siblingReport.toString(), 1000));
     }
 
     @Test

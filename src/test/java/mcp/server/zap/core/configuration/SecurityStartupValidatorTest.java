@@ -93,7 +93,7 @@ class SecurityStartupValidatorTest {
         ApiKeyProperties.ApiKeyClient client = new ApiKeyProperties.ApiKeyClient();
         client.setClientId("test-client");
         client.setKey(apiKey);
-        properties.getApiKeys().add(client);
+        properties.setApiKeys(java.util.List.of(client));
 
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles("test");

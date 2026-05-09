@@ -20,6 +20,8 @@ import java.util.Set;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
+import mcp.server.zap.extension.api.policy.PolicyBundlePreviewer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

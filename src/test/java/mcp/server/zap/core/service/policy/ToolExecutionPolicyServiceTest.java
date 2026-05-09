@@ -6,6 +6,8 @@ import java.util.stream.Stream;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
 import mcp.server.zap.core.exception.ToolPolicyDeniedException;
 import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
+import mcp.server.zap.extension.api.policy.ToolExecutionPolicyHook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.mockito.ArgumentCaptor;
@@ -156,6 +158,44 @@ class ToolExecutionPolicyServiceTest {
                 .containsEntry("policyProviderCount", 2);
         assertThat((List<Map<String, Object>>) details.get("abstainedPolicyProviders"))
                 .hasSize(1);
+    }
+
+    @Test
+    void extensionPolicyDetailsCannotOverwriteCoreAuditFacts() {
+        PolicyEnforcementProperties properties = new PolicyEnforcementProperties();
+        properties.setMode(PolicyEnforcementProperties.Mode.DRY_RUN);
+        ObservabilityService observabilityService = mock(ObservabilityService.class);
+
+        ToolExecutionPolicyService service = new ToolExecutionPolicyService(
+                properties,
+                provider(context -> PolicyEnforcementDecision.allow(
+                        "core reason wins",
+                        Map.of(
+                                "tool", "spoofed_tool",
+                                "mode", "enforce",
+                                "allowed", false,
+                                "reason", "spoofed reason",
+                                "policyProvider", "sample"
+                        )
+                )),
+                observabilityService
+        );
+
+        service.enforce("zap_attack_start", "https://prod.example.com", "corr-spoof");
+
+        Map<String, Object> details = capturedPolicyDetails(observabilityService, "dry_run_allow", "corr-spoof");
+        assertThat(details)
+                .containsEntry("tool", "zap_attack_start")
+                .containsEntry("mode", "dry_run")
+                .containsEntry("allowed", true)
+                .containsEntry("reason", "core reason wins")
+                .containsEntry("policyProvider", "sample");
+        assertThat(details)
+                .doesNotContainEntry("tool", "spoofed_tool")
+                .doesNotContainEntry("allowed", false);
+        assertThat((Map<String, Object>) details.get("extensionDetails"))
+                .containsEntry("tool", "spoofed_tool")
+                .containsEntry("allowed", false);
     }
 
     @SuppressWarnings("unchecked")

@@ -3,6 +3,7 @@ package mcp.server.zap.core.history;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
@@ -12,6 +13,7 @@ import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
+import mcp.server.zap.extension.api.evidence.EvidenceMetadataEnricher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -109,6 +111,72 @@ class ScanHistoryLedgerServiceTest {
     }
 
     @Test
+    void evidenceMetadataEnricherAppliesToStoredAndQueuedEvidence() throws Exception {
+        InMemoryScanJobStore enrichedJobStore = new InMemoryScanJobStore();
+        EvidenceMetadataEnricher failingEnricher = request -> {
+            throw new IllegalStateException("metadata extension failed");
+        };
+        EvidenceMetadataEnricher enricher = request -> Map.of(
+                "extensionProvider", "test-evidence-extension",
+                "extensionEvidenceType", request.evidenceType(),
+                "extensionStatus", request.status(),
+                "extensionTarget", request.targetUrl() == null ? "none" : request.targetUrl(),
+                "existing", "extension-must-not-rewrite-core-metadata",
+                "template", "extension-must-not-rewrite-core-metadata"
+        );
+        ScanHistoryLedgerService enrichedService = new ScanHistoryLedgerService(
+                new InMemoryScanHistoryStore(),
+                enrichedJobStore,
+                properties(),
+                new ClientWorkspaceResolver(new ApiKeyProperties()),
+                new GatewayRecordFactory(),
+                objectMapper,
+                List.of(failingEnricher, enricher)
+        );
+
+        enrichedService.recordDirectScanStarted(
+                "active_scan",
+                "active-extension",
+                "https://api.example.com",
+                Map.of("existing", "kept")
+        );
+        enrichedService.recordReportArtifact(
+                "/zap/wrk/zap-report-extension.json",
+                "traditional-json-plus",
+                "https://api.example.com",
+                Map.of("template", "core-template")
+        );
+        ScanJob job = new ScanJob(
+                "job-extension",
+                ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "https://api.example.com/queued"),
+                Instant.parse("2026-05-06T00:00:00Z"),
+                3,
+                "client-a",
+                "idem-extension"
+        );
+        job.markRunning("zap-extension");
+        enrichedJobStore.upsertAll(java.util.List.of(job));
+
+        JsonNode root = objectMapper.readTree(enrichedService.exportHistory(null, null, "api.example.com", 10));
+
+        assertThat(metadataFor(root, "scan_run"))
+                .containsEntry("existing", "kept")
+                .containsEntry("extensionProvider", "test-evidence-extension")
+                .containsEntry("extensionEvidenceType", "scan_run")
+                .containsEntry("extensionStatus", "started")
+                .containsEntry("extensionTarget", "https://api.example.com");
+        assertThat(metadataFor(root, "report_artifact"))
+                .containsEntry("extensionEvidenceType", "report_artifact")
+                .containsEntry("extensionStatus", "generated")
+                .containsEntry("template", "core-template");
+        assertThat(metadataFor(root, "scan_job"))
+                .containsEntry("extensionEvidenceType", "scan_job")
+                .containsEntry("extensionStatus", "running")
+                .containsEntry("extensionTarget", "https://api.example.com/queued");
+    }
+
+    @Test
     void defaultWorkspaceBoundaryFiltersStoredAndJobDerivedHistory() {
         service.recordDirectScanStarted("spider", "spider-client-a", "https://a.example.com", Map.of());
 
@@ -131,6 +199,27 @@ class ScanHistoryLedgerServiceTest {
         assertThat(list)
                 .contains("spider-client-a")
                 .doesNotContain("spider-client-b", "job:job-client-b", "b.example.com");
+    }
+
+    private ScanHistoryLedgerProperties properties() {
+        ScanHistoryLedgerProperties properties = new ScanHistoryLedgerProperties();
+        properties.setMaxListEntries(10);
+        properties.setMaxExportEntries(10);
+        properties.setRetentionDays(180);
+        return properties;
+    }
+
+    private Map<String, String> metadataFor(JsonNode root, String evidenceType) {
+        for (JsonNode entry : root.path("entries")) {
+            if (evidenceType.equals(entry.path("evidenceType").asText())) {
+                ObjectMapper mapper = new ObjectMapper();
+                return mapper.convertValue(
+                        entry.path("metadata"),
+                        mapper.getTypeFactory().constructMapType(Map.class, String.class, String.class)
+                );
+            }
+        }
+        throw new AssertionError("No entry found for evidence type " + evidenceType);
     }
 
     @Test

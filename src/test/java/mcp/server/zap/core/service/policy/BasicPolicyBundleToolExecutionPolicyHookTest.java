@@ -6,6 +6,8 @@ import java.nio.file.Path;
 import java.util.List;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
+import mcp.server.zap.extension.api.policy.ToolExecutionPolicyContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

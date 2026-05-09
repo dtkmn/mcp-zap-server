@@ -10,7 +10,6 @@ import java.util.List;
 /**
  * Configuration properties for API key clients.
  */
-@Data
 @Configuration
 @ConfigurationProperties(prefix = "mcp.server.auth")
 public class ApiKeyProperties {
@@ -19,6 +18,14 @@ public class ApiKeyProperties {
      * List of registered API key clients.
      */
     private List<ApiKeyClient> apiKeys = new ArrayList<>();
+
+    public List<ApiKeyClient> getApiKeys() {
+        return List.copyOf(apiKeys);
+    }
+
+    public void setApiKeys(List<ApiKeyClient> apiKeys) {
+        this.apiKeys = apiKeys == null ? new ArrayList<>() : new ArrayList<>(apiKeys);
+    }
 
     @Data
     public static class ApiKeyClient {

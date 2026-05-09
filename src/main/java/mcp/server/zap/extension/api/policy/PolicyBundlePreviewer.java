@@ -1,9 +1,9 @@
-package mcp.server.zap.core.service.policy;
+package mcp.server.zap.extension.api.policy;
 
 import java.util.Map;
 
 /**
- * Core contract for evaluating a policy bundle without publishing enforcement audit events.
+ * Extension API contract for evaluating a policy bundle without publishing enforcement audit events.
  */
 public interface PolicyBundlePreviewer {
 

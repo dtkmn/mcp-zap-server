@@ -67,7 +67,7 @@ public class AjaxSpiderService {
         String scanId = startAjaxSpiderJob(targetUrl);
         trackAjaxSpiderStarted(scanId, resolveWorkspaceId());
         recordDirectScanStarted("ajax_spider", scanId, targetUrl);
-        log.info("AJAX Spider direct scan token {}", scanId);
+        log.info("AJAX Spider direct scan id {}", scanId);
         return formatDirectStartMessage(targetUrl);
     }
 
@@ -108,12 +108,12 @@ public class AjaxSpiderService {
      * @return Confirmation message
      */
     public String stopAjaxSpider() {
-        stopAjaxSpiderJob(null);
+        stopAjaxSpiderJob();
         trackAjaxSpiderStopped();
         return "AJAX Spider scan stopped successfully";
     }
 
-    public void stopAjaxSpiderJob(String ignoredScanId) {
+    public void stopAjaxSpiderJob() {
         ajaxSpiderExecution.stopAjaxSpider();
     }
 
@@ -126,7 +126,7 @@ public class AjaxSpiderService {
         return "AJAX Spider Results:\n" + ajaxSpiderExecution.loadAjaxSpiderResults();
     }
 
-    public int getAjaxSpiderProgressPercent(String ignoredScanId) {
+    public int getAjaxSpiderProgressPercent() {
         return ajaxSpiderExecution.readAjaxSpiderStatus().running() ? 0 : 100;
     }
 

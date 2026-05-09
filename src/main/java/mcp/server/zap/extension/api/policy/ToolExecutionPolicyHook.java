@@ -1,8 +1,9 @@
-package mcp.server.zap.core.service.policy;
+package mcp.server.zap.extension.api.policy;
 
 /**
- * Optional provider hook for allow or deny policy checks on tool execution.
+ * Extension API hook for allow, deny, or abstain policy checks on tool execution.
  */
 public interface ToolExecutionPolicyHook {
+
     PolicyEnforcementDecision evaluate(ToolExecutionPolicyContext context);
 }

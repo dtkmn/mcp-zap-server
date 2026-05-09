@@ -25,6 +25,10 @@ import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.ScanHistoryAccessBoundary;
 import mcp.server.zap.core.service.protection.ScanJobAccessBoundary;
+import mcp.server.zap.extension.api.evidence.EvidenceMetadataEnricher;
+import mcp.server.zap.extension.api.evidence.EvidenceMetadataRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -34,6 +38,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ScanHistoryLedgerService {
+    private static final Logger log = LoggerFactory.getLogger(ScanHistoryLedgerService.class);
     private static final String ENGINE_ZAP = "zap";
     private static final String TYPE_SCAN_JOB = "scan_job";
     private static final String TYPE_SCAN_RUN = "scan_run";
@@ -49,6 +54,7 @@ public class ScanHistoryLedgerService {
     private final ClientWorkspaceResolver clientWorkspaceResolver;
     private final GatewayRecordFactory gatewayRecordFactory;
     private final ObjectMapper objectMapper;
+    private final List<EvidenceMetadataEnricher> evidenceMetadataEnrichers;
     private ScanJobAccessBoundary scanJobAccessBoundary;
     private ScanHistoryAccessBoundary scanHistoryAccessBoundary;
 
@@ -58,14 +64,16 @@ public class ScanHistoryLedgerService {
                                     ScanHistoryLedgerProperties properties,
                                     ClientWorkspaceResolver clientWorkspaceResolver,
                                     GatewayRecordFactory gatewayRecordFactory,
-                                    ObjectProvider<ObjectMapper> objectMapperProvider) {
+                                    ObjectProvider<ObjectMapper> objectMapperProvider,
+                                    ObjectProvider<EvidenceMetadataEnricher> evidenceMetadataEnricherProvider) {
         this(
                 historyStore,
                 scanJobStoreProvider.getIfAvailable(InMemoryScanJobStore::new),
                 properties,
                 clientWorkspaceResolver,
                 gatewayRecordFactory,
-                objectMapperProvider.getIfAvailable(ObjectMapper::new)
+                objectMapperProvider.getIfAvailable(ObjectMapper::new),
+                evidenceMetadataEnricherProvider.orderedStream().toList()
         );
     }
 
@@ -75,6 +83,16 @@ public class ScanHistoryLedgerService {
                              ClientWorkspaceResolver clientWorkspaceResolver,
                              GatewayRecordFactory gatewayRecordFactory,
                              ObjectMapper objectMapper) {
+        this(historyStore, scanJobStore, properties, clientWorkspaceResolver, gatewayRecordFactory, objectMapper, List.of());
+    }
+
+    ScanHistoryLedgerService(ScanHistoryStore historyStore,
+                             ScanJobStore scanJobStore,
+                             ScanHistoryLedgerProperties properties,
+                             ClientWorkspaceResolver clientWorkspaceResolver,
+                             GatewayRecordFactory gatewayRecordFactory,
+                             ObjectMapper objectMapper,
+                             List<EvidenceMetadataEnricher> evidenceMetadataEnrichers) {
         this.historyStore = historyStore;
         this.scanJobStore = scanJobStore == null ? new InMemoryScanJobStore() : scanJobStore;
         this.properties = properties;
@@ -84,6 +102,11 @@ public class ScanHistoryLedgerService {
                 .copy()
                 .findAndRegisterModules()
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.evidenceMetadataEnrichers = evidenceMetadataEnrichers == null
+                ? List.of()
+                : evidenceMetadataEnrichers.stream()
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     @Autowired(required = false)
@@ -104,12 +127,14 @@ public class ScanHistoryLedgerService {
             return;
         }
         TargetDescriptor target = gatewayRecordFactory.optionalTarget(targetUrl, TargetDescriptor.Kind.WEB);
+        String operation = normalize(operationKind, "scan");
+        String status = "started";
         append(new ScanHistoryEntry(
                 newLedgerId(),
                 Instant.now(),
                 TYPE_SCAN_RUN,
-                normalize(operationKind, "scan"),
-                "started",
+                operation,
+                status,
                 ENGINE_ZAP,
                 target,
                 "direct",
@@ -120,7 +145,7 @@ public class ScanHistoryLedgerService {
                 null,
                 currentClientId(),
                 currentWorkspaceId(),
-                metadata
+                enrichedMetadata(TYPE_SCAN_RUN, operation, status, target, metadata)
         ));
     }
 
@@ -148,23 +173,27 @@ public class ScanHistoryLedgerService {
         if (artifact == null || !hasText(artifact.location())) {
             return;
         }
+        String operation = "report";
+        String status = "generated";
+        String artifactType = normalize(artifact.artifactType(), "report");
+        String mediaType = normalize(artifact.mediaType(), "application/octet-stream");
         append(new ScanHistoryEntry(
                 newLedgerId(),
                 Instant.now(),
                 TYPE_REPORT_ARTIFACT,
-                "report",
-                "generated",
+                operation,
+                status,
                 normalize(artifact.engineId(), ENGINE_ZAP),
                 artifact.target(),
                 "artifact",
                 artifact.location(),
                 artifact.artifactId(),
-                normalize(artifact.artifactType(), "report"),
+                artifactType,
                 artifact.location(),
-                normalize(artifact.mediaType(), "application/octet-stream"),
+                mediaType,
                 currentClientId(),
                 currentWorkspaceId(),
-                metadata
+                enrichedMetadata(TYPE_REPORT_ARTIFACT, operation, status, artifact.target(), metadata)
         ));
     }
 
@@ -842,6 +871,47 @@ public class ScanHistoryLedgerService {
         return historyStore.append(entry);
     }
 
+    private Map<String, String> enrichedMetadata(String evidenceType,
+                                                 String operationKind,
+                                                 String status,
+                                                 TargetDescriptor target,
+                                                 Map<String, String> metadata) {
+        Map<String, String> enriched = new LinkedHashMap<>();
+        putMetadata(enriched, metadata);
+        if (evidenceMetadataEnrichers.isEmpty()) {
+            return enriched;
+        }
+
+        String targetUrl = target == null ? null : target.baseUrl();
+        for (EvidenceMetadataEnricher enricher : evidenceMetadataEnrichers) {
+            try {
+                Map<String, String> extensionMetadata = enricher.enrichEvidenceMetadata(new EvidenceMetadataRequest(
+                        evidenceType,
+                        operationKind,
+                        status,
+                        targetUrl,
+                        enriched
+                ));
+                putMetadata(enriched, extensionMetadata);
+            } catch (RuntimeException e) {
+                log.warn("Evidence metadata enricher {} failed for evidence type {} and status {}; skipping provider",
+                        enricher.getClass().getName(), evidenceType, status, e);
+            }
+        }
+        return enriched;
+    }
+
+    private void putMetadata(Map<String, String> target, Map<String, String> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        source.forEach((key, value) -> {
+            if (hasText(key) && value != null) {
+                target.putIfAbsent(key.trim(), value);
+            }
+        });
+    }
+
     private ScanHistoryEntry loadEntry(String entryId) {
         if (entryId.startsWith("job:")) {
             String jobId = entryId.substring("job:".length());
@@ -914,12 +984,14 @@ public class ScanHistoryLedgerService {
         if (job.getType().name().endsWith("_AS_USER")) {
             metadata.put("authenticated", "true");
         }
+        String operation = job.getType().name().toLowerCase(Locale.ROOT);
+        String status = job.getStatus().name().toLowerCase(Locale.ROOT);
         return new ScanHistoryEntry(
                 "job:" + job.getId(),
                 effectiveRecordedAt(job),
                 TYPE_SCAN_JOB,
-                job.getType().name().toLowerCase(Locale.ROOT),
-                job.getStatus().name().toLowerCase(Locale.ROOT),
+                operation,
+                status,
                 ENGINE_ZAP,
                 target,
                 "queue",
@@ -930,7 +1002,7 @@ public class ScanHistoryLedgerService {
                 null,
                 clientId,
                 clientWorkspaceResolver.resolveWorkspaceId(clientId),
-                metadata
+                enrichedMetadata(TYPE_SCAN_JOB, operation, status, target, metadata)
         );
     }
 

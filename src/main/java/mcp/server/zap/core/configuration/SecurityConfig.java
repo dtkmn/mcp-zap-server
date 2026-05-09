@@ -323,7 +323,7 @@ public class SecurityConfig {
 
             // Check token type
             if (!"access".equals(tokenType)) {
-                log.warn("Invalid token type for API access: {}", tokenType);
+                log.warn("Invalid token type for API access");
                 observabilityService.recordAuthentication(
                         authMethod,
                         "failure",
@@ -337,7 +337,7 @@ public class SecurityConfig {
 
             // Check blacklist
             if (tokenBlacklistService.isBlacklisted(tokenId)) {
-                log.warn("Attempt to use blacklisted token: {}", tokenId);
+                log.warn("Attempt to use revoked token");
                 observabilityService.recordAuthentication(
                         authMethod,
                         "failure",
@@ -361,7 +361,7 @@ public class SecurityConfig {
             return filterWithAuthentication(exchange, chain, authentication, authMethod);
 
         } catch (JwtException e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.warn("JWT validation failed");
             observabilityService.recordAuthentication(
                     authMethod,
                     "failure",

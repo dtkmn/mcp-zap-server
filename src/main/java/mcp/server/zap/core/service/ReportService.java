@@ -6,7 +6,7 @@ import mcp.server.zap.core.gateway.EngineReportAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.ReportArtifactBoundary;
+import mcp.server.zap.extension.api.protection.ReportArtifactBoundary;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -221,14 +221,38 @@ public class ReportService {
         if (reportArtifactBoundary == null) {
             return workspaceScopedDirectory(configuredReportRoot);
         }
-        return reportArtifactBoundary.resolveWriteDirectory(configuredReportRoot).toAbsolutePath().normalize();
+        return requireDirectoryUnderConfiguredRoot(
+                configuredReportRoot,
+                reportArtifactBoundary.resolveWriteDirectory(configuredReportRoot),
+                "write"
+        );
     }
 
     private Path resolveReadReportDirectory(Path configuredReportRoot) {
         if (reportArtifactBoundary == null) {
             return workspaceScopedDirectory(configuredReportRoot);
         }
-        return reportArtifactBoundary.resolveReadDirectory(configuredReportRoot).toAbsolutePath().normalize();
+        return requireDirectoryUnderConfiguredRoot(
+                configuredReportRoot,
+                reportArtifactBoundary.resolveReadDirectory(configuredReportRoot),
+                "read"
+        );
+    }
+
+    private Path requireDirectoryUnderConfiguredRoot(Path configuredReportRoot,
+                                                     Path extensionDirectory,
+                                                     String accessMode) {
+        if (extensionDirectory == null) {
+            throw new IllegalArgumentException("Report artifact boundary returned null " + accessMode + " directory");
+        }
+        Path normalizedRoot = configuredReportRoot.toAbsolutePath().normalize();
+        Path normalizedDirectory = extensionDirectory.toAbsolutePath().normalize();
+        if (!normalizedDirectory.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException(
+                    "Report artifact boundary " + accessMode + " directory must stay within the configured report directory"
+            );
+        }
+        return normalizedDirectory;
     }
 
     private Path workspaceScopedDirectory(Path configuredReportRoot) {

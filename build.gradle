@@ -209,10 +209,31 @@ tasks.register('verifyExtensionApiPublication') {
     }
 }
 
+tasks.register('standalonePolicyMetadataExtensionJar', GradleBuild) {
+    group = 'verification'
+    description = 'Builds the standalone sample extension against the staged extension API publication.'
+    dependsOn project.tasks.named('verifyExtensionApiPublication')
+    dir = file('examples/extensions/standalone-policy-metadata-extension')
+    tasks = ['clean', 'jar']
+    startParameter.projectProperties = [
+            extensionApiVersion       : project.version.toString(),
+            extensionApiRepositoryUrl : layout.buildDirectory.dir('extension-api-publication').get().asFile.absolutePath
+    ]
+}
+
+tasks.register('cleanStandalonePolicyMetadataExtensionOutput', Delete) {
+    group = 'verification'
+    description = 'Removes generated output from the standalone sample extension.'
+    delete file('examples/extensions/standalone-policy-metadata-extension/build')
+    delete file('examples/extensions/standalone-policy-metadata-extension/.gradle')
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     dependsOn tasks.named('extensionApiJar')
     dependsOn tasks.named('samplePolicyMetadataExtensionJar')
+    dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
+    finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')
 }
 
 tasks.named('check') {

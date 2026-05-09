@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 class StandaloneExtensionExampleArchitectureTest {
 
     private static final Path GITIGNORE = Path.of(".gitignore");
+    private static final Path ROOT_BUILD = Path.of("build.gradle");
     private static final Path SAMPLE_ROOT = Path.of("examples/extensions/standalone-policy-metadata-extension");
     private static final Path SAMPLE_BUILD = SAMPLE_ROOT.resolve("build.gradle");
     private static final Path SAMPLE_SOURCE_ROOT = SAMPLE_ROOT.resolve("src/main/java");
@@ -24,9 +25,19 @@ class StandaloneExtensionExampleArchitectureTest {
 
     @Test
     void standaloneSampleDependsOnExtensionApiArtifactOnly() throws IOException {
+        String rootBuild = Files.readString(ROOT_BUILD);
         String build = Files.readString(SAMPLE_BUILD);
         String metadata = Files.readString(SAMPLE_METADATA);
         String autoConfigurationImports = Files.readString(SAMPLE_AUTO_CONFIGURATION_IMPORTS);
+
+        assertThat(rootBuild)
+                .contains("tasks.register('standalonePolicyMetadataExtensionJar', GradleBuild)")
+                .contains("dependsOn project.tasks.named('verifyExtensionApiPublication')")
+                .contains("dir = file('examples/extensions/standalone-policy-metadata-extension')")
+                .contains("tasks = ['clean', 'jar']")
+                .contains("extensionApiRepositoryUrl")
+                .contains("dependsOn tasks.named('standalonePolicyMetadataExtensionJar')")
+                .contains("finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')");
 
         assertThat(build)
                 .contains("id 'java-library'")

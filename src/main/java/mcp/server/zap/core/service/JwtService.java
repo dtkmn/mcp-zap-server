@@ -118,7 +118,7 @@ public class JwtService {
         try {
             return jwtDecoder.decode(token);
         } catch (JwtException e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.warn("JWT validation failed");
             throw e;
         }
     }

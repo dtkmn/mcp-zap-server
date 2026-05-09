@@ -463,7 +463,7 @@ public class ScanJobQueueServiceTest {
     @Test
     void queuedAjaxSpiderUsesSharedJobLifecycle() {
         when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent("ajax-spider:1")).thenReturn(0, 100);
+        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(0, 100);
 
         String response = service.queueAjaxSpiderScan("http://example.com/spa", "ajax-req-1");
         String jobId = extractJobId(response);
@@ -480,14 +480,14 @@ public class ScanJobQueueServiceTest {
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
         verify(ajaxSpiderService).startAjaxSpiderJob("http://example.com/spa");
-        verify(ajaxSpiderService, times(2)).getAjaxSpiderProgressPercent("ajax-spider:1");
+        verify(ajaxSpiderService, times(2)).getAjaxSpiderProgressPercent();
     }
 
     @Test
     void onlyOneAjaxSpiderJobStartsAtATimeEvenWhenSpiderCapacityAllowsMore() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(5);
         when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1", "ajax-spider:2");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent("ajax-spider:1")).thenReturn(0, 100);
+        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(0, 100);
 
         String firstJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-1", "ajax-1"));
         String secondJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-2", "ajax-2"));

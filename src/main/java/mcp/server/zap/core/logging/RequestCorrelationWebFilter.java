@@ -81,7 +81,7 @@ public class RequestCorrelationWebFilter implements WebFilter, Ordered {
                 : 0;
         String status = statusCode > 0 ? Integer.toString(statusCode) : "unknown";
 
-        observabilityService.recordHttpRequest(method, path, statusCode, clientId, workspaceId, duration);
+        observabilityService.recordHttpRequest(method, path, statusCode, clientId, duration);
 
         try (MDC.MDCCloseable ignoredCorrelation = MDC.putCloseable(RequestLogContext.CORRELATION_ID_MDC_KEY, correlationId);
              MDC.MDCCloseable ignoredClient = MDC.putCloseable(RequestLogContext.CLIENT_ID_MDC_KEY, clientId);

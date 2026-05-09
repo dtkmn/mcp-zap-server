@@ -35,7 +35,6 @@ public class ObservabilityService {
                                   String path,
                                   int status,
                                   String clientId,
-                                  String workspaceId,
                                   Duration duration) {
         Timer.builder("mcp.zap.http.requests")
                 .description("HTTP request duration for MCP, auth, and actuator flows")

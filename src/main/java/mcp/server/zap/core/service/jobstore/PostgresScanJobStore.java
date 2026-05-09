@@ -337,10 +337,9 @@ public class PostgresScanJobStore implements ScanJobStore {
                         return Optional.empty();
                     }
 
-                    ScanJobStatus priorStatus = current.getStatus();
                     ScanJob updated = Objects.requireNonNull(updater.apply(current),
                             "Claimed scan job updater must not return null");
-                    normalizeQueuePositionTransition(connection, updated, priorStatus);
+                    normalizeQueuePositionTransition(connection, updated);
                     upsertJob(connection, updated);
                     connection.commit();
                     return Optional.of(updated);
@@ -649,7 +648,7 @@ public class PostgresScanJobStore implements ScanJobStore {
         return activeFamily ? "?, ?" : "?, ?, ?";
     }
 
-    private void normalizeQueuePositionTransition(Connection connection, ScanJob job, ScanJobStatus priorStatus) throws Exception {
+    private void normalizeQueuePositionTransition(Connection connection, ScanJob job) throws Exception {
         if (job.getStatus() != ScanJobStatus.QUEUED) {
             job.assignQueuePosition(0);
             return;

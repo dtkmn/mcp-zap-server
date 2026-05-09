@@ -55,7 +55,7 @@ public class ScanJobRuntimeExecutor {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.getSpiderScanProgressPercent(scanId);
-            case AJAX_SPIDER -> requireAjaxSpiderService().getAjaxSpiderProgressPercent(scanId);
+            case AJAX_SPIDER -> requireAjaxSpiderService().getAjaxSpiderProgressPercent();
         };
     }
 
@@ -63,7 +63,7 @@ public class ScanJobRuntimeExecutor {
         switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.stopActiveScanJob(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.stopSpiderScanJob(scanId);
-            case AJAX_SPIDER -> requireAjaxSpiderService().stopAjaxSpiderJob(scanId);
+            case AJAX_SPIDER -> requireAjaxSpiderService().stopAjaxSpiderJob();
         }
     }
 

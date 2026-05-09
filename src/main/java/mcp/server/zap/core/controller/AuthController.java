@@ -80,7 +80,7 @@ public class AuthController {
         String accessToken = jwtService.generateAccessToken(client.getClientId(), client.getScopes());
         String refreshToken = jwtService.generateRefreshToken(client.getClientId());
         
-        log.info("Generated tokens for client: {}", client.getClientId());
+        log.info("Generated token pair");
         
         TokenResponse response = TokenResponse.builder()
                 .accessToken(accessToken)
@@ -114,7 +114,7 @@ public class AuthController {
                     : Instant.now().plusSeconds(60);
 
             if (!"refresh".equals(tokenType)) {
-                log.warn("Invalid token type for refresh: {}", tokenType);
+                log.warn("Invalid token type for refresh");
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
 
@@ -129,7 +129,7 @@ public class AuthController {
                     .findFirst();
             
             if (clientOpt.isEmpty()) {
-                log.warn("Client not found for refresh token: {}", clientId);
+                log.warn("Client not found for refresh token");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
@@ -137,7 +137,7 @@ public class AuthController {
 
             // Refresh token is one-time-use: consume current token before issuing the next one.
             if (!tokenBlacklistService.consumeTokenForOneTimeUse(tokenId, expiresAt)) {
-                log.warn("Refresh token replay detected for client {} token {}", clientId, tokenId);
+                log.warn("Refresh token replay detected");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
@@ -145,7 +145,7 @@ public class AuthController {
             String newAccessToken = jwtService.generateAccessToken(client.getClientId(), client.getScopes());
             String newRefreshToken = jwtService.generateRefreshToken(client.getClientId());
             
-            log.info("Refreshed access token for client: {}", clientId);
+            log.info("Refreshed access token");
             
             TokenResponse response = TokenResponse.builder()
                     .accessToken(newAccessToken)
@@ -159,7 +159,7 @@ public class AuthController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Error refreshing token: {}", e.getMessage());
+            log.error("Error refreshing token");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
     }
@@ -186,14 +186,14 @@ public class AuthController {
                     : Instant.now().plusSeconds(60);
             tokenBlacklistService.blacklistToken(tokenId, expiresAt);
 
-            log.info("Revoked {} token for client: {}", jwt.getClaimAsString("type"), jwt.getSubject());
+            log.info("Revoked token");
             return ResponseEntity.ok(Map.of(
                     "revoked", true,
                     "tokenId", tokenId,
                     "expiresAt", expiresAt.toString()
             ));
         } catch (JwtException e) {
-            log.warn("Invalid token provided for revocation: {}", e.getMessage());
+            log.warn("Invalid token provided for revocation");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("revoked", false, "error", "Invalid or expired JWT token"));
         }
@@ -239,7 +239,7 @@ public class AuthController {
         } catch (Exception e) {
             return ResponseEntity.ok(Map.of(
                     "valid", false,
-                    "error", e.getMessage()
+                    "error", "Invalid or expired JWT token"
             ));
         }
     }

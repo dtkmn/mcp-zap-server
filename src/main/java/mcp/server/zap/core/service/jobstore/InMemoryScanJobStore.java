@@ -184,13 +184,12 @@ public class InMemoryScanJobStore implements ScanJobStore {
                 return Optional.empty();
             }
 
-            ScanJobStatus priorStatus = job.getStatus();
             ScanJob updated = updater.apply(job);
             if (updated == null) {
                 updated = job;
             }
 
-            normalizeQueuePositionTransition(updated, priorStatus);
+            normalizeQueuePositionTransition(updated);
             jobs.put(jobId, updated);
             return Optional.of(updated);
         } finally {
@@ -259,7 +258,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
     }
 
-    private void normalizeQueuePositionTransition(ScanJob job, ScanJobStatus priorStatus) {
+    private void normalizeQueuePositionTransition(ScanJob job) {
         if (job.getStatus() != ScanJobStatus.QUEUED) {
             job.assignQueuePosition(0);
             return;

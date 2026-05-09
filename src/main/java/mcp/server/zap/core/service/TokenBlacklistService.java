@@ -34,7 +34,7 @@ public class TokenBlacklistService {
             return;
         }
         tokenRevocationStore.revoke(tokenId, expirationTime);
-        log.info("Token {} added to blacklist", tokenId);
+        log.info("Token added to blacklist");
     }
 
     /**
@@ -50,7 +50,7 @@ public class TokenBlacklistService {
         }
         boolean consumed = tokenRevocationStore.revokeIfActive(tokenId, expirationTime);
         if (!consumed) {
-            log.warn("Detected replay/already-revoked token usage: {}", tokenId);
+            log.warn("Detected replay or already-revoked token usage");
         }
         return consumed;
     }

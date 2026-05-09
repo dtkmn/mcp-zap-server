@@ -30,6 +30,8 @@ mcp.server.zap:mcp-zap-extension-api:<version>
 ```
 
 Treat that coordinate as project-local until a public repository is declared.
+The public-preview coordinate decision is documented below; do not assume the
+local staged group is the public Maven group.
 
 ## Release Stages
 
@@ -44,7 +46,7 @@ support debt before the product has earned trust.
 
 ## Repository Policy
 
-Preferred target for stable public releases: Maven Central.
+Preferred target for public-preview and stable public releases: Maven Central.
 
 Reason: external builders should not need private credentials, GitHub account
 permissions, or a custom company package registry just to compile an OSS
@@ -53,14 +55,62 @@ extension.
 Allowed repositories by stage:
 
 - `experimental-local`: `build/extension-api-publication` only
-- `public-preview`: Maven Central or another public unauthenticated Maven
-  repository
+- `public-preview`: Maven Central under a verified public namespace
 - `stable`: Maven Central
 - private enterprise-only artifacts: private registry is allowed, but those
   artifacts must not be required by OSS extensions
 
 The release workflow must not publish the API from any non-public source tree
 unless the OSS export has already proven the same source is public-safe.
+
+## Public-Preview Publishing Decision
+
+Decision for the first public preview:
+
+- target repository: Maven Central
+- target public coordinate: `io.github.dtkmn:mcp-zap-extension-api:<version>`
+- local staged coordinate remains:
+  `mcp.server.zap:mcp-zap-extension-api:<version>`
+- namespace requirement: `io.github.dtkmn` must be verified in the Central
+  Portal before publication
+- artifact ID: `mcp-zap-extension-api`
+- Java package: `mcp.server.zap.extension.api`
+
+Do not publish `mcp.server.zap:mcp-zap-extension-api` publicly unless that
+namespace is explicitly verified and the release policy is updated first. The
+current `mcp.server.zap` group is useful for local proof because it matches the
+project package, but it is not a responsible public Maven coordinate unless the
+namespace can be owned.
+
+The public-preview release workflow must be wired from the OSS-safe source tree
+and must produce the Central-required publication shape:
+
+- main API JAR
+- sources JAR
+- Javadoc JAR
+- POM with required metadata
+- artifact signatures or the active Central-required signing mechanism
+- release notes that mark the artifact as `public-preview`
+
+Use the Central Publisher Portal path, not GitHub Packages, for the public API
+artifact. GitHub Packages is fine for private experiments, but it teaches the
+wrong developer path because unauthenticated OSS builders should be able to
+resolve the API with normal Maven tooling.
+
+Preview wording must be exact:
+
+> `mcp-zap-extension-api` is public preview. It is intended for early extension
+> builders. Best-effort source compatibility is expected inside the same minor
+> line, but binary compatibility is not stable yet and breaking changes may
+> still ship with release notes.
+
+Preview wording must not imply:
+
+- stable binary compatibility
+- runtime plugin-directory discovery
+- marketplace installation
+- runtime multi-engine support
+- public engine adapter contracts
 
 ## Versioning Policy
 
@@ -98,6 +148,8 @@ Breaking changes include:
 Before public preview, CI must prove:
 
 - `verifyExtensionApiPublication` passes
+- `verifyPublicPreviewExtensionApiPublication` passes with the planned
+  `io.github.dtkmn:mcp-zap-extension-api` coordinate
 - the staged POM has no runtime dependencies or dependency management
 - the staged JAR contains only `mcp/server/zap/extension/api/**` plus manifest
   entries
@@ -134,10 +186,14 @@ extension compiled against an older published API.
 Before publishing any public extension API artifact:
 
 - confirm the artifact comes from the OSS-safe source tree
+- confirm the Maven Central namespace and public coordinate are verified
 - run `./gradlew verifyExtensionApiPublication`
-- run the standalone extension build against the staged publication
+- run `./gradlew verifyPublicPreviewExtensionApiPublication`
+- confirm the standalone extension build resolves the API from the staged
+  local and public-preview repositories, not Maven Central
 - inspect the staged POM and JAR shape
 - run the external-extension runtime wiring compatibility test
+- generate the sources JAR, Javadoc JAR, POM metadata, and required signatures
 - update `EXTENSION_API_COMPATIBILITY.md`
 - update release notes with the API stability level
 - confirm no enterprise package, private path, private workflow, or private

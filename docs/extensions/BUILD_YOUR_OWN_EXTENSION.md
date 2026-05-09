@@ -15,7 +15,7 @@ Supported today:
 - a dedicated `mcp-zap-extension-api` artifact is built by the project
 - the repository contains a compile-checked sample extension
 - the sample compiles against the API artifact instead of the full runtime
-- the sample packages separately from the core runtime
+- the sample packages separately from the gateway runtime
 - the sample does not contain core, enterprise, or application classes
 - compatibility tests prove the sample JAR wires through Spring Boot
   auto-configuration
@@ -40,19 +40,19 @@ The desired shape is:
 ```mermaid
 flowchart LR
   Api["mcp-zap-extension-api<br/>small public contract artifact"]
-  Core["mcp-zap-server<br/>gateway runtime"]
+  GatewayRuntime["mcp-zap-server<br/>current OSS gateway runtime"]
   Extension["Your extension<br/>separate repository"]
-  Runtime["Runtime image<br/>core plus extension JAR"]
+  Runtime["Runtime image<br/>gateway runtime plus extension JAR"]
 
-  Core --> Api
+  GatewayRuntime --> Api
   Extension -->|"compile against"| Api
-  Runtime --> Core
+  Runtime --> GatewayRuntime
   Runtime --> Extension
 ```
 
 In that model:
 
-- core owns the MCP tools and runtime orchestration
+- the current OSS gateway runtime owns the MCP tools and runtime orchestration
 - the API artifact owns small stable extension contracts
 - your extension implements one or more contracts
 - the runtime loads your extension through classpath-based Spring wiring
@@ -75,7 +75,8 @@ Bad first extensions:
 - tenant isolation claims without authz, durable store, and evidence tests
 
 Do not start with Nuclei, Semgrep, Burp, or runtime engine switching. Engine
-adapters need the engine extension ADR first.
+adapters must satisfy the accepted engine extension ADR gates before any
+runtime implementation.
 
 ## Standalone Project Shape
 
@@ -121,6 +122,9 @@ plugins {
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
         .orElse('0.7.0')
         .get()
+def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
+        .orElse('mcp.server.zap')
+        .get()
 def extensionApiRepositoryUrl = providers.gradleProperty('extensionApiRepositoryUrl')
         .orElse('../mcp-zap-server/build/extension-api-publication')
         .get()
@@ -133,14 +137,14 @@ repositories {
             }
         }
         filter {
-            includeGroup 'mcp.server.zap'
+            includeGroup extensionApiGroup
         }
     }
     mavenCentral()
 }
 
 dependencies {
-    compileOnly "mcp.server.zap:mcp-zap-extension-api:${extensionApiVersion}"
+    compileOnly "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"
     compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.6'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'
@@ -163,6 +167,16 @@ This coordinate describes the current staged publication shape. Treat it as
 experimental until the project publishes a public artifact repository and
 declares a stable compatibility level. The group may still change before a
 public artifact is published.
+
+For public preview, the planned external coordinate is:
+
+```text
+io.github.dtkmn:mcp-zap-extension-api:<version>
+```
+
+That coordinate is not published yet. Keep using the staged
+`extensionApiRepositoryUrl` flow until the release policy says the public
+preview artifact is available on Maven Central.
 
 The explicit Spring, JUnit, and AssertJ versions are shown so those third-party
 dependencies are resolvable without relying on this repository's build. A
@@ -232,7 +246,7 @@ environment-specific IDs.
 
 The intended first loading model is deliberately simple:
 
-1. build the core gateway runtime
+1. build the current OSS gateway runtime
 2. build the extension JAR
 3. build a custom runtime image or launch profile that puts the extension JAR on
    the application classpath
@@ -256,7 +270,7 @@ An extension should pass these checks before anyone treats it as credible:
 - compiles against the extension API artifact only
 - imports no `mcp.server.zap.enterprise.*` packages
 - imports no ZAP-native APIs unless it is an approved engine adapter
-- does not copy core runtime classes into the extension JAR
+- does not copy gateway runtime classes into the extension JAR
 - does not declare surprise public MCP tools
 - has tests for allow, deny, abstain, or enrichment behavior
 - has a compatibility test proving the extension bean wires into the gateway
@@ -293,6 +307,7 @@ artifact publishing are promoted.
 Before marketing the project as a developer-ready extension platform, finish:
 
 - public API artifact publishing
+- Maven Central namespace verification and signed public-preview release
 - external standalone sample repository
 - compatibility policy graduation beyond experimental
 - external sample extension repository or template

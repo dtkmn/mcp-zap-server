@@ -21,8 +21,18 @@ The Maven publication is:
 mcp.server.zap:mcp-zap-extension-api:<version>
 ```
 
-That group is the current project-local coordinate. Treat it as experimental
-until a public artifact repository and support window are declared.
+That group is the current project-local coordinate for the staged publication.
+Treat it as experimental and local-only.
+
+The planned public-preview coordinate is:
+
+```text
+io.github.dtkmn:mcp-zap-extension-api:<version>
+```
+
+The public-preview coordinate must not be published until the Maven Central
+namespace is verified and the release workflow can produce the required signed
+artifact set from the OSS-safe source tree.
 
 The release rules for moving beyond local staging live in
 [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md).
@@ -70,7 +80,7 @@ The API artifact must not expose:
 - ZAP-native APIs
 - MCP tool implementation classes
 - queue or history boundaries that require mutable core model objects
-- engine adapter contracts before the engine extension ADR is accepted
+- engine adapter contracts before the engine extension ADR gates are satisfied
 
 ## Stability Level
 
@@ -100,9 +110,12 @@ policy checklist is satisfied.
 Some boundaries are intentionally still internal.
 
 `ScanJobAccessBoundary` and `ScanHistoryAccessBoundary` currently operate on
-core runtime types. Exporting those signatures would force external builders to
-depend on mutable implementation models. They should only move into the public
-API after safe view DTOs exist.
+mutable gateway runtime implementation types. Exporting those signatures would
+force external builders to depend on implementation models. They should only
+move into the public API after safe view DTOs exist.
 
-Engine adapter contracts are also not part of the first API artifact. They need
-the engine extension ADR first.
+Engine adapter contracts are also not part of the first API artifact. The ADR
+now exists, but that is not enough. Engine contracts stay internal until a real
+candidate second-engine design satisfies the ADR gates: capability matrix,
+fail-closed tests, target-scope filtering, queue/report fit, external-adapter
+compatibility proof, and release-policy graduation.

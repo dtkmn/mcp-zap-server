@@ -20,9 +20,9 @@ if (rootBuildFile.isFile()) {
     }
 }
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion).get()
-def extensionApiGroup = providers.gradleProperty('extensionApiGroup').orElse('mcp.server.zap').get()
+def extensionApiGroup = providers.gradleProperty('extensionApiGroup').orElse('io.github.dtkmn').get()
 def extensionApiCoordinate = "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"
-def defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-publication').toURI().toString()
+def defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-public-preview-publication').toURI().toString()
 def extensionApiRepositoryUrl = providers.gradleProperty('extensionApiRepositoryUrl')
         .orElse(defaultExtensionApiRepositoryUrl)
         .get()

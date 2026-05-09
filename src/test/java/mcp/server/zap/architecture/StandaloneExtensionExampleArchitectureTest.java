@@ -36,6 +36,7 @@ class StandaloneExtensionExampleArchitectureTest {
                 .contains("dir = file('examples/extensions/standalone-policy-metadata-extension')")
                 .contains("tasks = ['clean', 'jar']")
                 .contains("extensionApiRepositoryUrl")
+                .contains("extensionApiGroup         : 'io.github.dtkmn'")
                 .contains("dependsOn tasks.named('standalonePolicyMetadataExtensionJar')")
                 .contains("finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')");
 
@@ -44,8 +45,8 @@ class StandaloneExtensionExampleArchitectureTest {
                 .contains("rootBuildFile = file('../../../build.gradle')")
                 .contains("defaultExtensionApiVersion = matcher.group(1)")
                 .contains("providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion)")
-                .contains("defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-publication')")
-                .contains("providers.gradleProperty('extensionApiGroup').orElse('mcp.server.zap')")
+                .contains("defaultExtensionApiRepositoryUrl = file('../../../build/extension-api-public-preview-publication')")
+                .contains("providers.gradleProperty('extensionApiGroup').orElse('io.github.dtkmn')")
                 .contains("providers.gradleProperty('extensionApiRepositoryUrl')")
                 .contains("extensionApiCoordinate = \"${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}\"")
                 .contains("exclusiveContent")

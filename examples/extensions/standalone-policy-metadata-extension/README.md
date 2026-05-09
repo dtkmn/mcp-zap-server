@@ -6,7 +6,8 @@ It is intentionally separate from the root build. It does not depend on the
 gateway application, core services, enterprise packages, or ZAP-native APIs.
 It depends on only:
 
-- `mcp.server.zap:mcp-zap-extension-api` from the local staged publication
+- `io.github.dtkmn:mcp-zap-extension-api` from the local staged public-preview
+  publication
 - Spring Boot auto-configuration annotations
 - test libraries
 
@@ -15,7 +16,7 @@ It depends on only:
 First verify the local experimental API publication from the repository root:
 
 ```bash
-./gradlew verifyExtensionApiPublication
+./gradlew verifyPublicPreviewExtensionApiPublication
 ```
 
 Then build the standalone sample:
@@ -26,16 +27,15 @@ Then build the standalone sample:
 
 Inside this repository, the sample derives the default API version from the
 root `build.gradle` and reads the API artifact from
-`build/extension-api-publication` so the compatibility proof tracks the current
-project version without relying on stale `mavenLocal()` state. Outside this
-repository, pass `-PextensionApiVersion=<version>` and
+`build/extension-api-public-preview-publication` so the compatibility proof
+tracks the current project version without relying on stale `mavenLocal()`
+state. Outside this repository, pass `-PextensionApiVersion=<version>` and
 `-PextensionApiRepositoryUrl=<maven-repository-url>` when you want to target a
 specific API release.
 
 This is still an experimental path. It proves the decoupled extension shape,
 not a public binary compatibility promise.
 
-The planned public-preview coordinate is
-`io.github.dtkmn:mcp-zap-extension-api`. That artifact is not published yet;
-this sample should keep using the staged repository until the release policy
-marks public preview as available.
+The planned public-preview coordinate is already used in the staged repository.
+That artifact is not published yet; this sample should keep using the staged
+repository until the release policy marks public preview as available.

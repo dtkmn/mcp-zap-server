@@ -140,6 +140,10 @@ publishing {
             name = 'extensionApiStaging'
             url = layout.buildDirectory.dir('extension-api-publication').get().asFile.toURI()
         }
+        maven {
+            name = 'extensionApiPublicPreviewStaging'
+            url = layout.buildDirectory.dir('extension-api-public-preview-publication').get().asFile.toURI()
+        }
     }
     publications {
         extensionApi(MavenPublication) {
@@ -155,6 +159,64 @@ publishing {
                 }
             }
         }
+        extensionApiPublicPreview(MavenPublication) {
+            groupId = 'io.github.dtkmn'
+            artifactId = 'mcp-zap-extension-api'
+            artifact tasks.named('extensionApiJar')
+            pom {
+                name = 'MCP ZAP Extension API'
+                description = 'Experimental public extension contracts for MCP ZAP Server.'
+                withXml {
+                    def root = asNode()
+                    root.dependencyManagement?.each { root.remove(it) }
+                    root.dependencies?.each { root.remove(it) }
+                }
+            }
+        }
+    }
+}
+
+def verifyExtensionApiPublicationShape = { File publicationDir, String expectedGroupId ->
+    String apiVersion = project.version.toString()
+    File apiJar = new File(publicationDir, "mcp-zap-extension-api-${apiVersion}.jar")
+    File apiPom = new File(publicationDir, "mcp-zap-extension-api-${apiVersion}.pom")
+
+    [apiJar, apiPom].each { artifact ->
+        if (!artifact.isFile()) {
+            throw new GradleException("Expected extension API publication artifact is missing: ${artifact}")
+        }
+    }
+
+    String pomText = apiPom.text
+    if (!pomText.contains("<groupId>${expectedGroupId}</groupId>")) {
+        throw new GradleException("Extension API POM must publish expected groupId ${expectedGroupId}.")
+    }
+    if (pomText.contains('<dependencies>') || pomText.contains('<dependencyManagement>')) {
+        throw new GradleException('Extension API POM must not publish runtime dependencies or dependency management.')
+    }
+
+    List<String> unexpectedJarEntries = []
+    List<String> apiClasses = []
+    new java.util.zip.ZipFile(apiJar).withCloseable { jar ->
+        jar.entries().each { entry ->
+            String name = entry.name
+            boolean manifestEntry = name == 'META-INF/' || name == 'META-INF/MANIFEST.MF'
+            boolean apiEntry = name.startsWith('mcp/server/zap/extension/api/')
+            boolean apiParentDirectory = entry.isDirectory() && 'mcp/server/zap/extension/api/'.startsWith(name)
+
+            if (apiEntry && name.endsWith('.class')) {
+                apiClasses.add(name)
+            }
+            if (!manifestEntry && !apiEntry && !apiParentDirectory) {
+                unexpectedJarEntries.add(name)
+            }
+        }
+    }
+    if (!unexpectedJarEntries.isEmpty()) {
+        throw new GradleException("Extension API JAR contains non-public entries: ${unexpectedJarEntries.sort().take(20)}")
+    }
+    if (apiClasses.isEmpty()) {
+        throw new GradleException('Extension API JAR must contain public API classes.')
     }
 }
 
@@ -164,48 +226,11 @@ tasks.register('verifyExtensionApiPublication') {
     dependsOn tasks.named('publishExtensionApiPublicationToExtensionApiStagingRepository')
 
     doLast {
-        String apiVersion = project.version.toString()
         File publicationDir = layout.buildDirectory
-                .dir("extension-api-publication/mcp/server/zap/mcp-zap-extension-api/${apiVersion}")
+                .dir("extension-api-publication/mcp/server/zap/mcp-zap-extension-api/${project.version}")
                 .get()
                 .asFile
-        File apiJar = new File(publicationDir, "mcp-zap-extension-api-${apiVersion}.jar")
-        File apiPom = new File(publicationDir, "mcp-zap-extension-api-${apiVersion}.pom")
-
-        [apiJar, apiPom].each { artifact ->
-            if (!artifact.isFile()) {
-                throw new GradleException("Expected extension API publication artifact is missing: ${artifact}")
-            }
-        }
-
-        String pomText = apiPom.text
-        if (pomText.contains('<dependencies>') || pomText.contains('<dependencyManagement>')) {
-            throw new GradleException('Extension API POM must not publish runtime dependencies or dependency management.')
-        }
-
-        List<String> unexpectedJarEntries = []
-        List<String> apiClasses = []
-        new java.util.zip.ZipFile(apiJar).withCloseable { jar ->
-            jar.entries().each { entry ->
-                String name = entry.name
-                boolean manifestEntry = name == 'META-INF/' || name == 'META-INF/MANIFEST.MF'
-                boolean apiEntry = name.startsWith('mcp/server/zap/extension/api/')
-                boolean apiParentDirectory = entry.isDirectory() && 'mcp/server/zap/extension/api/'.startsWith(name)
-
-                if (apiEntry && name.endsWith('.class')) {
-                    apiClasses.add(name)
-                }
-                if (!manifestEntry && !apiEntry && !apiParentDirectory) {
-                    unexpectedJarEntries.add(name)
-                }
-            }
-        }
-        if (!unexpectedJarEntries.isEmpty()) {
-            throw new GradleException("Extension API JAR contains non-public entries: ${unexpectedJarEntries.sort().take(20)}")
-        }
-        if (apiClasses.isEmpty()) {
-            throw new GradleException('Extension API JAR must contain public API classes.')
-        }
+        verifyExtensionApiPublicationShape(publicationDir, 'mcp.server.zap')
     }
 }
 
@@ -228,6 +253,38 @@ tasks.register('cleanStandalonePolicyMetadataExtensionOutput', Delete) {
     delete file('examples/extensions/standalone-policy-metadata-extension/.gradle')
 }
 
+tasks.register('standalonePolicyMetadataExtensionPublicPreviewJar', Exec) {
+    group = 'verification'
+    description = 'Builds the standalone sample extension against the staged public-preview API coordinate.'
+    dependsOn project.tasks.named('publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository')
+    mustRunAfter tasks.named('test')
+    commandLine './gradlew',
+            '-p', 'examples/extensions/standalone-policy-metadata-extension',
+            'clean',
+            'jar',
+            '--no-daemon',
+            '--stacktrace',
+            "-PextensionApiGroup=io.github.dtkmn",
+            "-PextensionApiVersion=${project.version}",
+            "-PextensionApiRepositoryUrl=${layout.buildDirectory.dir('extension-api-public-preview-publication').get().asFile.absolutePath}"
+}
+
+tasks.register('verifyPublicPreviewExtensionApiPublication') {
+    group = 'verification'
+    description = 'Stages the planned public-preview extension API coordinate and verifies the standalone sample resolves it.'
+    dependsOn tasks.named('publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository')
+    dependsOn tasks.named('standalonePolicyMetadataExtensionPublicPreviewJar')
+    finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')
+
+    doLast {
+        File publicationDir = layout.buildDirectory
+                .dir("extension-api-public-preview-publication/io/github/dtkmn/mcp-zap-extension-api/${project.version}")
+                .get()
+                .asFile
+        verifyExtensionApiPublicationShape(publicationDir, 'io.github.dtkmn')
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
     dependsOn tasks.named('extensionApiJar')
@@ -238,6 +295,8 @@ tasks.named('test') {
 
 tasks.named('check') {
     dependsOn tasks.named('verifyExtensionApiPublication')
+    dependsOn tasks.named('verifyPublicPreviewExtensionApiPublication')
+    finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')
 }
 
 tasks.named('assemble') {

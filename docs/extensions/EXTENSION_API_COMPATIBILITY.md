@@ -18,19 +18,11 @@ build/libs/mcp-zap-extension-api-<version>.jar
 The Maven publication is:
 
 ```text
-mcp.server.zap:mcp-zap-extension-api:<version>
-```
-
-That group is the current project-local coordinate for the staged publication.
-Treat it as experimental and local-only.
-
-The planned public-preview coordinate is:
-
-```text
 io.github.dtkmn:mcp-zap-extension-api:<version>
 ```
 
-The public-preview coordinate must not be published until the Maven Central
+This is the planned public-preview coordinate, staged locally while the API is
+still experimental. It must not be published until the Maven Central
 namespace is verified and the release workflow can produce the required signed
 artifact set from the OSS-safe source tree.
 
@@ -49,7 +41,7 @@ Maven-style staging repository:
 The staged artifacts are written under:
 
 ```text
-build/extension-api-publication/mcp/server/zap/mcp-zap-extension-api/<version>/
+build/extension-api-public-preview-publication/io/github/dtkmn/mcp-zap-extension-api/<version>/
 ```
 
 This is a release gate, not an external publication. It proves the public JAR

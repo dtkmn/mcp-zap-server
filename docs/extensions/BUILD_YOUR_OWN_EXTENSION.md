@@ -123,10 +123,10 @@ def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
         .orElse('0.7.0')
         .get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
-        .orElse('mcp.server.zap')
+        .orElse('io.github.dtkmn')
         .get()
 def extensionApiRepositoryUrl = providers.gradleProperty('extensionApiRepositoryUrl')
-        .orElse('../mcp-zap-server/build/extension-api-publication')
+        .orElse('../mcp-zap-server/build/extension-api-public-preview-publication')
         .get()
 
 repositories {
@@ -157,18 +157,16 @@ tasks.named('test') {
 }
 ```
 
-First run `./gradlew verifyExtensionApiPublication` from the gateway repository
-so `build/extension-api-publication` exists. The `exclusiveContent` block is
-intentional: it prevents `mcp.server.zap:mcp-zap-extension-api` from resolving
-from Maven Central or a stale public mirror while this proof is supposed to use
-the freshly staged artifact.
+First run `./gradlew verifyPublicPreviewExtensionApiPublication` from the
+gateway repository so `build/extension-api-public-preview-publication` exists.
+The `exclusiveContent` block is intentional: it prevents
+`io.github.dtkmn:mcp-zap-extension-api` from resolving from Maven Central or a
+stale public mirror while this proof is supposed to use the freshly staged
+artifact.
 
-This coordinate describes the current staged publication shape. Treat it as
-experimental until the project publishes a public artifact repository and
-declares a stable compatibility level. The group may still change before a
-public artifact is published.
-
-For public preview, the planned external coordinate is:
+This coordinate describes the planned public-preview publication shape. Treat
+it as experimental until the project publishes a public artifact repository and
+declares a stable compatibility level:
 
 ```text
 io.github.dtkmn:mcp-zap-extension-api:<version>

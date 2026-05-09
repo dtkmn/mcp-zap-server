@@ -18,20 +18,22 @@ Current status: `experimental-local`.
 That means:
 
 - the project builds `mcp-zap-extension-api`
-- normal builds verify a local staged Maven publication
-- the standalone sample resolves the API from `build/extension-api-publication`
+- normal builds verify a local staged Maven publication using the planned
+  public-preview coordinate
+- the standalone sample resolves the API from
+  `build/extension-api-public-preview-publication`
 - no public artifact repository is promised
 - no third-party binary compatibility window is promised
 
-The current coordinate is:
+The staged coordinate is already the planned public-preview coordinate:
 
 ```text
-mcp.server.zap:mcp-zap-extension-api:<version>
+io.github.dtkmn:mcp-zap-extension-api:<version>
 ```
 
-Treat that coordinate as project-local until a public repository is declared.
-The public-preview coordinate decision is documented below; do not assume the
-local staged group is the public Maven group.
+Treat that coordinate as local-only until a public repository is declared. The
+coordinate is intentional: CI should prove the namespace builders will use
+later, even before Maven Central publication exists.
 
 ## Release Stages
 
@@ -54,7 +56,7 @@ extension.
 
 Allowed repositories by stage:
 
-- `experimental-local`: `build/extension-api-publication` only
+- `experimental-local`: `build/extension-api-public-preview-publication` only
 - `public-preview`: Maven Central under a verified public namespace
 - `stable`: Maven Central
 - private enterprise-only artifacts: private registry is allowed, but those
@@ -69,18 +71,14 @@ Decision for the first public preview:
 
 - target repository: Maven Central
 - target public coordinate: `io.github.dtkmn:mcp-zap-extension-api:<version>`
-- local staged coordinate remains:
-  `mcp.server.zap:mcp-zap-extension-api:<version>`
 - namespace requirement: `io.github.dtkmn` must be verified in the Central
   Portal before publication
 - artifact ID: `mcp-zap-extension-api`
 - Java package: `mcp.server.zap.extension.api`
 
-Do not publish `mcp.server.zap:mcp-zap-extension-api` publicly unless that
-namespace is explicitly verified and the release policy is updated first. The
-current `mcp.server.zap` group is useful for local proof because it matches the
-project package, but it is not a responsible public Maven coordinate unless the
-namespace can be owned.
+Do not publish under the Java package group as a Maven coordinate. The Java
+package can stay `mcp.server.zap.extension.api`, but the Maven group should use
+the verified public namespace builders can actually resolve.
 
 The public-preview release workflow must be wired from the OSS-safe source tree
 and must produce the Central-required publication shape:
@@ -147,9 +145,10 @@ Breaking changes include:
 
 Before public preview, CI must prove:
 
-- `verifyExtensionApiPublication` passes
-- `verifyPublicPreviewExtensionApiPublication` passes with the planned
+- `verifyExtensionApiPublication` passes for the staged
   `io.github.dtkmn:mcp-zap-extension-api` coordinate
+- `verifyPublicPreviewExtensionApiPublication` passes, including standalone
+  sample resolution from the staged public-preview repository
 - the staged POM has no runtime dependencies or dependency management
 - the staged JAR contains only `mcp/server/zap/extension/api/**` plus manifest
   entries
@@ -190,7 +189,7 @@ Before publishing any public extension API artifact:
 - run `./gradlew verifyExtensionApiPublication`
 - run `./gradlew verifyPublicPreviewExtensionApiPublication`
 - confirm the standalone extension build resolves the API from the staged
-  local and public-preview repositories, not Maven Central
+  public-preview repository, not Maven Central
 - inspect the staged POM and JAR shape
 - run the external-extension runtime wiring compatibility test
 - generate the sources JAR, Javadoc JAR, POM metadata, and required signatures

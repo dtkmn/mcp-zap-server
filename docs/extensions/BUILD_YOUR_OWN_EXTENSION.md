@@ -120,7 +120,7 @@ plugins {
 }
 
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
-        .orElse('0.7.0')
+        .orElse('0.8.0')
         .get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
         .orElse('io.github.dtkmn')

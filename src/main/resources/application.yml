@@ -3,7 +3,7 @@ spring:
     mcp:
       server:
         name: mcp-zap-server
-        version: 0.7.0
+        version: 0.8.0
         instructions: "Use this server to interact with the ZAP API for security testing."
         protocol: streamable
         resource-change-notification: true

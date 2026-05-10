@@ -21,7 +21,7 @@ MCP_SECURITY_MODE=none
 MCP_SECURITY_MODE=api-key
 MCP_API_KEY=your-secure-key-here
 
-# Option 3: JWT (production)
+# Option 3: JWT (shared or production-oriented deployments)
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
 JWT_SECRET=your-256-bit-secret-minimum-32-chars
@@ -76,7 +76,7 @@ TOKEN=$(curl -X POST http://localhost:7456/auth/token \
 curl -H "Authorization: Bearer $TOKEN" http://localhost:7456/mcp
 ```
 
-✅ **Production ready**
+✅ **Best for shared deployments**
 
 ## 🔄 Quick Comparison
 
@@ -85,7 +85,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:7456/mcp
 | Setup Time | 10 sec | 30 sec | 60 sec |
 | Security | ❌ None | ⚠️ Basic | ✅ Strong |
 | Token Expiry | N/A | Never | 1 hour |
-| Use Case | Dev | Internal | Production |
+| Use Case | Dev | Internal | Shared deployments |
 
 ## 📚 Need More?
 
@@ -100,7 +100,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:7456/mcp
 - **Mode `jwt`**: Token might be expired, get new one
 
 ### "Security is disabled" warning
-- You're in `none` mode - change to `api-key` or `jwt` for production
+- You're in `none` mode - change to `api-key` or `jwt` for shared deployments
 
 ### Environment variables not loading
 ```bash
@@ -113,8 +113,8 @@ docker-compose up -d
 
 - **Local Dev**: Use `none` mode
 - **Docker Compose**: Use `api-key` mode  
-- **Cloud/Production**: Use `jwt` mode
+- **Cloud/shared deployments**: Use `jwt` mode
 
 ---
 
-**Time Investment**: 1 minute setup → Production-grade security ✨
+**Time Investment**: 1 minute setup -> stronger deployment posture

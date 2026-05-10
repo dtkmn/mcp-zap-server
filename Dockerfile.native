@@ -16,6 +16,7 @@ RUN ./gradlew nativeCompile --no-daemon --parallel --max-workers=8
 
 # Stage 2: Runtime image
 FROM debian:bookworm-slim
+LABEL io.modelcontextprotocol.server.name="io.github.dtkmn/mcp-zap-server"
 
 # Install required runtime libraries
 RUN apt-get update && \
@@ -37,7 +38,7 @@ RUN groupadd -g 1001 appuser && \
 
 USER appuser
 
-EXPOSE 9092
+EXPOSE 7456
 
 # Healthcheck
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 --start-period=10s \

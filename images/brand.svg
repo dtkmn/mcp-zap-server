@@ -16,19 +16,32 @@
       <stop offset="0" stop-color="#FFF07A"/>
       <stop offset="1" stop-color="#FFB02E"/>
     </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="22" flood-color="#020713" flood-opacity="0.45"/>
+    </filter>
   </defs>
+
   <rect width="1024" height="1024" rx="192" fill="url(#bg)"/>
-  <path d="M512 106c106 67 219 111 339 130v220c0 217-126 376-339 466-213-90-339-249-339-466V236c120-19 233-63 339-130Z" fill="url(#shield)"/>
+
+  <path d="M512 106c106 67 219 111 339 130v220c0 217-126 376-339 466-213-90-339-249-339-466V236c120-19 233-63 339-130Z" fill="url(#shield)" filter="url(#soft-shadow)"/>
+  <path d="M512 160c91 53 184 89 280 108v182c0 175-100 309-280 389-180-80-280-214-280-389V268c96-19 189-55 280-108Z" fill="none" stroke="#C7F5FF" stroke-opacity="0.18" stroke-width="18"/>
+
   <path d="M291 363l107 112-83 128 139 77 116-119" fill="none" stroke="#07111F" stroke-width="54" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M291 363l107 112-83 128 139 77 116-119" fill="none" stroke="#EAFBFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
   <g stroke="#07111F" stroke-width="28">
     <circle cx="291" cy="363" r="44" fill="#EAFBFF"/>
     <circle cx="398" cy="475" r="44" fill="#EAFBFF"/>
     <circle cx="315" cy="603" r="44" fill="#EAFBFF"/>
     <circle cx="454" cy="680" r="44" fill="#EAFBFF"/>
   </g>
-  <circle cx="644" cy="430" r="128" fill="#F8FCFF" stroke="#07111F" stroke-width="42"/>
-  <path d="M735 522l125 125" fill="none" stroke="#07111F" stroke-width="70" stroke-linecap="round"/>
-  <path d="M734 521l125 125" fill="none" stroke="#F8FCFF" stroke-width="30" stroke-linecap="round"/>
+
+  <g filter="url(#soft-shadow)">
+    <circle cx="644" cy="430" r="128" fill="#F8FCFF" stroke="#07111F" stroke-width="42"/>
+    <circle cx="644" cy="430" r="76" fill="#07111F" opacity="0.06"/>
+    <path d="M735 522l125 125" fill="none" stroke="#07111F" stroke-width="70" stroke-linecap="round"/>
+    <path d="M734 521l125 125" fill="none" stroke="#F8FCFF" stroke-width="30" stroke-linecap="round"/>
+  </g>
+
   <path d="M630 319l-68 132h68l-38 126 136-174h-73l48-84h-73Z" fill="url(#bolt)" stroke="#07111F" stroke-width="20" stroke-linejoin="round"/>
 </svg>

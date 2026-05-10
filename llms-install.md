@@ -72,6 +72,81 @@ If your client requires explicit transport metadata, use:
 }
 ```
 
+## Standalone OCI Image With External ZAP
+
+Use this path only when you already run, or are willing to run, OWASP ZAP separately. Marketplace and registry clients do not automatically start the ZAP sidecar for this package.
+
+Create a shared network and report workspace volume, then initialize the volume for the standard ZAP container UID/GID:
+
+```bash
+docker network create mcp-zap-network
+docker volume create mcp-zap-wrk
+export ZAP_API_KEY="$(openssl rand -hex 32)"
+export MCP_API_KEY="$(openssl rand -hex 32)"
+
+docker run --rm \
+  --user root \
+  -v mcp-zap-wrk:/zap/wrk \
+  zaproxy/zap-stable \
+  sh -c 'mkdir -p /zap/wrk && chown -R 1000:1000 /zap/wrk && chmod -R u+rwX,g+rwX /zap/wrk'
+```
+
+Start ZAP with the same report workspace mounted:
+
+```bash
+docker run -d \
+  --name mcp-zap-zap \
+  --network mcp-zap-network \
+  -v mcp-zap-wrk:/zap/wrk \
+  -e ZAP_API_KEY="$ZAP_API_KEY" \
+  zaproxy/zap-stable \
+  zap.sh -daemon -host 0.0.0.0 -port 8090 \
+  -config "api.key=$ZAP_API_KEY" \
+  -config "api.addrs.addr.name=.*" \
+  -config "api.addrs.addr.regex=true"
+```
+
+Then start the MCP server image:
+
+```bash
+docker run -d \
+  --name mcp-zap-server \
+  --network mcp-zap-network \
+  --user 1000:1000 \
+  -p 127.0.0.1:7456:7456 \
+  -v mcp-zap-wrk:/zap/wrk \
+  -e ZAP_API_URL=mcp-zap-zap \
+  -e ZAP_API_PORT=8090 \
+  -e ZAP_API_KEY="$ZAP_API_KEY" \
+  -e MCP_SECURITY_MODE=api-key \
+  -e MCP_SECURITY_ENABLED=true \
+  -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
+  -e MCP_API_KEY="$MCP_API_KEY" \
+  ghcr.io/dtkmn/mcp-zap-server:v0.8.0
+```
+
+Check the MCP server:
+
+```bash
+curl http://127.0.0.1:7456/actuator/health
+```
+
+Configure the MCP client to use:
+
+```text
+http://localhost:7456/mcp
+```
+
+and send:
+
+```text
+X-API-Key: $MCP_API_KEY
+```
+
+The `mcp-zap-wrk:/zap/wrk` volume must be mounted into both containers. ZAP writes report artifacts there, and the MCP server reads those same paths back for report and evidence-handoff tools. The MCP container is run as UID/GID `1000:1000` to match the standard `zaproxy/zap-stable` container user, so report directories remain writable by both containers.
+
+This default guided standalone path has been smoke-tested with MCP `initialize`, `tools/list`, `zap_passive_scan_status`, and `zap_report_generate` against a separate ZAP container. If you need expert tools such as `zap_report_read`, add `-e MCP_SERVER_TOOLS_SURFACE=expert` to the MCP container run command.
+
 ## Safe First Test
 
 After the stack is running, ask the MCP client to list available ZAP tools before running a scan. Start with the bundled demo targets, not a public or third-party site.

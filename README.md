@@ -63,9 +63,9 @@ Client setup:
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). New Docker builds are labeled with the MCP server name expected by registry and catalog tooling.
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.8.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
 
-The honest installation path is Docker Compose because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The registry metadata intentionally does not advertise an OCI package until a newly tagged labeled image and a tested single-image Docker run path exist.
+Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
 
 ## What You Get
 

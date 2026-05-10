@@ -7,8 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-05-10
+
+### Added
+- Added public-preview extension API publication under `io.github.dtkmn:mcp-zap-extension-api`, including artifact-shape verification and standalone extension build validation.
+- Added standalone and in-repository policy metadata extension examples that compile against the public extension API artifact.
+- Added extension documentation for the OSS extension model, compatibility boundaries, release policy, and external extension repository shape.
+- Added `zap_scan_history_release_evidence` and `zap_scan_history_customer_handoff` for internal evidence bundles and customer-safe Markdown handoff summaries.
+- Added HA queue claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica queue execution.
+- Added MCP Registry metadata, agent install notes, and Docker image labels for registry/catalog discovery.
+
 ### Changed
 - Changed the project license for future releases from MIT to Apache License 2.0. Existing releases remain available under their original MIT license terms.
+- Changed the Docker build to package exactly one executable application JAR, avoiding extension API and sample-extension artifacts in the runtime image.
+- Changed Helm release metadata to `0.8.0` with `appVersion` set to the `v0.8.0` image tag shape used by the release workflow.
+- Updated extension API group and repository metadata for public-preview publication.
+- Tightened README, security, marketplace, scan-history, and production-readiness docs around durable scan-job state, raw evidence redaction, customer-facing handoff packaging, and supported install paths.
+- Updated docs dependencies, GitHub Pages configuration, and release workflow validation for Compose manifests, extension API publication, and standalone extension builds.
+
+### Security
+- Added auth endpoint rate limiting coverage and strengthened API-key property handling.
+- Kept MCP Registry metadata discovery-only until a newly tagged labeled image and a tested single-image Docker run path exist.
+
+### Fixed
+- Fixed Docker Compose workspace defaults so generated Compose configuration binds to the repo-local workspace unless operators override it.
+- Fixed native Dockerfile port metadata to expose the actual MCP port, `7456`.
 
 ## [0.7.0] - 2026-05-05
 
@@ -43,13 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Added release notes for `0.7.0`.
 - Added scan history ledger documentation and updated production, observability, JWT, tool-scope authorization, security mode, security policy, and Helm docs.
-
-### Added
-- Added HA queue claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica queue execution.
-- Added `zap_scan_history_release_evidence` and `zap_scan_history_customer_handoff` for internal evidence bundles and customer-safe Markdown handoff summaries.
-
-### Changed
-- Tightened scan-history and production-readiness docs around durable scan-job state, raw evidence redaction, and customer-facing handoff packaging.
 
 ## [0.6.1] - 2026-04-28
 

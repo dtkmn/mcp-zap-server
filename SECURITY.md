@@ -4,10 +4,11 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 ## Supported Versions
 
-| Version    | Supported                                |
-| ---------- | ---------------------------------------- |
-| `>= 0.7.0` | ✅ Active development; receives security fixes |
-| `< 0.7.0`  | ⚠️ Legacy versions; consider upgrading    |
+| Version    | Supported                                      |
+| ---------- | ---------------------------------------------- |
+| `>= 0.8.0` | ✅ Active development; receives security fixes |
+| `0.7.x`    | ⚠️ Critical security fixes where practical     |
+| `< 0.7.0`  | ⚠️ Legacy versions; consider upgrading         |
 
 ## Security Features
 

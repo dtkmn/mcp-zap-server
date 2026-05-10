@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dtkmn/mcp-zap-server",
+  "title": "MCP ZAP Server",
+  "description": "Safe, self-hosted OWASP ZAP operator for guided AI security scans and reports.",
+  "version": "0.8.0",
+  "websiteUrl": "https://danieltse.org/mcp-zap-server/",
+  "repository": {
+    "url": "https://github.com/dtkmn/mcp-zap-server",
+    "source": "github",
+    "id": "969625020"
+  },
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/dtkmn/mcp-zap-server/main/images/brand.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "1024x1024"
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "installation": "Docker Compose is the supported installation path because the MCP server is designed to run with an OWASP ZAP sidecar, explicit auth keys, and local loopback port binding.",
+      "packageStatus": "No OCI package is advertised yet. Add packages only after publishing a newly tagged image with io.modelcontextprotocol.server.name and documenting a tested single-image Docker run path.",
+      "recommendedInstallDoc": "https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/",
+      "dockerCompose": "https://github.com/dtkmn/mcp-zap-server/blob/main/docker-compose.yml"
+    }
+  }
+}

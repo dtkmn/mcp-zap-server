@@ -5,10 +5,10 @@ This is a minimal OSS-safe extension proof.
 It does not add a scanner engine, MCP tool, secret reader, report generator, or
 tenant model. It only demonstrates the extension pattern:
 
-- depend on the shared core
+- depend on the dedicated extension API artifact
 - implement a public extension API contract
 - register through Spring Boot auto-configuration
-- package extension classes and metadata separately from the core runtime
+- package extension classes and metadata separately from the gateway runtime
 
 This sample lives inside the repository so CI can prove the packaging and
 runtime wiring boundary. A real third-party extension should live in its own
@@ -51,7 +51,7 @@ The sample JAR should contain only:
 - `META-INF/mcp-zap/extensions/sample-policy-metadata.properties`
 - `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 
-It should not contain core runtime classes, enterprise classes, or the
+It should not contain gateway runtime classes, enterprise classes, or the
 application entrypoint. It should also not contain the extension API classes;
 those belong in the separate API artifact.
 
@@ -76,7 +76,7 @@ This sample proves the extension model, not a product feature:
 - extension artifacts can be packaged separately
 - extension artifacts can register through Spring Boot auto-configuration
 - extension metadata can describe how the provider loads
-- the core build can verify the sample without importing enterprise code
+- the gateway build can verify the sample without importing enterprise code
 
 ## Target External Developer Path
 

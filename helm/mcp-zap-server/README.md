@@ -163,7 +163,7 @@ mcp:
       jwtSecretKey: JWT_SECRET
 ```
 
-The private CI/CD workflow now creates `mcp-zap-runtime` before deployment and consumes it through these references.
+Your deployment pipeline should create `mcp-zap-runtime` before deployment and consume it through these references.
 
 ## Network Policy
 
@@ -239,7 +239,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=0.7.0
+  --set mcp.image.tag=v0.8.0
 ```
 
 ## Uninstalling

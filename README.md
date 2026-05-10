@@ -7,14 +7,16 @@
 
 # MCP ZAP Server
 
-`mcp-zap-server` turns OWASP ZAP into a self-hosted MCP server so AI agents can run guided or expert web security workflows without brittle glue scripts.
+Give AI agents a safe, self-hosted OWASP ZAP operator for guided web security scans, findings, reports, and production guardrails.
+
+`mcp-zap-server` exposes OWASP ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 
 Use it when you want:
 
-- a guided default MCP surface for common ZAP workflows
-- an optional expert surface for raw ZAP control
-- self-hosted auth, scan queueing, reporting, policy controls, and observability
-- Docker and Helm deployment paths instead of one-off local scripts
+- **safe agentic scanning** with guided defaults for spider, active scan, passive scan, API imports, findings, and reports
+- **operator control** through API-key or JWT auth, tool scopes, runtime policy bundles, rate limits, and audit events
+- **self-hosted deployment** with Docker Compose for local adoption and Helm for Kubernetes
+- **expert ZAP access** when you intentionally need lower-level ZAP context, user, scan, and report controls
 
 Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap-server/)
 
@@ -57,6 +59,13 @@ Client setup:
 - [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Configuration](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 - [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
+- [Agent install notes](./llms-install.md)
+
+## Discovery Metadata
+
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). New Docker builds are labeled with the MCP server name expected by registry and catalog tooling.
+
+The honest installation path is Docker Compose because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The registry metadata intentionally does not advertise an OCI package until a newly tagged labeled image and a tested single-image Docker run path exist.
 
 ## What You Get
 
@@ -71,17 +80,17 @@ Client setup:
 
 ## Latest Release
 
-`v0.7.0` adds:
+`v0.8.0` adds:
 
-- Policy Bundle v1 dry-run and runtime enforcement
-- guided auth session bootstrap with credential reference allowlisting
-- scan history list/get/export and release-evidence handoff tools
-- queue HA claim fencing and Postgres-backed recovery improvements
-- hardened request limits, auth throttling, Helm affinity checks, and MCP/ZAP egress boundaries
+- public-preview extension API publication and standalone extension examples
+- scan history release-evidence and customer-handoff tools
+- HA queue claim fencing, dispatcher/result-applier boundaries, and Postgres race coverage
+- Docker image packaging hardening, MCP Docker catalog labeling, and native-image port alignment
+- MCP Registry metadata and agent install notes for marketplace discovery
 
 Read the full notes:
 
-- [Release notes](./RELEASE_NOTES_0.7.0.md)
+- [Release notes](./RELEASE_NOTES_0.8.0.md)
 - [Changelog](./CHANGELOG.md)
 - [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 

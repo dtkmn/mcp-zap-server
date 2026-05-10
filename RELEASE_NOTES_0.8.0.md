@@ -9,7 +9,7 @@
 - Added release-evidence and customer-handoff scan-history tools for safer evidence packaging and downstream reporting.
 - Refactored queue execution around claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica operation.
 - Hardened Docker image packaging so the runtime image contains the executable application JAR, not extension API or sample-extension artifacts.
-- Added MCP Registry metadata, agent install notes, and Docker image labels for registry/catalog discovery while keeping OCI package metadata disabled until a tested single-image install path exists.
+- Added MCP Registry OCI package metadata, agent install notes, and Docker image labels for registry/catalog discovery, with explicit external-ZAP requirements for standalone installs.
 - Changed the project license for future releases to Apache License 2.0. Existing releases remain available under their original MIT license terms.
 
 ## Upgrade Notes
@@ -31,11 +31,11 @@ The extension API artifact is publishable and validated, but it is still an expe
 
 Do not treat the extension API as a long-term stable contract until the release policy says it has graduated from public preview.
 
-### MCP Registry metadata is discovery-only
+### MCP Registry OCI package requires external ZAP
 
-The repository now includes `.mcp/server.json`, but it intentionally does not advertise an OCI package yet.
+The repository now includes `.mcp/server.json` with OCI package metadata for the published `v0.8.0` images.
 
-The supported install path remains Docker Compose because the MCP server is designed to run with an OWASP ZAP sidecar, explicit auth keys, and local loopback binding. Add OCI package metadata only after publishing a newly tagged image with `io.modelcontextprotocol.server.name` and documenting a tested single-image Docker run path.
+Docker Compose remains the easiest install path. Standalone OCI installs require a separately running OWASP ZAP daemon reachable from the MCP container, plus explicit `ZAP_API_URL`, `ZAP_API_PORT`, `ZAP_API_KEY`, and `MCP_API_KEY` configuration.
 
 ### Docker and Helm image tags
 
@@ -70,7 +70,7 @@ For Helm, the default MCP image tag follows chart `appVersion`, now `v0.8.0`.
 
 - Added auth endpoint rate limiting coverage.
 - Strengthened API-key property management.
-- Kept registry package metadata disabled until published artifacts and install instructions are truthful.
+- Documented that OCI package installs require an external OWASP ZAP daemon rather than bundling ZAP inside the MCP server image.
 
 ## Fixed
 

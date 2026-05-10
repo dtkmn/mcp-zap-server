@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added extension documentation for the OSS extension model, compatibility boundaries, release policy, and external extension repository shape.
 - Added `zap_scan_history_release_evidence` and `zap_scan_history_customer_handoff` for internal evidence bundles and customer-safe Markdown handoff summaries.
 - Added HA queue claim fencing, dispatcher/result-applier/normalizer boundaries, and Postgres race coverage for safer multi-replica queue execution.
-- Added MCP Registry metadata, agent install notes, and Docker image labels for registry/catalog discovery.
+- Added MCP Registry OCI package metadata, agent install notes, and Docker image labels for registry/catalog discovery.
 
 ### Changed
 - Changed the project license for future releases from MIT to Apache License 2.0. Existing releases remain available under their original MIT license terms.
@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - Added auth endpoint rate limiting coverage and strengthened API-key property handling.
-- Kept MCP Registry metadata discovery-only until a newly tagged labeled image and a tested single-image Docker run path exist.
+- Documented that OCI package installs require a separately running OWASP ZAP daemon reachable from the MCP container.
 
 ### Fixed
 - Fixed Docker Compose workspace defaults so generated Compose configuration binds to the repo-local workspace unless operators override it.

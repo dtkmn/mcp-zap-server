@@ -1,13 +1,21 @@
-![GitHub stars](https://img.shields.io/github/stars/dtkmn/mcp-zap-server?style=social)
-![GitHub forks](https://img.shields.io/github/forks/dtkmn/mcp-zap-server?style=social)
-![GitHub Tag](https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server)
-![GitHub License](https://img.shields.io/github/license/dtkmn/mcp-zap-server)
+<p align="center">
+  <img src="images/brand.png" alt="MCP ZAP Server logo" width="180">
+</p>
+
+<h1 align="center">MCP ZAP Server</h1>
+
+<p align="center">
+  Give AI agents a safe, self-hosted OWASP ZAP operator for guided web security scans, findings, reports, and production guardrails.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/stars/dtkmn/mcp-zap-server?style=social" alt="GitHub stars">
+  <img src="https://img.shields.io/github/forks/dtkmn/mcp-zap-server?style=social" alt="GitHub forks">
+  <img src="https://img.shields.io/github/v/tag/dtkmn/mcp-zap-server" alt="GitHub tag">
+  <img src="https://img.shields.io/github/license/dtkmn/mcp-zap-server" alt="GitHub license">
+</p>
 
 > **Note** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation.
-
-# MCP ZAP Server
-
-Give AI agents a safe, self-hosted OWASP ZAP operator for guided web security scans, findings, reports, and production guardrails.
 
 `mcp-zap-server` exposes OWASP ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 

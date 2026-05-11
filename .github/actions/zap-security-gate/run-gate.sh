@@ -101,7 +101,7 @@ case "${baseline_mode}" in
 esac
 
 local_workspace_folder="$(resolve_path "${INPUT_LOCAL_ZAP_WORKSPACE_FOLDER:-.zap-work}")"
-output_dir="$(resolve_path "${INPUT_OUTPUT_DIR:-.zap-artifacts}")"
+output_dir="$(resolve_path "${INPUT_OUTPUT_DIR:-zap-artifacts}")"
 baseline_file=""
 if [[ -n "${INPUT_BASELINE_FILE:-}" ]]; then
   baseline_file="$(resolve_path "${INPUT_BASELINE_FILE:-}")"
@@ -109,6 +109,10 @@ fi
 suppressions_file=""
 if [[ -n "${INPUT_SUPPRESSIONS_FILE:-}" ]]; then
   suppressions_file="$(resolve_path "${INPUT_SUPPRESSIONS_FILE:-}")"
+fi
+seed_requests_file=""
+if [[ -n "${INPUT_SEED_REQUESTS_FILE:-}" ]]; then
+  seed_requests_file="$(resolve_path "${INPUT_SEED_REQUESTS_FILE:-}")"
 fi
 
 mkdir -p "${local_workspace_folder}/reports" "${local_workspace_folder}/automation" "${local_workspace_folder}/zap-home" "${output_dir}"
@@ -202,6 +206,8 @@ python_args=(
   "--active-timeout-seconds" "${INPUT_ACTIVE_TIMEOUT_SECONDS:-1200}"
   "--report-root-container" "/zap/wrk/reports"
   "--report-root-local" "${local_workspace_folder}/reports"
+  "--zap-proxy-url" "${INPUT_ZAP_PROXY_URL:-http://127.0.0.1:8090}"
+  "--seed-request-timeout-seconds" "${INPUT_SEED_REQUEST_TIMEOUT_SECONDS:-30}"
 )
 
 if [[ -n "${baseline_file}" ]]; then
@@ -210,6 +216,10 @@ fi
 
 if [[ -n "${suppressions_file}" ]]; then
   python_args+=("--suppressions-file" "${suppressions_file}")
+fi
+
+if [[ -n "${seed_requests_file}" ]]; then
+  python_args+=("--seed-requests-file" "${seed_requests_file}")
 fi
 
 if [[ -n "${INPUT_SCAN_POLICY:-}" ]]; then

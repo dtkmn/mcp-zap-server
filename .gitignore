@@ -37,5 +37,6 @@ docs/node_modules/
 # Runtime and verification artifacts
 .zap-work/
 .zap-artifacts/
+zap-artifacts/
 .verify/
 zap-workplace/

@@ -25,14 +25,15 @@ If you need GitLab today, treat this guide as a starting template that you valid
 The GitLab flow follows the same scan and findings sequence as the GitHub Actions template:
 
 1. start ZAP and `mcp-zap-server`
-2. run `zap_spider_start`
-3. wait with `zap_spider_status`
-4. run `zap_active_scan_start` when enabled
-5. wait with `zap_active_scan_status`
-6. drain passive analysis with `zap_passive_scan_wait`
-7. save findings summary and snapshot artifacts
-8. run `zap_findings_diff` when a baseline file is present
-9. generate a report with `zap_generate_report`
+2. optionally replay configured HTTP seed requests through the ZAP proxy
+3. run `zap_spider_start`
+4. wait with `zap_spider_status`
+5. run `zap_active_scan_start` when enabled
+6. wait with `zap_active_scan_status`
+7. drain passive analysis with `zap_passive_scan_wait`
+8. save findings summary and snapshot artifacts
+9. run `zap_findings_diff` when a baseline file is present
+10. generate a report with `zap_generate_report`
 
 The bundled GitLab compose stack forces `mcp-zap-server` into the `expert` tool surface so snapshot and diff contracts are available during CI. If you override the MCP endpoint to use an external server, the artifact set still depends on that server's configured tool surface.
 
@@ -64,6 +65,7 @@ variables:
   ZAP_TARGET_URL: https://staging.example.com
   ZAP_BASELINE_FILE: .zap/baselines/main-findings.json
   ZAP_BASELINE_MODE: seed
+  # ZAP_SEED_REQUESTS_FILE: examples/github-actions/seed-requests.json
   ZAP_FAIL_ON_NEW_FINDINGS: "false"
 
 zap_security_gate:
@@ -93,6 +95,10 @@ Important variables used by the wrapper script:
 - `ZAP_BASELINE_FILE`: optional path to a prior `zap_findings_snapshot` JSON file
 - `ZAP_BASELINE_MODE`: `seed` allows first-run baseline review; `enforce`
   fails when `ZAP_FAIL_ON_NEW_FINDINGS=true` but no findings diff can be produced
+- `ZAP_SEED_REQUESTS_FILE`: optional JSON file with HTTP requests replayed
+  through the ZAP proxy before crawling; use this for API endpoints that a
+  spider cannot discover
+- `ZAP_PROXY_URL`: ZAP proxy URL used for seeded requests, default `http://docker:8090`
 - `ZAP_SUPPRESSIONS_FILE`: optional path to a `ci_gate_suppressions/v1` JSON file
 - `ZAP_FAIL_ON_NEW_FINDINGS`: `true` or `false`
 - `ZAP_MAX_NEW_FINDINGS`: integer threshold for the diff gate

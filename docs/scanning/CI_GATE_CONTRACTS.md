@@ -5,6 +5,7 @@
 The helper now emits these stable contracts under the configured output directory:
 
 - `gate-metadata.json`: `ci_gate_result/v1`
+- `seed-requests-results.json`: `ci_gate_seed_requests/v1` when seed requests are configured
 - `current-findings.json`: `ci_gate_findings_snapshot/v1`
 - `findings-diff.json`: `ci_gate_findings_diff/v1` when a baseline is used on the expert surface
 - `artifact-manifest.json`: `ci_gate_artifact_manifest/v1`
@@ -33,6 +34,7 @@ Top-level fields include:
 - `baseline`
 - `enforcement`
 - `suppressions`
+- `seed_requests`
 - `findings`
 - `report`
 - `manifest_path`
@@ -48,6 +50,49 @@ Important behavior:
   missing or the active MCP endpoint only exposes the guided surface
 - `baseline-mode: seed` keeps first-run evidence generation non-blocking while
   the baseline is reviewed
+
+## Seed Requests v1
+
+`seed-requests-results.json` is emitted when a GitHub Actions `seed-requests-file`
+or GitLab `ZAP_SEED_REQUESTS_FILE` is configured.
+
+The seed file shape is:
+
+```json
+{
+  "requests": [
+    {
+      "name": "valid-api-request",
+      "method": "POST",
+      "url": "http://app:8080/api/resource",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "example": true
+      },
+      "expectedStatus": [200, 201, 204]
+    }
+  ]
+}
+```
+
+The result contract includes:
+
+- `contract_version`
+- `proxy_url`
+- `request_count`
+- `failure_count`
+- `requests`
+
+Each request result includes only bounded audit data: `name`, `method`,
+sanitized `url`, `status`, `expected_status`, `ok`, and `response_bytes`.
+Request headers and bodies are intentionally not copied into CI artifacts.
+URL userinfo is removed, query strings are reduced to `?redacted`, and the
+stored proxy URL is sanitized the same way.
+
+If any seed request returns an unexpected status or cannot be sent through the
+ZAP proxy, the helper fails before it claims scan coverage.
 
 ## Findings Snapshot v1
 

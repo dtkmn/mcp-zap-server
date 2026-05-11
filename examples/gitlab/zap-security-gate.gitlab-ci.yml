@@ -8,6 +8,7 @@ variables:
   ZAP_TARGET_URL: https://staging.example.com
   ZAP_BASELINE_FILE: .zap/baselines/main-findings.json
   ZAP_BASELINE_MODE: seed
+  # ZAP_SEED_REQUESTS_FILE: examples/github-actions/seed-requests.json
   # ZAP_SUPPRESSIONS_FILE: .zap/suppressions/main.json
   ZAP_FAIL_ON_NEW_FINDINGS: "false"
   ZAP_MAX_NEW_FINDINGS: "0"

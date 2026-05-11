@@ -1,0 +1,21 @@
+{
+  "requests": [
+    {
+      "name": "example-json-post",
+      "method": "POST",
+      "url": "http://app:80/api/example",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "example": true
+      },
+      "expectedStatus": [
+        200,
+        201,
+        202,
+        204
+      ]
+    }
+  ]
+}

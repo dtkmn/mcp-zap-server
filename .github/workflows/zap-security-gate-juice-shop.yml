@@ -1,0 +1,167 @@
+name: Validate ZAP Security Gate On Juice Shop
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/actions/zap-security-gate/**"
+      - ".github/workflows/zap-security-gate-juice-shop.yml"
+      - ".github/zap/**"
+      - "docs/integrations/GITHUB_ACTIONS_INTEGRATION.md"
+      - "docs/scanning/CI_GATE_CONTRACTS.md"
+      - "examples/github-actions/**"
+      - "tests/python/test_mcp_zap_gate.py"
+
+concurrency:
+  group: zap-security-gate-juice-shop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Derive local MCP server image ref
+        id: image
+        shell: bash
+        run: |
+          echo "ref=mcp-zap-server:gha-${GITHUB_SHA::12}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Build current MCP server image
+        shell: bash
+        run: docker build -t "${{ steps.image.outputs.ref }}" .
+
+      - name: Run Juice Shop gate pass 1
+        id: pass1
+        uses: ./.github/actions/zap-security-gate
+        with:
+          target-url: http://juice-shop:3000
+          compose-override-file: .github/zap/docker-compose.juice-shop.yml
+          compose-services: juice-shop zap mcp-server
+          mcp-server-image: ${{ steps.image.outputs.ref }}
+          output-dir: .zap-artifacts/juice-shop-pass1
+          run-active-scan: "false"
+          fail-on-new-findings: "false"
+          spider-timeout-seconds: "900"
+          passive-timeout-seconds: "300"
+
+      - name: Run Juice Shop gate pass 2 with baseline replay
+        id: pass2
+        uses: ./.github/actions/zap-security-gate
+        with:
+          target-url: http://juice-shop:3000
+          compose-override-file: .github/zap/docker-compose.juice-shop.yml
+          compose-services: juice-shop zap mcp-server
+          mcp-server-image: ${{ steps.image.outputs.ref }}
+          baseline-file: .zap-artifacts/juice-shop-pass1/current-findings.json
+          output-dir: .zap-artifacts/juice-shop-pass2
+          run-active-scan: "false"
+          fail-on-new-findings: "false"
+          spider-timeout-seconds: "900"
+          passive-timeout-seconds: "300"
+
+      - name: Validate CI gate contract artifacts
+        shell: bash
+        env:
+          PASS1_METADATA: ${{ steps.pass1.outputs.metadata-path }}
+          PASS1_SNAPSHOT: ${{ steps.pass1.outputs.snapshot-path }}
+          PASS1_MANIFEST: ${{ steps.pass1.outputs.manifest-path }}
+          PASS2_METADATA: ${{ steps.pass2.outputs.metadata-path }}
+          PASS2_SNAPSHOT: ${{ steps.pass2.outputs.snapshot-path }}
+          PASS2_MANIFEST: ${{ steps.pass2.outputs.manifest-path }}
+          PASS2_DIFF_JSON: ${{ steps.pass2.outputs.diff-json-path }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def load_json(path_env: str, expected_contract: str) -> dict:
+            path = Path(os.environ[path_env])
+            if not path.is_file():
+              raise SystemExit(f"Missing artifact for {path_env}: {path}")
+            payload = json.loads(path.read_text())
+            actual = payload.get("contract_version")
+            if actual != expected_contract:
+              raise SystemExit(
+                  f"Unexpected contract for {path_env}: expected {expected_contract}, got {actual}"
+              )
+            return payload
+
+          pass1_metadata = load_json("PASS1_METADATA", "ci_gate_result/v1")
+          pass1_snapshot = load_json("PASS1_SNAPSHOT", "ci_gate_findings_snapshot/v1")
+          pass1_manifest = load_json("PASS1_MANIFEST", "ci_gate_artifact_manifest/v1")
+          pass2_metadata = load_json("PASS2_METADATA", "ci_gate_result/v1")
+          pass2_snapshot = load_json("PASS2_SNAPSHOT", "ci_gate_findings_snapshot/v1")
+          pass2_manifest = load_json("PASS2_MANIFEST", "ci_gate_artifact_manifest/v1")
+          pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v1")
+
+          if pass1_metadata.get("tool_surface") != "expert":
+            raise SystemExit(f"Pass 1 should use expert tools, got {pass1_metadata.get('tool_surface')}")
+          if pass2_metadata.get("tool_surface") != "expert":
+            raise SystemExit(f"Pass 2 should use expert tools, got {pass2_metadata.get('tool_surface')}")
+          if not pass1_snapshot.get("findings"):
+            raise SystemExit("Pass 1 should emit at least one normalized finding for Juice Shop.")
+          if not pass2_metadata.get("baseline_used"):
+            raise SystemExit("Pass 2 should report that the baseline was used.")
+          if pass2_diff.get("counts", {}).get("new", 0) < 0:
+            raise SystemExit("Pass 2 diff count cannot be negative.")
+
+          report_path = Path(".zap-artifacts/juice-shop-pass2/reports/zap-report.html")
+          if not report_path.is_file():
+            raise SystemExit(f"Expected copied report artifact at {report_path}")
+
+          manifest_names = {entry.get("name") for entry in pass2_manifest.get("artifacts", [])}
+          required_names = {
+              "gate_result",
+              "findings_summary",
+              "findings_snapshot",
+              "findings_diff_text",
+              "findings_diff_json",
+              "report_artifact",
+          }
+          missing = sorted(required_names - manifest_names)
+          if missing:
+            raise SystemExit(f"Pass 2 manifest missing required artifacts: {missing}")
+
+          print("Pass 1 findings:", pass1_snapshot.get("finding_count"))
+          print("Pass 2 findings:", pass2_snapshot.get("finding_count"))
+          print("Pass 2 new findings:", pass2_diff.get("counts", {}).get("new"))
+          print("Pass 2 resolved findings:", pass2_diff.get("counts", {}).get("resolved"))
+          PY
+
+      - name: Summarize Juice Shop replay result
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Juice Shop CI Gate Replay"
+            echo
+            echo "- Pass 1 gate passed: ${{ steps.pass1.outputs.gate-passed }}"
+            echo "- Pass 1 baseline used: ${{ steps.pass1.outputs.baseline-used }}"
+            echo "- Pass 2 gate passed: ${{ steps.pass2.outputs.gate-passed }}"
+            echo "- Pass 2 baseline used: ${{ steps.pass2.outputs.baseline-used }}"
+            echo "- Pass 2 new findings: ${{ steps.pass2.outputs.new-findings }}"
+            echo "- Pass 2 resolved findings: ${{ steps.pass2.outputs.resolved-findings }}"
+            echo
+            echo "Juice Shop is used here as a GitHub Actions smoke target, not as a deterministic zero-drift baseline target."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ZAP gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-security-gate-juice-shop
+          path: .zap-artifacts
+          if-no-files-found: warn
+          retention-days: 14

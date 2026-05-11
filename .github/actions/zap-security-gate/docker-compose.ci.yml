@@ -1,0 +1,64 @@
+services:
+  zap:
+    image: ${ZAP_IMAGE}
+    command:
+      - zap.sh
+      - -daemon
+      - -host
+      - 0.0.0.0
+      - -port
+      - "8090"
+      - -config
+      - api.key=${ZAP_API_KEY}
+      - -config
+      - api.addrs.addr.name=.*
+      - -config
+      - api.addrs.addr.regex=true
+      - -addoninstall
+      - ajaxSpider
+      - -addoninstall
+      - graphql
+      - -addoninstall
+      - soap
+      - -addoninstall
+      - automation
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      ZAP_API_KEY: ${ZAP_API_KEY}
+      ZAP_MEMORY: ${ZAP_MEMORY:-4G}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8090/"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    volumes:
+      - ${LOCAL_ZAP_WORKSPACE_FOLDER}:/zap/wrk
+      - ${LOCAL_ZAP_WORKSPACE_FOLDER}/zap-home:/home/zap/.ZAP
+
+  mcp-server:
+    image: ${MCP_SERVER_IMAGE}
+    depends_on:
+      zap:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:7456:7456"
+    environment:
+      ZAP_API_URL: zap
+      ZAP_API_PORT: 8090
+      ZAP_API_KEY: ${ZAP_API_KEY}
+      MCP_API_KEY: ${MCP_API_KEY}
+      MCP_SECURITY_MODE: api-key
+      MCP_SECURITY_ENABLED: "true"
+      MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: "false"
+      MCP_PROTECTION_ENABLED: "true"
+      MCP_SERVER_TOOLS_SURFACE: expert
+      ZAP_REPORT_DIRECTORY: /zap/wrk/reports
+      ZAP_AUTOMATION_LOCAL_DIRECTORY: /zap/wrk/automation
+      ZAP_AUTOMATION_ZAP_DIRECTORY: /zap/wrk/automation
+      ZAP_URL_VALIDATION_ENABLED: "true"
+      ZAP_ALLOW_LOCALHOST: "true"
+      ZAP_ALLOW_PRIVATE_NETWORKS: "true"
+    volumes:
+      - ${LOCAL_ZAP_WORKSPACE_FOLDER}:/zap/wrk

@@ -1,0 +1,5 @@
+services:
+  app:
+    image: nginx:1.27-alpine
+    expose:
+      - "80"

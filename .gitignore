@@ -1,12 +1,20 @@
 # Gradle build output
 /build/
-/bin/
+/bin/*
+!/bin/github-ci-pack-verify.sh
 .gradle/
 **/build/
 **/.gradle/
 
 # Java class files
 *.class
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
 
 # IDE directories
 .idea/
@@ -25,3 +33,9 @@
 docs/.astro/
 docs/dist/
 docs/node_modules/
+
+# Runtime and verification artifacts
+.zap-work/
+.zap-artifacts/
+.verify/
+zap-workplace/

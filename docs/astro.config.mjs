@@ -47,6 +47,7 @@ export default defineConfig({
 						{ slug: 'scanning/scan-execution-modes' },
 						{ slug: 'scanning/ajax-spider' },
 						{ slug: 'scanning/passive-scan' },
+						{ slug: 'scanning/seeded-api-gate-playbook' },
 						{ slug: 'scanning/api-schema-imports' },
 						{ slug: 'scanning/scan-policy-controls' },
 						{ slug: 'scanning/findings-and-reports' },

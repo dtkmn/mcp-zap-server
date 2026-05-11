@@ -173,6 +173,7 @@ Start here:
 Scanning:
 
 - [Scan Execution Modes](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/)
+- [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)

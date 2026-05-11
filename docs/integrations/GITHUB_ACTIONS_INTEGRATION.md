@@ -9,6 +9,9 @@ This repository also carries a repo-local validation workflow in [`.github/workf
 As of March 28, 2026, GitHub Actions is the only CI target under active hosted validation in the current 2-3 engineer roadmap. GitLab remains an example/template path until customer demand justifies parity work.
 
 The artifact contracts emitted by that helper are defined in [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md).
+For the team operating model around seed mode, artifact review, baseline
+acceptance, and enforcement, use the
+[Seeded API Gate Playbook](../scanning/SEEDED_API_GATE_PLAYBOOK.md).
 
 For pilot installation, rollback, and preflight checks, use the
 [GitHub CI Pack Pilot Install Runbook](../operator/runbooks/GITHUB_CI_PACK_PILOT_INSTALL.md).

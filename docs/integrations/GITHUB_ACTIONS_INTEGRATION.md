@@ -15,17 +15,18 @@ For pilot installation, rollback, and preflight checks, use the
 
 ## What The Action Does
 
-The action brings up a minimal ZAP + MCP stack, then uses the MCP tools already exposed by this repository:
+The action brings up a minimal ZAP + MCP stack, optionally replays configured HTTP seed requests through the ZAP proxy, then uses the MCP tools already exposed by this repository:
 
-1. `zap_spider_start`
-2. `zap_spider_status`
-3. `zap_active_scan_start` (optional)
-4. `zap_active_scan_status` (optional)
-5. `zap_passive_scan_wait`
-6. `zap_get_findings_summary`
-7. `zap_findings_snapshot`
-8. `zap_findings_diff` when a baseline file is present
-9. `zap_generate_report`
+1. optional seed HTTP requests through the ZAP proxy
+2. `zap_spider_start`
+3. `zap_spider_status`
+4. `zap_active_scan_start` (optional)
+5. `zap_active_scan_status` (optional)
+6. `zap_passive_scan_wait`
+7. `zap_get_findings_summary`
+8. `zap_findings_snapshot`
+9. `zap_findings_diff` when a baseline file is present
+10. `zap_generate_report`
 
 When the action starts its own bundled CI stack, it forces the MCP server into the `expert` tool surface so baseline replay, snapshot generation, and findings diff contracts are actually available. If you point the helper at an externally managed MCP server instead, the available artifacts still depend on that server's configured tool surface.
 
@@ -33,6 +34,7 @@ Artifacts emitted into the configured output directory include:
 
 - `findings-summary.md`
 - `current-findings.json`
+- `seed-requests-results.json` when seed requests are configured
 - `findings-diff.txt` and `findings-diff.json` when a baseline is used
 - `gate-metadata.json`
 - `artifact-manifest.json`
@@ -92,6 +94,50 @@ Recommended pattern:
 
 Baseline behavior is mode-specific. In `baseline-mode: seed`, a missing baseline stays non-blocking and the action emits a fresh `current-findings.json` artifact for review. In `baseline-mode: enforce`, a missing baseline fails the run when `fail-on-new-findings: "true"` because the gate cannot produce an auditable diff.
 
+## Seeded API Requests
+
+Spiders do not invent JSON `POST` payloads for you. If the surface that matters is an API endpoint, provide a seed request file so the helper drives representative traffic through the ZAP proxy before snapshot/report generation.
+
+Example seed file:
+
+```json
+{
+  "requests": [
+    {
+      "name": "valid-bid-request",
+      "method": "POST",
+      "url": "http://app:8080/bid-request",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "id": "ci-seed-bid-1",
+        "site": {
+          "id": "site-1",
+          "domain": "example.com"
+        },
+        "device": {
+          "ip": "192.0.2.10",
+          "ua": "ci-zap-seed",
+          "lmt": 0
+        }
+      },
+      "expectedStatus": [200]
+    }
+  ]
+}
+```
+
+Wire it into the action:
+
+```yaml
+with:
+  target-url: http://app:8080/bid-request
+  seed-requests-file: .zap/seed-requests/bid-request.json
+```
+
+The helper writes `seed-requests-results.json` without echoing request headers or bodies. If any seed request returns an unexpected status or cannot be sent through the ZAP proxy, the run fails before claiming scan coverage.
+
 ## Suppression Strategy
 
 If you need temporary, reviewable exceptions without mutating the stored baseline, supply `suppressions-file`.
@@ -116,7 +162,7 @@ env:
     snapshot-path: ${{ steps.zap_gate.outputs.snapshot-path }}
     diff-path: ${{ steps.zap_gate.outputs.diff-path }}
     report-local-path: ${{ steps.zap_gate.outputs.report-local-path }}
-    output-path: .zap-artifacts/webhook-delivery.json
+    output-path: zap-artifacts/webhook-delivery.json
 ```
 
 That callback helper is documented in [Webhook Callbacks](./WEBHOOK_CALLBACKS.md) and includes retry/backoff plus optional HMAC signing.
@@ -147,7 +193,8 @@ jobs:
           mcp-server-image: ghcr.io/dtkmn/mcp-zap-server:<release-tag>
           baseline-file: .zap/baselines/main-findings.json
           baseline-mode: enforce
-          output-dir: .zap-artifacts
+          seed-requests-file: .zap/seed-requests/main.json
+          output-dir: zap-artifacts
           fail-on-new-findings: "true"
           max-new-findings: "0"
 
@@ -156,7 +203,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: zap-security-gate
-          path: .zap-artifacts
+          path: zap-artifacts
 ```
 
 ## App-Under-Test In The Same Workflow
@@ -179,6 +226,10 @@ Minimal workflow pattern:
     compose-override-file: examples/github-actions/docker-compose.app-under-test.yml
     compose-services: app zap mcp-server
 ```
+
+Only add `seed-requests-file` after replacing the example app with a service
+that actually serves the seeded endpoint. The bundled example seed file is an
+API shape example, not a valid request for the default nginx app.
 
 Replace `<release-tag>` with a real release tag or digest. The action rejects
 the placeholder before it starts Docker so pilot failures stay obvious.
@@ -231,6 +282,7 @@ For long-lived shared environments, the queue remains the recommended production
 Important action inputs:
 
 - `target-url`: required scan target
+- `seed-requests-file`: optional JSON file with HTTP requests replayed through the ZAP proxy before crawling; use this for API endpoints that a spider cannot discover
 - `baseline-file`: optional findings snapshot JSON from a prior accepted run
 - `baseline-mode`: `seed` allows first-run baseline review; `enforce` fails
   when `fail-on-new-findings=true` but no findings diff can be produced

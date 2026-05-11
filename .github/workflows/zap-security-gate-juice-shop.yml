@@ -49,7 +49,7 @@ jobs:
           compose-override-file: .github/zap/docker-compose.juice-shop.yml
           compose-services: juice-shop zap mcp-server
           mcp-server-image: ${{ steps.image.outputs.ref }}
-          output-dir: .zap-artifacts/juice-shop-pass1
+          output-dir: zap-artifacts/juice-shop-pass1
           run-active-scan: "false"
           fail-on-new-findings: "false"
           spider-timeout-seconds: "900"
@@ -63,8 +63,8 @@ jobs:
           compose-override-file: .github/zap/docker-compose.juice-shop.yml
           compose-services: juice-shop zap mcp-server
           mcp-server-image: ${{ steps.image.outputs.ref }}
-          baseline-file: .zap-artifacts/juice-shop-pass1/current-findings.json
-          output-dir: .zap-artifacts/juice-shop-pass2
+          baseline-file: zap-artifacts/juice-shop-pass1/current-findings.json
+          output-dir: zap-artifacts/juice-shop-pass2
           run-active-scan: "false"
           fail-on-new-findings: "false"
           spider-timeout-seconds: "900"
@@ -117,7 +117,7 @@ jobs:
           if pass2_diff.get("counts", {}).get("new", 0) < 0:
             raise SystemExit("Pass 2 diff count cannot be negative.")
 
-          report_path = Path(".zap-artifacts/juice-shop-pass2/reports/zap-report.html")
+          report_path = Path("zap-artifacts/juice-shop-pass2/reports/zap-report.html")
           if not report_path.is_file():
             raise SystemExit(f"Expected copied report artifact at {report_path}")
 
@@ -162,6 +162,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: zap-security-gate-juice-shop
-          path: .zap-artifacts
+          path: zap-artifacts
           if-no-files-found: warn
           retention-days: 14

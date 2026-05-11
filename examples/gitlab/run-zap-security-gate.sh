@@ -108,6 +108,10 @@ suppressions_file=""
 if [[ -n "${ZAP_SUPPRESSIONS_FILE:-}" ]]; then
   suppressions_file="$(resolve_path "${ZAP_SUPPRESSIONS_FILE}")"
 fi
+seed_requests_file=""
+if [[ -n "${ZAP_SEED_REQUESTS_FILE:-}" ]]; then
+  seed_requests_file="$(resolve_path "${ZAP_SEED_REQUESTS_FILE}")"
+fi
 
 mkdir -p "${local_workspace_folder}/reports" "${local_workspace_folder}/automation" "${local_workspace_folder}/zap-home" "${output_dir}"
 ensure_writable_workspace_dirs \
@@ -187,6 +191,8 @@ python_args=(
   "--active-timeout-seconds" "${ZAP_ACTIVE_TIMEOUT_SECONDS:-1200}"
   "--report-root-container" "/zap/wrk/reports"
   "--report-root-local" "${local_workspace_folder}/reports"
+  "--zap-proxy-url" "${ZAP_PROXY_URL:-http://docker:8090}"
+  "--seed-request-timeout-seconds" "${ZAP_SEED_REQUEST_TIMEOUT_SECONDS:-30}"
 )
 
 if [[ -n "${baseline_file}" ]]; then
@@ -195,6 +201,10 @@ fi
 
 if [[ -n "${suppressions_file}" ]]; then
   python_args+=("--suppressions-file" "${suppressions_file}")
+fi
+
+if [[ -n "${seed_requests_file}" ]]; then
+  python_args+=("--seed-requests-file" "${seed_requests_file}")
 fi
 
 if [[ -n "${ZAP_SCAN_POLICY:-}" ]]; then

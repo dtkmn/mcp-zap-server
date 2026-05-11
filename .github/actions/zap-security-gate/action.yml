@@ -17,10 +17,14 @@ inputs:
     description: Optional CI gate suppression contract JSON file applied after baseline/current snapshot normalization.
     required: false
     default: ""
+  seed-requests-file:
+    description: Optional JSON file with HTTP requests to replay through the ZAP proxy before crawling. Use this for JSON POST/API surfaces that a spider cannot discover.
+    required: false
+    default: ""
   output-dir:
     description: Directory where gate artifacts will be written.
     required: false
-    default: ".zap-artifacts"
+    default: "zap-artifacts"
   report-template:
     description: Report template hint. Expert mode passes this to zap_generate_report; guided mode maps it to html/json report format.
     required: false
@@ -81,6 +85,14 @@ inputs:
     description: MCP streamable HTTP endpoint used by the helper script.
     required: false
     default: "http://localhost:7456/mcp"
+  zap-proxy-url:
+    description: ZAP proxy URL used for optional seed request replay.
+    required: false
+    default: "http://127.0.0.1:8090"
+  seed-request-timeout-seconds:
+    description: Per-request timeout for optional seed request replay.
+    required: false
+    default: "30"
   mcp-server-image:
     description: MCP server image ref used by the bundled CI compose stack. When start-stack is true, provide an immutable tag or digest.
     required: false
@@ -146,6 +158,7 @@ runs:
         INPUT_BASELINE_FILE: ${{ inputs.baseline-file }}
         INPUT_BASELINE_MODE: ${{ inputs.baseline-mode }}
         INPUT_SUPPRESSIONS_FILE: ${{ inputs.suppressions-file }}
+        INPUT_SEED_REQUESTS_FILE: ${{ inputs.seed-requests-file }}
         INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
         INPUT_REPORT_TEMPLATE: ${{ inputs.report-template }}
         INPUT_REPORT_THEME: ${{ inputs.report-theme }}
@@ -162,6 +175,8 @@ runs:
         INPUT_COMPOSE_SERVICES: ${{ inputs.compose-services }}
         INPUT_LOCAL_ZAP_WORKSPACE_FOLDER: ${{ inputs.local-zap-workspace-folder }}
         INPUT_MCP_SERVER_URL: ${{ inputs.mcp-server-url }}
+        INPUT_ZAP_PROXY_URL: ${{ inputs.zap-proxy-url }}
+        INPUT_SEED_REQUEST_TIMEOUT_SECONDS: ${{ inputs.seed-request-timeout-seconds }}
         INPUT_MCP_SERVER_IMAGE: ${{ inputs.mcp-server-image }}
         INPUT_ZAP_IMAGE: ${{ inputs.zap-image }}
         INPUT_ZAP_API_KEY: ${{ inputs.zap-api-key }}

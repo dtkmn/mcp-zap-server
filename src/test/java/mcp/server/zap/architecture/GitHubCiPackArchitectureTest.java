@@ -12,6 +12,7 @@ class GitHubCiPackArchitectureTest {
     private static final Path ACTION = Path.of(".github/actions/zap-security-gate/action.yml");
     private static final Path ACTION_COMPOSE = Path.of(".github/actions/zap-security-gate/docker-compose.ci.yml");
     private static final Path EXAMPLE_WORKFLOW = Path.of("examples/github-actions/zap-security-gate.yml");
+    private static final Path EXAMPLE_SEED_REQUESTS = Path.of("examples/github-actions/seed-requests.json");
     private static final Path EXAMPLE_APP_COMPOSE = Path.of("examples/github-actions/docker-compose.app-under-test.yml");
     private static final Path INTEGRATION_DOC = Path.of("docs/integrations/GITHUB_ACTIONS_INTEGRATION.md");
     private static final Path GITLAB_INTEGRATION_DOC = Path.of("docs/integrations/GITLAB_CI_INTEGRATION.md");
@@ -29,6 +30,7 @@ class GitHubCiPackArchitectureTest {
                 .contains("baseline_mode:")
                 .contains("default: seed")
                 .contains("run-active-scan: \"false\"")
+                .contains("seed-requests-file: examples/github-actions/seed-requests.json")
                 .contains("baseline-mode: ${{ inputs.baseline_mode }}")
                 .contains("fail-on-new-findings: ${{ inputs.fail_on_new_findings }}")
                 .contains("compose-override-file: examples/github-actions/docker-compose.app-under-test.yml")
@@ -60,6 +62,9 @@ class GitHubCiPackArchitectureTest {
                 .contains("baseline-mode: enforce")
                 .contains("Baseline behavior is mode-specific")
                 .contains("a missing baseline fails the run")
+                .contains("Seeded API Requests")
+                .contains("seed-requests-results.json")
+                .contains("seed-requests-file: .zap/seed-requests/main.json")
                 .doesNotContain("does not fail the run by default")
                 .contains(
                         """
@@ -70,6 +75,8 @@ class GitHubCiPackArchitectureTest {
                             fail-on-new-findings: "false"
                             compose-override-file: examples/github-actions/docker-compose.app-under-test.yml
                         """)
+                .contains("Only add `seed-requests-file` after replacing the example app")
+                .contains("not a valid request for the default nginx app")
                 .contains("compose-services: app zap mcp-server")
                 .contains("GitHub CI Pack Pilot Install Runbook");
 
@@ -78,6 +85,7 @@ class GitHubCiPackArchitectureTest {
                 .contains("examples/github-actions/zap-security-gate.yml")
                 .contains("Replace the local action reference with the release action ref")
                 .contains("examples/github-actions/docker-compose.app-under-test.yml")
+                .contains("Add `seed-requests-file` when the target surface needs JSON `POST`")
                 .contains("Pin `mcp-server-image` to a release tag or digest")
                 .contains("The action rejects the literal `<release-tag>` placeholder")
                 .contains("Keep `baseline-mode: seed` until the first baseline is reviewed")
@@ -91,6 +99,7 @@ class GitHubCiPackArchitectureTest {
                 .contains("mutable tags")
                 .contains("placeholder refs such as `<release-tag>` are rejected before Docker starts")
                 .contains("ZAP_BASELINE_MODE")
+                .contains("ZAP_SEED_REQUESTS_FILE")
                 .contains("no findings diff can be produced");
     }
 
@@ -99,7 +108,21 @@ class GitHubCiPackArchitectureTest {
         assertThat(Files.readString(EXAMPLE_GITLAB_WORKFLOW))
                 .contains("MCP_SERVER_IMAGE: ghcr.io/dtkmn/mcp-zap-server:<release-tag>")
                 .contains("ZAP_BASELINE_MODE: seed")
+                .contains("ZAP_SEED_REQUESTS_FILE: examples/github-actions/seed-requests.json")
                 .contains("ZAP_FAIL_ON_NEW_FINDINGS: \"false\"");
+    }
+
+    @Test
+    void exampleSeedRequestShowsApiPostShapeWithoutSecrets() throws IOException {
+        String seedRequests = Files.readString(EXAMPLE_SEED_REQUESTS);
+
+        assertThat(seedRequests)
+                .contains("\"requests\"")
+                .contains("\"method\": \"POST\"")
+                .contains("\"url\": \"http://app:80/api/example\"")
+                .contains("\"expectedStatus\"")
+                .doesNotContain("Authorization")
+                .doesNotContain("Cookie");
     }
 
     @Test

@@ -49,8 +49,9 @@ jobs:
           mcp-server-image: ghcr.io/dtkmn/mcp-zap-server:<release-tag>
           baseline-file: .zap/baselines/main-findings.json
           baseline-mode: ${{ inputs.baseline_mode }}
+          # seed-requests-file: examples/github-actions/seed-requests.json
           # suppressions-file: .zap/suppressions/main.json
-          output-dir: .zap-artifacts
+          output-dir: zap-artifacts
           fail-on-new-findings: ${{ inputs.fail_on_new_findings }}
           max-new-findings: "0"
           run-active-scan: "false"
@@ -67,14 +68,14 @@ jobs:
           snapshot-path: ${{ steps.zap_gate.outputs.snapshot-path }}
           diff-path: ${{ steps.zap_gate.outputs.diff-path }}
           report-local-path: ${{ steps.zap_gate.outputs.report-local-path }}
-          output-path: .zap-artifacts/webhook-delivery.json
+          output-path: zap-artifacts/webhook-delivery.json
 
       - name: Upload ZAP gate artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: zap-security-gate
-          path: .zap-artifacts
+          path: zap-artifacts
           if-no-files-found: warn
 
       - name: Print gate outputs

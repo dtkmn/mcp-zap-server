@@ -253,6 +253,120 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
         self.assertEqual(diff_contract["target_url"], "https://example.com/search?a=1&b=2")
 
+    def test_load_seed_requests_defaults_url_and_json_content_type(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "seed.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "requests": [
+                            {
+                                "name": "bid-request",
+                                "method": "post",
+                                "body": {"id": "ci-bid"},
+                                "expectedStatus": [200, 204],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            requests = MODULE.load_seed_requests(path, "http://app:8080/bid-request")
+
+            self.assertEqual(requests[0]["name"], "bid-request")
+            self.assertEqual(requests[0]["method"], "POST")
+            self.assertEqual(requests[0]["url"], "http://app:8080/bid-request")
+            self.assertEqual(requests[0]["expected_statuses"], {200, 204})
+
+    def test_execute_seed_requests_replays_through_proxy_without_echoing_body_or_headers(self):
+        class FakeResponse:
+            def getcode(self):
+                return 200
+
+            def read(self):
+                return b'{"ok":true}'
+
+            def close(self):
+                pass
+
+        class FakeOpener:
+            def __init__(self):
+                self.requests = []
+
+            def open(self, request, timeout):
+                self.requests.append((request, timeout))
+                return FakeResponse()
+
+        opener = FakeOpener()
+        seed_requests = [
+            {
+                "name": "bid-request",
+                "method": "POST",
+                "url": "http://app:8080/bid-request?token=secret&debug=true",
+                "headers": {"X-Test": "secret-ish"},
+                "body": {"id": "ci-bid"},
+                "expected_statuses": {200},
+            }
+        ]
+
+        result = MODULE.execute_seed_requests(
+            seed_requests,
+            "http://proxy-user:proxy-pass@127.0.0.1:8090?token=proxy-secret",
+            7,
+            opener=opener,
+        )
+
+        self.assertEqual(result["contract_version"], "ci_gate_seed_requests/v1")
+        self.assertEqual(result["proxy_url"], "http://127.0.0.1:8090?redacted")
+        self.assertEqual(result["request_count"], 1)
+        self.assertEqual(result["failure_count"], 0)
+        self.assertEqual(result["requests"][0]["method"], "POST")
+        self.assertEqual(result["requests"][0]["url"], "http://app:8080/bid-request?redacted")
+        self.assertEqual(result["requests"][0]["status"], 200)
+        self.assertEqual(result["requests"][0]["expected_status"], "200")
+        self.assertTrue(result["requests"][0]["ok"])
+        self.assertNotIn("headers", result["requests"][0])
+        self.assertNotIn("body", result["requests"][0])
+        self.assertNotIn("secret", json.dumps(result))
+        request, timeout = opener.requests[0]
+        self.assertEqual(timeout, 7)
+        self.assertEqual(request.full_url, "http://app:8080/bid-request?token=secret&debug=true")
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b'{"id":"ci-bid"}')
+        self.assertEqual(request.headers["Content-type"], "application/json")
+
+    def test_execute_seed_requests_records_unexpected_status(self):
+        class FakeHttpErrorOpener:
+            def open(self, _request, timeout):
+                raise MODULE.urllib.error.HTTPError(
+                    "http://app:8080/bid-request",
+                    400,
+                    "Bad Request",
+                    {},
+                    None,
+                )
+
+        result = MODULE.execute_seed_requests(
+            [
+                {
+                    "name": "bid-request",
+                    "method": "POST",
+                    "url": "http://app:8080/bid-request",
+                    "headers": {},
+                    "body": "{}",
+                    "expected_statuses": {200},
+                }
+            ],
+            "http://127.0.0.1:8090",
+            30,
+            opener=FakeHttpErrorOpener(),
+        )
+
+        self.assertEqual(result["failure_count"], 1)
+        self.assertFalse(result["requests"][0]["ok"])
+        self.assertEqual(result["requests"][0]["status"], 400)
+
     def test_main_writes_deterministic_gate_contract_artifacts(self):
         class FakeMcpHttpClient:
             snapshot_text = ""
@@ -512,6 +626,104 @@ class McpZapGateHelpersTest(unittest.TestCase):
             self.assertEqual(metadata["tool_surface"], "expert")
             self.assertTrue((output_dir / "current-findings.json").exists())
             self.assertEqual(metadata["report"]["artifact_path"], "reports/zap-report.html")
+
+    def test_main_records_successful_seed_request_artifact(self):
+        class FakeMcpHttpClient:
+            def __init__(self, _server_url: str, _api_key: str, timeout_seconds: int = 60) -> None:
+                self.timeout_seconds = timeout_seconds
+
+            def list_tools(self):
+                return [
+                    "zap_spider_start",
+                    "zap_spider_status",
+                    "zap_active_scan_start",
+                    "zap_active_scan_status",
+                    "zap_passive_scan_wait",
+                    "zap_get_findings_summary",
+                    "zap_findings_snapshot",
+                    "zap_generate_report",
+                ]
+
+            def call_tool(self, name, _arguments):
+                if name == "zap_spider_start":
+                    return "Direct spider scan started.\nScan ID: spider-1"
+                if name == "zap_spider_status":
+                    return "Direct spider scan status:\nScan ID: spider-1\nCompleted: yes\n"
+                if name == "zap_passive_scan_wait":
+                    return "Passive scan queue drained."
+                if name == "zap_findings_snapshot":
+                    return json.dumps({"version": 1, "baseUrl": "https://example.com/api", "fingerprints": []})
+                if name == "zap_generate_report":
+                    return "/zap/wrk/reports/generated.html"
+                raise AssertionError(f"Unexpected tool call: {name}")
+
+        seed_results = {
+            "contract_version": "ci_gate_seed_requests/v1",
+            "proxy_url": "http://127.0.0.1:8090",
+            "request_count": 1,
+            "failure_count": 0,
+            "requests": [
+                {
+                    "name": "api-post",
+                    "method": "POST",
+                    "url": "https://example.com/api",
+                    "status": 200,
+                    "expected_status": "200",
+                    "ok": True,
+                    "response_bytes": 2,
+                }
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            seed_path = tmp_path / "seed.json"
+            seed_path.write_text(
+                json.dumps({"requests": [{"name": "api-post", "method": "POST", "body": {"ok": True}}]}),
+                encoding="utf-8",
+            )
+            report_root = tmp_path / "reports"
+            report_root.mkdir()
+            (report_root / "generated.html").write_text("<html>report</html>\n", encoding="utf-8")
+            output_dir = tmp_path / "artifacts"
+
+            with mock.patch.object(MODULE, "McpHttpClient", FakeMcpHttpClient), mock.patch.object(
+                    MODULE, "execute_seed_requests", return_value=seed_results) as execute_seed_requests:
+                result = MODULE.main(
+                    [
+                        "--server-url",
+                        "http://example.com/mcp",
+                        "--api-key",
+                        "test-key",
+                        "--target-url",
+                        "https://example.com/api",
+                        "--seed-requests-file",
+                        str(seed_path),
+                        "--output-dir",
+                        str(output_dir),
+                        "--report-root-container",
+                        "/zap/wrk/reports",
+                        "--report-root-local",
+                        str(report_root),
+                        "--run-active-scan",
+                        "false",
+                        "--fail-on-new-findings",
+                        "false",
+                    ]
+                )
+
+            self.assertEqual(result, 0)
+            execute_seed_requests.assert_called_once()
+            metadata = json.loads((output_dir / "gate-metadata.json").read_text(encoding="utf-8"))
+            manifest = json.loads((output_dir / "artifact-manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["seed_requests"]["request_count"], 1)
+            self.assertEqual(metadata["seed_requests"]["failure_count"], 0)
+            self.assertEqual(metadata["seed_requests"]["result_path"], "seed-requests-results.json")
+            self.assertEqual(
+                json.loads((output_dir / "seed-requests-results.json").read_text(encoding="utf-8")),
+                seed_results,
+            )
+            self.assertIn("seed_requests", [artifact["name"] for artifact in manifest["artifacts"]])
 
     def test_main_fails_when_enforced_baseline_file_is_missing(self):
         class FakeMcpHttpClient:

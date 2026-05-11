@@ -49,13 +49,15 @@ without custom engineering, the pack is not ready for that pilot yet.
   target service should start inside the workflow.
 - [ ] Replace the example `app` image with the pilot service image.
 - [ ] Set `target-url` to the compose service address, such as `http://app:80`.
+- [ ] Add `seed-requests-file` when the target surface needs JSON `POST` or
+  other API requests a spider cannot discover.
 - [ ] Pin `mcp-server-image` to a release tag or digest.
   The action rejects the literal `<release-tag>` placeholder.
 - [ ] Keep `run-active-scan: "false"` for the first onboarding run.
 - [ ] Keep `baseline-mode: seed` until the first baseline is reviewed.
 - [ ] Keep `fail-on-new-findings: "false"` until the first baseline is reviewed.
 - [ ] Run the workflow manually.
-- [ ] Upload or attach `.zap-artifacts` to the pilot issue.
+- [ ] Upload or attach `zap-artifacts` to the pilot issue.
 - [ ] Review `current-findings.json`, `gate-metadata.json`, and
   `artifact-manifest.json`.
 - [ ] Commit a baseline only after the pilot owner accepts the current security
@@ -107,7 +109,9 @@ operators.
    and include the app service in `compose-services`. Start from
    `examples/github-actions/docker-compose.app-under-test.yml` and replace the
    example `nginx:1.27-alpine` image with the pilot service image.
-5. Start with:
+5. If the meaningful surface is an API endpoint, add a seed request file and
+   pass it as `seed-requests-file`.
+6. Start with:
 
    ```yaml
    run-active-scan: "false"
@@ -115,10 +119,10 @@ operators.
    fail-on-new-findings: "false"
    ```
 
-6. Run the workflow manually and inspect `.zap-artifacts`.
-7. Commit the generated `current-findings.json` as the accepted baseline only
+7. Run the workflow manually and inspect `zap-artifacts`.
+8. Commit the generated `current-findings.json` as the accepted baseline only
    after review.
-8. Enable blocking mode only after the baseline and suppressions are agreed:
+9. Enable blocking mode only after the baseline and suppressions are agreed:
    set `baseline-mode: enforce` and `fail-on-new-findings: "true"` together.
 
 ## Rollback
@@ -127,7 +131,7 @@ If the gate blocks unexpectedly:
 
 1. Set `fail-on-new-findings: "false"` to keep evidence generation while
    unblocking delivery.
-2. Keep uploading `.zap-artifacts`; do not remove the gate completely unless the
+2. Keep uploading `zap-artifacts`; do not remove the gate completely unless the
    action cannot start.
 3. Pin back to the last known good action release and image tag.
 4. Review `gate-metadata.json`, `findings-diff.json`, and
@@ -142,7 +146,7 @@ Attach these to the pilot issue or release note:
 - `current-findings.json`
 - `findings-diff.json` when a baseline was used
 - `artifact-manifest.json`
-- copied report artifact under `.zap-artifacts/reports`
+- copied report artifact under `zap-artifacts/reports`
 
 ## Exit Criteria
 

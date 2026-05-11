@@ -799,12 +799,197 @@ def deterministic_report_path(mapped_report: Path, output_dir: Path, report_temp
     return output_dir / "reports" / f"zap-report{suffix}"
 
 
+def normalize_expected_statuses(value: Any) -> set[int] | None:
+    if value is None:
+        return None
+    raw_statuses = value if isinstance(value, list) else [value]
+    statuses: set[int] = set()
+    for raw_status in raw_statuses:
+        if not isinstance(raw_status, int):
+            raise ValueError("seed request expectedStatus values must be integers")
+        if raw_status < 100 or raw_status > 599:
+            raise ValueError("seed request expectedStatus values must be valid HTTP status codes")
+        statuses.add(raw_status)
+    return statuses
+
+
+def expected_status_label(statuses: set[int] | None) -> str:
+    if statuses is None:
+        return "200-399"
+    return ",".join(str(status) for status in sorted(statuses))
+
+
+def status_is_expected(status: int | None, statuses: set[int] | None) -> bool:
+    if status is None:
+        return False
+    if statuses is None:
+        return 200 <= status < 400
+    return status in statuses
+
+
+def load_seed_requests(path: Path, default_target_url: str) -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Seed requests file must be valid JSON: {path}") from exc
+
+    requests = payload.get("requests") if isinstance(payload, dict) else payload
+    if not isinstance(requests, list):
+        raise RuntimeError("Seed requests file must contain a JSON array or an object with a 'requests' array.")
+    if not requests:
+        raise RuntimeError("Seed requests file must contain at least one request.")
+
+    normalized_requests: list[dict[str, Any]] = []
+    for index, raw_request in enumerate(requests, start=1):
+        if not isinstance(raw_request, dict):
+            raise RuntimeError(f"Seed request #{index} must be an object.")
+
+        method = compact_whitespace(raw_request.get("method") or "GET")
+        if not method:
+            method = "GET"
+        method = method.upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_-]{0,20}", method):
+            raise RuntimeError(f"Seed request #{index} has an invalid HTTP method.")
+
+        url = compact_whitespace(raw_request.get("url")) or compact_whitespace(default_target_url)
+        if not url:
+            raise RuntimeError(f"Seed request #{index} must define a URL or rely on a non-empty target URL.")
+        parsed_url = urllib.parse.urlparse(url)
+        if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+            raise RuntimeError(f"Seed request #{index} URL must be an absolute HTTP(S) URL.")
+
+        headers = raw_request.get("headers") or {}
+        if not isinstance(headers, dict):
+            raise RuntimeError(f"Seed request #{index} headers must be an object.")
+        normalized_headers: dict[str, str] = {}
+        for raw_name, raw_value in headers.items():
+            name = compact_whitespace(str(raw_name))
+            if not name:
+                raise RuntimeError(f"Seed request #{index} contains an empty header name.")
+            normalized_headers[name] = str(raw_value)
+
+        try:
+            expected_statuses = normalize_expected_statuses(
+                raw_request.get("expectedStatus", raw_request.get("expected_status"))
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"Seed request #{index} has invalid expectedStatus: {exc}") from exc
+
+        name = compact_whitespace(raw_request.get("name")) or f"request-{index}"
+        normalized_requests.append(
+            {
+                "name": name,
+                "method": method,
+                "url": url,
+                "headers": normalized_headers,
+                "body": raw_request.get("body"),
+                "expected_statuses": expected_statuses,
+            }
+        )
+
+    return normalized_requests
+
+
+def encode_seed_body(body: Any, headers: dict[str, str]) -> bytes | None:
+    if body is None:
+        return None
+    if isinstance(body, str):
+        return body.encode("utf-8")
+    if isinstance(body, (dict, list, int, float, bool)):
+        if not any(name.lower() == "content-type" for name in headers):
+            headers["Content-Type"] = "application/json"
+        return json.dumps(body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    raise RuntimeError("seed request body must be a string, object, array, number, boolean, or null")
+
+
+def artifact_safe_url(raw_url: str) -> str:
+    parsed = urllib.parse.urlsplit(compact_whitespace(raw_url))
+    if not parsed.scheme or not parsed.netloc:
+        return "<invalid-url>"
+
+    netloc = parsed.netloc.rsplit("@", 1)[-1]
+    query = "redacted" if parsed.query else ""
+    return urllib.parse.urlunsplit((parsed.scheme.lower(), netloc, parsed.path, query, ""))
+
+
+def execute_seed_requests(
+        seed_requests: list[dict[str, Any]],
+        zap_proxy_url: str,
+        timeout_seconds: int,
+        opener: Any | None = None) -> dict[str, Any]:
+    if timeout_seconds <= 0:
+        raise RuntimeError("seed request timeout must be greater than zero seconds")
+    proxy_url = compact_whitespace(zap_proxy_url)
+    if not proxy_url:
+        raise RuntimeError("ZAP proxy URL is required when seed requests are configured")
+    parsed_proxy_url = urllib.parse.urlparse(proxy_url)
+    if parsed_proxy_url.scheme not in {"http", "https"} or not parsed_proxy_url.netloc:
+        raise RuntimeError("ZAP proxy URL must be an absolute HTTP(S) URL")
+
+    if opener is None:
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        )
+
+    results: list[dict[str, Any]] = []
+    for seed_request in seed_requests:
+        headers = dict(seed_request["headers"])
+        body = encode_seed_body(seed_request["body"], headers)
+        request = urllib.request.Request(
+            seed_request["url"],
+            data=body,
+            headers=headers,
+            method=seed_request["method"],
+        )
+        status: int | None = None
+        response_bytes = 0
+        error: str | None = None
+        try:
+            response = opener.open(request, timeout=timeout_seconds)
+            try:
+                status = response.getcode()
+                response_bytes = len(response.read())
+            finally:
+                response.close()
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            response_bytes = len(exc.read())
+            exc.close()
+        except urllib.error.URLError as exc:
+            error = compact_whitespace(str(exc.reason)) or exc.__class__.__name__
+
+        expected_statuses = seed_request["expected_statuses"]
+        ok = status_is_expected(status, expected_statuses)
+        result = {
+            "name": seed_request["name"],
+            "method": seed_request["method"],
+            "url": artifact_safe_url(seed_request["url"]),
+            "status": status,
+            "expected_status": expected_status_label(expected_statuses),
+            "ok": ok,
+            "response_bytes": response_bytes,
+        }
+        if error:
+            result["error"] = error
+        results.append(result)
+
+    failed = [result for result in results if not result["ok"]]
+    return {
+        "contract_version": "ci_gate_seed_requests/v1",
+        "proxy_url": artifact_safe_url(proxy_url),
+        "request_count": len(results),
+        "failure_count": len(failed),
+        "requests": results,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a GitHub Actions-friendly MCP ZAP gate.")
     parser.add_argument("--server-url", required=True)
     parser.add_argument("--api-key", required=True)
     parser.add_argument("--target-url", required=True)
     parser.add_argument("--baseline-file")
+    parser.add_argument("--seed-requests-file")
     parser.add_argument(
         "--baseline-mode",
         choices=("enforce", "seed"),
@@ -829,6 +1014,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--active-timeout-seconds", type=int, default=1200)
     parser.add_argument("--report-root-container")
     parser.add_argument("--report-root-local")
+    parser.add_argument("--zap-proxy-url", default="http://127.0.0.1:8090")
+    parser.add_argument("--seed-request-timeout-seconds", type=int, default=30)
     return parser
 
 
@@ -866,6 +1053,27 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     surface = "expert" if expert_surface else "guided"
+    seed_results_path: Path | None = None
+    seed_results_contract: dict[str, Any] | None = None
+    if args.seed_requests_file:
+        seed_requests_path = Path(args.seed_requests_file).resolve()
+        if not seed_requests_path.exists():
+            raise RuntimeError(f"Seed requests file was requested but not found: {seed_requests_path}")
+        seed_requests = load_seed_requests(seed_requests_path, args.target_url)
+        seed_results_contract = execute_seed_requests(
+            seed_requests,
+            args.zap_proxy_url,
+            args.seed_request_timeout_seconds,
+        )
+        seed_results_path = output_dir / "seed-requests-results.json"
+        write_json(seed_results_path, seed_results_contract)
+        if seed_results_contract["failure_count"] > 0:
+            raise RuntimeError(
+                "Seed request replay failed for "
+                f"{seed_results_contract['failure_count']} of {seed_results_contract['request_count']} request(s). "
+                f"See {seed_results_path}."
+            )
+
     crawl_reference: str
     attack_reference: str | None = None
 
@@ -1151,6 +1359,12 @@ def main(argv: list[str] | None = None) -> int:
             "failure_reason": enforcement_failure_reason,
         },
         "suppressions": suppressions_summary,
+        "seed_requests": {
+            "requested": bool(args.seed_requests_file),
+            "result_path": relative_artifact_path(seed_results_path, output_dir),
+            "request_count": None if seed_results_contract is None else seed_results_contract["request_count"],
+            "failure_count": None if seed_results_contract is None else seed_results_contract["failure_count"],
+        },
         "findings": {
             "summary_path": relative_artifact_path(findings_summary_path, output_dir),
             "snapshot_path": relative_artifact_path(current_snapshot_path, output_dir),
@@ -1182,6 +1396,7 @@ def main(argv: list[str] | None = None) -> int:
         f"- Tool surface: `{surface}`",
         f"- Crawl reference: `{crawl_reference}`",
         f"- Active scan: `{'enabled' if args.run_active_scan else 'skipped'}`",
+        f"- Seed requests: `{0 if seed_results_contract is None else seed_results_contract['request_count']}`",
         f"- Baseline requested: `{'yes' if baseline_requested else 'no'}`",
         f"- Baseline mode: `{args.baseline_mode}`",
         f"- Baseline used: `{'yes' if baseline_used else 'no'}`",
@@ -1214,6 +1429,8 @@ def main(argv: list[str] | None = None) -> int:
         gate_summary_lines.append(
             f"- Suppression rules applied: `{len(suppressions_summary['matched_rule_ids'])}`"
         )
+    if seed_results_path:
+        gate_summary_lines.append(f"- Seed request results: `{relative_artifact_path(seed_results_path, output_dir)}`")
     if relative_report_artifact_path:
         gate_summary_lines.append(f"- Copied report artifact: `{relative_report_artifact_path}`")
     gate_summary_lines.append(f"- Artifact manifest: `{metadata['manifest_path']}`")
@@ -1236,6 +1453,8 @@ def main(argv: list[str] | None = None) -> int:
         manifest_entries.append(build_manifest_entry("baseline_note", baseline_note_path, output_dir))
     if suppressions_note_path:
         manifest_entries.append(build_manifest_entry("suppressions_note", suppressions_note_path, output_dir))
+    if seed_results_path:
+        manifest_entries.append(build_manifest_entry("seed_requests", seed_results_path, output_dir))
     if copied_report_path:
         manifest_entries.append(build_manifest_entry("report_artifact", copied_report_path, output_dir, include_digest=False))
 

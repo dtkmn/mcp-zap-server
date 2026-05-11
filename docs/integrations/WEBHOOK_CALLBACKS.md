@@ -28,11 +28,11 @@ High-level payload shape:
   },
   "artifacts": {
     "metadataPath": {
-      "path": "/workspace/.zap-artifacts/gate-metadata.json",
+      "path": "/workspace/zap-artifacts/gate-metadata.json",
       "exists": true
     },
     "diffPath": {
-      "path": "/workspace/.zap-artifacts/findings-diff.txt",
+      "path": "/workspace/zap-artifacts/findings-diff.txt",
       "exists": true
     }
   },
@@ -111,7 +111,7 @@ Optional step after the gate action:
     snapshot-path: ${{ steps.zap_gate.outputs.snapshot-path }}
     diff-path: ${{ steps.zap_gate.outputs.diff-path }}
     report-local-path: ${{ steps.zap_gate.outputs.report-local-path }}
-    output-path: .zap-artifacts/webhook-delivery.json
+    output-path: zap-artifacts/webhook-delivery.json
 ```
 
 Typical job-level environment:
@@ -158,7 +158,7 @@ When you set an output path, the helper writes a delivery record JSON file conta
 
 Recommended default:
 
-- `.zap-artifacts/webhook-delivery.json`
+- `zap-artifacts/webhook-delivery.json`
 
 ## When To Use This
 

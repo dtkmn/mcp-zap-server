@@ -1,0 +1,89 @@
+name: ZAP Security Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: URL that the bundled ZAP container can reach, for example http://app:80 when using the included compose override
+        required: true
+        default: http://app:80
+        type: string
+      fail_on_new_findings:
+        description: Fail if the current run introduces net-new findings beyond the configured threshold
+        required: true
+        default: false
+        type: boolean
+      baseline_mode:
+        description: Use seed for first-run review, then enforce once the baseline is committed
+        required: true
+        default: seed
+        type: choice
+        options:
+          - seed
+          - enforce
+
+jobs:
+  zap-security-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      ZAP_WEBHOOK_URL: ${{ secrets.ZAP_WEBHOOK_URL }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # If your app under test is not already reachable from the public internet,
+      # copy examples/github-actions/docker-compose.app-under-test.yml to your
+      # repository, replace the app image with your service image, and keep
+      # target-url aligned with the service name and port.
+      #
+      # External repositories can replace the local action reference below with:
+      # uses: dtkmn/mcp-zap-server/.github/actions/zap-security-gate@<release-tag>
+      - name: Run MCP ZAP security gate
+        id: zap_gate
+        uses: ./.github/actions/zap-security-gate
+        with:
+          target-url: ${{ inputs.target_url }}
+          mcp-server-image: ghcr.io/dtkmn/mcp-zap-server:<release-tag>
+          baseline-file: .zap/baselines/main-findings.json
+          baseline-mode: ${{ inputs.baseline_mode }}
+          # suppressions-file: .zap/suppressions/main.json
+          output-dir: .zap-artifacts
+          fail-on-new-findings: ${{ inputs.fail_on_new_findings }}
+          max-new-findings: "0"
+          run-active-scan: "false"
+          compose-override-file: examples/github-actions/docker-compose.app-under-test.yml
+          compose-services: app zap mcp-server
+
+      - name: Send webhook callback
+        if: always() && env.ZAP_WEBHOOK_URL != ''
+        uses: ./.github/actions/zap-webhook-callback
+        with:
+          webhook-url: ${{ env.ZAP_WEBHOOK_URL }}
+          metadata-path: ${{ steps.zap_gate.outputs.metadata-path }}
+          summary-path: ${{ steps.zap_gate.outputs.summary-path }}
+          snapshot-path: ${{ steps.zap_gate.outputs.snapshot-path }}
+          diff-path: ${{ steps.zap_gate.outputs.diff-path }}
+          report-local-path: ${{ steps.zap_gate.outputs.report-local-path }}
+          output-path: .zap-artifacts/webhook-delivery.json
+
+      - name: Upload ZAP gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-security-gate
+          path: .zap-artifacts
+          if-no-files-found: warn
+
+      - name: Print gate outputs
+        if: always()
+        run: |
+          echo "Gate passed: ${{ steps.zap_gate.outputs.gate-passed }}"
+          echo "Baseline used: ${{ steps.zap_gate.outputs.baseline-used }}"
+          echo "New findings: ${{ steps.zap_gate.outputs.new-findings }}"
+          echo "Resolved findings: ${{ steps.zap_gate.outputs.resolved-findings }}"
+          echo "Diff JSON: ${{ steps.zap_gate.outputs.diff-json-path }}"
+          echo "Manifest: ${{ steps.zap_gate.outputs.manifest-path }}"
+          echo "Report artifact: ${{ steps.zap_gate.outputs.report-local-path }}"

@@ -1,0 +1,22 @@
+services:
+  juice-shop:
+    image: bkimminich/juice-shop:v19.1.1
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - /nodejs/bin/node
+        - -e
+        - "const http=require('http'); const req=http.get('http://127.0.0.1:3000/', (res) => process.exit(res.statusCode < 500 ? 0 : 1)); req.on('error', () => process.exit(1)); setTimeout(() => process.exit(1), 5000);"
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+
+  mcp-server:
+    depends_on:
+      zap:
+        condition: service_healthy
+      juice-shop:
+        condition: service_healthy

@@ -1,0 +1,114 @@
+name: ZAP Webhook Callback
+description: Send GitHub or GitLab CI gate results to a webhook endpoint with retry and optional HMAC signing.
+
+inputs:
+  webhook-url:
+    description: Destination webhook URL.
+    required: true
+  metadata-path:
+    description: Gate metadata JSON path emitted by the CI scan helper.
+    required: true
+  summary-path:
+    description: Optional findings summary artifact path.
+    required: false
+    default: ""
+  snapshot-path:
+    description: Optional findings snapshot artifact path.
+    required: false
+    default: ""
+  diff-path:
+    description: Optional findings diff artifact path.
+    required: false
+    default: ""
+  report-local-path:
+    description: Optional copied local report artifact path.
+    required: false
+    default: ""
+  event-name:
+    description: Logical event name delivered in the payload and headers.
+    required: false
+    default: "zap_security_gate.completed"
+  provider:
+    description: CI provider hint. Use auto, github, gitlab, or generic.
+    required: false
+    default: "auto"
+  secret:
+    description: Optional shared secret used to sign the JSON body with HMAC SHA-256.
+    required: false
+    default: ""
+  bearer-token:
+    description: Optional bearer token added to the Authorization header.
+    required: false
+    default: ""
+  headers-json:
+    description: Optional JSON object of additional headers.
+    required: false
+    default: ""
+  timeout-seconds:
+    description: HTTP timeout per delivery attempt.
+    required: false
+    default: "15"
+  max-attempts:
+    description: Maximum delivery attempts including the first try.
+    required: false
+    default: "4"
+  initial-backoff-seconds:
+    description: Initial retry backoff in seconds.
+    required: false
+    default: "2"
+  max-backoff-seconds:
+    description: Maximum retry backoff in seconds.
+    required: false
+    default: "30"
+  backoff-multiplier:
+    description: Exponential retry multiplier.
+    required: false
+    default: "2"
+  output-path:
+    description: Optional path for the delivery record artifact.
+    required: false
+    default: ""
+  allow-failure:
+    description: Whether the step should stay green if all delivery attempts fail.
+    required: false
+    default: "false"
+
+outputs:
+  delivered:
+    description: Whether the webhook was delivered successfully.
+    value: ${{ steps.notify.outputs.delivered }}
+  attempt-count:
+    description: Number of delivery attempts made.
+    value: ${{ steps.notify.outputs.attempt_count }}
+  status-code:
+    description: Final HTTP status code, when available.
+    value: ${{ steps.notify.outputs.status_code }}
+  output-path:
+    description: Delivery record JSON path.
+    value: ${{ steps.notify.outputs.output_path }}
+
+runs:
+  using: composite
+  steps:
+    - id: notify
+      shell: bash
+      env:
+        INPUT_WEBHOOK_URL: ${{ inputs.webhook-url }}
+        INPUT_METADATA_PATH: ${{ inputs.metadata-path }}
+        INPUT_SUMMARY_PATH: ${{ inputs.summary-path }}
+        INPUT_SNAPSHOT_PATH: ${{ inputs.snapshot-path }}
+        INPUT_DIFF_PATH: ${{ inputs.diff-path }}
+        INPUT_REPORT_LOCAL_PATH: ${{ inputs.report-local-path }}
+        INPUT_EVENT_NAME: ${{ inputs.event-name }}
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_SECRET: ${{ inputs.secret }}
+        INPUT_BEARER_TOKEN: ${{ inputs.bearer-token }}
+        INPUT_HEADERS_JSON: ${{ inputs.headers-json }}
+        INPUT_TIMEOUT_SECONDS: ${{ inputs.timeout-seconds }}
+        INPUT_MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        INPUT_INITIAL_BACKOFF_SECONDS: ${{ inputs.initial-backoff-seconds }}
+        INPUT_MAX_BACKOFF_SECONDS: ${{ inputs.max-backoff-seconds }}
+        INPUT_BACKOFF_MULTIPLIER: ${{ inputs.backoff-multiplier }}
+        INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
+        INPUT_ALLOW_FAILURE: ${{ inputs.allow-failure }}
+      run: bash "${{ github.action_path }}/run-webhook.sh"

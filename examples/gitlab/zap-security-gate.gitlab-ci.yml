@@ -1,0 +1,40 @@
+stages:
+  - security
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  MCP_SERVER_IMAGE: ghcr.io/dtkmn/mcp-zap-server:<release-tag>
+  ZAP_TARGET_URL: https://staging.example.com
+  ZAP_BASELINE_FILE: .zap/baselines/main-findings.json
+  ZAP_BASELINE_MODE: seed
+  # ZAP_SUPPRESSIONS_FILE: .zap/suppressions/main.json
+  ZAP_FAIL_ON_NEW_FINDINGS: "false"
+  ZAP_MAX_NEW_FINDINGS: "0"
+  ZAP_OUTPUT_DIR: .zap-artifacts
+  ZAP_RUN_ACTIVE_SCAN: "true"
+  ZAP_WEBHOOK_URL: ""
+
+zap_security_gate:
+  stage: security
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+      command: ["--tls=false"]
+  before_script:
+    - apk add --no-cache bash curl python3
+    - docker compose version
+  script:
+    - bash examples/gitlab/run-zap-security-gate.sh
+    - |
+      if [ -n "${ZAP_WEBHOOK_URL:-}" ]; then
+        bash examples/gitlab/send-zap-webhook.sh
+      fi
+  artifacts:
+    when: always
+    paths:
+      - .zap-artifacts/
+    expire_in: 7 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "web"

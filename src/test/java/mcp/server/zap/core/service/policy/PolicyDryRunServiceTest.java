@@ -64,6 +64,84 @@ class PolicyDryRunServiceTest {
     }
 
     @Test
+    void dryRunAllowsGuidedReportReadbackForSandboxRequest() throws Exception {
+        String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"));
+
+        Map<String, Object> response = service.dryRun(
+                bundle,
+                "zap_report_read",
+                null,
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", true);
+        assertThat(decision(response)).containsEntry("result", "allow");
+        assertThat(decision(response)).containsEntry("source", "rule");
+        assertThat(decision(response)).containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+        assertThat(request(response)).containsEntry("target", null);
+        assertThat(request(response)).containsEntry("normalizedHost", null);
+
+        CapturedPolicyDecision audit = capturedPolicyDecision();
+        assertThat(audit.outcome()).isEqualTo("allow");
+        assertThat(audit.details())
+                .containsEntry("bundleName", "ci-guided-guardrails")
+                .containsEntry("evaluatedTool", "zap_report_read")
+                .containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+    }
+
+    @Test
+    void dryRunAllowsGuidedPassiveWaitForSandboxRequest() throws Exception {
+        String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"));
+
+        Map<String, Object> response = service.dryRun(
+                bundle,
+                "zap_passive_scan_wait",
+                null,
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", true);
+        assertThat(decision(response)).containsEntry("result", "allow");
+        assertThat(decision(response)).containsEntry("source", "rule");
+        assertThat(decision(response)).containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+        assertThat(request(response)).containsEntry("target", null);
+        assertThat(request(response)).containsEntry("normalizedHost", null);
+
+        CapturedPolicyDecision audit = capturedPolicyDecision();
+        assertThat(audit.outcome()).isEqualTo("allow");
+        assertThat(audit.details())
+                .containsEntry("bundleName", "ci-guided-guardrails")
+                .containsEntry("evaluatedTool", "zap_passive_scan_wait")
+                .containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+    }
+
+    @Test
+    void dryRunAllowsGuidedPassiveStatusForSandboxRequest() throws Exception {
+        String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"));
+
+        Map<String, Object> response = service.dryRun(
+                bundle,
+                "zap_passive_scan_status",
+                null,
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", true);
+        assertThat(decision(response)).containsEntry("result", "allow");
+        assertThat(decision(response)).containsEntry("source", "rule");
+        assertThat(decision(response)).containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+        assertThat(request(response)).containsEntry("target", null);
+        assertThat(request(response)).containsEntry("normalizedHost", null);
+
+        CapturedPolicyDecision audit = capturedPolicyDecision();
+        assertThat(audit.outcome()).isEqualTo("allow");
+        assertThat(audit.details())
+                .containsEntry("bundleName", "ci-guided-guardrails")
+                .containsEntry("evaluatedTool", "zap_passive_scan_status")
+                .containsEntry("matchedRuleId", "allow-guided-ci-followups-staffed-hours");
+    }
+
+    @Test
     void dryRunFallsBackToDefaultDecisionWhenNoRuleMatches() throws Exception {
         String bundle = Files.readString(Path.of("examples/policy-bundles/expert-readonly-triage.json"));
 

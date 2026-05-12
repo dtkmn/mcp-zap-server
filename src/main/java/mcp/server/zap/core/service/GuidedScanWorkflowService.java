@@ -41,6 +41,7 @@ public class GuidedScanWorkflowService {
             "Auto strategy fell back from the HTTP spider to the browser-backed crawler because the direct spider failed.";
     private static final String AUTO_QUEUE_HTTP_NOTE =
             "Auto strategy in queued mode currently selects the HTTP spider by default. Pass strategy=browser to force the browser-backed crawler.";
+    private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
 
     private final GuidedExecutionModeResolver executionModeResolver;
     private final SpiderScanService spiderScanService;
@@ -373,9 +374,9 @@ public class GuidedScanWorkflowService {
         if (hasText(started.note())) {
             output.append("Note: ").append(started.note().trim()).append('\n');
         }
-        output.append("Use 'zap_").append(started.operation().kind().wireValue()).append("_status' with this operation ID.\n")
+        output.append(nextActionsForStartedOperation(started.operation(), operationId))
                 .append('\n')
-                .append(started.delegateResponse());
+                .append(sanitizeDelegateResponse(started.delegateResponse()));
         return output.toString();
     }
 
@@ -399,8 +400,150 @@ public class GuidedScanWorkflowService {
                 .append("Execution Mode: ").append(formatExecutionMode(operation.executionMode())).append('\n')
                 .append("Strategy: ").append(operation.strategy()).append('\n')
                 .append('\n')
-                .append(delegateResponse)
+                .append(nextActionsForLifecycle(action, operation, operationId, delegateResponse))
+                .append('\n')
+                .append(sanitizeDelegateResponse(delegateResponse))
                 .toString();
+    }
+
+    private String nextActionsForStartedOperation(GuidedOperation operation, String operationId) {
+        String statusTool = statusToolFor(operation.kind());
+        String stopTool = stopToolFor(operation.kind());
+        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER)
+                .append('\n')
+                .append("- Poll: call ").append(statusTool).append(" with this operation ID: ").append(operationId).append('\n')
+                .append("- Stop if needed: call ").append(stopTool).append(" with the same operation ID.").append('\n');
+        if (operation.kind() == OperationKind.CRAWL) {
+            output.append("- When crawl is complete: call zap_attack_start if active testing is approved, or zap_passive_scan_wait before findings/report if crawl-only evidence is enough.");
+        } else {
+            output.append("- When attack is complete: call zap_passive_scan_wait before zap_findings_summary or zap_report_generate.");
+        }
+        return output.toString();
+    }
+
+    private String nextActionsForLifecycle(String action,
+                                           GuidedOperation operation,
+                                           String operationId,
+                                           String delegateResponse) {
+        if ("stop requested".equals(action)) {
+            return nextActionsForStoppedOperation(operation, operationId);
+        }
+        if (!"status".equals(action)) {
+            return "";
+        }
+        return nextActionsForStatus(operation, operationId, delegateResponse);
+    }
+
+    private String nextActionsForStatus(GuidedOperation operation, String operationId, String delegateResponse) {
+        OperationState state = inferOperationState(delegateResponse);
+        String statusTool = statusToolFor(operation.kind());
+        String stopTool = stopToolFor(operation.kind());
+        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
+        return switch (state) {
+            case SUCCEEDED -> {
+                if (operation.kind() == OperationKind.CRAWL) {
+                    output.append("- Continue security testing: call zap_attack_start for the same target if active testing is approved.\n")
+                            .append("- Crawl-only path: call zap_passive_scan_wait before zap_findings_summary or zap_report_generate.");
+                } else {
+                    output.append("- Settle passive analysis: call zap_passive_scan_wait.\n")
+                            .append("- Then review: call zap_findings_summary for the same target, then zap_report_generate when you need an artifact.");
+                }
+                yield output.toString();
+            }
+            case FAILED, CANCELLED -> {
+                output.append("- Review the status/error above before trusting this scan as evidence.\n")
+                        .append("- Retry only after fixing target reachability, auth, policy, or scan configuration.");
+                yield output.toString();
+            }
+            case RUNNING, QUEUED, UNKNOWN -> {
+                output.append("- Continue: call ").append(statusTool).append(" with this operation ID until the scan is complete: ").append(operationId).append('\n')
+                        .append("- Stop if needed: call ").append(stopTool).append(" with the same operation ID.");
+                yield output.toString();
+            }
+        };
+    }
+
+    private String nextActionsForStoppedOperation(GuidedOperation operation, String operationId) {
+        return new StringBuilder(NEXT_ACTIONS_HEADER)
+                .append('\n')
+                .append("- Confirm if needed: call ").append(statusToolFor(operation.kind()))
+                .append(" with this operation ID: ").append(operationId).append('\n')
+                .append("- Start a new guided ").append(operation.kind().wireValue())
+                .append(" only after the target and policy are ready.")
+                .toString();
+    }
+
+    private OperationState inferOperationState(String delegateResponse) {
+        if (!hasText(delegateResponse)) {
+            return OperationState.UNKNOWN;
+        }
+        String normalized = delegateResponse.toLowerCase(Locale.ROOT);
+        if (normalized.contains("status: cancelled")
+                || normalized.contains("status: canceled")
+                || normalized.contains("status=cancelled")
+                || normalized.contains("status=canceled")) {
+            return OperationState.CANCELLED;
+        }
+        if (normalized.contains("status: failed")
+                || normalized.contains("status=failed")
+                || normalized.contains("dead letter: true")
+                || normalized.contains("dead-letter=true")) {
+            return OperationState.FAILED;
+        }
+        if (normalized.contains("status: succeeded")
+                || normalized.contains("status=succeeded")
+                || normalized.contains("completed: yes")
+                || normalized.contains("progress: 100%")
+                || normalized.contains("scan completed.")) {
+            return OperationState.SUCCEEDED;
+        }
+        if (normalized.contains("status: queued") || normalized.contains("status=queued")) {
+            return OperationState.QUEUED;
+        }
+        if (normalized.contains("status: running")
+                || normalized.contains("status=running")
+                || normalized.contains("scan is in progress")
+                || normalized.contains("completed: no")) {
+            return OperationState.RUNNING;
+        }
+        return OperationState.UNKNOWN;
+    }
+
+    private String sanitizeDelegateResponse(String delegateResponse) {
+        if (!hasText(delegateResponse)) {
+            return "";
+        }
+        StringBuilder sanitized = new StringBuilder();
+        for (String line : delegateResponse.split("\\R")) {
+            if (isDelegateGuidanceLine(line)) {
+                continue;
+            }
+            if (!sanitized.isEmpty()) {
+                sanitized.append('\n');
+            }
+            sanitized.append(line);
+        }
+        return sanitized.toString().trim();
+    }
+
+    private boolean isDelegateGuidanceLine(String line) {
+        if (!hasText(line)) {
+            return false;
+        }
+        String normalized = line.trim().toLowerCase(Locale.ROOT);
+        return normalized.startsWith("use 'zap_")
+                || normalized.startsWith("run 'zap_")
+                || normalized.startsWith("for durable")
+                || normalized.startsWith("for retryable")
+                || normalized.contains(" prefer 'zap_queue_");
+    }
+
+    private String statusToolFor(OperationKind kind) {
+        return "zap_" + kind.wireValue() + "_status";
+    }
+
+    private String stopToolFor(OperationKind kind) {
+        return "zap_" + kind.wireValue() + "_stop";
     }
 
     private String normalizeCrawlStrategy(String strategy) {
@@ -649,5 +792,14 @@ public class GuidedScanWorkflowService {
                 default -> throw new IllegalArgumentException("operationId belongs to an unsupported guided flow");
             };
         }
+    }
+
+    private enum OperationState {
+        QUEUED,
+        RUNNING,
+        SUCCEEDED,
+        FAILED,
+        CANCELLED,
+        UNKNOWN
     }
 }

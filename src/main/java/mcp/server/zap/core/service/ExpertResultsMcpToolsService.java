@@ -90,14 +90,4 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
         return findingsService.getFindingsSummary(baseUrl);
     }
 
-    @Tool(
-            name = "zap_report_read",
-            description = "Read a generated report artifact back through MCP without manual filesystem access."
-    )
-    public String readReport(
-            @ToolParam(description = "Report path returned by zap_generate_report") String reportPath,
-            @ToolParam(required = false, description = "Maximum characters to return (optional, default: 20000, max: 200000)") Integer maxChars
-    ) {
-        return reportService.readReport(reportPath, maxChars);
-    }
 }

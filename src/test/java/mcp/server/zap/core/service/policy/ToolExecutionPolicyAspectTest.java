@@ -176,7 +176,7 @@ class ToolExecutionPolicyAspectTest {
     private static class SampleToolMethods {
         @Tool(name = "zap_report_read")
         String readReport(String reportPath, Integer maxChars) {
-            return "unused";
+            return reportPath + ":" + maxChars;
         }
 
         @Tool(name = "zap_passive_scan_status")

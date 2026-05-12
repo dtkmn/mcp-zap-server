@@ -82,9 +82,17 @@ class GuidedSecurityToolsServiceTest {
                         Direct spider scan started.
                         Scan ID: spider-1
                         Target URL: https://example.com
+                        Use 'zap_spider_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.
+                        For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_spider_scan'.
                         """);
         when(spiderScanService.getSpiderScanStatus("spider-1"))
-                .thenReturn("Direct spider scan status:\nScan ID: spider-1\nProgress: 45%");
+                .thenReturn("""
+                        Direct spider scan status:
+                        Scan ID: spider-1
+                        Progress: 45%
+                        Completed: no
+                        Use 'zap_spider_stop' to stop this direct crawl, or 'zap_queue_spider_scan' for durable queued execution next time.
+                        """);
 
         String startResponse = service.startCrawl("https://example.com", "auto", null, null);
         String operationId = extractOperationId(startResponse);
@@ -93,8 +101,16 @@ class GuidedSecurityToolsServiceTest {
         assertThat(startResponse).contains("Guided crawl started.");
         assertThat(startResponse).contains("Execution Mode: direct");
         assertThat(startResponse).contains("Strategy: http");
+        assertThat(startResponse).contains("Next Actions:");
+        assertThat(startResponse).contains("Poll: call zap_crawl_status");
+        assertThat(startResponse).contains("When crawl is complete: call zap_attack_start");
+        assertThat(startResponse).doesNotContain("zap_spider_status");
+        assertThat(startResponse).doesNotContain("zap_queue_spider_scan");
         assertThat(statusResponse).contains("Guided crawl status.");
         assertThat(statusResponse).contains("Progress: 45%");
+        assertThat(statusResponse).contains("Continue: call zap_crawl_status");
+        assertThat(statusResponse).doesNotContain("zap_spider_stop");
+        assertThat(statusResponse).doesNotContain("zap_queue_spider_scan");
     }
 
     @Test
@@ -130,8 +146,92 @@ class GuidedSecurityToolsServiceTest {
 
         assertThat(startResponse).contains("Guided attack started.");
         assertThat(startResponse).contains("Execution Mode: queue");
+        assertThat(startResponse).contains("Next Actions:");
+        assertThat(startResponse).contains("Poll: call zap_attack_status");
+        assertThat(startResponse).contains("When attack is complete: call zap_passive_scan_wait");
         assertThat(statusResponse).contains("Guided attack status.");
         assertThat(statusResponse).contains("Job ID: job-7");
+        assertThat(statusResponse).contains("Continue: call zap_attack_status");
+    }
+
+    @Test
+    void completedCrawlStatusPointsToAttackOrPassiveWait() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(spiderScanService.startSpiderScan(eq("https://example.com")))
+                .thenReturn("""
+                        Direct spider scan started.
+                        Scan ID: spider-100
+                        Target URL: https://example.com
+                        """);
+        when(spiderScanService.getSpiderScanStatus("spider-100"))
+                .thenReturn("""
+                        Direct spider scan status:
+                        Scan ID: spider-100
+                        Progress: 100%
+                        Completed: yes
+                        """);
+
+        String operationId = extractOperationId(service.startCrawl("https://example.com", "http", null, null));
+        String statusResponse = service.getCrawlStatus(operationId);
+
+        assertThat(statusResponse).contains("Guided crawl status.");
+        assertThat(statusResponse).contains("Next Actions:");
+        assertThat(statusResponse).contains("Continue security testing: call zap_attack_start");
+        assertThat(statusResponse).contains("Crawl-only path: call zap_passive_scan_wait");
+    }
+
+    @Test
+    void completedAttackStatusPointsToPassiveWaitAndFindings() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(activeScanService.startActiveScan(eq("https://example.com"), eq("true"), eq((String) null)))
+                .thenReturn("""
+                        Active scan started.
+                        Scan ID: active-100
+                        Target URL: https://example.com
+                        """);
+        when(activeScanService.getActiveScanStatus("active-100"))
+                .thenReturn("""
+                        Direct active scan status:
+                        Scan ID: active-100
+                        Progress: 100%
+                        Completed: yes
+                        """);
+
+        String operationId = extractOperationId(service.startAttack("https://example.com", "true", null, null, null));
+        String statusResponse = service.getAttackStatus(operationId);
+
+        assertThat(statusResponse).contains("Guided attack status.");
+        assertThat(statusResponse).contains("Next Actions:");
+        assertThat(statusResponse).contains("Settle passive analysis: call zap_passive_scan_wait");
+        assertThat(statusResponse).contains("Then review: call zap_findings_summary");
+    }
+
+    @Test
+    void failedQueueStatusWithFullProgressDoesNotReturnSuccessNextActions() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq((String) null), eq((String) null)))
+                .thenReturn("""
+                        Scan job accepted
+                        Job ID: job-failed
+                        Type: ACTIVE_SCAN
+                        """);
+        when(scanJobQueueService.getScanJobStatus("job-failed"))
+                .thenReturn("""
+                        Scan job details
+                        Job ID: job-failed
+                        Status: FAILED
+                        Progress: 100%
+                        Last Error: runtime failure after progress update
+                        """);
+
+        String operationId = extractOperationId(service.startAttack("https://example.com", "true", null, null, null));
+        String statusResponse = service.getAttackStatus(operationId);
+
+        assertThat(statusResponse).contains("Guided attack status.");
+        assertThat(statusResponse).contains("Status: FAILED");
+        assertThat(statusResponse).contains("Progress: 100%");
+        assertThat(statusResponse).contains("Review the status/error above before trusting this scan as evidence.");
+        assertThat(statusResponse).doesNotContain("Settle passive analysis: call zap_passive_scan_wait");
     }
 
     @Test
@@ -291,6 +391,38 @@ class GuidedSecurityToolsServiceTest {
         assertThat(response).contains("Guided report generated.");
         assertThat(response).contains("Scope: https://example.com/admin");
         assertThat(response).contains("Path: /tmp/report.html");
+        assertThat(response).contains("Next Actions:");
+        assertThat(response).contains("Report readback: call zap_report_read with the Path above");
+        assertThat(response).contains("Internal evidence: call zap_scan_history_release_evidence with target filter https://example.com/admin");
+        assertThat(response).contains("Customer summary: call zap_scan_history_customer_handoff");
+
+        int readbackIndex = response.indexOf("Report readback: call zap_report_read");
+        int evidenceIndex = response.indexOf("Internal evidence: call zap_scan_history_release_evidence");
+        int handoffIndex = response.indexOf("Customer summary: call zap_scan_history_customer_handoff");
+        assertThat(readbackIndex).isLessThan(evidenceIndex);
+        assertThat(evidenceIndex).isLessThan(handoffIndex);
+    }
+
+    @Test
+    void readGuidedReportAddsEvidenceNextActions() {
+        when(reportService.readReport("/tmp/report.html", 1000))
+                .thenReturn("""
+                        Report artifact
+                        Path: /tmp/report.html
+                        Characters Returned: 42
+
+                        <html>report</html>
+                        """);
+
+        String response = service.readGuidedReport("/tmp/report.html", 1000);
+
+        assertThat(response).contains("Guided report readback.");
+        assertThat(response).contains("Path: /tmp/report.html");
+        assertThat(response).contains("review the generated artifact");
+        assertThat(response).contains("Next Actions:");
+        assertThat(response).contains("Internal evidence: call zap_scan_history_release_evidence");
+        assertThat(response).contains("Customer summary: call zap_scan_history_customer_handoff");
+        assertThat(response).contains("<html>report</html>");
     }
 
     @Test
@@ -303,7 +435,9 @@ class GuidedSecurityToolsServiceTest {
         assertThat(response).contains("Guided findings summary.");
         assertThat(response).contains("Scope: https://example.com/admin");
         assertThat(response).contains("Use: first-pass triage");
-        assertThat(response).contains("Next Step: call zap_findings_details");
+        assertThat(response).contains("Next Actions:");
+        assertThat(response).contains("Drill down: call zap_findings_details");
+        assertThat(response).contains("Report: call zap_report_generate");
         assertThat(response).contains("# Findings Summary");
     }
 
@@ -327,6 +461,9 @@ class GuidedSecurityToolsServiceTest {
         assertThat(response).contains("Alert Name Filter: SQL Injection");
         assertThat(response).contains("Requested Limit: 5");
         assertThat(response).contains("inspect concrete URLs, params, evidence, and attack samples");
+        assertThat(response).contains("Next Actions:");
+        assertThat(response).contains("Report: call zap_report_generate");
+        assertThat(response).contains("Handoff: after a report exists, call zap_scan_history_release_evidence");
         assertThat(response).contains("Alert instances returned: 1 of 1");
     }
 
@@ -458,6 +595,7 @@ class GuidedSecurityToolsServiceTest {
         assertThat(response).contains("Guided report generated.");
         assertThat(response).contains("Scope: https://example.com/admin");
         assertThat(response).contains("Path: /tmp/report.html");
+        assertThat(response).contains("Next Actions:");
         verify(localGatewayRecordFactory).requireCapability(localEngineAdapter, EngineCapability.REPORT_GENERATE, "report generation");
         verify(localGatewayRecordFactory).optionalTarget("https://example.com/admin", TargetDescriptor.Kind.WEB);
         verify(localGatewayRecordFactory).reportArtifact(localEngineAdapter, target, "/tmp/report.html", "html");

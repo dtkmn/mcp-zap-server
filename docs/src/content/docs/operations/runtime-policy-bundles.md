@@ -71,7 +71,7 @@ A bundle is a JSON document with this shape:
     "rules": [
       {
         "id": "allow-guided-ci-sandbox-hours",
-        "description": "Permit the approved guided scan path for sandbox hosts.",
+        "description": "Permit target-bearing guided CI calls for sandbox hosts during staffed hours.",
         "decision": "allow",
         "reason": "Sandbox CI is approved during staffed rollout hours.",
         "match": {
@@ -80,9 +80,32 @@ A bundle is a JSON document with this shape:
             "zap_crawl_start",
             "zap_attack_start",
             "zap_findings_summary",
+            "zap_findings_details",
             "zap_report_generate"
           ],
           "hosts": ["*.sandbox.example.com"],
+          "timeWindows": [
+            {
+              "days": ["mon", "tue", "wed", "thu", "fri"],
+              "start": "08:00",
+              "end": "18:00"
+            }
+          ]
+        }
+      },
+      {
+        "id": "allow-guided-ci-followups-staffed-hours",
+        "description": "Permit guided lifecycle checks and workspace-confined report readback that do not carry a target parameter.",
+        "decision": "allow",
+        "reason": "Guided follow-up calls are approved during staffed hours; report readback is bounded by report/workspace artifact confinement, not host matching.",
+        "match": {
+          "tools": [
+            "zap_crawl_status",
+            "zap_attack_status",
+            "zap_passive_scan_wait",
+            "zap_passive_scan_status",
+            "zap_report_read"
+          ],
           "timeWindows": [
             {
               "days": ["mon", "tue", "wed", "thu", "fri"],
@@ -98,6 +121,14 @@ A bundle is a JSON document with this shape:
 ```
 
 Rules are evaluated in `first-match` order. Put explicit deny rules before broad allow rules. Keep `defaultDecision` set to `deny` unless you have a narrow, documented reason to do otherwise.
+
+Host-free requests do not match rules that require `hosts`.
+For guided lifecycle calls such as operation status, passive wait/status, or
+report readback, use a separate host-free rule unless the runtime can recover a
+target from signed operation/report state. A host-free `zap_report_read` rule is
+not sandbox-host scoped; it authorizes report readback by path, with safety
+coming from tool scope, time windows, and `ReportService` report/workspace
+artifact confinement.
 
 The repository ships example bundles at:
 

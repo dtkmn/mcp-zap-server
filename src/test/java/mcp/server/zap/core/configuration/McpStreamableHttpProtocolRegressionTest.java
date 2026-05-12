@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -48,6 +49,9 @@ class McpStreamableHttpProtocolRegressionTest {
     @LocalServerPort
     private int port;
 
+    @Value("${spring.ai.mcp.server.version}")
+    private String configuredServerVersion;
+
     @Test
     void latestProtocolSessionHandlesListPingAndToolCallFollowUps() throws Exception {
         Session session = initializeSession(LATEST_PROTOCOL_VERSION, Map.of(
@@ -57,6 +61,7 @@ class McpStreamableHttpProtocolRegressionTest {
         ));
 
         assertThat(session.negotiatedProtocolVersion()).isEqualTo(LATEST_PROTOCOL_VERSION);
+        assertThat(session.serverInfoVersion()).isEqualTo(configuredServerVersion);
         assertFollowUpSucceeds(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "zap_passive_scan_status");
         assertFollowUpSucceeds(session, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}", "\"result\":{}");
         assertFollowUpSucceeds(
@@ -107,7 +112,9 @@ class McpStreamableHttpProtocolRegressionTest {
         JsonNode envelope = OBJECT_MAPPER.readTree(result.getResponseBody());
         String negotiatedProtocolVersion = envelope.path("result").path("protocolVersion").asText();
         assertThat(negotiatedProtocolVersion).isNotBlank();
-        return new Session(sessionId, negotiatedProtocolVersion);
+        String serverInfoVersion = envelope.path("result").path("serverInfo").path("version").asText();
+        assertThat(serverInfoVersion).isNotBlank();
+        return new Session(sessionId, negotiatedProtocolVersion, serverInfoVersion);
     }
 
     private void assertFollowUpSucceeds(Session session, String payload, String expectedBodyFragment) {
@@ -132,7 +139,7 @@ class McpStreamableHttpProtocolRegressionTest {
         return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
     }
 
-    private record Session(String sessionId, String negotiatedProtocolVersion) {
+    private record Session(String sessionId, String negotiatedProtocolVersion, String serverInfoVersion) {
     }
 
     @TestConfiguration

@@ -7,7 +7,7 @@
     "displayName": "CI Guided Guardrails",
     "owner": "security-platform",
     "timezone": "Australia/Sydney",
-    "ruleCount": 3
+    "ruleCount": 4
   },
   "request": {
     "tool": "zap_attack_start",

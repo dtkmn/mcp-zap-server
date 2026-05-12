@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 public class GuidedSecurityToolsService {
     private static final String REPORT_FORMAT_HTML = "html";
     private static final String REPORT_FORMAT_JSON = "json";
+    private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
 
     private final GuidedScanWorkflowService guidedScanWorkflowService;
     private final ReportService reportService;
@@ -204,7 +205,29 @@ public class GuidedSecurityToolsService {
                 .append("Format: ").append(normalizedFormat).append('\n')
                 .append("Theme: ").append(normalizedTheme).append('\n')
                 .append("Scope: ").append(targetScope(artifact.target())).append('\n')
-                .append("Path: ").append(artifact.location())
+                .append("Path: ").append(artifact.location()).append('\n')
+                .append(reportNextActions(targetScope(artifact.target())))
+                .toString();
+    }
+
+    @Tool(
+            name = "zap_report_read",
+            description = "Read a generated report artifact back through MCP after zap_report_generate, without manual filesystem access."
+    )
+    public String readGuidedReport(
+            @ToolParam(description = "Report path returned by zap_report_generate") String reportPath,
+            @ToolParam(required = false, description = "Maximum characters to return (optional, default: 20000, max: 200000)") Integer maxChars
+    ) {
+        String normalizedReportPath = requireText(reportPath, "reportPath");
+        String report = reportService.readReport(normalizedReportPath, maxChars);
+        return new StringBuilder()
+                .append("Guided report readback.\n")
+                .append("Path: ").append(normalizedReportPath).append('\n')
+                .append("Use: review the generated artifact before attaching it to internal or customer-facing evidence.\n")
+                .append(NEXT_ACTIONS_HEADER).append('\n')
+                .append("- Internal evidence: call zap_scan_history_release_evidence for the same target or evidence window.\n")
+                .append("- Customer summary: call zap_scan_history_customer_handoff only after reviewing report content and release-evidence warnings.\n\n")
+                .append(report)
                 .toString();
     }
 
@@ -255,7 +278,9 @@ public class GuidedSecurityToolsService {
                 .append("Guided findings summary.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')
                 .append("Use: first-pass triage before drilldown or report generation.\n")
-                .append("Next Step: call zap_findings_details for one alert family or concrete instances when you need evidence.\n\n")
+                .append(NEXT_ACTIONS_HEADER).append('\n')
+                .append("- Drill down: call zap_findings_details for one alert family or concrete instances when you need evidence.\n")
+                .append("- Report: call zap_report_generate after passive analysis has drained and the summary is ready to share.\n\n")
                 .append(delegateResponse)
                 .toString();
     }
@@ -283,9 +308,27 @@ public class GuidedSecurityToolsService {
                 .append(Boolean.TRUE.equals(includeInstances)
                         ? "inspect concrete URLs, params, evidence, and attack samples."
                         : "inspect grouped detail before expanding into raw per-occurrence evidence.")
+                .append('\n')
+                .append(NEXT_ACTIONS_HEADER)
+                .append('\n')
+                .append("- Report: call zap_report_generate when you need a human-shareable artifact.")
+                .append('\n')
+                .append("- Handoff: after a report exists, call zap_scan_history_release_evidence for internal review, then zap_scan_history_customer_handoff for the curated external summary.")
                 .append("\n\n")
                 .append(delegateResponse);
         return output.toString();
+    }
+
+    private String reportNextActions(String scope) {
+        String targetAdvice = hasText(scope) && !"All targets".equals(scope)
+                ? " with target filter " + scope
+                : " with a target filter when you need scoped evidence";
+        return new StringBuilder(NEXT_ACTIONS_HEADER)
+                .append('\n')
+                .append("- Report readback: call zap_report_read with the Path above before creating evidence or sharing the artifact.\n")
+                .append("- Internal evidence: call zap_scan_history_release_evidence").append(targetAdvice).append(".\n")
+                .append("- Customer summary: call zap_scan_history_customer_handoff after reviewing release-evidence warnings.")
+                .toString();
     }
 
     private String normalizeDefinitionType(String definitionType) {

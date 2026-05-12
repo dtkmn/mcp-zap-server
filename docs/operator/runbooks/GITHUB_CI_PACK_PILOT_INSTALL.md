@@ -7,6 +7,10 @@ The goal is not to prove every enterprise workflow. The goal is to give a team
 one copyable GitHub path that starts the gateway, runs a ZAP-backed scan through
 MCP, emits evidence, and fails or warns on net-new findings.
 
+Use this runbook for installation mechanics. Use the
+[Seeded API Gate Playbook](../../scanning/SEEDED_API_GATE_PLAYBOOK.md) for the
+team process: seed mode, artifact review, baseline acceptance, and enforcement.
+
 ## What Ships Today
 
 - Composite action: `.github/actions/zap-security-gate`

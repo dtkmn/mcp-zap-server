@@ -50,6 +50,7 @@ Guided tools:
 - `zap_findings_summary`
 - `zap_findings_details`
 - `zap_report_generate`
+- `zap_report_read`
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
 - `zap_scan_history_list`

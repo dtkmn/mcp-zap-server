@@ -269,20 +269,29 @@ class ToolSurfaceProviderTest {
                 String.class,
                 String.class
         );
+        Method reportReadMethod = GuidedSecurityToolsService.class.getDeclaredMethod(
+                "readGuidedReport",
+                String.class,
+                Integer.class
+        );
 
         Tool summaryTool = summaryMethod.getAnnotation(Tool.class);
         Tool detailsTool = detailsMethod.getAnnotation(Tool.class);
         Tool reportTool = reportMethod.getAnnotation(Tool.class);
+        Tool reportReadTool = reportReadMethod.getAnnotation(Tool.class);
         ToolParam summaryBaseUrlParam = summaryMethod.getParameters()[0].getAnnotation(ToolParam.class);
         ToolParam includeInstancesParam = detailsMethod.getParameters()[3].getAnnotation(ToolParam.class);
         ToolParam reportFormatParam = reportMethod.getParameters()[1].getAnnotation(ToolParam.class);
+        ToolParam reportPathParam = reportReadMethod.getParameters()[0].getAnnotation(ToolParam.class);
 
         assertThat(summaryTool.description()).contains("first-pass", "triage", "baseUrl");
         assertThat(detailsTool.description()).contains("Drill", "includeInstances", "URLs", "evidence");
         assertThat(reportTool.description()).contains("human-shareable", "artifact", "triage");
+        assertThat(reportReadTool.description()).contains("Read", "report artifact", "zap_report_generate");
         assertThat(summaryBaseUrlParam.description()).contains("host", "path");
         assertThat(includeInstancesParam.description()).contains("URLs", "evidence");
         assertThat(reportFormatParam.description()).contains("html", "json");
+        assertThat(reportPathParam.description()).contains("Report path", "zap_report_generate");
     }
 
     private boolean hasToolParamAnnotations(Class<?> type) {

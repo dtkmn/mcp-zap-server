@@ -146,7 +146,7 @@ ZAP is the first scanner engine, not the whole product boundary. The current
 public extension work is intentionally small:
 
 - `mcp-zap-extension-api` packages selected policy, protection, evidence, and
-  metadata contracts without core runtime internals.
+  metadata contracts without gateway runtime internals.
 - [How extensions work](./docs/extensions/README.md) explains the core versus
   extension boundary.
 - [Build your own extension](./docs/extensions/BUILD_YOUR_OWN_EXTENSION.md)
@@ -172,6 +172,7 @@ Start here:
 
 Scanning:
 
+- [MCP Client Scan To Evidence](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
 - [Scan Execution Modes](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/)
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)

@@ -46,24 +46,34 @@ Prerequisites:
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 
-cp .env.example .env
-
-# Generate values for ZAP_API_KEY and MCP_API_KEY, then put them in .env.
-openssl rand -hex 32
-openssl rand -hex 32
-
-docker compose up -d
+./bin/bootstrap-local.sh
+./dev.sh
+./bin/self-serve-doctor.sh
 ```
+
+Those scripts are the supported local happy path, not hidden magic:
+
+- `bootstrap-local.sh` creates `.env`, generates local API keys, and prepares the ZAP workspace.
+- `dev.sh` starts the Docker Compose stack with the faster JVM image.
+- `self-serve-doctor.sh` checks Docker, auth, MCP initialize, `tools/list`, guided tools, and a harmless tool call.
 
 Then open:
 
 - Open WebUI: `http://localhost:3000`
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
+- Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
+
+When scanning the bundled demo targets, use the container URLs that ZAP can
+reach from inside Compose:
+
+- Juice Shop scan target: `http://juice-shop:3000`
+- Petstore scan target: `http://petstore:8080`
 
 The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
 Client setup:
 
+- [Self-Serve First Run](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/)
 - [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Configuration](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 - [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
@@ -165,6 +175,7 @@ become product claims.
 Start here:
 
 - [Full documentation](https://danieltse.org/mcp-zap-server/)
+- [Self-Serve First Run](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/)
 - [OSS Extension Model](./docs/extensions/README.md)
 - [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Authentication](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)

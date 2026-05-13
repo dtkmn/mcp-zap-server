@@ -145,7 +145,7 @@ X-API-Key: $MCP_API_KEY
 
 The `mcp-zap-wrk:/zap/wrk` volume must be mounted into both containers. ZAP writes report artifacts there, and the MCP server reads those same paths back for report and evidence-handoff tools. The MCP container is run as UID/GID `1000:1000` to match the standard `zaproxy/zap-stable` container user, so report directories remain writable by both containers.
 
-This default guided standalone path has been smoke-tested with MCP `initialize`, `tools/list`, `zap_passive_scan_status`, and `zap_report_generate` against a separate ZAP container. If you need expert tools such as `zap_report_read`, add `-e MCP_SERVER_TOOLS_SURFACE=expert` to the MCP container run command.
+This default guided standalone path has been smoke-tested with MCP `initialize`, `tools/list`, `zap_passive_scan_status`, `zap_report_generate`, and `zap_report_read` against a separate ZAP container. Keep `MCP_SERVER_TOOLS_SURFACE=guided` for normal report readback. Use `-e MCP_SERVER_TOOLS_SURFACE=expert` only when you need lower-level ZAP tools outside the guided surface.
 
 ## Safe First Test
 

@@ -88,4 +88,4 @@ docker compose -f docker-compose.yml -f docker-compose.ha.yml down -v
 - The gateway is session-aware: streamable MCP over HTTP needs sticky ingress when session state lives in-memory on each replica.
 - In local Compose, `ha.sh` owns the generated gateway config because explicit per-replica upstream entries are required for nginx hashing to behave correctly with scaled Docker services.
 - MCP replicas assume the shared Postgres schema has already been migrated; they no longer create queue/JWT tables on startup.
-- The default dev override still disables MCP auth (`MCP_SECURITY_MODE=none`). If you want auth in the HA simulation, add another override or export the relevant environment variables.
+- The dev override preserves the base API-key/security behavior. Only add an override when you intentionally want to test `none`, JWT, or another auth mode.

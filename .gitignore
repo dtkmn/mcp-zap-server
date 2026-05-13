@@ -1,7 +1,9 @@
 # Gradle build output
 /build/
 /bin/*
+!/bin/bootstrap-local.sh
 !/bin/github-ci-pack-verify.sh
+!/bin/self-serve-doctor.sh
 .gradle/
 **/build/
 **/.gradle/

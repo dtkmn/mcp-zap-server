@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mcp-zap-server": {
+      "url": "http://localhost:7456/mcp",
+      "headers": {
+        "X-API-Key": "${env:MCP_API_KEY}"
+      }
+    }
+  }
+}

@@ -17,6 +17,8 @@ The server supports:
 
 The practical truth: API-key mode is still the easiest self-serve client setup. Not every MCP desktop client handles remote HTTP transport, custom auth headers, or JWT refresh the same way.
 
+If you are starting from a fresh clone, use [Self-Serve First Run](./self-serve-first-run/) before tuning client-specific details here.
+
 ## Recommended Paths
 
 Use one of these paths:

@@ -34,6 +34,7 @@ export default defineConfig({
 					label: 'Mission Control',
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
+						{ slug: 'getting-started/self-serve-first-run' },
 						{ slug: 'getting-started/authentication-quick-start' },
 						{ slug: 'getting-started/tool-surfaces' },
 						{ slug: 'getting-started/mcp-client-authentication' },

@@ -18,7 +18,7 @@ RUN gradle bootJar -x test && \
     cp "${boot_jars}" /tmp/app.jar
 
 # Runtime stage
-FROM eclipse-temurin:25-jre-alpine
+FROM eclipse-temurin:26-jre-alpine
 LABEL io.modelcontextprotocol.server.name="io.github.dtkmn/mcp-zap-server"
 RUN apk add --no-cache curl
 WORKDIR /app

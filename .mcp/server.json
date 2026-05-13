@@ -75,7 +75,7 @@
         },
         {
           "name": "MCP_SERVER_TOOLS_SURFACE",
-          "description": "Tool surface to expose. Use guided for the safer default workflow, or expert when clients need raw ZAP tools such as zap_report_read.",
+          "description": "Tool surface to expose. Use guided for the safer default workflow, including report readback. Use expert only when clients need raw ZAP tools outside the guided surface.",
           "default": "guided"
         },
         {
@@ -159,7 +159,7 @@
         },
         {
           "name": "MCP_SERVER_TOOLS_SURFACE",
-          "description": "Tool surface to expose. Use guided for the safer default workflow, or expert when clients need raw ZAP tools such as zap_report_read.",
+          "description": "Tool surface to expose. Use guided for the safer default workflow, including report readback. Use expert only when clients need raw ZAP tools outside the guided surface.",
           "default": "guided"
         },
         {

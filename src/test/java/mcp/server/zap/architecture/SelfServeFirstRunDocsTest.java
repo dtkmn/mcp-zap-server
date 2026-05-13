@@ -18,6 +18,8 @@ class SelfServeFirstRunDocsTest {
     private static final Path CLIENT_AUTH_DOC =
             Path.of("docs/src/content/docs/getting-started/mcp-client-authentication.md");
     private static final Path CURSOR_EXAMPLE = Path.of("examples/cursor/mcp.json");
+    private static final Path MARKETPLACE_METADATA = Path.of(".mcp/server.json");
+    private static final Path LLMS_INSTALL = Path.of("llms-install.md");
     private static final Path DOCTOR = Path.of("bin/self-serve-doctor.sh");
     private static final Path BOOTSTRAP = Path.of("bin/bootstrap-local.sh");
     private static final Path DEV_COMPOSE = Path.of("docker-compose.dev.yml");
@@ -89,6 +91,19 @@ class SelfServeFirstRunDocsTest {
                 .doesNotContain("--with-open-webui");
 
         assertThat(Files.readString(BOOTSTRAP)).doesNotContain("--with-open-webui");
+    }
+
+    @Test
+    void marketplaceGuidanceKeepsReportReadbackOnTheGuidedSurface() throws IOException {
+        assertThat(Files.readString(MARKETPLACE_METADATA))
+                .contains("including report readback")
+                .contains("Use expert only when clients need raw ZAP tools outside the guided surface")
+                .doesNotContain("expert when clients need raw ZAP tools such as zap_report_read");
+
+        assertThat(Files.readString(LLMS_INSTALL))
+                .contains("Keep `MCP_SERVER_TOOLS_SURFACE=guided` for normal report readback")
+                .contains("Use `-e MCP_SERVER_TOOLS_SURFACE=expert` only when you need lower-level ZAP tools outside the guided surface")
+                .doesNotContain("If you need expert tools such as `zap_report_read`");
     }
 
     @Test

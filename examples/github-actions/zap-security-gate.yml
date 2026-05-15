@@ -32,7 +32,7 @@ jobs:
       ZAP_WEBHOOK_URL: ${{ secrets.ZAP_WEBHOOK_URL }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # If your app under test is not already reachable from the public internet,
       # copy examples/github-actions/docker-compose.app-under-test.yml to your

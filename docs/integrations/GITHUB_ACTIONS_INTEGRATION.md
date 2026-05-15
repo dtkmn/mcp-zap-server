@@ -187,7 +187,7 @@ jobs:
   zap-security-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Run MCP ZAP security gate
         uses: ./.github/actions/zap-security-gate

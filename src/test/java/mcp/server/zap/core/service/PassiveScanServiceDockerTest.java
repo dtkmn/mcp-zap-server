@@ -10,9 +10,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
-
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,8 +45,7 @@ public class PassiveScanServiceDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static PassiveScanService service;
@@ -57,7 +53,7 @@ public class PassiveScanServiceDockerTest {
     @BeforeAll
     static void setupClient() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady();
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new PassiveScanService(new ZapEnginePassiveScanAccess(clientApi));
     }
 
@@ -72,18 +68,5 @@ public class PassiveScanServiceDockerTest {
         assertTrue(status.contains("Records remaining:"));
         assertTrue(waitResult.contains("Passive scan backlog drained."));
         assertTrue(finalStatus.contains("Completed: yes"));
-    }
-
-    private static void awaitApiReady() throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
     }
 }

@@ -14,7 +14,6 @@ import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -63,8 +62,7 @@ public class ApiSchemaImportServiceDockerTest {
                             "-addoninstall",
                             "soap"
                     )
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static OpenApiService service;
@@ -72,7 +70,7 @@ public class ApiSchemaImportServiceDockerTest {
     @BeforeAll
     static void setupService() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady();
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
     }
 
@@ -93,19 +91,6 @@ public class ApiSchemaImportServiceDockerTest {
 
         assertTrue(response.contains("SOAP/WSDL import completed"));
         awaitImportedUrl("http://api-schema-fixtures/soap");
-    }
-
-    private static void awaitApiReady() throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
     }
 
     private static void awaitImportedUrl(String expectedUrl) throws Exception {

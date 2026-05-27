@@ -35,7 +35,6 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class AutomationPlanServiceDockerTest {
     private static final Pattern PLAN_ID_PATTERN = Pattern.compile("Plan ID: ([^\\n]+)");
     private static final Pattern PLAN_FILE_PATTERN = Pattern.compile("Plan File: ([^\\n]+)");
-    private static final Duration ZAP_API_READY_TIMEOUT = Duration.ofSeconds(90);
     private static final Duration AUTOMATION_API_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration AUTOMATION_PLAN_COMPLETION_TIMEOUT = Duration.ofSeconds(30);
     private static final Network NETWORK = Network.newNetwork();
@@ -76,15 +75,14 @@ public class AutomationPlanServiceDockerTest {
                         cmd.withUser("0:0");
                         addHostBind(cmd, AUTOMATION_ROOT);
                     })
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static AutomationPlanService service;
 
     @BeforeAll
     static void setupService() throws Exception {
         ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady(clientApi);
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 
         service = new AutomationPlanService(new ZapEngineAutomationAccess(clientApi));
@@ -136,20 +134,6 @@ public class AutomationPlanServiceDockerTest {
         assertTrue(finalStatus.contains("Job report generated report"), finalStatus);
         assertTrue(artifacts.contains("automation-report.json"), artifacts);
         assertTrue(artifacts.contains("\"@programName\": \"ZAP\""), artifacts);
-    }
-
-    private static void awaitApiReady(ClientApi clientApi) throws Exception {
-        long deadline = System.nanoTime() + ZAP_API_READY_TIMEOUT.toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException(
-                "ZAP API did not become ready within " + ZAP_API_READY_TIMEOUT.toSeconds() + " seconds");
     }
 
     private static void awaitAutomationApiReady(ClientApi clientApi) throws Exception {

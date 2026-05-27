@@ -11,9 +11,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
-import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -53,8 +51,7 @@ public class DirectScanServicesDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static ActiveScanService activeScanService;
@@ -63,7 +60,7 @@ public class DirectScanServicesDockerTest {
     @BeforeAll
     static void setupServices() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady();
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         ScanLimitProperties scanLimitProperties = new ScanLimitProperties();
         scanLimitProperties.setMaxActiveScanDurationInMins(1);
@@ -101,19 +98,6 @@ public class DirectScanServicesDockerTest {
 
         assertTrue(activeStop.contains("Direct active scan stopped."));
         assertTrue(spiderStop.contains("Direct spider scan stopped."));
-    }
-
-    private static void awaitApiReady() throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
     }
 
     private static String extractScanId(String response) {

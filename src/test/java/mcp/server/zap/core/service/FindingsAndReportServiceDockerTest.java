@@ -21,7 +21,6 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,8 +68,7 @@ public class FindingsAndReportServiceDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static FindingsService findingsService;
@@ -80,7 +78,7 @@ public class FindingsAndReportServiceDockerTest {
     @BeforeAll
     static void setupServices() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady();
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
         ScanHistoryLedgerService scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
@@ -127,19 +125,6 @@ public class FindingsAndReportServiceDockerTest {
 
         assertTrue(reportContents.contains("Report artifact"));
         assertTrue(reportContents.contains("Codex Test Alert"));
-    }
-
-    private static void awaitApiReady() throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
     }
 
     private static String awaitFirstMessageId(String baseUrl) throws Exception {

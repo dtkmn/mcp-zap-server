@@ -10,7 +10,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
-import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.time.Duration;
 
@@ -38,15 +37,16 @@ public class ActiveScanPolicyToolsDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forListeningPort())
-                    .withStartupTimeout(Duration.ofMinutes(2));
+                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
+                            .forPort(8090)
+                            .forStatusCode(200)
+                            .withStartupTimeout(Duration.ofMinutes(2)));
 
     private static ActiveScanService service;
 
     @BeforeAll
     static void setupService() throws Exception {
         ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
-        awaitApiReady(clientApi);
         service = new ActiveScanService(
                 new ZapEngineScanExecution(clientApi),
                 mock(UrlValidationService.class),
@@ -80,16 +80,4 @@ public class ActiveScanPolicyToolsDockerTest {
         assertTrue(restoredView.contains("threshold=DEFAULT"));
     }
 
-    private static void awaitApiReady(ClientApi clientApi) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        while (System.nanoTime() < deadline) {
-            try {
-                clientApi.core.version();
-                return;
-            } catch (ClientApiException ignored) {
-                Thread.sleep(500);
-            }
-        }
-        throw new IllegalStateException("ZAP API did not become ready within 30 seconds");
-    }
 }

@@ -68,10 +68,7 @@ public class FindingsAndReportServiceDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static FindingsService findingsService;
@@ -81,6 +78,7 @@ public class FindingsAndReportServiceDockerTest {
     @BeforeAll
     static void setupServices() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
         ScanHistoryLedgerService scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);

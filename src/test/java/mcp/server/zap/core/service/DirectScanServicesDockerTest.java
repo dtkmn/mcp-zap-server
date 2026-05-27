@@ -12,7 +12,6 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
 
-import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,10 +51,7 @@ public class DirectScanServicesDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static ActiveScanService activeScanService;
@@ -64,6 +60,7 @@ public class DirectScanServicesDockerTest {
     @BeforeAll
     static void setupServices() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         ScanLimitProperties scanLimitProperties = new ScanLimitProperties();
         scanLimitProperties.setMaxActiveScanDurationInMins(1);

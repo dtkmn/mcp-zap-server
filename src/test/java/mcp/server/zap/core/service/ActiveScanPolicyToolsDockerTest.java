@@ -5,13 +5,10 @@ import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
-
-import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -37,16 +34,14 @@ public class ActiveScanPolicyToolsDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ActiveScanService service;
 
     @BeforeAll
     static void setupService() throws Exception {
         ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new ActiveScanService(
                 new ZapEngineScanExecution(clientApi),
                 mock(UrlValidationService.class),

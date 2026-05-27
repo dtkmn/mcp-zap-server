@@ -11,8 +11,6 @@ import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.zaproxy.clientapi.core.ClientApi;
 
-import java.time.Duration;
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers(disabledWithoutDocker = true)
@@ -47,10 +45,7 @@ public class PassiveScanServiceDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true"
                     )
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static PassiveScanService service;
@@ -58,6 +53,7 @@ public class PassiveScanServiceDockerTest {
     @BeforeAll
     static void setupClient() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new PassiveScanService(new ZapEnginePassiveScanAccess(clientApi));
     }
 
@@ -73,5 +69,4 @@ public class PassiveScanServiceDockerTest {
         assertTrue(waitResult.contains("Passive scan backlog drained."));
         assertTrue(finalStatus.contains("Completed: yes"));
     }
-
 }

@@ -62,10 +62,7 @@ public class ApiSchemaImportServiceDockerTest {
                             "-addoninstall",
                             "soap"
                     )
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static ClientApi clientApi;
     private static OpenApiService service;
@@ -73,6 +70,7 @@ public class ApiSchemaImportServiceDockerTest {
     @BeforeAll
     static void setupService() throws Exception {
         clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
     }
 

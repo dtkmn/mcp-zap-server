@@ -75,16 +75,14 @@ public class AutomationPlanServiceDockerTest {
                         cmd.withUser("0:0");
                         addHostBind(cmd, AUTOMATION_ROOT);
                     })
-                    .waitingFor(Wait.forHttp("/JSON/core/view/version/")
-                            .forPort(8090)
-                            .forStatusCode(200)
-                            .withStartupTimeout(Duration.ofMinutes(2)));
+                    .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static AutomationPlanService service;
 
     @BeforeAll
     static void setupService() throws Exception {
         ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ZapDockerTestSupport.awaitZapApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 
         service = new AutomationPlanService(new ZapEngineAutomationAccess(clientApi));

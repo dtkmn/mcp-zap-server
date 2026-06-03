@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service.authz;
 
 import java.util.List;
+import mcp.gateway.core.authz.ToolAuthorizationDecision;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import org.junit.jupiter.api.Test;
 

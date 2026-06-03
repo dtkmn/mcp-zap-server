@@ -13,13 +13,15 @@ The short version:
 
 ## What The Current OSS Runtime Owns
 
-Today, `mcp-zap-server` contains both the future-extractable gateway core and
-the ZAP/security distribution. In this document, "current OSS runtime" means
-that whole runnable product, not a separately published generic core module.
+Today, `mcp-zap-server` is the ZAP/security distribution. It consumes
+public-preview core contracts from
+`io.github.dtkmn:mcp-gateway-core`, but it is not the standalone generic MCP
+gateway runtime. In this document, "current OSS runtime" means the runnable
+ZAP/security product.
 
 The current OSS runtime owns:
 
-- the MCP tool surface
+- the MCP tool surface, backed by public-preview core contracts where extracted
 - authentication and tool-scope authorization
 - URL guardrails, request limits, and abuse protection
 - scan queue admission, retry, and durable coordination
@@ -28,9 +30,9 @@ The current OSS runtime owns:
 - extension contracts for engines, policy, selected access boundaries, and
   evidence metadata
 
-Some of those responsibilities are future-extractable gateway-core material.
-Others are security-pack responsibilities that should remain with the
-ZAP/security distribution unless a later extraction ADR proves otherwise.
+Some of those responsibilities now use public-preview `mcp-gateway-core`
+contracts. Others are security-pack responsibilities that should remain with
+the ZAP/security distribution unless a later extraction ADR proves otherwise.
 
 The current OSS runtime must run without enterprise installed. If removing an
 extension breaks the basic gateway, the boundary is wrong.
@@ -55,7 +57,7 @@ learn a different product.
 ```mermaid
 flowchart TD
   Client["MCP client"]
-  Core["OSS runtime today<br/>gateway core plus security pack"]
+  Core["OSS runtime today<br/>ZAP/security pack using public-preview core contracts"]
   Contracts["Extension contracts<br/>Engine, policy, auth, access, evidence"]
   Zap["Built-in ZAP engine adapter"]
   Community["Community extension<br/>public provider package"]

@@ -1,0 +1,243 @@
+def externalGatewayCoreRepositoryUrlProvider = providers.gradleProperty('gatewayCoreExternalRepositoryUrl')
+def externalGatewayCoreGroupProvider = providers.gradleProperty('gatewayCoreExternalGroup')
+        .orElse('io.github.dtkmn')
+def externalGatewayCoreArtifactProvider = providers.gradleProperty('gatewayCoreExternalArtifact')
+        .orElse('mcp-gateway-core')
+def gatewayCoreVersionProvider = providers.gradleProperty('gatewayCoreVersion')
+def externalGatewayCoreVersionProvider = providers.gradleProperty('gatewayCoreExternalVersion')
+        .orElse(gatewayCoreVersionProvider)
+
+ext.gatewayCoreRuntimeDependency = "${externalGatewayCoreGroupProvider.get()}:${externalGatewayCoreArtifactProvider.get()}:${externalGatewayCoreVersionProvider.get()}"
+
+if (externalGatewayCoreRepositoryUrlProvider.isPresent()) {
+    repositories {
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'externalGatewayCore'
+                    url = uri(externalGatewayCoreRepositoryUrlProvider.get())
+                }
+            }
+            filter {
+                includeGroup externalGatewayCoreGroupProvider.get()
+            }
+        }
+    }
+}
+
+def verifyModuleJarClosedWorld = { File jarFile, String allowedPrefix, String label ->
+    if (!jarFile.isFile()) {
+        throw new GradleException("${label} JAR is missing: ${jarFile}")
+    }
+
+    List<String> classes = []
+    List<String> unexpectedEntries = []
+    new java.util.zip.ZipFile(jarFile).withCloseable { jar ->
+        jar.entries().each { entry ->
+            String name = entry.name
+            boolean manifestEntry = name == 'META-INF/' || name == 'META-INF/MANIFEST.MF'
+            boolean allowedEntry = name.startsWith(allowedPrefix)
+            boolean allowedParentDirectory = entry.isDirectory() && allowedPrefix.startsWith(name)
+
+            if (allowedEntry && name.endsWith('.class')) {
+                classes.add(name)
+            }
+            if (!manifestEntry && !allowedEntry && !allowedParentDirectory) {
+                unexpectedEntries.add(name)
+            }
+        }
+    }
+
+    if (classes.isEmpty()) {
+        throw new GradleException("${label} JAR must contain classes under ${allowedPrefix}.")
+    }
+    if (!unexpectedEntries.isEmpty()) {
+        throw new GradleException("${label} JAR contains unexpected entries: ${unexpectedEntries.sort().take(20)}")
+    }
+}
+
+def verifyZapSecurityPackCoreConsumptionArtifacts = { File bootJarFile, File gatewayCoreJar ->
+    verifyModuleJarClosedWorld(gatewayCoreJar, 'mcp/gateway/core/', 'gateway-core')
+
+    Set<String> bootEntries
+    new java.util.zip.ZipFile(bootJarFile).withCloseable { jar ->
+        bootEntries = jar.entries().collect { it.name } as Set
+    }
+
+    String expectedEntry = "BOOT-INF/lib/${gatewayCoreJar.name}"
+    if (!bootEntries.contains(expectedEntry)) {
+        throw new GradleException("Security gateway bootJar is missing gateway-core artifact: ${expectedEntry}")
+    }
+
+    List<String> unpackedCoreClasses = bootEntries.findAll { entry ->
+        entry.startsWith('BOOT-INF/classes/mcp/gateway/core/')
+    }.sort()
+    if (!unpackedCoreClasses.isEmpty()) {
+        throw new GradleException(
+                "Security gateway bootJar must consume gateway-core as a module jar, not unpack core classes: ${unpackedCoreClasses.take(20)}"
+        )
+    }
+}
+
+def resolveGatewayCoreRuntimeArtifact = {
+    String expectedGroup = externalGatewayCoreGroupProvider.get()
+    String expectedArtifact = externalGatewayCoreArtifactProvider.get()
+    String expectedVersion = externalGatewayCoreVersionProvider.get()
+    def artifacts = configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+        artifact.moduleVersion.id.group == expectedGroup
+                && artifact.name == expectedArtifact
+                && artifact.moduleVersion.id.version == expectedVersion
+    }
+    if (artifacts.size() != 1) {
+        throw new GradleException("Expected exactly one gateway-core runtime artifact ${expectedGroup}:${expectedArtifact}:${expectedVersion}, got: ${artifacts.collect {
+            "${it.moduleVersion.id.group}:${it.name}:${it.moduleVersion.id.version}"
+        }}")
+    }
+    artifacts.first().file
+}
+
+def expectExternalGatewayCoreResolutionFailure = {
+    File repository = layout.buildDirectory.dir('missing-external-gateway-core-repository').get().asFile
+    delete repository
+    repository.mkdirs()
+
+    Process process = new ProcessBuilder(
+            './gradlew',
+            'verifyZapSecurityPackCoreConsumption',
+            "-PgatewayCoreExternalRepositoryUrl=${repository.toURI()}",
+            '--no-daemon',
+            '--stacktrace'
+    )
+            .directory(rootProject.projectDir)
+            .redirectErrorStream(true)
+            .start()
+    String output = process.inputStream.getText('UTF-8')
+    int exitCode = process.waitFor()
+    if (exitCode == 0) {
+        throw new GradleException('External gateway-core negative test unexpectedly resolved without the external artifact.')
+    }
+    if (!output.contains('io.github.dtkmn:mcp-gateway-core')) {
+        throw new GradleException("External gateway-core negative test failed for the wrong reason:\n${output}")
+    }
+}
+
+def assertNoRepositoryLocalGatewayCoreSource = {
+    File localCoreRoot = rootProject.file('gateway-core')
+    if (localCoreRoot.exists()) {
+        throw new GradleException(
+                "gateway-core source must live in the public mcp-gateway-core repository, not this repo: ${localCoreRoot}"
+        )
+    }
+}
+
+def expectZapSecurityPackCoreConsumptionFailure = { String label, String expectedMessage, Closure action ->
+    try {
+        action.call()
+    } catch (GradleException e) {
+        if (!e.message.contains(expectedMessage)) {
+            throw new GradleException(
+                    "${label} failed with the wrong message. Expected '${expectedMessage}', got '${e.message}'.",
+                    e
+            )
+        }
+        return
+    }
+    throw new GradleException("${label} unexpectedly passed.")
+}
+
+tasks.register('verifyZapSecurityPackCoreConsumption') {
+    group = 'verification'
+    description = 'Verifies the current ZAP/security runtime consumes gateway-core as an external artifact.'
+    dependsOn tasks.named('bootJar')
+
+    doLast {
+        assertNoRepositoryLocalGatewayCoreSource()
+
+        File gatewayCoreJar = resolveGatewayCoreRuntimeArtifact()
+        File bootJarFile = tasks.named('bootJar').get().archiveFile.get().asFile
+
+        verifyZapSecurityPackCoreConsumptionArtifacts(bootJarFile, gatewayCoreJar)
+    }
+}
+
+tasks.register('verifyZapSecurityPackCoreConsumptionNegativeTests') {
+    group = 'verification'
+    description = 'Runs tamper checks that prove the ZAP/security runtime core-consumption gate fails closed.'
+    dependsOn tasks.named('verifyZapSecurityPackCoreConsumption')
+
+    doLast {
+        File gatewayCoreJar = resolveGatewayCoreRuntimeArtifact()
+        File bootJarFile = tasks.named('bootJar').get().archiveFile.get().asFile
+        File tamperRoot = layout.buildDirectory.dir('zap-security-pack-core-consumption-negative-tests').get().asFile
+        delete tamperRoot
+
+        String gatewayCoreBootEntry = "BOOT-INF/lib/${gatewayCoreJar.name}"
+        File missingCoreDir = new File(tamperRoot, 'missing-core-bootjar')
+        copy {
+            from zipTree(bootJarFile)
+            into missingCoreDir
+            exclude gatewayCoreBootEntry
+        }
+        File missingCoreBootJar = new File(tamperRoot, 'missing-core.jar')
+        ant.zip(destfile: missingCoreBootJar, basedir: missingCoreDir)
+        expectZapSecurityPackCoreConsumptionFailure(
+                'missing gateway-core module jar negative test',
+                'missing gateway-core artifact',
+                {
+                    verifyZapSecurityPackCoreConsumptionArtifacts(missingCoreBootJar, gatewayCoreJar)
+                }
+        )
+
+        File flattenedCoreDir = new File(tamperRoot, 'flattened-core-bootjar')
+        copy {
+            from zipTree(bootJarFile)
+            into flattenedCoreDir
+        }
+        File flattenedClass = new File(
+                flattenedCoreDir,
+                'BOOT-INF/classes/mcp/gateway/core/authz/FlattenedLeak.class'
+        )
+        flattenedClass.parentFile.mkdirs()
+        flattenedClass.text = 'not-a-real-class'
+        File flattenedCoreBootJar = new File(tamperRoot, 'flattened-core.jar')
+        ant.zip(destfile: flattenedCoreBootJar, basedir: flattenedCoreDir)
+        expectZapSecurityPackCoreConsumptionFailure(
+                'flattened gateway-core class negative test',
+                'must consume gateway-core as a module jar',
+                {
+                    verifyZapSecurityPackCoreConsumptionArtifacts(flattenedCoreBootJar, gatewayCoreJar)
+                }
+        )
+
+        File contaminatedCoreDir = new File(tamperRoot, 'contaminated-gateway-core')
+        copy {
+            from zipTree(gatewayCoreJar)
+            into contaminatedCoreDir
+        }
+        File leakedAppClass = new File(contaminatedCoreDir, 'mcp/server/zap/LeakedRuntimeClass.class')
+        leakedAppClass.parentFile.mkdirs()
+        leakedAppClass.text = 'not-a-real-class'
+        File contaminatedCoreJar = new File(tamperRoot, 'contaminated-gateway-core.jar')
+        ant.zip(destfile: contaminatedCoreJar, basedir: contaminatedCoreDir)
+        expectZapSecurityPackCoreConsumptionFailure(
+                'contaminated gateway-core jar negative test',
+                'gateway-core JAR contains unexpected entries',
+                {
+                    verifyZapSecurityPackCoreConsumptionArtifacts(bootJarFile, contaminatedCoreJar)
+                }
+        )
+    }
+}
+
+tasks.register('verifyExternalGatewayCoreResolutionFailsClosed') {
+    group = 'verification'
+    description = 'Proves external gateway-core resolution cannot silently fall back to repository-local source.'
+
+    onlyIf {
+        !externalGatewayCoreRepositoryUrlProvider.isPresent()
+    }
+
+    doLast {
+        expectExternalGatewayCoreResolutionFailure()
+    }
+}

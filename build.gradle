@@ -51,7 +51,10 @@ ext {
     set('commonsCompressVersion', "1.28.0")
 }
 
+apply from: file('gradle/security-pack-core-consumption.gradle')
+
 dependencies {
+    implementation gatewayCoreRuntimeDependency
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -255,6 +258,9 @@ tasks.named('test') {
 
 tasks.named('check') {
     dependsOn tasks.named('verifyPublicPreviewExtensionApiPublication')
+    dependsOn tasks.named('verifyZapSecurityPackCoreConsumption')
+    dependsOn tasks.named('verifyZapSecurityPackCoreConsumptionNegativeTests')
+    dependsOn tasks.named('verifyExternalGatewayCoreResolutionFailsClosed')
     finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')
 }
 

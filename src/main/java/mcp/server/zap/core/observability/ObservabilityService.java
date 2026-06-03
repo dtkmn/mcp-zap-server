@@ -8,8 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.McpAbuseProtectionDecision;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 

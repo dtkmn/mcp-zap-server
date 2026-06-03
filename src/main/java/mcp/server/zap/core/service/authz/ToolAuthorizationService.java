@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import mcp.gateway.core.authz.ToolAuthorizationDecision;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import org.springframework.stereotype.Service;
 

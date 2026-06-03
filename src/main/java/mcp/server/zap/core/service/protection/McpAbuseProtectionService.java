@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;

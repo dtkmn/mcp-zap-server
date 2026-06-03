@@ -1,9 +1,9 @@
 # Build stage
 FROM gradle:9.5.0-jdk25 AS builder
 WORKDIR /usr/src/app
+COPY build.gradle settings.gradle gradle.properties ./
+COPY gradle ./gradle
 COPY src ./src
-COPY build.gradle .
-COPY settings.gradle .
 RUN gradle bootJar -x test && \
     boot_jars="$(find build/libs -maxdepth 1 -type f -name '*.jar' \
       ! -name '*-plain.jar' \

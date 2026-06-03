@@ -20,8 +20,6 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
     private static final Path BUILD_GRADLE = Path.of("build.gradle");
     private static final Path SETTINGS_GRADLE = Path.of("settings.gradle");
     private static final Path GRADLE_PROPERTIES = Path.of("gradle.properties");
-    private static final Path CORE_CONSUMPTION_GRADLE =
-            Path.of("gradle/security-pack-core-consumption.gradle");
     private static final Path EXTENSION_MODEL_DOC = Path.of("docs/extensions/README.md");
 
     @Test
@@ -52,34 +50,24 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
     }
 
     @Test
-    void gradleWiringKeepsGatewayCoreExternalAndVerified() throws IOException {
+    void gradleWiringUsesNormalMavenCentralDependency() throws IOException {
         String buildFile = Files.readString(BUILD_GRADLE);
         String settingsFile = Files.readString(SETTINGS_GRADLE);
         String propertiesFile = Files.readString(GRADLE_PROPERTIES);
-        String consumptionGate = Files.readString(CORE_CONSUMPTION_GRADLE);
 
         assertThat(propertiesFile).contains("gatewayCoreVersion=0.5.4");
         assertThat(buildFile)
-                .contains("apply from: file('gradle/security-pack-core-consumption.gradle')")
-                .contains("implementation gatewayCoreRuntimeDependency")
-                .contains("dependsOn tasks.named('verifyZapSecurityPackCoreConsumption')")
-                .contains("dependsOn tasks.named('verifyExternalGatewayCoreResolutionFailsClosed')")
+                .contains("implementation \"io.github.dtkmn:mcp-gateway-core:${gatewayCoreVersion}\"")
+                .doesNotContain("apply from: file('gradle/security-pack-core-consumption.gradle')")
+                .doesNotContain("verifyZapSecurityPackCoreConsumption")
+                .doesNotContain("verifyExternalGatewayCoreResolutionFailsClosed")
+                .doesNotContain("gatewayCoreRuntimeDependency")
                 .doesNotContain("project(':gateway-core')")
                 .doesNotContain("gatewayCoreUseLocalProject");
         assertThat(settingsFile)
                 .doesNotContain("gateway-core");
-        assertThat(consumptionGate)
-                .contains("io.github.dtkmn")
-                .contains("mcp-gateway-core")
-                .contains("verifyZapSecurityPackCoreConsumption")
-                .contains("verifyZapSecurityPackCoreConsumptionNegativeTests")
-                .contains("verifyExternalGatewayCoreResolutionFailsClosed")
-                .contains("BOOT-INF/lib/${gatewayCoreJar.name}")
-                .contains("BOOT-INF/classes/mcp/gateway/core/")
-                .contains("mcp/gateway/core/")
-                .contains("gateway-core source must live in the public mcp-gateway-core repository")
-                .doesNotContain("project(':gateway-core')")
-                .doesNotContain("gatewayCoreUseLocalProject");
+        assertThat(Path.of("gradle/security-pack-core-consumption.gradle"))
+                .doesNotExist();
     }
 
     @Test

@@ -11,12 +11,14 @@ class GitHubCiPackArchitectureTest {
 
     private static final Path ACTION = Path.of(".github/actions/zap-security-gate/action.yml");
     private static final Path ACTION_COMPOSE = Path.of(".github/actions/zap-security-gate/docker-compose.ci.yml");
+    private static final Path ACTION_RUN_GATE = Path.of(".github/actions/zap-security-gate/run-gate.sh");
     private static final Path EXAMPLE_WORKFLOW = Path.of("examples/github-actions/zap-security-gate.yml");
     private static final Path EXAMPLE_SEED_REQUESTS = Path.of("examples/github-actions/seed-requests.json");
     private static final Path EXAMPLE_APP_COMPOSE = Path.of("examples/github-actions/docker-compose.app-under-test.yml");
     private static final Path INTEGRATION_DOC = Path.of("docs/integrations/GITHUB_ACTIONS_INTEGRATION.md");
     private static final Path GITLAB_INTEGRATION_DOC = Path.of("docs/integrations/GITLAB_CI_INTEGRATION.md");
     private static final Path EXAMPLE_GITLAB_WORKFLOW = Path.of("examples/gitlab/zap-security-gate.gitlab-ci.yml");
+    private static final Path EXAMPLE_GITLAB_RUN_GATE = Path.of("examples/gitlab/run-zap-security-gate.sh");
     private static final Path PILOT_RUNBOOK = Path.of("docs/operator/runbooks/GITHUB_CI_PACK_PILOT_INSTALL.md");
     private static final Path VERIFY_SCRIPT = Path.of("bin/github-ci-pack-verify.sh");
     private static final Path JUICE_SHOP_WORKFLOW = Path.of(".github/workflows/zap-security-gate-juice-shop.yml");
@@ -153,5 +155,23 @@ class GitHubCiPackArchitectureTest {
         assertThat(Files.readString(ACTION_COMPOSE))
                 .contains("MCP_SERVER_TOOLS_SURFACE: expert")
                 .contains("${LOCAL_ZAP_WORKSPACE_FOLDER}:/zap/wrk");
+    }
+
+    @Test
+    void actionMapsWorkspaceScopedReportsBackToArtifacts() throws IOException {
+        assertThat(Files.readString(ACTION_RUN_GATE))
+                .contains("\"--report-root-container\" \"/zap/wrk\"")
+                .contains("\"--report-root-local\" \"${local_workspace_folder}\"")
+                .doesNotContain("\"--report-root-container\" \"/zap/wrk/reports\"")
+                .doesNotContain("\"--report-root-local\" \"${local_workspace_folder}/reports\"");
+    }
+
+    @Test
+    void gitLabHelperMapsWorkspaceScopedReportsBackToArtifacts() throws IOException {
+        assertThat(Files.readString(EXAMPLE_GITLAB_RUN_GATE))
+                .contains("\"--report-root-container\" \"/zap/wrk\"")
+                .contains("\"--report-root-local\" \"${local_workspace_folder}\"")
+                .doesNotContain("\"--report-root-container\" \"/zap/wrk/reports\"")
+                .doesNotContain("\"--report-root-local\" \"${local_workspace_folder}/reports\"");
     }
 }

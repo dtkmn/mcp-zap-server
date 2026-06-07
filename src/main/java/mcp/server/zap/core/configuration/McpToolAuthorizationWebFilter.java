@@ -1,6 +1,5 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -11,9 +10,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import mcp.gateway.core.authz.ToolAuthorizationDecision;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
@@ -35,34 +39,35 @@ import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Enforces tool-level scope authorization for MCP JSON-RPC requests.
  */
 @Component
 public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
-    private static final String JSON_RPC_METHOD_TOOLS_CALL = "tools/call";
-    private static final String JSON_RPC_METHOD_TOOLS_LIST = "tools/list";
     private static final Logger log = LoggerFactory.getLogger(McpToolAuthorizationWebFilter.class);
 
     private final ObjectMapper objectMapper;
+    private final McpJsonRpcInvocationParser invocationParser;
     private final String mcpEndpoint;
     private final int maxBodyBytes;
     private final ToolAuthorizationService toolAuthorizationService;
     private final ObservabilityService observabilityService;
+    private final ClientWorkspaceResolver clientWorkspaceResolver;
 
     public McpToolAuthorizationWebFilter(ObjectProvider<ObjectMapper> objectMapperProvider,
                                          @Value("${spring.ai.mcp.server.streamable-http.mcp-endpoint:/mcp}") String mcpEndpoint,
                                          @Value("${mcp.server.request.max-body-bytes:262144}") int maxBodyBytes,
                                          ToolAuthorizationService toolAuthorizationService,
-                                         ObservabilityService observabilityService) {
+                                         ObservabilityService observabilityService,
+                                         ClientWorkspaceResolver clientWorkspaceResolver) {
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        this.invocationParser = new McpJsonRpcInvocationParser(this.objectMapper);
         this.mcpEndpoint = normalizeEndpoint(mcpEndpoint);
         this.maxBodyBytes = Math.max(1024, maxBodyBytes);
         this.toolAuthorizationService = toolAuthorizationService;
         this.observabilityService = observabilityService;
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     @Override
@@ -98,28 +103,32 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
                     dataBuffer.read(bodyBytes);
                     DataBufferUtils.release(dataBuffer);
 
-                    AuthorizationRequest authorizationRequest = parseAuthorizationRequest(bodyBytes);
-                    if (authorizationRequest == null) {
+                    McpToolInvocation invocation = invocationParser.parse(bodyBytes);
+                    if (!invocation.authorizable()) {
                         return chain.filter(decorateExchange(exchange, bodyBytes));
                     }
 
                     List<String> grantedScopes = extractGrantedScopes(authentication);
-                    ToolAuthorizationDecision decision = switch (authorizationRequest.kind()) {
-                        case TOOLS_LIST -> toolAuthorizationService.authorizeToolsList(grantedScopes);
-                        case TOOL_CALL -> toolAuthorizationService.authorizeToolCall(grantedScopes, authorizationRequest.toolName());
-                    };
+                    String correlationId = RequestLogContext.correlationId(exchange);
+                    GatewayToolExecutionContext toolContext = clientWorkspaceResolver.resolveToolExecutionContext(
+                            authentication,
+                            correlationId,
+                            invocation,
+                            null
+                    );
+                    ToolAuthorizationDecision decision = toolAuthorizationService.authorize(grantedScopes, toolContext);
 
                     if (!decision.mapped()) {
-                        log.warn("Denied MCP action {} because no scope mapping exists", authorizationRequest.toolName());
+                        log.warn("Denied MCP action {} because no scope mapping exists", invocation.actionName());
                         observabilityService.recordAuthorization(
                                 decision.actionName(),
                                 toolAuthorizationService.isEnforced() ? "denied" : "warn",
                                 "unmapped_tool",
                                 decision.requiredScopes(),
                                 decision.grantedScopes(),
-                                resolveClientId(authentication),
-                                resolveWorkspaceId(exchange),
-                                RequestLogContext.correlationId(exchange)
+                                toolContext.principalId(),
+                                toolContext.workspaceId(),
+                                correlationId
                         );
                         if (toolAuthorizationService.isEnforced()) {
                             return writeForbidden(exchange, decision, "unmapped_tool");
@@ -133,13 +142,13 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
                                 "insufficient_scope",
                                 decision.requiredScopes(),
                                 decision.grantedScopes(),
-                                resolveClientId(authentication),
-                                resolveWorkspaceId(exchange),
-                                RequestLogContext.correlationId(exchange)
+                                toolContext.principalId(),
+                                toolContext.workspaceId(),
+                                correlationId
                         );
                         if (toolAuthorizationService.isWarnOnly()) {
                             log.warn("Allowing insufficient-scope MCP action {} in warn mode. Missing scopes: {} granted: {}",
-                                    authorizationRequest.toolName(), decision.missingScopes(), decision.grantedScopes());
+                                    invocation.actionName(), decision.missingScopes(), decision.grantedScopes());
                             return chain.filter(decorateExchange(exchange, bodyBytes));
                         }
                         return writeForbidden(exchange, decision, "insufficient_scope");
@@ -151,9 +160,9 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
                             "scope_granted",
                             decision.requiredScopes(),
                             decision.grantedScopes(),
-                            resolveClientId(authentication),
-                            resolveWorkspaceId(exchange),
-                            RequestLogContext.correlationId(exchange)
+                            toolContext.principalId(),
+                            toolContext.workspaceId(),
+                            correlationId
                     );
                     return chain.filter(decorateExchange(exchange, bodyBytes));
                 })
@@ -163,36 +172,6 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
     private boolean contentLengthExceedsLimit(ServerWebExchange exchange) {
         long contentLength = exchange.getRequest().getHeaders().getContentLength();
         return contentLength > maxBodyBytes;
-    }
-
-    private AuthorizationRequest parseAuthorizationRequest(byte[] bodyBytes) {
-        if (bodyBytes.length == 0) {
-            return null;
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(bodyBytes);
-            if (root == null || !root.isObject()) {
-                return null;
-            }
-
-            String method = textValue(root.get("method"));
-            if (JSON_RPC_METHOD_TOOLS_LIST.equals(method)) {
-                return new AuthorizationRequest(RequestKind.TOOLS_LIST, JSON_RPC_METHOD_TOOLS_LIST);
-            }
-            if (JSON_RPC_METHOD_TOOLS_CALL.equals(method)) {
-                JsonNode params = root.get("params");
-                String toolName = params != null ? textValue(params.get("name")) : null;
-                if (toolName == null || toolName.isBlank()) {
-                    return null;
-                }
-                return new AuthorizationRequest(RequestKind.TOOL_CALL, toolName.trim());
-            }
-            return null;
-        } catch (Exception e) {
-            log.debug("Skipping MCP scope inspection because request body could not be parsed as JSON: {}", e.getMessage());
-            return null;
-        }
     }
 
     private ServerWebExchange decorateExchange(ServerWebExchange exchange, byte[] bodyBytes) {
@@ -283,37 +262,11 @@ public class McpToolAuthorizationWebFilter implements WebFilter, Ordered {
                 .collect(Collectors.toList());
     }
 
-    private String textValue(JsonNode node) {
-        return node == null || node.isNull() ? null : node.asText(null);
-    }
-
     private String normalizeEndpoint(String endpoint) {
         if (endpoint == null || endpoint.isBlank()) {
             return "/mcp";
         }
         return endpoint.startsWith("/") ? endpoint : "/" + endpoint;
-    }
-
-    private String resolveClientId(Authentication authentication) {
-        return authentication != null && authentication.getName() != null && !authentication.getName().isBlank()
-                ? authentication.getName().trim()
-                : "anonymous";
-    }
-
-    private String resolveWorkspaceId(ServerWebExchange exchange) {
-        Object workspaceId = exchange.getAttribute(RequestLogContext.WORKSPACE_ID_ATTRIBUTE);
-        if (workspaceId instanceof String value && !value.isBlank()) {
-            return value.trim();
-        }
-        return "default-workspace";
-    }
-
-    private enum RequestKind {
-        TOOLS_LIST,
-        TOOL_CALL
-    }
-
-    private record AuthorizationRequest(RequestKind kind, String toolName) {
     }
 
     @Override

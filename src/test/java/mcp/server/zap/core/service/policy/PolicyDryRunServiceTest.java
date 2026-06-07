@@ -230,6 +230,63 @@ class PolicyDryRunServiceTest {
     }
 
     @Test
+    void dryRunReturnsValidationErrorForEqualTimeWindowBounds() {
+        String invalidBundle = """
+                {
+                  "apiVersion": "mcp.zap.policy/v1",
+                  "kind": "PolicyBundle",
+                  "metadata": {
+                    "name": "equal-time-window",
+                    "description": "invalid equal bounds",
+                    "owner": "security"
+                  },
+                  "spec": {
+                    "defaultDecision": "deny",
+                    "evaluationOrder": "first-match",
+                    "timezone": "UTC",
+                    "rules": [
+                      {
+                        "id": "invalid-window-rule",
+                        "description": "invalid window",
+                        "decision": "allow",
+                        "reason": "invalid",
+                        "match": {
+                          "tools": ["zap_attack_start"],
+                          "hosts": ["api.sandbox.example.com"],
+                          "timeWindows": [
+                            {
+                              "days": ["mon", "tue"],
+                              "start": "09:00",
+                              "end": "09:00"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+                """;
+
+        Map<String, Object> response = service.dryRun(
+                invalidBundle,
+                "zap_attack_start",
+                "https://api.sandbox.example.com/orders",
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", false);
+        assertThat((List<String>) validation(response).get("errors"))
+                .anyMatch(error -> error.contains("start and end cannot be identical"));
+        assertThat(decision(response)).containsEntry("result", "invalid");
+        assertThat(response).containsEntry("trace", List.of());
+
+        CapturedPolicyDecision audit = capturedPolicyDecision();
+        assertThat(audit.outcome()).isEqualTo("invalid");
+        assertThat((List<String>) audit.details().get("validationErrors"))
+                .anyMatch(error -> error.contains("start and end cannot be identical"));
+    }
+
+    @Test
     void dryRunRejectsBundlesOutsideCurrentTenantScope() {
         service.setPolicyBundleAccessBoundary(new PolicyBundleAccessBoundary() {
             @Override

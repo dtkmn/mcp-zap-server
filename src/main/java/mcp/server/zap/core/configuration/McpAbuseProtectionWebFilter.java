@@ -1,15 +1,17 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.McpAbuseProtectionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,21 +44,26 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
     private static final Logger log = LoggerFactory.getLogger(McpAbuseProtectionWebFilter.class);
 
     private final ObjectMapper objectMapper;
+    private final McpJsonRpcInvocationParser invocationParser;
     private final String mcpEndpoint;
     private final int maxBodyBytes;
     private final McpAbuseProtectionService protectionService;
     private final ObservabilityService observabilityService;
+    private final ClientWorkspaceResolver clientWorkspaceResolver;
 
     public McpAbuseProtectionWebFilter(ObjectProvider<ObjectMapper> objectMapperProvider,
                                        @Value("${spring.ai.mcp.server.streamable-http.mcp-endpoint:/mcp}") String mcpEndpoint,
                                        @Value("${mcp.server.request.max-body-bytes:262144}") int maxBodyBytes,
                                        McpAbuseProtectionService protectionService,
-                                       ObservabilityService observabilityService) {
+                                       ObservabilityService observabilityService,
+                                       ClientWorkspaceResolver clientWorkspaceResolver) {
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        this.invocationParser = new McpJsonRpcInvocationParser(this.objectMapper);
         this.mcpEndpoint = normalizeEndpoint(mcpEndpoint);
         this.maxBodyBytes = Math.max(1024, maxBodyBytes);
         this.protectionService = protectionService;
         this.observabilityService = observabilityService;
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     @Override
@@ -80,12 +87,14 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
                                     dataBuffer.read(bodyBytes);
                                     DataBufferUtils.release(dataBuffer);
 
-                                    JsonRpcAction action = parseAction(bodyBytes);
-                                    McpAbuseProtectionDecision decision = protectionService.evaluate(
+                                    McpToolInvocation action = invocationParser.parse(bodyBytes);
+                                    GatewayToolExecutionContext toolContext = clientWorkspaceResolver.resolveToolExecutionContext(
                                             authentication,
-                                            action.method(),
-                                            action.toolName()
+                                            RequestLogContext.correlationId(exchange),
+                                            action,
+                                            null
                                     );
+                                    McpAbuseProtectionDecision decision = protectionService.evaluate(toolContext);
                                     if (!decision.allowed()) {
                                         log.warn("Rejected MCP action {} for client {} workspace {} due to {} ({})",
                                                 decision.toolName(), decision.clientId(), decision.workspaceId(),
@@ -112,25 +121,6 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
         return exchange.getRequest().getMethod() != null
                 && "POST".equalsIgnoreCase(exchange.getRequest().getMethod().name())
                 && mcpEndpoint.equals(exchange.getRequest().getPath().value());
-    }
-
-    private JsonRpcAction parseAction(byte[] bodyBytes) {
-        if (bodyBytes.length == 0) {
-            return new JsonRpcAction(null, null);
-        }
-
-        try {
-            JsonNode root = objectMapper.readTree(bodyBytes);
-            String method = textValue(root.get("method"));
-            if (!"tools/call".equals(method)) {
-                return new JsonRpcAction(method, null);
-            }
-            JsonNode params = root.get("params");
-            String toolName = params != null ? textValue(params.get("name")) : null;
-            return new JsonRpcAction(method, toolName);
-        } catch (Exception e) {
-            return new JsonRpcAction(null, null);
-        }
     }
 
     private Mono<Void> writeRejected(ServerWebExchange exchange, McpAbuseProtectionDecision decision) {
@@ -209,15 +199,8 @@ public class McpAbuseProtectionWebFilter implements WebFilter, Ordered {
         return endpoint.startsWith("/") ? endpoint : "/" + endpoint;
     }
 
-    private String textValue(JsonNode node) {
-        return node == null || node.isNull() ? null : node.asText(null);
-    }
-
     @Override
     public int getOrder() {
         return SecurityWebFiltersOrder.AUTHORIZATION.getOrder() + 2;
-    }
-
-    private record JsonRpcAction(String method, String toolName) {
     }
 }

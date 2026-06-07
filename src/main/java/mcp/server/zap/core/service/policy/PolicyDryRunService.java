@@ -3,6 +3,7 @@ package mcp.server.zap.core.service.policy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalTime;
@@ -17,6 +18,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import mcp.gateway.core.policybundle.PolicyBundleDecision;
+import mcp.gateway.core.policybundle.PolicyBundleEvaluationRequest;
+import mcp.gateway.core.policybundle.PolicyBundleEvaluationResult;
+import mcp.gateway.core.policybundle.PolicyBundleEvaluator;
+import mcp.gateway.core.policybundle.PolicyBundleMatch;
+import mcp.gateway.core.policybundle.PolicyBundleRule;
+import mcp.gateway.core.policybundle.PolicyBundleRuleEvaluation;
+import mcp.gateway.core.policybundle.PolicyBundleRuleset;
+import mcp.gateway.core.policybundle.PolicyBundleTimeWindow;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
@@ -45,6 +55,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
     private final ObjectMapper objectMapper;
     private final Set<String> knownActionNames;
     private final ObservabilityService observabilityService;
+    private final Clock clock;
     private PolicyBundleAccessBoundary policyBundleAccessBoundary;
 
     @Autowired
@@ -55,6 +66,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         this.knownActionNames = new LinkedHashSet<>(toolScopeRegistry.getRequiredScopesByTool().keySet());
         this.knownActionNames.add(ToolScopeRegistry.TOOLS_LIST_ACTION);
         this.observabilityService = observabilityServiceProvider.getIfAvailable();
+        this.clock = Clock.systemUTC();
     }
 
     public PolicyDryRunService(ObjectMapper objectMapper, ToolScopeRegistry toolScopeRegistry) {
@@ -64,10 +76,18 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
     public PolicyDryRunService(ObjectMapper objectMapper,
                                ToolScopeRegistry toolScopeRegistry,
                                ObservabilityService observabilityService) {
+        this(objectMapper, toolScopeRegistry, observabilityService, Clock.systemUTC());
+    }
+
+    public PolicyDryRunService(ObjectMapper objectMapper,
+                               ToolScopeRegistry toolScopeRegistry,
+                               ObservabilityService observabilityService,
+                               Clock clock) {
         this.objectMapper = objectMapper;
         this.knownActionNames = new LinkedHashSet<>(toolScopeRegistry.getRequiredScopesByTool().keySet());
         this.knownActionNames.add(ToolScopeRegistry.TOOLS_LIST_ACTION);
         this.observabilityService = observabilityService;
+        this.clock = clock == null ? Clock.systemUTC() : clock;
     }
 
     @Autowired(required = false)
@@ -233,27 +253,33 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             errors.add("bundle.spec.rules must be a non-empty array");
             return null;
         }
-        if (rulesNode.size() > 50) {
-            errors.add("bundle.spec.rules must not contain more than 50 rules");
-        }
-
-        List<PolicyRule> rules = new ArrayList<>();
-        Set<String> seenRuleIds = new LinkedHashSet<>();
+        List<PolicyBundleRule> rules = new ArrayList<>();
         for (int index = 0; index < rulesNode.size(); index++) {
             JsonNode ruleNode = rulesNode.get(index);
-            PolicyRule rule = parseRule(ruleNode, index, seenRuleIds, errors);
+            PolicyBundleRule rule = parseRule(ruleNode, index, errors);
             if (rule != null) {
                 rules.add(rule);
             }
         }
 
-        return new PolicyBundleSpec(defaultDecision, evaluationOrder, timezoneId, timezone, rules);
+        PolicyBundleRuleset ruleset = null;
+        if (defaultDecision != null && RULE_DECISIONS.contains(defaultDecision) && !rules.isEmpty()) {
+            try {
+                ruleset = PolicyBundleRuleset.of(PolicyBundleDecision.fromWireValue(defaultDecision), rules);
+            } catch (IllegalArgumentException e) {
+                errors.add("bundle.spec.rules " + e.getMessage());
+            }
+        }
+        if (ruleset == null) {
+            return null;
+        }
+
+        return new PolicyBundleSpec(evaluationOrder, timezoneId, timezone, ruleset);
     }
 
-    private PolicyRule parseRule(JsonNode ruleNode,
-                                 int index,
-                                 Set<String> seenRuleIds,
-                                 List<String> errors) {
+    private PolicyBundleRule parseRule(JsonNode ruleNode,
+                                       int index,
+                                       List<String> errors) {
         String prefix = "bundle.spec.rules[" + index + "]";
         if (ruleNode == null || !ruleNode.isObject()) {
             errors.add(prefix + " must be an object");
@@ -265,9 +291,6 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         String id = requiredText(ruleNode, "id", prefix, errors);
         if (id != null && !isKebabCase(id)) {
             errors.add(prefix + ".id must be lowercase kebab-case");
-        }
-        if (id != null && !seenRuleIds.add(id)) {
-            errors.add(prefix + ".id '" + id + "' must be unique");
         }
 
         String description = requiredText(ruleNode, "description", prefix, errors);
@@ -287,11 +310,17 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             }
         }
 
-        PolicyMatch match = parseMatch(ruleNode.get("match"), prefix + ".match", errors);
-        return new PolicyRule(id, description, decision, reason, enabled, match);
+        PolicyBundleMatch match = parseMatch(ruleNode.get("match"), prefix + ".match", errors);
+        if (id == null || decision == null || reason == null || match == null) {
+            return null;
+        }
+        PolicyBundleDecision decisionValue = RULE_DECISIONS.contains(decision)
+                ? PolicyBundleDecision.fromWireValue(decision)
+                : PolicyBundleDecision.DENY;
+        return new PolicyBundleRule(id, decisionValue, reason, enabled, match);
     }
 
-    private PolicyMatch parseMatch(JsonNode matchNode, String prefix, List<String> errors) {
+    private PolicyBundleMatch parseMatch(JsonNode matchNode, String prefix, List<String> errors) {
         if (matchNode == null || !matchNode.isObject()) {
             errors.add(prefix + " must be an object");
             return null;
@@ -310,9 +339,17 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
 
         List<String> tools = parseTools(toolsNode, prefix + ".tools", errors);
         List<String> hosts = parseHosts(hostsNode, prefix + ".hosts", errors);
-        List<PolicyTimeWindow> timeWindows = parseTimeWindows(timeWindowsNode, prefix + ".timeWindows", errors);
+        List<PolicyBundleTimeWindow> timeWindows = parseTimeWindows(timeWindowsNode, prefix + ".timeWindows", errors);
+        if (tools.isEmpty() && hosts.isEmpty() && timeWindows.isEmpty()) {
+            if (!((toolsNode == null || toolsNode.isNull())
+                    && (hostsNode == null || hostsNode.isNull())
+                    && (timeWindowsNode == null || timeWindowsNode.isNull()))) {
+                errors.add(prefix + " must include at least one valid selector");
+            }
+            return null;
+        }
 
-        return new PolicyMatch(tools, hosts, timeWindows);
+        return PolicyBundleMatch.of(tools, hosts, timeWindows);
     }
 
     private List<String> parseTools(JsonNode toolsNode, String prefix, List<String> errors) {
@@ -380,7 +417,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         return hosts;
     }
 
-    private List<PolicyTimeWindow> parseTimeWindows(JsonNode timeWindowsNode, String prefix, List<String> errors) {
+    private List<PolicyBundleTimeWindow> parseTimeWindows(JsonNode timeWindowsNode, String prefix, List<String> errors) {
         if (timeWindowsNode == null || timeWindowsNode.isNull()) {
             return List.of();
         }
@@ -389,7 +426,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             return List.of();
         }
 
-        List<PolicyTimeWindow> windows = new ArrayList<>();
+        List<PolicyBundleTimeWindow> windows = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         for (int index = 0; index < timeWindowsNode.size(); index++) {
             String windowPrefix = prefix + "[" + index + "]";
@@ -430,8 +467,10 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             String end = requiredText(windowNode, "end", windowPrefix, errors);
             LocalTime startTime = parseLocalTime(start, windowPrefix + ".start", errors);
             LocalTime endTime = parseLocalTime(end, windowPrefix + ".end", errors);
+            boolean invalidWindow = false;
             if (startTime != null && endTime != null && startTime.equals(endTime)) {
                 errors.add(windowPrefix + " start and end cannot be identical");
+                invalidWindow = true;
             }
 
             String signature = dayNames + "|" + start + "|" + end;
@@ -440,8 +479,14 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
                 continue;
             }
 
-            List<DayOfWeek> days = dayNames.stream().map(this::parseDayOfWeek).toList();
-            windows.add(new PolicyTimeWindow(days, start, startTime, end, endTime));
+            if (!dayNames.isEmpty() && startTime != null && endTime != null && !invalidWindow) {
+                List<DayOfWeek> days = dayNames.stream().map(this::parseDayOfWeek).toList();
+                try {
+                    windows.add(PolicyBundleTimeWindow.of(days, startTime, endTime));
+                } catch (IllegalArgumentException ex) {
+                    errors.add(windowPrefix + " " + ex.getMessage());
+                }
+            }
         }
         return windows;
     }
@@ -468,86 +513,37 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
                                          NormalizedTarget normalizedTarget,
                                          Instant evaluationInstant) {
         ZonedDateTime bundleTime = evaluationInstant.atZone(bundle.spec().timezone());
+        PolicyBundleEvaluationResult evaluation = PolicyBundleEvaluator.evaluate(
+                bundle.spec().ruleset(),
+                new PolicyBundleEvaluationRequest(toolName, normalizedTarget.normalizedHost(), bundleTime)
+        );
         List<Map<String, Object>> trace = new ArrayList<>();
-
-        PolicyRule matchedRule = null;
-        for (PolicyRule rule : bundle.spec().rules()) {
-            RuleEvaluation evaluation = evaluateRule(rule, toolName, normalizedTarget.normalizedHost(), bundleTime);
-            trace.add(traceMap(evaluation));
-            if (evaluation.matched()) {
-                matchedRule = rule;
-                break;
-            }
+        for (PolicyBundleRuleEvaluation ruleEvaluation : evaluation.trace()) {
+            trace.add(traceMap(ruleEvaluation));
         }
 
         Map<String, Object> response = baseResponse(bundle, toolName, normalizedTarget, evaluationInstant, true, List.of());
         response.put("trace", trace);
 
         Map<String, Object> decision = new LinkedHashMap<>();
-        if (matchedRule != null) {
-            decision.put("result", matchedRule.decision());
-            decision.put("source", "rule");
-            decision.put("matchedRuleId", matchedRule.id());
-            decision.put("reason", matchedRule.reason());
-        } else {
-            decision.put("result", bundle.spec().defaultDecision());
-            decision.put("source", "default");
-            decision.put("matchedRuleId", null);
-            decision.put("reason", "No enabled rule matched the request. Using bundle default decision.");
-        }
+        decision.put("result", evaluation.decision().wireValue());
+        decision.put("source", evaluation.source().wireValue());
+        decision.put("matchedRuleId", evaluation.matchedRuleId());
+        decision.put("reason", evaluation.reason());
         decision.put("defaultDecision", bundle.spec().defaultDecision());
         response.put("decision", decision);
         return response;
     }
 
-    private RuleEvaluation evaluateRule(PolicyRule rule,
-                                        String toolName,
-                                        String normalizedHost,
-                                        ZonedDateTime bundleTime) {
-        List<String> matchedSelectors = new ArrayList<>();
-        List<String> failedSelectors = new ArrayList<>();
-
-        if (!rule.enabled()) {
-            failedSelectors.add("disabled");
-            return new RuleEvaluation(rule, false, matchedSelectors, failedSelectors);
-        }
-
-        if (!rule.match().tools().isEmpty()) {
-            if (rule.match().tools().contains(toolName)) {
-                matchedSelectors.add("tools");
-            } else {
-                failedSelectors.add("tools");
-            }
-        }
-
-        if (!rule.match().hosts().isEmpty()) {
-            if (normalizedHost != null && matchesAnyHost(normalizedHost, rule.match().hosts())) {
-                matchedSelectors.add("hosts");
-            } else {
-                failedSelectors.add("hosts");
-            }
-        }
-
-        if (!rule.match().timeWindows().isEmpty()) {
-            if (matchesAnyWindow(bundleTime, rule.match().timeWindows())) {
-                matchedSelectors.add("timeWindows");
-            } else {
-                failedSelectors.add("timeWindows");
-            }
-        }
-
-        return new RuleEvaluation(rule, failedSelectors.isEmpty(), matchedSelectors, failedSelectors);
-    }
-
-    private Map<String, Object> traceMap(RuleEvaluation evaluation) {
+    private Map<String, Object> traceMap(PolicyBundleRuleEvaluation evaluation) {
         Map<String, Object> trace = new LinkedHashMap<>();
-        trace.put("ruleId", evaluation.rule().id());
-        trace.put("decision", evaluation.rule().decision());
-        trace.put("enabled", evaluation.rule().enabled());
+        trace.put("ruleId", evaluation.ruleId());
+        trace.put("decision", evaluation.decision().wireValue());
+        trace.put("enabled", evaluation.enabled());
         trace.put("matched", evaluation.matched());
         trace.put("matchedSelectors", evaluation.matchedSelectors());
         trace.put("failedSelectors", evaluation.failedSelectors());
-        trace.put("reason", evaluation.rule().reason());
+        trace.put("reason", evaluation.reason());
         return trace;
     }
 
@@ -694,7 +690,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
 
     private Instant parseEvaluationInstant(String evaluatedAt, List<String> errors) {
         if (evaluatedAt == null || evaluatedAt.isBlank()) {
-            return Instant.now();
+            return clock.instant();
         }
 
         String trimmed = evaluatedAt.trim();
@@ -712,34 +708,6 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         }
         errors.add("evaluatedAt must be a valid ISO-8601 instant or offset datetime");
         return Instant.EPOCH;
-    }
-
-    private boolean matchesAnyHost(String normalizedHost, List<String> patterns) {
-        return patterns.stream().anyMatch(pattern -> hostMatches(normalizedHost, pattern));
-    }
-
-    private boolean hostMatches(String normalizedHost, String pattern) {
-        if (pattern.startsWith("*.")) {
-            String suffix = pattern.substring(1);
-            return normalizedHost.endsWith(suffix) && normalizedHost.length() > suffix.length() - 1;
-        }
-        return normalizedHost.equals(pattern);
-    }
-
-    private boolean matchesAnyWindow(ZonedDateTime bundleTime, List<PolicyTimeWindow> windows) {
-        return windows.stream().anyMatch(window -> matchesWindow(bundleTime, window));
-    }
-
-    private boolean matchesWindow(ZonedDateTime bundleTime, PolicyTimeWindow window) {
-        if (!window.days().contains(bundleTime.getDayOfWeek())) {
-            return false;
-        }
-
-        LocalTime currentTime = bundleTime.toLocalTime();
-        if (window.startTime().isBefore(window.endTime())) {
-            return !currentTime.isBefore(window.startTime()) && currentTime.isBefore(window.endTime());
-        }
-        return !currentTime.isBefore(window.startTime()) || currentTime.isBefore(window.endTime());
     }
 
     private String extractHost(String target) {
@@ -920,36 +888,16 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
                                         Map<String, String> labels) {
     }
 
-    private record PolicyBundleSpec(String defaultDecision,
-                                    String evaluationOrder,
+    private record PolicyBundleSpec(String evaluationOrder,
                                     String timezoneId,
                                     ZoneId timezone,
-                                    List<PolicyRule> rules) {
-    }
+                                    PolicyBundleRuleset ruleset) {
+        private String defaultDecision() {
+            return ruleset.defaultDecision().wireValue();
+        }
 
-    private record PolicyRule(String id,
-                              String description,
-                              String decision,
-                              String reason,
-                              boolean enabled,
-                              PolicyMatch match) {
-    }
-
-    private record PolicyMatch(List<String> tools,
-                               List<String> hosts,
-                               List<PolicyTimeWindow> timeWindows) {
-    }
-
-    private record PolicyTimeWindow(List<DayOfWeek> days,
-                                    String start,
-                                    LocalTime startTime,
-                                    String end,
-                                    LocalTime endTime) {
-    }
-
-    private record RuleEvaluation(PolicyRule rule,
-                                  boolean matched,
-                                  List<String> matchedSelectors,
-                                  List<String> failedSelectors) {
+        private List<PolicyBundleRule> rules() {
+            return ruleset.rules();
+        }
     }
 }

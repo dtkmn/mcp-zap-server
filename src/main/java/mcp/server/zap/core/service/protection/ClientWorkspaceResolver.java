@@ -1,5 +1,8 @@
 package mcp.server.zap.core.service.protection;
 
+import mcp.gateway.core.context.GatewayExecutionContext;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.extension.api.protection.WorkspaceIdentityResolver;
 import org.springframework.security.core.Authentication;
@@ -58,6 +61,23 @@ public class ClientWorkspaceResolver implements WorkspaceIdentityResolver {
         }
 
         return DEFAULT_CLIENT_ID.equals(clientId) ? DEFAULT_WORKSPACE_ID : clientId.trim();
+    }
+
+    public GatewayExecutionContext resolveExecutionContext(Authentication authentication, String correlationId) {
+        String clientId = resolveClientId(authentication);
+        return GatewayExecutionContext.of(clientId, resolveWorkspaceId(clientId), correlationId);
+    }
+
+    public GatewayExecutionContext resolveCurrentExecutionContext(String correlationId) {
+        String clientId = resolveCurrentClientId();
+        return GatewayExecutionContext.of(clientId, resolveWorkspaceId(clientId), correlationId);
+    }
+
+    public GatewayToolExecutionContext resolveToolExecutionContext(Authentication authentication,
+                                                                   String correlationId,
+                                                                   McpToolInvocation invocation,
+                                                                   String target) {
+        return GatewayToolExecutionContext.of(resolveExecutionContext(authentication, correlationId), invocation, target);
     }
 
     private boolean hasText(String value) {

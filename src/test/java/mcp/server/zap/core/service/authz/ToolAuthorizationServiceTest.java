@@ -2,6 +2,8 @@ package mcp.server.zap.core.service.authz;
 
 import java.util.List;
 import mcp.gateway.core.authz.ToolAuthorizationDecision;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import org.junit.jupiter.api.Test;
 
@@ -116,6 +118,37 @@ class ToolAuthorizationServiceTest {
 
         assertThat(decision.allowed()).isFalse();
         assertThat(decision.mapped()).isFalse();
+    }
+
+    @Test
+    void disabledModeBypassesMappedScopeChecksButStillDeniesUnmappedTools() {
+        ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.OFF, true);
+
+        ToolAuthorizationDecision mapped = service.authorizeToolCall(List.of(), "zap_report_read");
+        ToolAuthorizationDecision unmapped = service.authorizeToolCall(List.of("*"), "zap_unknown_tool");
+
+        assertThat(mapped.allowed()).isTrue();
+        assertThat(mapped.mapped()).isTrue();
+        assertThat(mapped.requiredScopes()).containsExactly("zap:report:read");
+        assertThat(unmapped.allowed()).isFalse();
+        assertThat(unmapped.mapped()).isFalse();
+    }
+
+    @Test
+    void authorizesNormalizedGatewayToolContextThroughCoreAuthorizer() {
+        ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
+        GatewayToolExecutionContext context = GatewayToolExecutionContext.of(
+                "client",
+                "workspace",
+                "corr",
+                McpToolInvocation.fromJsonRpc(McpToolInvocation.METHOD_TOOLS_CALL, "zap_report_read"),
+                null
+        );
+
+        ToolAuthorizationDecision decision = service.authorize(List.of("zap:report:read"), context);
+
+        assertThat(decision.allowed()).isTrue();
+        assertThat(decision.actionName()).isEqualTo("zap_report_read");
     }
 
     private ToolAuthorizationService createService(ToolAuthorizationProperties.Mode mode, boolean allowWildcard) {

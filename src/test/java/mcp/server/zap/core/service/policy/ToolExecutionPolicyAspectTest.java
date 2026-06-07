@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.stream.Stream;
+import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
+import mcp.server.zap.core.gateway.GatewayCorePolicyAdapter;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.extension.api.policy.ToolExecutionPolicyHook;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.reflect.CodeSignature;
@@ -59,7 +62,9 @@ class ToolExecutionPolicyAspectTest {
         ToolExecutionPolicyService policyService = new ToolExecutionPolicyService(
                 properties,
                 policyHooks(hook),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
         ToolExecutionPolicyAspect aspect = new ToolExecutionPolicyAspect(policyService);
 
@@ -125,7 +130,9 @@ class ToolExecutionPolicyAspectTest {
         ToolExecutionPolicyService policyService = new ToolExecutionPolicyService(
                 properties,
                 policyHooks(hook),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
         ToolExecutionPolicyAspect aspect = new ToolExecutionPolicyAspect(policyService);
 
@@ -171,6 +178,10 @@ class ToolExecutionPolicyAspectTest {
         ObjectProvider<ToolExecutionPolicyHook> provider = mock(ObjectProvider.class);
         when(provider.orderedStream()).thenReturn(Stream.of(hook));
         return provider;
+    }
+
+    private ClientWorkspaceResolver clientWorkspaceResolver() {
+        return new ClientWorkspaceResolver(new ApiKeyProperties());
     }
 
     private static class SampleToolMethods {

@@ -1,11 +1,15 @@
 package mcp.server.zap.core.service.policy;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import mcp.gateway.core.policy.ToolPolicyDeniedException;
+import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
+import mcp.server.zap.core.gateway.GatewayCorePolicyAdapter;
+import mcp.gateway.core.policy.ToolPolicyDeniedException;
 import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
 import mcp.server.zap.extension.api.policy.ToolExecutionPolicyHook;
 import org.junit.jupiter.api.Test;
@@ -30,7 +34,9 @@ class ToolExecutionPolicyServiceTest {
         ToolExecutionPolicyService service = new ToolExecutionPolicyService(
                 properties,
                 provider(context -> PolicyEnforcementDecision.deny("deny for test")),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatCode(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-off"))
@@ -46,7 +52,9 @@ class ToolExecutionPolicyServiceTest {
         ToolExecutionPolicyService service = new ToolExecutionPolicyService(
                 properties,
                 provider(context -> PolicyEnforcementDecision.deny("deny for test")),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatCode(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-dry"))
@@ -64,7 +72,9 @@ class ToolExecutionPolicyServiceTest {
         ToolExecutionPolicyService service = new ToolExecutionPolicyService(
                 properties,
                 provider(context -> PolicyEnforcementDecision.deny("deny for test")),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatThrownBy(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-enforce"))
@@ -83,7 +93,9 @@ class ToolExecutionPolicyServiceTest {
         ToolExecutionPolicyService service = new ToolExecutionPolicyService(
                 properties,
                 provider(),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatThrownBy(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-no-hook"))
@@ -108,7 +120,9 @@ class ToolExecutionPolicyServiceTest {
                         "no_policy_bundle_configured",
                         Map.of("policyProvider", "basic_policy_bundle")
                 )),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatThrownBy(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-abstain"))
@@ -145,7 +159,9 @@ class ToolExecutionPolicyServiceTest {
                                 Map.of("policyProvider", "custom_policy_provider")
                         )
                 ),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         assertThatCode(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-allow"))
@@ -175,10 +191,16 @@ class ToolExecutionPolicyServiceTest {
                                 "mode", "enforce",
                                 "allowed", false,
                                 "reason", "spoofed reason",
+                                "clientId", "spoofed-client",
+                                "workspaceId", "spoofed-workspace",
+                                "correlationId", "spoofed-correlation",
+                                "outcome", "allow",
                                 "policyProvider", "sample"
                         )
                 )),
-                observabilityService
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
         );
 
         service.enforce("zap_attack_start", "https://prod.example.com", "corr-spoof");
@@ -192,10 +214,45 @@ class ToolExecutionPolicyServiceTest {
                 .containsEntry("policyProvider", "sample");
         assertThat(details)
                 .doesNotContainEntry("tool", "spoofed_tool")
-                .doesNotContainEntry("allowed", false);
+                .doesNotContainEntry("allowed", false)
+                .doesNotContainKeys("clientId", "workspaceId", "correlationId", "outcome");
         assertThat((Map<String, Object>) details.get("extensionDetails"))
                 .containsEntry("tool", "spoofed_tool")
-                .containsEntry("allowed", false);
+                .containsEntry("allowed", false)
+                .containsEntry("clientId", "spoofed-client")
+                .containsEntry("workspaceId", "spoofed-workspace")
+                .containsEntry("correlationId", "spoofed-correlation")
+                .containsEntry("outcome", "allow");
+    }
+
+    @Test
+    void extensionPolicyDetailsWithNullKeysDoNotCrashPolicyAudit() {
+        PolicyEnforcementProperties properties = new PolicyEnforcementProperties();
+        properties.setMode(PolicyEnforcementProperties.Mode.DRY_RUN);
+        ObservabilityService observabilityService = mock(ObservabilityService.class);
+        Map<String, Object> detailsWithNullKey = new LinkedHashMap<>();
+        detailsWithNullKey.put(null, "ignored");
+        detailsWithNullKey.put("policyProvider", "sample");
+
+        ToolExecutionPolicyService service = new ToolExecutionPolicyService(
+                properties,
+                provider(context -> new PolicyEnforcementDecision(
+                        PolicyEnforcementDecision.Outcome.ALLOW,
+                        "null key should not crash",
+                        detailsWithNullKey
+                )),
+                observabilityService,
+                new GatewayCorePolicyAdapter(),
+                clientWorkspaceResolver()
+        );
+
+        assertThatCode(() -> service.enforce("zap_attack_start", "https://prod.example.com", "corr-null-key"))
+                .doesNotThrowAnyException();
+
+        Map<String, Object> details = capturedPolicyDetails(observabilityService, "dry_run_allow", "corr-null-key");
+        assertThat(details)
+                .containsEntry("policyProvider", "sample")
+                .doesNotContainKey(null);
     }
 
     @SuppressWarnings("unchecked")
@@ -210,6 +267,10 @@ class ToolExecutionPolicyServiceTest {
         ArgumentCaptor<Map<String, Object>> detailsCaptor = ArgumentCaptor.forClass(Map.class);
         verify(observabilityService).recordPolicyDecision(eq(outcome), detailsCaptor.capture(), eq(correlationId));
         return detailsCaptor.getValue();
+    }
+
+    private ClientWorkspaceResolver clientWorkspaceResolver() {
+        return new ClientWorkspaceResolver(new ApiKeyProperties());
     }
 
     private ObjectProvider<ToolExecutionPolicyHook> provider(ToolExecutionPolicyHook... hooks) {

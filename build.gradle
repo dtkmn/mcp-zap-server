@@ -44,7 +44,7 @@ repositories {
 }
 
 ext {
-    set('springAiVersion', "2.0.0-M5")
+    set('springAiVersion', "2.0.0-RC1")
     set('testcontainersVersion', "1.20.6")
     set('netty.version', "4.2.13.Final")
     set('postgresql.version', "42.7.11")
@@ -53,6 +53,7 @@ ext {
 
 dependencies {
     implementation "io.github.dtkmn:mcp-gateway-core:${gatewayCoreVersion}"
+    implementation "io.github.dtkmn:mcp-gateway-spring-webflux:${gatewayCoreVersion}"
     implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-security'

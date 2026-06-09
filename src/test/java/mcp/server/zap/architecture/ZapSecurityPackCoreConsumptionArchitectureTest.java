@@ -19,6 +19,9 @@ import mcp.gateway.core.protection.McpAbuseProtectionContext;
 import mcp.gateway.core.rate.TokenBucketRateLimiter;
 import mcp.gateway.core.tool.McpToolRegistry;
 import mcp.gateway.core.url.UrlScope;
+import mcp.gateway.spring.webflux.McpGatewayWebFluxAbuseProtectionFilter;
+import mcp.gateway.spring.webflux.McpGatewayWebFluxAuthorizationFilter;
+import mcp.gateway.spring.webflux.McpJsonRpcToolInvocationParser;
 import org.junit.jupiter.api.Test;
 
 class ZapSecurityPackCoreConsumptionArchitectureTest {
@@ -66,9 +69,10 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
         String settingsFile = Files.readString(SETTINGS_GRADLE);
         String propertiesFile = Files.readString(GRADLE_PROPERTIES);
 
-        assertThat(propertiesFile).contains("gatewayCoreVersion=0.5.7");
+        assertThat(propertiesFile).contains("gatewayCoreVersion=0.5.8");
         assertThat(buildFile)
                 .contains("implementation \"io.github.dtkmn:mcp-gateway-core:${gatewayCoreVersion}\"")
+                .contains("implementation \"io.github.dtkmn:mcp-gateway-spring-webflux:${gatewayCoreVersion}\"")
                 .doesNotContain("apply from: file('gradle/security-pack-core-consumption.gradle')")
                 .doesNotContain("verifyZapSecurityPackCoreConsumption")
                 .doesNotContain("verifyExternalGatewayCoreResolutionFailsClosed")
@@ -97,15 +101,27 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
 
     @Test
     void zapRuntimeUsesCoreContractsAtTheAdapterBoundary() throws IOException {
+        assertThat(Path.of("src/main/java/mcp/server/zap/core/configuration/McpAbuseProtectionWebFilter.java"))
+                .doesNotExist();
+        assertThat(Path.of("src/main/java/mcp/server/zap/core/configuration/McpToolAuthorizationWebFilter.java"))
+                .doesNotExist();
+        assertThat(Path.of("src/main/java/mcp/server/zap/core/configuration/McpJsonRpcInvocationParser.java"))
+                .doesNotExist();
+        assertThat(Files.readString(Path.of(
+                        "src/main/java/mcp/server/zap/core/configuration/McpGatewayWebFluxAdapterConfiguration.java")))
+                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxAuthorizationFilter;")
+                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxAbuseProtectionFilter;")
+                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxContextResolver;")
+                .contains("clientWorkspaceResolver.resolveToolExecutionContext(")
+                .contains("toolAuthorizationService.authorize(grantedScopes, context)")
+                .contains("protectionService.evaluate(context)")
+                .contains("observabilityService.recordAuthorization(")
+                .contains("observabilityService.recordProtectionRejection(");
         assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/service/authz/ToolAuthorizationService.java")))
                 .contains("import mcp.gateway.core.authz.McpToolAuthorizer;")
                 .contains("import mcp.gateway.core.context.GatewayToolExecutionContext;")
                 .contains("authorizer.authorize(context, grantedScopes, allowWildcard(), !isDisabled())")
                 .doesNotContain("missingScopes.add");
-        assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/configuration/McpToolAuthorizationWebFilter.java")))
-                .contains("import mcp.gateway.core.context.GatewayToolExecutionContext;")
-                .contains("import mcp.gateway.core.invocation.McpToolInvocation;")
-                .contains("toolAuthorizationService.authorize(grantedScopes, toolContext)");
         assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/service/policy/ToolExecutionPolicyService.java")))
                 .contains("import mcp.gateway.core.context.GatewayToolExecutionContext;")
                 .contains("import mcp.gateway.core.policy.ToolPolicyDecision;")
@@ -122,10 +138,6 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
                 .contains("import mcp.gateway.core.protection.McpQuotaLimit;")
                 .contains("toolScopeRegistry.hasCapability(")
                 .doesNotContain("QUEUE_ADMISSION_TOOLS");
-        assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/configuration/McpAbuseProtectionWebFilter.java")))
-                .contains("import mcp.gateway.core.context.GatewayToolExecutionContext;")
-                .contains("import mcp.gateway.core.invocation.McpToolInvocation;")
-                .contains("protectionService.evaluate(toolContext)");
         assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/observability/ObservabilityService.java")))
                 .contains("import mcp.gateway.core.audit.GatewayAuditSink;")
                 .contains("import mcp.gateway.core.protection.McpAbuseProtectionDecision;")
@@ -188,11 +200,29 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
                 .contains("It consumes")
                 .contains("public-preview core contracts from")
                 .contains("`io.github.dtkmn:mcp-gateway-core`")
+                .contains("`mcp-gateway-spring-webflux`")
                 .contains("it is not the standalone generic MCP")
                 .contains("gateway runtime")
                 .contains("public-preview core contracts where extracted")
                 .doesNotContain("contains both the future-extractable gateway core")
                 .doesNotContain("gateway core plus security pack");
+    }
+
+    @Test
+    void representativeSpringWebFluxAdapterContractsResolveFromExternalArtifact() throws Exception {
+        String expectedJar = "mcp-gateway-spring-webflux-" + gatewayCoreVersion() + ".jar";
+
+        for (Class<?> type : List.of(
+                McpGatewayWebFluxAuthorizationFilter.class,
+                McpGatewayWebFluxAbuseProtectionFilter.class,
+                McpJsonRpcToolInvocationParser.class
+        )) {
+            Path source = codeSourcePath(type);
+            assertThat(source.getFileName().toString())
+                    .as("%s should resolve from the public mcp-gateway-spring-webflux dependency", type.getName())
+                    .isEqualTo(expectedJar);
+            assertThat(source).isRegularFile();
+        }
     }
 
     private String gatewayCoreVersion() throws IOException {

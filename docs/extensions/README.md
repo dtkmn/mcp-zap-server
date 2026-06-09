@@ -14,8 +14,9 @@ The short version:
 ## What The Current OSS Runtime Owns
 
 Today, `mcp-zap-server` is the ZAP/security distribution. It consumes
-public-preview core contracts from
-`io.github.dtkmn:mcp-gateway-core`, but it is not the standalone generic MCP
+public-preview core contracts from `io.github.dtkmn:mcp-gateway-core` and uses
+the public-preview `mcp-gateway-spring-webflux` adapter for MCP HTTP
+authorization/protection filters, but it is not the standalone generic MCP
 gateway runtime. In this document, "current OSS runtime" means the runnable
 ZAP/security product.
 
@@ -31,8 +32,9 @@ The current OSS runtime owns:
   evidence metadata
 
 Some of those responsibilities now use public-preview `mcp-gateway-core`
-contracts. Others are security-pack responsibilities that should remain with
-the ZAP/security distribution unless a later extraction ADR proves otherwise.
+contracts and the Spring WebFlux adapter. Others are security-pack
+responsibilities that should remain with the ZAP/security distribution unless a
+later extraction ADR proves otherwise.
 
 The current OSS runtime must run without enterprise installed. If removing an
 extension breaks the basic gateway, the boundary is wrong.

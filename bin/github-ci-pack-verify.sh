@@ -76,6 +76,10 @@ assert_exact_line_count() {
   fi
 }
 
+spring_ai_version() {
+  sed -n "s/^[[:space:]]*set('springAiVersion', \"\\([^\"]*\\)\").*/\\1/p" "${REPO_ROOT}/build.gradle" | head -n 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-docker)
@@ -158,16 +162,21 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
 fi
 
 if [[ "${SKIP_GRADLE}" -eq 0 ]]; then
+  expected_spring_ai_version="$(spring_ai_version)"
+  [[ -n "${expected_spring_ai_version}" ]] || {
+    echo "Could not resolve springAiVersion from build.gradle" >&2
+    exit 1
+  }
+
   log_step "Record Spring AI / Spring Boot dependency resolution"
   (
     cd "${REPO_ROOT}"
     ./gradlew dependencyInsight --dependency spring-ai-starter-mcp-server-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt"
-    ./gradlew dependencyInsight --dependency spring-boot --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt"
+    ./gradlew dependencyInsight --dependency spring-boot-starter-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt"
   )
-  assert_file_contains "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt" "org.springframework.ai:spring-ai-starter-mcp-server-webflux:2.0.0-M5"
-  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot:4.0.6"
-  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter:4.1.0-RC1 -> 4.0.6"
-  pass "Spring AI 2.0.0-M5 resolves against the managed Spring Boot 4.0.6 runtime"
+  assert_file_contains "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt" "org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}"
+  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0-RC1 -> 4.0.6"
+  pass "Spring AI ${expected_spring_ai_version} resolves against the managed Spring Boot 4.0.6 runtime"
 
   log_step "Run Docker image packaging architecture guard"
   (

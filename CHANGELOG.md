@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-06-10
+
+### Added
+- Added reusable GitHub Actions for ZAP security gates and webhook callbacks, including CI contract tests and a Juice Shop pilot workflow.
+- Added GitLab CI examples, seeded API request fixtures, and runbooks for installing and rolling back the CI security gate pack.
+- Added self-serve local bootstrap and doctor scripts with first-run documentation for MCP client setup.
+- Added gateway-core audit and policy adapters plus Spring WebFlux adapter configuration backed by the `mcp-gateway-spring-webflux` adapter module for shared MCP policy, abuse-protection, and audit handling.
+
+### Changed
+- Bumped runtime, MCP server metadata, Helm chart metadata, MCP Registry package metadata, and install examples to `0.9.0` / `v0.9.0`.
+- Updated the runtime to consume `io.github.dtkmn:mcp-gateway-core` and `io.github.dtkmn:mcp-gateway-spring-webflux` `0.5.9`.
+- Updated Spring AI to `2.0.0-RC1`, Netty to `4.2.15.Final`, and docs dependencies including Astro `6.4.5`.
+- Reworked tool-scope authorization, policy dry-run, rate limiting, workspace resolution, and audit-event publishing around the shared gateway-core adapter model.
+
+### Security
+- Replaced bespoke MCP authorization and abuse-protection WebFlux filters with shared gateway-core adapter enforcement.
+- Added Snyk scanning workflow coverage for open-source and container security checks.
+- Strengthened CI gate image-reference validation so release examples reject mutable MCP server image tags.
+
+### Fixed
+- Improved MCP client timeout handling for CI gate orchestration.
+- Improved report path mapping so generated evidence paths stay inside the expected workspace contract.
+- Removed legacy URL-scope and policy decision classes after moving the corresponding boundaries into gateway-core.
+
 ## [0.8.0] - 2026-05-10
 
 ### Added

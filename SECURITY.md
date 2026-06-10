@@ -6,9 +6,9 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 | Version    | Supported                                      |
 | ---------- | ---------------------------------------------- |
-| `>= 0.8.0` | ✅ Active development; receives security fixes |
-| `0.7.x`    | ⚠️ Critical security fixes where practical     |
-| `< 0.7.0`  | ⚠️ Legacy versions; consider upgrading         |
+| `>= 0.9.0` | ✅ Active development; receives security fixes |
+| `0.8.x`    | ⚠️ Critical security fixes where practical     |
+| `< 0.8.0`  | ⚠️ Legacy versions; consider upgrading         |
 
 ## Security Features
 

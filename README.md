@@ -81,7 +81,7 @@ Client setup:
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.8.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.9.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
 
 Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
 
@@ -98,17 +98,17 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 ## Latest Release
 
-`v0.8.0` adds:
+`v0.9.0` adds:
 
-- public-preview extension API publication and standalone extension examples
-- scan history release-evidence and customer-handoff tools
-- HA queue claim fencing, dispatcher/result-applier boundaries, and Postgres race coverage
-- Docker image packaging hardening, MCP Docker catalog labeling, and native-image port alignment
-- MCP Registry metadata and agent install notes for marketplace discovery
+- shared gateway-core audit, policy, and protection adapter integration for MCP traffic
+- Spring WebFlux adapter wiring backed by `mcp-gateway-spring-webflux` `0.5.9`
+- reusable GitHub Actions ZAP security gate and webhook callback actions
+- GitHub/GitLab CI examples, seeded API gate contracts, and Juice Shop pilot validation
+- self-serve bootstrap/doctor scripts, MCP client timeout handling, and safer report path mapping
 
 Read the full notes:
 
-- [Release notes](./RELEASE_NOTES_0.8.0.md)
+- [Release notes](./RELEASE_NOTES_0.9.0.md)
 - [Changelog](./CHANGELOG.md)
 - [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 

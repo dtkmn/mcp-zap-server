@@ -189,8 +189,8 @@ python_args=(
   "--passive-timeout-seconds" "${ZAP_PASSIVE_TIMEOUT_SECONDS:-180}"
   "--spider-timeout-seconds" "${ZAP_SPIDER_TIMEOUT_SECONDS:-600}"
   "--active-timeout-seconds" "${ZAP_ACTIVE_TIMEOUT_SECONDS:-1200}"
-  "--report-root-container" "/zap/wrk/reports"
-  "--report-root-local" "${local_workspace_folder}/reports"
+  "--report-root-container" "/zap/wrk"
+  "--report-root-local" "${local_workspace_folder}"
   "--zap-proxy-url" "${ZAP_PROXY_URL:-http://docker:8090}"
   "--seed-request-timeout-seconds" "${ZAP_SEED_REQUEST_TIMEOUT_SECONDS:-30}"
 )

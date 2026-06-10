@@ -1,5 +1,6 @@
 package mcp.server.zap.core.service;
 
+import mcp.gateway.core.url.UrlScope;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

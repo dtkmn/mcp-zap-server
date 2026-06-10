@@ -16,6 +16,9 @@ class DockerImagePackagingArchitectureTest {
         String dockerfile = Files.readString(DOCKERFILE);
 
         assertThat(dockerfile)
+                .contains("COPY build.gradle settings.gradle gradle.properties ./")
+                .contains("COPY gradle ./gradle")
+                .contains("COPY src ./src")
                 .contains("gradle bootJar -x test")
                 .contains("Expected exactly one executable application JAR")
                 .contains("cp \"${boot_jars}\" /tmp/app.jar")

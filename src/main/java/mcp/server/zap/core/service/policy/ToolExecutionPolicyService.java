@@ -5,11 +5,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import mcp.gateway.core.context.GatewayExecutionContext;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
+import mcp.gateway.core.policy.ToolPolicyDecision;
+import mcp.gateway.core.policy.ToolPolicyDeniedException;
+import mcp.gateway.core.policy.ToolPolicyEvaluationContext;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
-import mcp.server.zap.core.exception.ToolPolicyDeniedException;
+import mcp.server.zap.core.gateway.GatewayCorePolicyAdapter;
 import mcp.server.zap.core.observability.ObservabilityService;
-import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
-import mcp.server.zap.extension.api.policy.ToolExecutionPolicyContext;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.extension.api.policy.ToolExecutionPolicyHook;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
@@ -25,19 +30,29 @@ public class ToolExecutionPolicyService {
             "mode",
             "allowed",
             "reason",
+            "clientId",
+            "workspaceId",
+            "correlationId",
+            "outcome",
             "extensionDetails"
     );
 
     private final PolicyEnforcementProperties policyEnforcementProperties;
     private final ObjectProvider<ToolExecutionPolicyHook> toolExecutionPolicyHookProvider;
     private final ObservabilityService observabilityService;
+    private final GatewayCorePolicyAdapter gatewayCorePolicyAdapter;
+    private final ClientWorkspaceResolver clientWorkspaceResolver;
 
     public ToolExecutionPolicyService(PolicyEnforcementProperties policyEnforcementProperties,
                                       ObjectProvider<ToolExecutionPolicyHook> toolExecutionPolicyHookProvider,
-                                      ObservabilityService observabilityService) {
+                                      ObservabilityService observabilityService,
+                                      GatewayCorePolicyAdapter gatewayCorePolicyAdapter,
+                                      ClientWorkspaceResolver clientWorkspaceResolver) {
         this.policyEnforcementProperties = policyEnforcementProperties;
         this.toolExecutionPolicyHookProvider = toolExecutionPolicyHookProvider;
         this.observabilityService = observabilityService;
+        this.gatewayCorePolicyAdapter = gatewayCorePolicyAdapter;
+        this.clientWorkspaceResolver = clientWorkspaceResolver;
     }
 
     public void enforce(String toolName, String target, String correlationId) {
@@ -46,12 +61,19 @@ public class ToolExecutionPolicyService {
             return;
         }
 
-        ToolExecutionPolicyContext context = new ToolExecutionPolicyContext(toolName, target, correlationId);
-        PolicyEnforcementDecision decision = evaluatePolicyHooks(context);
+        GatewayExecutionContext executionContext =
+                clientWorkspaceResolver.resolveCurrentExecutionContext(correlationId);
+        GatewayToolExecutionContext toolContext = GatewayToolExecutionContext.of(
+                executionContext,
+                McpToolInvocation.fromJsonRpc(McpToolInvocation.METHOD_TOOLS_CALL, toolName),
+                target
+        );
+        ToolPolicyEvaluationContext context = gatewayCorePolicyAdapter.evaluationContext(toolContext);
+        ToolPolicyDecision decision = evaluatePolicyHooks(context);
 
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("tool", toolName);
-        if (target != null && !target.isBlank()) {
+        details.put("tool", context.toolName());
+        if (context.target() != null) {
             details.put("targetProvided", true);
         }
         details.put("mode", mode.name().toLowerCase());
@@ -66,45 +88,29 @@ public class ToolExecutionPolicyService {
 
         if (mode == PolicyEnforcementProperties.Mode.ENFORCE && !decision.allowed()) {
             throw new ToolPolicyDeniedException(
-                    "Tool execution denied by policy for " + toolName + ": " + decision.reason()
+                    "Tool execution denied by policy for " + context.toolName() + ": " + decision.reason()
             );
         }
     }
 
-    private PolicyEnforcementDecision evaluatePolicyHooks(ToolExecutionPolicyContext context) {
+    private ToolPolicyDecision evaluatePolicyHooks(ToolPolicyEvaluationContext context) {
         List<ToolExecutionPolicyHook> hooks = toolExecutionPolicyHookProvider.orderedStream().toList();
         if (hooks.isEmpty()) {
-            return PolicyEnforcementDecision.deny("no_policy_hook_configured", Map.of("policyProviderCount", 0));
+            return gatewayCorePolicyAdapter.noPolicyHookDecision();
         }
 
         List<Map<String, Object>> abstentions = new ArrayList<>();
-        PolicyEnforcementDecision firstAllow = null;
+        ToolPolicyDecision firstAllow = null;
         for (int index = 0; index < hooks.size(); index++) {
-            PolicyEnforcementDecision decision;
-            try {
-                decision = hooks.get(index).evaluate(context);
-            } catch (RuntimeException e) {
-                Map<String, Object> details = new LinkedHashMap<>();
-                details.put("policyProviderCount", hooks.size());
-                details.put("policyHookIndex", index);
-                details.put("errorClass", e.getClass().getSimpleName());
-                return PolicyEnforcementDecision.deny("policy_hook_error", details);
-            }
-
-            if (decision == null || decision.outcome() == null) {
-                Map<String, Object> details = new LinkedHashMap<>();
-                details.put("policyProviderCount", hooks.size());
-                details.put("policyHookIndex", index);
-                return PolicyEnforcementDecision.deny("policy_hook_returned_invalid_decision", details);
-            }
-
+            ToolPolicyDecision decision =
+                    gatewayCorePolicyAdapter.evaluateExtensionHook(hooks.get(index), context, hooks.size(), index);
             if (decision.abstained()) {
-                abstentions.add(abstentionDetails(decision));
+                abstentions.add(gatewayCorePolicyAdapter.abstentionDetails(decision));
                 continue;
             }
 
             if (decision.denied()) {
-                return withRuntimeDetails(decision, hooks.size(), abstentions);
+                return gatewayCorePolicyAdapter.withRuntimeDetails(decision, hooks.size(), abstentions);
             }
 
             if (firstAllow == null) {
@@ -113,33 +119,10 @@ public class ToolExecutionPolicyService {
         }
 
         if (firstAllow != null) {
-            return withRuntimeDetails(firstAllow, hooks.size(), abstentions);
+            return gatewayCorePolicyAdapter.withRuntimeDetails(firstAllow, hooks.size(), abstentions);
         }
 
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("policyProviderCount", hooks.size());
-        if (!abstentions.isEmpty()) {
-            details.put("abstainedPolicyProviders", abstentions);
-        }
-        return PolicyEnforcementDecision.deny("no_active_policy_provider_configured", details);
-    }
-
-    private PolicyEnforcementDecision withRuntimeDetails(PolicyEnforcementDecision decision,
-                                                         int policyProviderCount,
-                                                         List<Map<String, Object>> abstentions) {
-        Map<String, Object> details = new LinkedHashMap<>();
-        if (decision.details() != null && !decision.details().isEmpty()) {
-            details.putAll(decision.details());
-        }
-        details.put("policyProviderCount", policyProviderCount);
-        if (!abstentions.isEmpty()) {
-            details.put("abstainedPolicyProviders", abstentions);
-        }
-
-        if (decision.allowed()) {
-            return PolicyEnforcementDecision.allow(decision.reason(), details);
-        }
-        return PolicyEnforcementDecision.deny(decision.reason(), details);
+        return gatewayCorePolicyAdapter.noActiveProviderDecision(hooks.size(), abstentions);
     }
 
     private void addExtensionDetails(Map<String, Object> auditDetails, Map<String, Object> policyDetails) {
@@ -149,6 +132,13 @@ public class ToolExecutionPolicyService {
 
         Map<String, Object> reservedDetails = new LinkedHashMap<>();
         policyDetails.forEach((key, value) -> {
+            if (key == null || value == null) {
+                return;
+            }
+            if ("extensionDetails".equals(key)) {
+                mergeExtensionDetails(reservedDetails, value);
+                return;
+            }
             if (CORE_AUDIT_DETAIL_KEYS.contains(key) || auditDetails.containsKey(key)) {
                 reservedDetails.put(key, value);
             } else {
@@ -160,14 +150,16 @@ public class ToolExecutionPolicyService {
         }
     }
 
-    private Map<String, Object> abstentionDetails(PolicyEnforcementDecision decision) {
-        Map<String, Object> details = new LinkedHashMap<>();
-        if (decision.details() != null && !decision.details().isEmpty()) {
-            details.putAll(decision.details());
+    private void mergeExtensionDetails(Map<String, Object> reservedDetails, Object value) {
+        if (value instanceof Map<?, ?> existingMap) {
+            existingMap.forEach((key, nestedValue) -> {
+                if (key != null && nestedValue != null) {
+                    reservedDetails.put(key.toString(), nestedValue);
+                }
+            });
+        } else if (value != null) {
+            reservedDetails.put("value", value);
         }
-        if (decision.reason() != null) {
-            details.put("reason", decision.reason());
-        }
-        return details;
     }
+
 }

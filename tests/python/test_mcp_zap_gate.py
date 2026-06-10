@@ -63,6 +63,25 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
         self.assertEqual(body := MODULE.unwrap_mcp_body(body), '{"jsonrpc":"2.0","result":{"ok":true}}')
 
+    def test_mcp_client_timeout_outlives_passive_wait_timeout(self):
+        self.assertEqual(MODULE.mcp_client_timeout_seconds(20), 60)
+        self.assertEqual(MODULE.mcp_client_timeout_seconds(180), 210)
+
+    def test_mcp_client_reports_socket_timeout_with_configured_timeout(self):
+        client = MODULE.McpHttpClient("http://example.com/mcp", "test-key", timeout_seconds=7)
+
+        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=TimeoutError):
+            with self.assertRaisesRegex(RuntimeError, "after 7 seconds"):
+                client._post_json({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+
+    def test_mcp_client_reports_wrapped_socket_timeout_with_configured_timeout(self):
+        client = MODULE.McpHttpClient("http://example.com/mcp", "test-key", timeout_seconds=11)
+        wrapped_timeout = MODULE.urllib.error.URLError(TimeoutError("timed out"))
+
+        with mock.patch.object(MODULE.urllib.request, "urlopen", side_effect=wrapped_timeout):
+            with self.assertRaisesRegex(RuntimeError, "after 11 seconds"):
+                client._post_json({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+
     def test_parse_operation_id_reads_guided_operation_id(self):
         text = "Guided crawl started.\nOperation ID: zop_123\nExecution Mode: direct\n"
 
@@ -92,7 +111,56 @@ class McpZapGateHelpersTest(unittest.TestCase):
             "/tmp/zap-work/reports",
         )
 
-        self.assertEqual(mapped, Path("/tmp/zap-work/reports/zap-report-123.html"))
+        self.assertEqual(mapped, Path("/tmp/zap-work/reports/zap-report-123.html").resolve())
+
+    def test_map_report_path_translates_workspace_scoped_report(self):
+        mapped = MODULE.map_report_path(
+            "/zap/wrk/workspaces/default-client/zap-report-123.html",
+            "/zap/wrk",
+            "/tmp/zap-work",
+        )
+
+        self.assertEqual(mapped, Path("/tmp/zap-work/workspaces/default-client/zap-report-123.html").resolve())
+
+    def test_map_report_path_rejects_parent_traversal(self):
+        mapped = MODULE.map_report_path(
+            "/zap/wrk/../../tmp/secret.txt",
+            "/zap/wrk",
+            "/tmp/zap-work",
+        )
+
+        self.assertIsNone(mapped)
+
+    def test_map_report_path_rejects_existing_host_path_when_roots_are_configured(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outside = Path(tmpdir) / "secret.txt"
+            outside.write_text("secret\n", encoding="utf-8")
+
+            mapped = MODULE.map_report_path(
+                str(outside),
+                "/zap/wrk",
+                str(Path(tmpdir) / "zap-work"),
+            )
+
+            self.assertIsNone(mapped)
+
+    def test_map_report_path_rejects_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            local_root = tmp_path / "zap-work"
+            outside = tmp_path / "outside"
+            local_root.mkdir()
+            outside.mkdir()
+            (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
+            (local_root / "escape").symlink_to(outside)
+
+            mapped = MODULE.map_report_path(
+                "/zap/wrk/escape/secret.txt",
+                "/zap/wrk",
+                str(local_root),
+            )
+
+            self.assertIsNone(mapped)
 
     def test_canonicalize_snapshot_normalizes_legacy_payload_and_dedupes(self):
         payload = {

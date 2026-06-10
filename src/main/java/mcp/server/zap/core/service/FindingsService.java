@@ -2,6 +2,7 @@ package mcp.server.zap.core.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import mcp.gateway.core.url.UrlScope;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineFindingAccess;
 import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;

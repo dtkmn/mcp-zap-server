@@ -167,18 +167,22 @@ def parse_report_path(text: str) -> str:
 
 def map_report_path(container_path: str, container_root: str | None, local_root: str | None) -> Path | None:
     report_path = Path(container_path)
-    if report_path.exists():
-        return report_path
     if not container_root or not local_root:
+        if report_path.exists():
+            return report_path.resolve()
         return None
     normalized_container_root = container_root.rstrip("/")
     if container_path == normalized_container_root:
-        return Path(local_root)
+        return Path(local_root).resolve()
     prefix = normalized_container_root + "/"
     if not container_path.startswith(prefix):
         return None
     suffix = container_path[len(prefix):]
-    return Path(local_root) / suffix
+    resolved_local_root = Path(local_root).resolve()
+    mapped_path = (resolved_local_root / suffix).resolve()
+    if mapped_path == resolved_local_root or resolved_local_root in mapped_path.parents:
+        return mapped_path
+    return None
 
 
 def append_github_output(name: str, value: str | None) -> None:
@@ -276,6 +280,10 @@ class McpHttpClient:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 response_body = response.read().decode("utf-8")
                 return response_body, response.headers
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"Timed out waiting for MCP server at {self.server_url} after {self.timeout_seconds} seconds."
+            ) from exc
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
             normalized_error_body = unwrap_mcp_body(error_body)
@@ -286,6 +294,10 @@ class McpHttpClient:
                 pass
             raise RuntimeError(f"HTTP {exc.code} from MCP server: {message}") from exc
         except urllib.error.URLError as exc:
+            if isinstance(exc.reason, TimeoutError):
+                raise RuntimeError(
+                    f"Timed out waiting for MCP server at {self.server_url} after {self.timeout_seconds} seconds."
+                ) from exc
             raise RuntimeError(f"Unable to reach MCP server at {self.server_url}: {exc}") from exc
 
     def _next_id(self) -> int:
@@ -1019,13 +1031,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def mcp_client_timeout_seconds(passive_timeout_seconds: int) -> int:
+    return max(60, passive_timeout_seconds + 30)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    client = McpHttpClient(args.server_url, args.api_key)
+    client = McpHttpClient(
+        args.server_url,
+        args.api_key,
+        timeout_seconds=mcp_client_timeout_seconds(args.passive_timeout_seconds),
+    )
     available_tools = set(client.list_tools())
 
     guided_surface = {

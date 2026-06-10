@@ -1,5 +1,6 @@
 package mcp.server.zap.core.service;
 
+import mcp.gateway.core.url.UrlScope;
 import mcp.server.zap.core.gateway.EngineInventoryAccess;
 import mcp.server.zap.core.gateway.EngineInventoryAccess.InventoryAlertSummary;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;

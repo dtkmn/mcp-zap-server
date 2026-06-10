@@ -6,6 +6,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import mcp.gateway.core.audit.GatewayAuditEvent;
+import mcp.gateway.core.audit.GatewayAuditSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -17,7 +19,7 @@ import org.springframework.stereotype.Service;
  * Publishes bounded audit events to the Actuator audit endpoint and structured logs.
  */
 @Service
-public class AuditEventStream {
+public class AuditEventStream implements GatewayAuditSink {
     private static final Logger auditLog = LoggerFactory.getLogger("mcp.server.zap.audit");
 
     private final AuditEventRepository auditEventRepository;
@@ -35,23 +37,26 @@ public class AuditEventStream {
         this.properties = properties;
     }
 
+    @Override
     public void publish(String type, String principal, String outcome, Map<String, Object> details) {
+        publish(GatewayAuditEvent.of(type, principal, outcome, details));
+    }
+
+    @Override
+    public void publish(GatewayAuditEvent event) {
         if (!properties.getAudit().isEnabled()) {
             return;
         }
 
-        String normalizedType = normalize(type, "unknown");
-        String normalizedPrincipal = hasText(principal) ? principal.trim() : "anonymous";
-        String normalizedOutcome = normalize(outcome, "unknown");
+        GatewayAuditEvent auditEvent = event == null
+                ? GatewayAuditEvent.of(null, null, null, Map.of())
+                : event;
+        String normalizedType = normalize(auditEvent.type(), "unknown");
+        String normalizedPrincipal = hasText(auditEvent.principal()) ? auditEvent.principal().trim() : "anonymous";
+        String normalizedOutcome = normalize(auditEvent.outcome(), "unknown");
         Map<String, Object> data = new LinkedHashMap<>();
-        if (details != null) {
-            details.forEach((key, value) -> {
-                if (key != null && value != null) {
-                    data.put(key, value);
-                }
-            });
-        }
-        data.putIfAbsent("outcome", normalizedOutcome);
+        auditEvent.details().forEach(data::put);
+        data.put("outcome", normalizedOutcome);
 
         auditEventRepository.add(new AuditEvent(Instant.now(), normalizedPrincipal, normalizedType, data));
         if (meterRegistry != null) {

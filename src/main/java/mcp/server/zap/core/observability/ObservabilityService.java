@@ -8,8 +8,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import mcp.gateway.core.audit.GatewayAuditSink;
+import mcp.gateway.core.context.GatewayExecutionContext;
+import mcp.server.zap.core.gateway.GatewayCoreAuditAdapter;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.McpAbuseProtectionDecision;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -20,15 +23,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class ObservabilityService {
     private final MeterRegistry meterRegistry;
-    private final AuditEventStream auditEventStream;
+    private final GatewayAuditSink auditEventSink;
     private final ClientWorkspaceResolver clientWorkspaceResolver;
+    private final GatewayCoreAuditAdapter gatewayCoreAuditAdapter;
 
     public ObservabilityService(ObjectProvider<MeterRegistry> meterRegistryProvider,
-                                AuditEventStream auditEventStream,
-                                ClientWorkspaceResolver clientWorkspaceResolver) {
+                                GatewayAuditSink auditEventSink,
+                                ClientWorkspaceResolver clientWorkspaceResolver,
+                                GatewayCoreAuditAdapter gatewayCoreAuditAdapter) {
         this.meterRegistry = meterRegistryProvider.getIfAvailable(SimpleMeterRegistry::new);
-        this.auditEventStream = auditEventStream;
+        this.auditEventSink = auditEventSink;
         this.clientWorkspaceResolver = clientWorkspaceResolver;
+        this.gatewayCoreAuditAdapter = gatewayCoreAuditAdapter;
     }
 
     public void recordHttpRequest(String method,
@@ -63,7 +69,7 @@ public class ObservabilityService {
                 "reason", normalizedReason
         ).increment();
 
-        auditEventStream.publish(
+        auditEventSink.publish(
                 "authentication",
                 clientId,
                 normalizedOutcome,
@@ -81,7 +87,7 @@ public class ObservabilityService {
                 "endpoint", normalizedEndpoint
         ).increment();
 
-        auditEventStream.publish(
+        auditEventSink.publish(
                 "auth_rate_limit_rejection",
                 "anonymous",
                 "rate_limited",
@@ -118,7 +124,7 @@ public class ObservabilityService {
             details.put("grantedScopes", grantedScopes);
         }
 
-        auditEventStream.publish(
+        auditEventSink.publish(
                 "authorization",
                 clientId,
                 normalizedOutcome,
@@ -139,7 +145,7 @@ public class ObservabilityService {
                 "toolFamily", toolFamily
         ).increment();
 
-        auditEventStream.publish(
+        auditEventSink.publish(
                 "protection_rejection",
                 decision.clientId(),
                 normalize(decision.errorCode(), "unknown"),
@@ -182,7 +188,7 @@ public class ObservabilityService {
             }
         }
 
-        auditEventStream.publish(
+        auditEventSink.publish(
                 "tool_execution",
                 clientId,
                 normalizedOutcome,
@@ -193,15 +199,13 @@ public class ObservabilityService {
     public void recordPolicyDecision(String outcome,
                                      Map<String, Object> details,
                                      String correlationId) {
-        String clientId = clientWorkspaceResolver.resolveCurrentClientId();
-        String workspaceId = clientWorkspaceResolver.resolveCurrentWorkspaceId();
+        GatewayExecutionContext context = clientWorkspaceResolver.resolveCurrentExecutionContext(correlationId);
 
-        auditEventStream.publish(
-                "policy_decision",
-                clientId,
+        auditEventSink.publish(gatewayCoreAuditAdapter.policyDecision(
+                context,
                 normalize(outcome, "unknown"),
-                auditDetails(correlationId, clientId, workspaceId, details == null ? Map.of() : details)
-        );
+                details
+        ));
     }
 
     public String classifyToolFamily(String toolName) {

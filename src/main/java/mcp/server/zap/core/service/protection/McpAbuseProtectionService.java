@@ -5,12 +5,17 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
+import mcp.gateway.core.protection.McpAbuseProtectionContext;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
+import mcp.gateway.core.protection.McpQuotaLimit;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.service.GuidedExecutionModeResolver;
 import mcp.server.zap.core.service.ScanJobQueueService;
+import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -20,31 +25,13 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class McpAbuseProtectionService {
-    private static final Set<String> QUEUE_ADMISSION_TOOLS = Set.of(
-            "zap_queue_active_scan",
-            "zap_queue_active_scan_as_user",
-            "zap_queue_spider_scan",
-            "zap_queue_spider_scan_as_user",
-            "zap_queue_ajax_spider",
-            "zap_scan_job_retry",
-            "zap_scan_job_dead_letter_requeue"
-    );
-    private static final Set<String> DIRECT_SCAN_TOOLS = Set.of(
-            "zap_active_scan_start",
-            "zap_active_scan_as_user",
-            "zap_spider_start",
-            "zap_spider_as_user",
-            "zap_ajax_spider"
-    );
-    private static final Set<String> AUTOMATION_TOOLS = Set.of("zap_automation_plan_run");
-    private static final Set<String> GUIDED_SCAN_TOOLS = Set.of("zap_crawl_start", "zap_attack_start");
-
     private final AbuseProtectionProperties properties;
     private final ClientRateLimiter clientRateLimiter;
     private final ClientWorkspaceResolver clientWorkspaceResolver;
     private final OperationRegistry operationRegistry;
     private final ObjectProvider<ScanJobQueueService> scanJobQueueServiceProvider;
     private final GuidedExecutionModeResolver guidedExecutionModeResolver;
+    private final ToolScopeRegistry toolScopeRegistry;
     private final ProtectionMetrics metrics;
 
     public McpAbuseProtectionService(AbuseProtectionProperties properties,
@@ -53,6 +40,7 @@ public class McpAbuseProtectionService {
                                      OperationRegistry operationRegistry,
                                      ObjectProvider<ScanJobQueueService> scanJobQueueServiceProvider,
                                      GuidedExecutionModeResolver guidedExecutionModeResolver,
+                                     ToolScopeRegistry toolScopeRegistry,
                                      ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.properties = properties;
         this.clientRateLimiter = clientRateLimiter;
@@ -60,6 +48,7 @@ public class McpAbuseProtectionService {
         this.operationRegistry = operationRegistry;
         this.scanJobQueueServiceProvider = scanJobQueueServiceProvider;
         this.guidedExecutionModeResolver = guidedExecutionModeResolver;
+        this.toolScopeRegistry = toolScopeRegistry;
         this.metrics = ProtectionMetrics.create(meterRegistryProvider.getIfAvailable());
     }
 
@@ -68,168 +57,196 @@ public class McpAbuseProtectionService {
     }
 
     public McpAbuseProtectionDecision evaluate(Authentication authentication, String method, String toolName) {
-        if (!properties.isEnabled()) {
-            String clientId = clientWorkspaceResolver.resolveClientId(authentication);
-            String workspaceId = clientWorkspaceResolver.resolveWorkspaceId(clientId);
-            return McpAbuseProtectionDecision.allow(toolName, clientId, workspaceId);
-        }
+        GatewayToolExecutionContext context = clientWorkspaceResolver.resolveToolExecutionContext(
+                authentication,
+                null,
+                McpToolInvocation.fromJsonRpc(method, toolName),
+                null
+        );
+        return evaluate(context);
+    }
 
-        String clientId = clientWorkspaceResolver.resolveClientId(authentication);
-        String workspaceId = clientWorkspaceResolver.resolveWorkspaceId(clientId);
-        String normalizedMethod = normalize(method);
-        String normalizedToolName = normalize(toolName);
+    public McpAbuseProtectionDecision evaluate(GatewayToolExecutionContext toolContext) {
+        GatewayToolExecutionContext normalizedContext =
+                toolContext == null ? GatewayToolExecutionContext.of(null, null, null) : toolContext;
+        McpAbuseProtectionContext protectionContext = McpAbuseProtectionContext.from(normalizedContext);
+        String clientId = normalizedContext.principalId();
+        String workspaceId = normalizedContext.workspaceId();
+        String normalizedMethod = normalize(normalizedContext.method());
+        String normalizedToolName = normalize(normalizedContext.toolName());
+
+        if (!properties.isEnabled()) {
+            return McpAbuseProtectionDecision.allow(protectionContext);
+        }
 
         if (!clientRateLimiter.tryConsume(clientId)) {
             metrics.rateLimited.increment();
             return McpAbuseProtectionDecision.reject(
                     "rate_limited",
                     "client_request_rate",
-                    normalizedToolName,
-                    clientId,
-                    workspaceId,
+                    protectionContext,
                     clientRateLimiter.retryAfterSeconds(clientId)
             );
         }
 
-        if (!"tools/call".equals(normalizedMethod) || normalizedToolName == null) {
-            return McpAbuseProtectionDecision.allow(normalizedToolName, clientId, workspaceId);
+        if (!McpToolInvocation.METHOD_TOOLS_CALL.equals(normalizedMethod) || normalizedToolName == null) {
+            return McpAbuseProtectionDecision.allow(protectionContext);
         }
 
         QueueSnapshot queueSnapshot = snapshotQueue();
 
-        if (GUIDED_SCAN_TOOLS.contains(normalizedToolName)) {
+        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)) {
             if (guidedExecutionModeResolver.preferQueue()) {
                 McpAbuseProtectionDecision queueDecision =
-                        evaluateQueueAdmissionLimits(queueSnapshot, normalizedToolName, clientId, workspaceId);
+                        evaluateQueueAdmissionLimits(queueSnapshot, protectionContext);
                 if (queueDecision != null) {
                     return queueDecision;
                 }
             } else {
                 McpAbuseProtectionDecision directDecision =
-                        evaluateDirectScanLimits(normalizedToolName, clientId, workspaceId);
+                        evaluateDirectScanLimits(protectionContext);
                 if (directDecision != null) {
                     return directDecision;
                 }
             }
         }
 
-        if (QUEUE_ADMISSION_TOOLS.contains(normalizedToolName)) {
+        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)) {
             McpAbuseProtectionDecision queueDecision =
-                    evaluateQueueAdmissionLimits(queueSnapshot, normalizedToolName, clientId, workspaceId);
+                    evaluateQueueAdmissionLimits(queueSnapshot, protectionContext);
             if (queueDecision != null) {
                 return queueDecision;
             }
         }
 
-        if (DIRECT_SCAN_TOOLS.contains(normalizedToolName)) {
+        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.DIRECT_SCAN_CAPABILITY)) {
             McpAbuseProtectionDecision directDecision =
-                    evaluateDirectScanLimits(normalizedToolName, clientId, workspaceId);
+                    evaluateDirectScanLimits(protectionContext);
             if (directDecision != null) {
                 return directDecision;
             }
         }
 
-        if (AUTOMATION_TOOLS.contains(normalizedToolName)) {
-            if (properties.getWorkspaceQuota().isEnabled()
-                    && operationRegistry.countAutomationPlans(workspaceId) >= properties.getWorkspaceQuota().getMaxAutomationPlans()) {
-                metrics.workspaceQuotaRejected.increment();
-                return McpAbuseProtectionDecision.reject(
+        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.AUTOMATION_EXECUTION_CAPABILITY)) {
+            if (properties.getWorkspaceQuota().isEnabled()) {
+                McpAbuseProtectionDecision workspaceDecision = evaluateQuotaLimit(
+                        protectionContext,
+                        metrics.workspaceQuotaRejected,
                         "workspace_quota_exceeded",
                         "workspace_automation_plans",
-                        normalizedToolName,
-                        clientId,
-                        workspaceId,
-                        properties.getRetryAfterSeconds()
+                        operationRegistry.countAutomationPlans(workspaceId),
+                        properties.getWorkspaceQuota().getMaxAutomationPlans()
                 );
+                if (workspaceDecision != null) {
+                    return workspaceDecision;
+                }
             }
-            if (properties.getBackpressure().isEnabled()
-                    && operationRegistry.countAutomationPlans() >= properties.getBackpressure().getMaxAutomationPlans()) {
-                metrics.backpressureRejected.increment();
-                return McpAbuseProtectionDecision.reject(
+            if (properties.getBackpressure().isEnabled()) {
+                McpAbuseProtectionDecision backpressureDecision = evaluateQuotaLimit(
+                        protectionContext,
+                        metrics.backpressureRejected,
                         "overloaded",
                         "automation_capacity",
-                        normalizedToolName,
-                        clientId,
-                        workspaceId,
-                        properties.getRetryAfterSeconds()
+                        operationRegistry.countAutomationPlans(),
+                        properties.getBackpressure().getMaxAutomationPlans()
                 );
+                if (backpressureDecision != null) {
+                    return backpressureDecision;
+                }
             }
         }
 
-        return McpAbuseProtectionDecision.allow(normalizedToolName, clientId, workspaceId);
+        return McpAbuseProtectionDecision.allow(protectionContext);
     }
 
     private McpAbuseProtectionDecision evaluateQueueAdmissionLimits(QueueSnapshot queueSnapshot,
-                                                                    String toolName,
-                                                                    String clientId,
-                                                                    String workspaceId) {
+                                                                    McpAbuseProtectionContext context) {
         if (properties.getWorkspaceQuota().isEnabled()) {
-            int workspaceJobs = queueSnapshot.nonTerminalJobsForWorkspace(workspaceId, clientWorkspaceResolver);
-            if (workspaceJobs >= properties.getWorkspaceQuota().getMaxQueuedOrRunningScanJobs()) {
-                metrics.workspaceQuotaRejected.increment();
-                return McpAbuseProtectionDecision.reject(
-                        "workspace_quota_exceeded",
-                        "workspace_scan_jobs",
-                        toolName,
-                        clientId,
-                        workspaceId,
-                        properties.getRetryAfterSeconds()
-                );
+            McpAbuseProtectionDecision workspaceDecision = evaluateQuotaLimit(
+                    context,
+                    metrics.workspaceQuotaRejected,
+                    "workspace_quota_exceeded",
+                    "workspace_scan_jobs",
+                    queueSnapshot.nonTerminalJobsForWorkspace(context.workspaceId(), clientWorkspaceResolver),
+                    properties.getWorkspaceQuota().getMaxQueuedOrRunningScanJobs()
+            );
+            if (workspaceDecision != null) {
+                return workspaceDecision;
             }
         }
         if (properties.getBackpressure().isEnabled()) {
-            if (queueSnapshot.nonTerminalJobs() >= properties.getBackpressure().getMaxTrackedScanJobs()) {
-                metrics.backpressureRejected.increment();
-                return McpAbuseProtectionDecision.reject(
-                        "overloaded",
-                        "scan_job_backlog",
-                        toolName,
-                        clientId,
-                        workspaceId,
-                        properties.getRetryAfterSeconds()
-                );
+            McpAbuseProtectionDecision backlogDecision = evaluateQuotaLimit(
+                    context,
+                    metrics.backpressureRejected,
+                    "overloaded",
+                    "scan_job_backlog",
+                    queueSnapshot.nonTerminalJobs(),
+                    properties.getBackpressure().getMaxTrackedScanJobs()
+            );
+            if (backlogDecision != null) {
+                return backlogDecision;
             }
-            if (queueSnapshot.runningJobs() >= properties.getBackpressure().getMaxRunningScanJobs()) {
-                metrics.backpressureRejected.increment();
-                return McpAbuseProtectionDecision.reject(
-                        "overloaded",
-                        "running_scan_capacity",
-                        toolName,
-                        clientId,
-                        workspaceId,
-                        properties.getRetryAfterSeconds()
-                );
+            McpAbuseProtectionDecision runningDecision = evaluateQuotaLimit(
+                    context,
+                    metrics.backpressureRejected,
+                    "overloaded",
+                    "running_scan_capacity",
+                    queueSnapshot.runningJobs(),
+                    properties.getBackpressure().getMaxRunningScanJobs()
+            );
+            if (runningDecision != null) {
+                return runningDecision;
             }
         }
         return null;
     }
 
-    private McpAbuseProtectionDecision evaluateDirectScanLimits(String toolName,
-                                                                String clientId,
-                                                                String workspaceId) {
-        if (properties.getWorkspaceQuota().isEnabled()
-                && operationRegistry.countDirectScans(workspaceId) >= properties.getWorkspaceQuota().getMaxDirectScans()) {
-            metrics.workspaceQuotaRejected.increment();
-            return McpAbuseProtectionDecision.reject(
+    private McpAbuseProtectionDecision evaluateDirectScanLimits(McpAbuseProtectionContext context) {
+        if (properties.getWorkspaceQuota().isEnabled()) {
+            McpAbuseProtectionDecision workspaceDecision = evaluateQuotaLimit(
+                    context,
+                    metrics.workspaceQuotaRejected,
                     "workspace_quota_exceeded",
                     "workspace_direct_scans",
-                    toolName,
-                    clientId,
-                    workspaceId,
-                    properties.getRetryAfterSeconds()
+                    operationRegistry.countDirectScans(context.workspaceId()),
+                    properties.getWorkspaceQuota().getMaxDirectScans()
             );
+            if (workspaceDecision != null) {
+                return workspaceDecision;
+            }
         }
-        if (properties.getBackpressure().isEnabled()
-                && operationRegistry.countDirectScans() >= properties.getBackpressure().getMaxDirectScans()) {
-            metrics.backpressureRejected.increment();
-            return McpAbuseProtectionDecision.reject(
+        if (properties.getBackpressure().isEnabled()) {
+            McpAbuseProtectionDecision backpressureDecision = evaluateQuotaLimit(
+                    context,
+                    metrics.backpressureRejected,
                     "overloaded",
                     "direct_scan_capacity",
-                    toolName,
-                    clientId,
-                    workspaceId,
-                    properties.getRetryAfterSeconds()
+                    operationRegistry.countDirectScans(),
+                    properties.getBackpressure().getMaxDirectScans()
             );
+            if (backpressureDecision != null) {
+                return backpressureDecision;
+            }
+        }
+        return null;
+    }
+
+    private McpAbuseProtectionDecision evaluateQuotaLimit(McpAbuseProtectionContext context,
+                                                          Counter rejectionCounter,
+                                                          String errorCode,
+                                                          String reason,
+                                                          int currentCount,
+                                                          int maxAllowed) {
+        McpAbuseProtectionDecision decision = McpQuotaLimit.of(
+                errorCode,
+                reason,
+                currentCount,
+                maxAllowed,
+                properties.getRetryAfterSeconds()
+        ).evaluate(context);
+        if (!decision.allowed()) {
+            rejectionCounter.increment();
+            return decision;
         }
         return null;
     }
@@ -262,6 +279,9 @@ public class McpAbuseProtectionService {
 
     private record QueueSnapshot(List<ScanJob> jobs, int nonTerminalJobs, int runningJobs) {
         private int nonTerminalJobsForWorkspace(String workspaceId, ClientWorkspaceResolver resolver) {
+            if (workspaceId == null) {
+                return 0;
+            }
             int count = 0;
             for (ScanJob job : jobs) {
                 if (job == null || job.getStatus() == null || job.getStatus().isTerminal()) {

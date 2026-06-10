@@ -88,15 +88,15 @@ This command verifies:
 - GitHub CI compose wiring keeps ZAP and MCP on the shared workspace
 - the CI stack forces the expert tool surface needed for snapshot and diff
   contracts
-- Spring AI `2.0.0-M5` resolves against the managed Spring Boot `4.0.6`
+- the configured Spring AI version resolves against the managed Spring Boot `4.0.6`
   runtime
 - the Dockerfile selects the executable app JAR instead of sidecar artifacts
 
-The Spring AI/Spring Boot check is intentional. Spring AI `2.0.0-M5`
-transitively requests Spring Boot `4.1.0-RC1`, while this repository currently
-manages Spring Boot to `4.0.6`. That is acceptable only as long as the build,
-image packaging, and CI gate proof stay green. Do not hide this mismatch from
-operators.
+The Spring AI/Spring Boot check is intentional. The verifier derives the current
+Spring AI version from `build.gradle` and records whether its transitive Spring
+Boot request is still forced back to the repository-managed `4.0.6` runtime.
+That is acceptable only as long as the build, image packaging, and CI gate proof
+stay green. Do not hide this mismatch from operators.
 
 ## Install In A Pilot Repository
 

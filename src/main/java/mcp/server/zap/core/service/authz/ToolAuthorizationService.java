@@ -1,11 +1,12 @@
 package mcp.server.zap.core.service.authz;
 
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
+import mcp.gateway.core.authz.McpToolAuthorizer;
+import mcp.gateway.core.authz.ToolAuthorizationDecision;
+import mcp.gateway.core.authz.ToolAuthorizationRequest;
+import mcp.gateway.core.context.GatewayToolExecutionContext;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import org.springframework.stereotype.Service;
 
@@ -16,20 +17,29 @@ import org.springframework.stereotype.Service;
 public class ToolAuthorizationService {
     private final ToolScopeRegistry toolScopeRegistry;
     private final ToolAuthorizationProperties properties;
+    private final McpToolAuthorizer authorizer;
 
     public ToolAuthorizationService(ToolScopeRegistry toolScopeRegistry,
                                     ToolAuthorizationProperties properties) {
         this.toolScopeRegistry = toolScopeRegistry;
         this.properties = properties;
+        this.authorizer = McpToolAuthorizer.of(
+                toolScopeRegistry.getToolAccessRegistry(),
+                toolScopeRegistry.getToolsListRequiredScopes()
+        );
     }
 
     public ToolAuthorizationDecision authorizeToolCall(Collection<String> grantedScopes, String toolName) {
-        List<String> requiredScopes = toolScopeRegistry.getRequiredScopes(toolName);
-        return evaluate(toolName, grantedScopes, requiredScopes);
+        return authorizer.authorizeToolCall(toolName, grantedScopes, allowWildcard(), !isDisabled());
     }
 
     public ToolAuthorizationDecision authorizeToolsList(Collection<String> grantedScopes) {
-        return evaluate(ToolScopeRegistry.TOOLS_LIST_ACTION, grantedScopes, toolScopeRegistry.getToolsListRequiredScopes());
+        return authorizer.authorizeToolsList(grantedScopes, allowWildcard(), !isDisabled());
+    }
+
+    public ToolAuthorizationDecision authorize(Collection<String> grantedScopes,
+                                               GatewayToolExecutionContext context) {
+        return authorizer.authorize(context, grantedScopes, allowWildcard(), !isDisabled());
     }
 
     public boolean isEnforced() {
@@ -52,51 +62,7 @@ public class ToolAuthorizationService {
         return toolScopeRegistry.getRequiredScopesByTool().keySet();
     }
 
-    private ToolAuthorizationDecision evaluate(String actionName,
-                                               Collection<String> grantedScopes,
-                                               List<String> requiredScopes) {
-        List<String> normalizedGrantedScopes = normalizeScopes(grantedScopes);
-        if (requiredScopes == null || requiredScopes.isEmpty()) {
-            return new ToolAuthorizationDecision(
-                    false,
-                    false,
-                    actionName,
-                    List.of(),
-                    normalizedGrantedScopes,
-                    List.of()
-            );
-        }
-
-        if (isDisabled()) {
-            return new ToolAuthorizationDecision(true, true, actionName, requiredScopes, normalizedGrantedScopes, List.of());
-        }
-
-        Set<String> grantedScopeSet = new LinkedHashSet<>(normalizedGrantedScopes);
-        boolean hasWildcard = allowWildcard() && grantedScopeSet.contains("*");
-        List<String> missingScopes = new ArrayList<>();
-        for (String requiredScope : requiredScopes) {
-            if (!hasWildcard && !grantedScopeSet.contains(requiredScope)) {
-                missingScopes.add(requiredScope);
-            }
-        }
-        return new ToolAuthorizationDecision(
-                missingScopes.isEmpty(),
-                true,
-                actionName,
-                requiredScopes,
-                normalizedGrantedScopes,
-                missingScopes
-        );
-    }
-
     public List<String> normalizeScopes(Collection<String> scopes) {
-        if (scopes == null || scopes.isEmpty()) {
-            return List.of();
-        }
-        return scopes.stream()
-                .filter(scope -> scope != null && !scope.isBlank())
-                .map(scope -> scope.trim().toLowerCase(Locale.ROOT))
-                .distinct()
-                .toList();
+        return ToolAuthorizationRequest.normalizeScopes(scopes);
     }
 }

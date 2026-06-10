@@ -1,6 +1,7 @@
 package mcp.server.zap.core.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import mcp.gateway.core.policy.ToolPolicyDeniedException;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.logging.RequestLogContext;
 import org.springframework.http.HttpStatus;

@@ -17,7 +17,7 @@
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/rajdhani": "^5.2.7",
     "astro": "^6.4.5",
-    "sharp": "^0.34.2"
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",

@@ -108,7 +108,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 Read the full notes:
 
-- [Release notes](./RELEASE_NOTES_0.9.0.md)
+- [Release notes](./docs/releases/RELEASE_NOTES_0.9.0.md)
 - [Changelog](./CHANGELOG.md)
 - [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 

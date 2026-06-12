@@ -46,4 +46,4 @@
 
 ## Full Changelog
 
-- [`CHANGELOG.md`](./CHANGELOG.md)
+- [`CHANGELOG.md`](../../CHANGELOG.md)

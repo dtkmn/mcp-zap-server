@@ -149,4 +149,4 @@ A bare `curl http://localhost:7456/mcp` is not a valid protocol check.
 
 ## Full Changelog
 
-- [`CHANGELOG.md`](./CHANGELOG.md)
+- [`CHANGELOG.md`](../../CHANGELOG.md)

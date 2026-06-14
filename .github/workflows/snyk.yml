@@ -19,6 +19,7 @@ concurrency:
 
 env:
   SNYK_SEVERITY_THRESHOLD: high
+  SNYK_ORG: ${{ vars.SNYK_ORG }}
 
 jobs:
   open-source:
@@ -46,7 +47,7 @@ jobs:
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Require Snyk token
+      - name: Require Snyk configuration
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
@@ -54,23 +55,28 @@ jobs:
             echo "::error::SNYK_TOKEN repository secret is required for Snyk scans."
             exit 1
           fi
+          if [ -z "${SNYK_ORG:-}" ]; then
+            echo "::error::SNYK_ORG repository variable is required for Snyk scans."
+            exit 1
+          fi
 
       - name: Run Snyk Open Source test
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_ORG: ${{ vars.SNYK_ORG }}
         run: |
-          org_args=()
-          if [ -n "${SNYK_ORG:-}" ]; then
-            org_args+=(--org="${SNYK_ORG}")
-          fi
-
           snyk test \
             --all-projects \
+            --org="${SNYK_ORG}" \
             --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-open-source.sarif \
-            "${org_args[@]}"
+            --sarif-file-output=snyk-open-source.sarif
+
+      - name: Require Snyk Open Source SARIF
+        run: |
+          if [ ! -s snyk-open-source.sarif ]; then
+            echo "::error::Snyk Open Source scan did not produce snyk-open-source.sarif."
+            exit 1
+          fi
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('snyk-open-source.sarif') != ''
@@ -81,16 +87,12 @@ jobs:
 
       - name: Monitor open-source dependencies
         if: github.event_name != 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 10
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_ORG: ${{ vars.SNYK_ORG }}
         run: |
-          org_args=()
-          if [ -n "${SNYK_ORG:-}" ]; then
-            org_args+=(--org="${SNYK_ORG}")
-          fi
-
-          snyk monitor --all-projects "${org_args[@]}"
+          snyk monitor --all-projects --org="${SNYK_ORG}"
 
   container:
     name: Container image
@@ -105,12 +107,16 @@ jobs:
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Require Snyk token
+      - name: Require Snyk configuration
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           if [ -z "${SNYK_TOKEN:-}" ]; then
             echo "::error::SNYK_TOKEN repository secret is required for Snyk scans."
+            exit 1
+          fi
+          if [ -z "${SNYK_ORG:-}" ]; then
+            echo "::error::SNYK_ORG repository variable is required for Snyk scans."
             exit 1
           fi
 
@@ -121,19 +127,20 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_ORG: ${{ vars.SNYK_ORG }}
         run: |
-          org_args=()
-          if [ -n "${SNYK_ORG:-}" ]; then
-            org_args+=(--org="${SNYK_ORG}")
-          fi
-
           snyk container test "${IMAGE_REF}" \
             --file=Dockerfile \
             --app-vulns \
+            --org="${SNYK_ORG}" \
             --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-container.sarif \
-            "${org_args[@]}"
+            --sarif-file-output=snyk-container.sarif
+
+      - name: Require Snyk Container SARIF
+        run: |
+          if [ ! -s snyk-container.sarif ]; then
+            echo "::error::Snyk Container scan did not produce snyk-container.sarif."
+            exit 1
+          fi
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('snyk-container.sarif') != ''
@@ -144,19 +151,15 @@ jobs:
 
       - name: Monitor container image
         if: github.event_name != 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 10
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_ORG: ${{ vars.SNYK_ORG }}
         run: |
-          org_args=()
-          if [ -n "${SNYK_ORG:-}" ]; then
-            org_args+=(--org="${SNYK_ORG}")
-          fi
-
           snyk container monitor "${IMAGE_REF}" \
             --file=Dockerfile \
             --app-vulns \
-            "${org_args[@]}"
+            --org="${SNYK_ORG}"
 
   infrastructure-as-code:
     name: Rendered Helm manifests
@@ -172,12 +175,16 @@ jobs:
       - name: Set up Snyk CLI
         uses: snyk/actions/setup@master
 
-      - name: Require Snyk token
+      - name: Require Snyk configuration
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           if [ -z "${SNYK_TOKEN:-}" ]; then
             echo "::error::SNYK_TOKEN repository secret is required for Snyk scans."
+            exit 1
+          fi
+          if [ -z "${SNYK_ORG:-}" ]; then
+            echo "::error::SNYK_ORG repository variable is required for Snyk scans."
             exit 1
           fi
 
@@ -191,17 +198,18 @@ jobs:
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_ORG: ${{ vars.SNYK_ORG }}
         run: |
-          org_args=()
-          if [ -n "${SNYK_ORG:-}" ]; then
-            org_args+=(--org="${SNYK_ORG}")
-          fi
-
           snyk iac test snyk-rendered-helm \
+            --org="${SNYK_ORG}" \
             --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-iac.sarif \
-            "${org_args[@]}"
+            --sarif-file-output=snyk-iac.sarif
+
+      - name: Require Snyk IaC SARIF
+        run: |
+          if [ ! -s snyk-iac.sarif ]; then
+            echo "::error::Snyk IaC scan did not produce snyk-iac.sarif."
+            exit 1
+          fi
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('snyk-iac.sarif') != ''

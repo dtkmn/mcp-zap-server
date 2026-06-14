@@ -24,6 +24,7 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
+    "esbuild": "^0.28.1",
     "postcss": "^8.5.12",
     "yaml": "^2.8.3"
   }

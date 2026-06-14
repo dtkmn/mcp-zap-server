@@ -44,7 +44,7 @@ repositories {
 }
 
 ext {
-    set('springAiVersion', "2.0.0-RC1")
+    set('springAiVersion', "2.0.0")
     set('testcontainersVersion', "1.20.6")
     set('netty.version', "4.2.15.Final")
     set('postgresql.version', "42.7.11")

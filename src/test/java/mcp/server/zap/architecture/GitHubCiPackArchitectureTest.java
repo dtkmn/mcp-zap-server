@@ -137,7 +137,7 @@ class GitHubCiPackArchitectureTest {
                 .contains("expected_spring_ai_version=\"$(spring_ai_version)\"")
                 .contains("org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}")
                 .contains("dependencyInsight --dependency spring-boot-starter-webflux")
-                .contains("org.springframework.boot:spring-boot-starter-webflux:4.1.0-RC1 -> 4.0.6")
+                .contains("org.springframework.boot:spring-boot-starter-webflux:4.1.0 -> 4.0.7")
                 .doesNotContain("spring-ai-starter-mcp-server-webflux:2.0.0-M5");
     }
 

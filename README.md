@@ -101,7 +101,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 `v0.9.0` adds:
 
 - shared gateway-core audit, policy, and protection adapter integration for MCP traffic
-- Spring WebFlux adapter wiring backed by `mcp-gateway-spring-webflux` `0.5.9`
+- Spring WebFlux adapter wiring backed by `mcp-gateway-spring-webflux` `0.5.10`
 - reusable GitHub Actions ZAP security gate and webhook callback actions
 - GitHub/GitLab CI examples, seeded API gate contracts, and Juice Shop pilot validation
 - self-serve bootstrap/doctor scripts, MCP client timeout handling, and safer report path mapping

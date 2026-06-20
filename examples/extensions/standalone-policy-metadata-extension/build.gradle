@@ -43,7 +43,7 @@ repositories {
 
 dependencies {
     compileOnly extensionApiCoordinate
-    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.6'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.7'
 
     testImplementation extensionApiCoordinate
     testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'

@@ -175,8 +175,8 @@ if [[ "${SKIP_GRADLE}" -eq 0 ]]; then
     ./gradlew dependencyInsight --dependency spring-boot-starter-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt"
   )
   assert_file_contains "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt" "org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}"
-  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0-RC1 -> 4.0.6"
-  pass "Spring AI ${expected_spring_ai_version} resolves against the managed Spring Boot 4.0.6 runtime"
+  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0 -> 4.0.7"
+  pass "Spring AI ${expected_spring_ai_version} resolves against the managed Spring Boot 4.0.7 runtime"
 
   log_step "Run Docker image packaging architecture guard"
   (

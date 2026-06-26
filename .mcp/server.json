@@ -3,7 +3,7 @@
   "name": "io.github.dtkmn/mcp-zap-server",
   "title": "MCP ZAP Server",
   "description": "Safe, self-hosted OWASP ZAP operator for guided AI security scans and reports.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "websiteUrl": "https://danieltse.org/mcp-zap-server/",
   "repository": {
     "url": "https://github.com/dtkmn/mcp-zap-server",
@@ -22,7 +22,7 @@
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/dtkmn/mcp-zap-server:v0.9.0",
+      "identifier": "ghcr.io/dtkmn/mcp-zap-server:v0.9.1",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {
@@ -106,7 +106,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/dtkmn/mcp-zap-server:v0.9.0",
+      "identifier": "docker.io/dtkmn/mcp-zap-server:v0.9.1",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {

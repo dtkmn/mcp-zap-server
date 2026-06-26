@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-06-26
+
+### Changed
+- Bumped runtime, MCP server metadata, Helm chart metadata, MCP Registry package metadata, and install examples to `0.9.1` / `v0.9.1`.
+- Updated the runtime to consume `io.github.dtkmn:mcp-gateway-core` and `io.github.dtkmn:mcp-gateway-spring-webflux` `0.5.10`.
+- Updated Spring Boot to `4.0.7`, Spring AI to `2.0.0`, Gradle to `9.6.0`, and docs dependencies including Astro `7.0.3`.
+- Moved archived release notes under `docs/releases/` and added an archive index.
+
+### Security
+- Overrode Spring Boot's Jackson 2 BOM to `2.22.0` so the runtime no longer resolves `com.fasterxml.jackson.core:jackson-databind` `2.21.4`.
+- Hardened the Snyk workflow by requiring `SNYK_ORG`, checking for generated SARIF files, and keeping monitor steps bounded.
+
+### Fixed
+- Corrected the README latest-release section so `v0.9.0` release notes remain historically accurate.
+
 ## [0.9.0] - 2026-06-10
 
 ### Added

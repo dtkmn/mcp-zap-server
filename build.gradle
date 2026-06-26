@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'mcp.server.zap'
-version = '0.9.0'
+version = '0.9.1'
 
 java {
     toolchain {
@@ -45,6 +45,7 @@ repositories {
 
 ext {
     set('springAiVersion', "2.0.0")
+    set('jackson-2-bom.version', "2.22.0")
     set('testcontainersVersion', "1.20.6")
     set('netty.version', "4.2.15.Final")
     set('postgresql.version', "42.7.11")

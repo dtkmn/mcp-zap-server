@@ -122,7 +122,7 @@ docker run -d \
   -e MCP_SECURITY_ENABLED=true \
   -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
   -e MCP_API_KEY="$MCP_API_KEY" \
-  ghcr.io/dtkmn/mcp-zap-server:v0.9.0
+  ghcr.io/dtkmn/mcp-zap-server:v0.9.1
 ```
 
 Check the MCP server:

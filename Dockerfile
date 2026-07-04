@@ -1,5 +1,5 @@
 # Build stage
-FROM gradle:9.6.0-jdk25 AS builder
+FROM gradle:9.6.1-jdk25 AS builder
 WORKDIR /usr/src/app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle
@@ -20,7 +20,7 @@ RUN gradle bootJar -x test && \
 # Runtime stage
 FROM eclipse-temurin:25-jre-alpine
 LABEL io.modelcontextprotocol.server.name="io.github.dtkmn/mcp-zap-server"
-RUN apk add --no-cache curl
+RUN apk add --no-cache --upgrade curl p11-kit p11-kit-trust
 WORKDIR /app
 COPY --from=builder /tmp/app.jar ./app.jar
 EXPOSE 7456

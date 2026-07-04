@@ -99,7 +99,7 @@ jobs:
     if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     env:
-      IMAGE_REF: mcp-zap-server:snyk-${{ github.sha }}
+      IMAGE_REF: mcp-zap-server:snyk-scan
     steps:
       - name: Checkout
         uses: actions/checkout@v7

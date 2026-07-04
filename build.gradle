@@ -8,6 +8,7 @@ plugins {
 
 group = 'mcp.server.zap'
 version = '0.9.1'
+def extensionApiPublicationVersion = version.toString()
 
 java {
     toolchain {
@@ -214,7 +215,7 @@ tasks.register('verifyExtensionApiPublication') {
 
     doLast {
         File publicationDir = layout.buildDirectory
-                .dir("extension-api-public-preview-publication/io/github/dtkmn/mcp-zap-extension-api/${project.version}")
+                .dir("extension-api-public-preview-publication/io/github/dtkmn/mcp-zap-extension-api/${extensionApiPublicationVersion}")
                 .get()
                 .asFile
         verifyExtensionApiPublicationShape(publicationDir, 'io.github.dtkmn')
@@ -229,7 +230,7 @@ tasks.register('standalonePolicyMetadataExtensionJar', GradleBuild) {
     tasks = ['clean', 'jar']
     startParameter.projectProperties = [
             extensionApiGroup         : 'io.github.dtkmn',
-            extensionApiVersion       : project.version.toString(),
+            extensionApiVersion       : extensionApiPublicationVersion,
             extensionApiRepositoryUrl : layout.buildDirectory.dir('extension-api-public-preview-publication').get().asFile.absolutePath
     ]
 }

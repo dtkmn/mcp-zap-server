@@ -106,7 +106,8 @@ public class ActiveScanServiceTest {
     void setScanPolicyRuleStateUpdatesRules() {
         when(engineScanExecution.listActiveScanPolicyNames()).thenReturn(scanPolicyNamesResponse());
         when(engineScanExecution.loadActiveScanPolicyRules("Default Policy"))
-                .thenReturn(defaultPolicyScannersResponse(), updatedDefaultPolicyScannersResponse());
+                .thenReturn(defaultPolicyScannersResponse())
+                .thenReturn(updatedDefaultPolicyScannersResponse());
 
         String result = service.setScanPolicyRuleState("Default Policy", "40012, 40018", "false", "LOW", "HIGH");
 

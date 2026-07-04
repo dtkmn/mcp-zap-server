@@ -158,6 +158,27 @@ public class ObservabilityService {
         );
     }
 
+    public void recordInvalidMcpRequest(String reason, String requestId, String correlationId) {
+        String normalizedReason = normalize(reason, "unknown");
+        meterRegistry.counter(
+                "mcp.zap.invalid_mcp_requests",
+                "reason", normalizedReason
+        ).increment();
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("reason", normalizedReason);
+        if (requestId != null && !requestId.isBlank()) {
+            details.put("requestId", requestId);
+        }
+
+        auditEventSink.publish(
+                "invalid_mcp_request",
+                "anonymous",
+                normalizedReason,
+                auditDetails(correlationId, "anonymous", "default-workspace", details)
+        );
+    }
+
     public void recordToolExecution(String toolName,
                                     String outcome,
                                     Duration duration,

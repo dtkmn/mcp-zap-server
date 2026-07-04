@@ -78,7 +78,7 @@ class ToolExecutionPolicyAspectTest {
         );
 
         assertThat(response).isEqualTo("tool-result");
-        ArgumentCaptor<Map<String, Object>> detailsCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, Object>> detailsCaptor = mapCaptor();
         verify(observabilityService).recordPolicyDecision(
                 org.mockito.ArgumentMatchers.eq("allow"),
                 detailsCaptor.capture(),
@@ -142,7 +142,7 @@ class ToolExecutionPolicyAspectTest {
         );
 
         assertThat(response).isEqualTo("tool-result");
-        ArgumentCaptor<Map<String, Object>> detailsCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, Object>> detailsCaptor = mapCaptor();
         verify(observabilityService).recordPolicyDecision(
                 org.mockito.ArgumentMatchers.eq("allow"),
                 detailsCaptor.capture(),
@@ -174,6 +174,12 @@ class ToolExecutionPolicyAspectTest {
         return method.getAnnotation(Tool.class);
     }
 
+    @SuppressWarnings("unchecked")
+    private ArgumentCaptor<Map<String, Object>> mapCaptor() {
+        return ArgumentCaptor.forClass(Map.class);
+    }
+
+    @SuppressWarnings("unchecked")
     private ObjectProvider<ToolExecutionPolicyHook> policyHooks(ToolExecutionPolicyHook hook) {
         ObjectProvider<ToolExecutionPolicyHook> provider = mock(ObjectProvider.class);
         when(provider.orderedStream()).thenReturn(Stream.of(hook));

@@ -19,8 +19,7 @@ import mcp.gateway.core.protection.McpAbuseProtectionContext;
 import mcp.gateway.core.rate.TokenBucketRateLimiter;
 import mcp.gateway.core.tool.McpToolRegistry;
 import mcp.gateway.core.url.UrlScope;
-import mcp.gateway.spring.webflux.McpGatewayWebFluxAbuseProtectionFilter;
-import mcp.gateway.spring.webflux.McpGatewayWebFluxAuthorizationFilter;
+import mcp.gateway.spring.webflux.McpGatewayWebFluxGovernanceFilter;
 import mcp.gateway.spring.webflux.McpJsonRpcToolInvocationParser;
 import org.junit.jupiter.api.Test;
 
@@ -69,7 +68,7 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
         String settingsFile = Files.readString(SETTINGS_GRADLE);
         String propertiesFile = Files.readString(GRADLE_PROPERTIES);
 
-        assertThat(propertiesFile).contains("gatewayCoreVersion=0.5.10");
+        assertThat(propertiesFile).contains("gatewayCoreVersion=0.7.0");
         assertThat(buildFile)
                 .contains("implementation \"io.github.dtkmn:mcp-gateway-core:${gatewayCoreVersion}\"")
                 .contains("implementation \"io.github.dtkmn:mcp-gateway-spring-webflux:${gatewayCoreVersion}\"")
@@ -109,14 +108,14 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
                 .doesNotExist();
         assertThat(Files.readString(Path.of(
                         "src/main/java/mcp/server/zap/core/configuration/McpGatewayWebFluxAdapterConfiguration.java")))
-                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxAuthorizationFilter;")
-                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxAbuseProtectionFilter;")
+                .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxGovernanceFilter;")
                 .contains("import mcp.gateway.spring.webflux.McpGatewayWebFluxContextResolver;")
                 .contains("clientWorkspaceResolver.resolveToolExecutionContext(")
                 .contains("toolAuthorizationService.authorize(grantedScopes, context)")
                 .contains("protectionService.evaluate(context)")
                 .contains("observabilityService.recordAuthorization(")
-                .contains("observabilityService.recordProtectionRejection(");
+                .contains("observabilityService.recordProtectionRejection(")
+                .contains("observabilityService::recordInvalidMcpRequest");
         assertThat(Files.readString(Path.of("src/main/java/mcp/server/zap/core/service/authz/ToolAuthorizationService.java")))
                 .contains("import mcp.gateway.core.authz.McpToolAuthorizer;")
                 .contains("import mcp.gateway.core.context.GatewayToolExecutionContext;")
@@ -213,8 +212,7 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
         String expectedJar = "mcp-gateway-spring-webflux-" + gatewayCoreVersion() + ".jar";
 
         for (Class<?> type : List.of(
-                McpGatewayWebFluxAuthorizationFilter.class,
-                McpGatewayWebFluxAbuseProtectionFilter.class,
+                McpGatewayWebFluxGovernanceFilter.class,
                 McpJsonRpcToolInvocationParser.class
         )) {
             Path source = codeSourcePath(type);

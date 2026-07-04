@@ -10,11 +10,11 @@ import mcp.gateway.spring.webflux.McpGatewayAbuseProtectionEvaluator;
 import mcp.gateway.spring.webflux.McpGatewayAuthorizationEvaluator;
 import mcp.gateway.spring.webflux.McpGatewayAuthorizationMode;
 import mcp.gateway.spring.webflux.McpGatewayCorrelationIdResolver;
-import mcp.gateway.spring.webflux.McpGatewayWebFluxAbuseProtectionFilter;
-import mcp.gateway.spring.webflux.McpGatewayWebFluxAuthorizationFilter;
 import mcp.gateway.spring.webflux.McpGatewayWebFluxContextResolver;
+import mcp.gateway.spring.webflux.McpGatewayWebFluxGovernanceFilter;
 import mcp.gateway.spring.webflux.McpGatewayWebFluxProperties;
 import mcp.gateway.spring.webflux.McpGrantedScopesExtractor;
+import mcp.gateway.spring.webflux.McpInvalidRequestObserver;
 import mcp.gateway.spring.webflux.McpProtectionRejectionObserver;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.observability.ObservabilityService;
@@ -40,8 +40,7 @@ public class McpGatewayWebFluxAdapterConfiguration {
         return new McpGatewayWebFluxProperties(
                 mcpEndpoint,
                 maxBodyBytes,
-                SecurityWebFiltersOrder.AUTHORIZATION.getOrder() + 1,
-                SecurityWebFiltersOrder.AUTHORIZATION.getOrder() + 2
+                SecurityWebFiltersOrder.AUTHORIZATION.getOrder() + 1
         );
     }
 
@@ -129,39 +128,32 @@ public class McpGatewayWebFluxAdapterConfiguration {
     }
 
     @Bean
-    McpGatewayWebFluxAuthorizationFilter mcpGatewayWebFluxAuthorizationFilter(
-            ObjectProvider<ObjectMapper> objectMapperProvider,
-            McpGatewayWebFluxProperties properties,
-            McpGatewayAuthorizationEvaluator authorizationEvaluator,
-            McpGatewayWebFluxContextResolver contextResolver,
-            McpAuthorizationObserver authorizationObserver,
-            McpGatewayCorrelationIdResolver correlationIdResolver) {
-        return new McpGatewayWebFluxAuthorizationFilter(
-                objectMapperProvider.getIfAvailable(ObjectMapper::new),
-                properties,
-                authorizationEvaluator,
-                contextResolver,
-                McpGrantedScopesExtractor.springSecurityScopes(),
-                authorizationObserver,
-                correlationIdResolver
-        );
+    McpInvalidRequestObserver mcpInvalidRequestObserver(ObservabilityService observabilityService) {
+        return observabilityService::recordInvalidMcpRequest;
     }
 
     @Bean
-    McpGatewayWebFluxAbuseProtectionFilter mcpGatewayWebFluxAbuseProtectionFilter(
+    McpGatewayWebFluxGovernanceFilter mcpGatewayWebFluxGovernanceFilter(
             ObjectProvider<ObjectMapper> objectMapperProvider,
             McpGatewayWebFluxProperties properties,
+            McpGatewayAuthorizationEvaluator authorizationEvaluator,
             McpGatewayAbuseProtectionEvaluator protectionEvaluator,
             McpGatewayWebFluxContextResolver contextResolver,
+            McpAuthorizationObserver authorizationObserver,
             McpProtectionRejectionObserver rejectionObserver,
-            McpGatewayCorrelationIdResolver correlationIdResolver) {
-        return new McpGatewayWebFluxAbuseProtectionFilter(
+            McpGatewayCorrelationIdResolver correlationIdResolver,
+            McpInvalidRequestObserver invalidRequestObserver) {
+        return new McpGatewayWebFluxGovernanceFilter(
                 objectMapperProvider.getIfAvailable(ObjectMapper::new),
                 properties,
+                authorizationEvaluator,
                 protectionEvaluator,
                 contextResolver,
+                McpGrantedScopesExtractor.springSecurityScopes(),
+                authorizationObserver,
                 rejectionObserver,
-                correlationIdResolver
+                correlationIdResolver,
+                invalidRequestObserver
         );
     }
 }

@@ -74,12 +74,12 @@ public class McpRequestBodyLimitWebFilter implements WebFilter, Ordered {
     }
 
     private Mono<Void> writePayloadTooLarge(ServerWebExchange exchange) {
-        exchange.getResponse().setStatusCode(HttpStatus.PAYLOAD_TOO_LARGE);
+        exchange.getResponse().setStatusCode(HttpStatus.CONTENT_TOO_LARGE);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
         Map<String, Object> body = new HashMap<>();
         body.put("timestamp", Instant.now().toString());
-        body.put("status", HttpStatus.PAYLOAD_TOO_LARGE.value());
+        body.put("status", HttpStatus.CONTENT_TOO_LARGE.value());
         body.put("error", "request_body_too_large");
         body.put("reason", "MCP request body exceeds the configured limit");
         body.put("maxBodyBytes", maxBodyBytes);

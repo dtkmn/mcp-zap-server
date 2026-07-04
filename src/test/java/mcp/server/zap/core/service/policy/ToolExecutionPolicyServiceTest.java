@@ -133,8 +133,7 @@ class ToolExecutionPolicyServiceTest {
         assertThat(details)
                 .containsEntry("reason", "no_active_policy_provider_configured")
                 .containsEntry("policyProviderCount", 1);
-        List<Map<String, Object>> abstainedPolicyProviders =
-                (List<Map<String, Object>>) details.get("abstainedPolicyProviders");
+        List<Map<String, Object>> abstainedPolicyProviders = mapList(details, "abstainedPolicyProviders");
         assertThat(abstainedPolicyProviders).hasSize(1);
         assertThat(abstainedPolicyProviders.getFirst())
                 .containsEntry("policyProvider", "basic_policy_bundle")
@@ -172,7 +171,7 @@ class ToolExecutionPolicyServiceTest {
                 .containsEntry("reason", "allowed by configured provider")
                 .containsEntry("policyProvider", "custom_policy_provider")
                 .containsEntry("policyProviderCount", 2);
-        assertThat((List<Map<String, Object>>) details.get("abstainedPolicyProviders"))
+        assertThat(mapList(details, "abstainedPolicyProviders"))
                 .hasSize(1);
     }
 
@@ -216,7 +215,7 @@ class ToolExecutionPolicyServiceTest {
                 .doesNotContainEntry("tool", "spoofed_tool")
                 .doesNotContainEntry("allowed", false)
                 .doesNotContainKeys("clientId", "workspaceId", "correlationId", "outcome");
-        assertThat((Map<String, Object>) details.get("extensionDetails"))
+        assertThat(objectMap(details, "extensionDetails"))
                 .containsEntry("tool", "spoofed_tool")
                 .containsEntry("allowed", false)
                 .containsEntry("clientId", "spoofed-client")
@@ -267,6 +266,16 @@ class ToolExecutionPolicyServiceTest {
         ArgumentCaptor<Map<String, Object>> detailsCaptor = ArgumentCaptor.forClass(Map.class);
         verify(observabilityService).recordPolicyDecision(eq(outcome), detailsCaptor.capture(), eq(correlationId));
         return detailsCaptor.getValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapList(Map<String, Object> values, String key) {
+        return (List<Map<String, Object>>) values.get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objectMap(Map<String, Object> values, String key) {
+        return (Map<String, Object>) values.get(key);
     }
 
     private ClientWorkspaceResolver clientWorkspaceResolver() {

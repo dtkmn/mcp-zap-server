@@ -155,7 +155,7 @@ class PolicyDryRunServiceTest {
         assertThat(validation(response)).containsEntry("valid", true);
         assertThat(decision(response)).containsEntry("result", "deny");
         assertThat(decision(response)).containsEntry("source", "default");
-        assertThat((List<Map<String, Object>>) response.get("trace"))
+        assertThat(mapList(response, "trace"))
                 .extracting(entry -> entry.get("ruleId"))
                 .contains("allow-readonly-review-surface", "deny-expert-mutation-tools");
 
@@ -209,7 +209,7 @@ class PolicyDryRunServiceTest {
         );
 
         assertThat(validation(response)).containsEntry("valid", false);
-        assertThat((List<String>) validation(response).get("errors"))
+        assertThat(stringList(validation(response), "errors"))
                 .anyMatch(error -> error.contains("toolName must be an exact known MCP tool or action"))
                 .anyMatch(error -> error.contains("target must be"))
                 .anyMatch(error -> error.contains("evaluatedAt must be"))
@@ -223,7 +223,7 @@ class PolicyDryRunServiceTest {
                 .containsEntry("decisionSource", "validation")
                 .containsEntry("validationValid", false)
                 .containsEntry("reason", "The request or policy bundle is invalid.");
-        assertThat((List<String>) audit.details().get("validationErrors"))
+        assertThat(stringList(audit.details(), "validationErrors"))
                 .anyMatch(error -> error.contains("toolName must be an exact known MCP tool or action"))
                 .anyMatch(error -> error.contains("target must be"))
                 .anyMatch(error -> error.contains("evaluatedAt must be"));
@@ -275,14 +275,14 @@ class PolicyDryRunServiceTest {
         );
 
         assertThat(validation(response)).containsEntry("valid", false);
-        assertThat((List<String>) validation(response).get("errors"))
+        assertThat(stringList(validation(response), "errors"))
                 .anyMatch(error -> error.contains("start and end cannot be identical"));
         assertThat(decision(response)).containsEntry("result", "invalid");
         assertThat(response).containsEntry("trace", List.of());
 
         CapturedPolicyDecision audit = capturedPolicyDecision();
         assertThat(audit.outcome()).isEqualTo("invalid");
-        assertThat((List<String>) audit.details().get("validationErrors"))
+        assertThat(stringList(audit.details(), "validationErrors"))
                 .anyMatch(error -> error.contains("start and end cannot be identical"));
     }
 
@@ -347,12 +347,12 @@ class PolicyDryRunServiceTest {
 
         assertThat(validation(response)).containsEntry("valid", false);
         assertThat(decision(response)).containsEntry("result", "invalid");
-        assertThat((List<String>) validation(response).get("errors"))
+        assertThat(stringList(validation(response), "errors"))
                 .contains("bundle.metadata.labels.tenant must match the current tenant scope");
         assertThat(request(response))
                 .containsEntry("tenant", "tenant-beta")
                 .containsEntry("workspace", "workspace-three");
-        assertThat((Map<String, Object>) response.get("bundle"))
+        assertThat(objectMap(response, "bundle"))
                 .containsEntry("tenant", "tenant-alpha");
 
         CapturedPolicyDecision audit = capturedPolicyDecision();
@@ -376,6 +376,21 @@ class PolicyDryRunServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> request(Map<String, Object> response) {
         return (Map<String, Object>) response.get("request");
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Map<String, Object> values, String key) {
+        return (List<String>) values.get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> mapList(Map<String, Object> values, String key) {
+        return (List<Map<String, Object>>) values.get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> objectMap(Map<String, Object> values, String key) {
+        return (Map<String, Object>) values.get(key);
     }
 
     @SuppressWarnings("unchecked")

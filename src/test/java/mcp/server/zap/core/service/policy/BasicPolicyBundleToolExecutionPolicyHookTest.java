@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import mcp.server.zap.core.configuration.PolicyEnforcementProperties;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
@@ -113,7 +114,7 @@ class BasicPolicyBundleToolExecutionPolicyHookTest {
                 .containsEntry("policyError", "request_or_bundle_invalid")
                 .containsEntry("decisionResult", "invalid")
                 .containsEntry("validationValid", false);
-        assertThat((List<String>) decision.details().get("validationErrors"))
+        assertThat(stringList(decision.details(), "validationErrors"))
                 .anyMatch(error -> error.contains("policyBundle must be valid JSON"));
     }
 
@@ -153,6 +154,11 @@ class BasicPolicyBundleToolExecutionPolicyHookTest {
                 properties,
                 new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry())
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Map<String, Object> values, String key) {
+        return (List<String>) values.get(key);
     }
 
     private String policyBundle(String defaultDecision, String ruleJson) {

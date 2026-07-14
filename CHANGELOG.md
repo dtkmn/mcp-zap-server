@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Updated the runtime to consume `io.github.dtkmn:mcp-gateway-core` and `io.github.dtkmn:mcp-gateway-spring-webflux` `0.7.1`.
+- Limited continuous container publication to successful `main` pushes while keeping CI builds on development and feature branches.
 
 ## [0.9.1] - 2026-06-26
 

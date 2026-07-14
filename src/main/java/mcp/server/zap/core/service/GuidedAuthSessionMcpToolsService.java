@@ -18,40 +18,13 @@ public class GuidedAuthSessionMcpToolsService {
 
     @Tool(
             name = "zap_auth_session_prepare",
-            description = "Prepare a guided auth session for simple form-login, bearer, or api-key flows. Prefer credentialReference values like env:NAME or file:/absolute/path. Inline secrets are disabled by default and should remain local-only."
+            description = "Prepare a guided auth session from an operator-managed profile. The requested target must remain on the profile's authorized origin."
     )
     public String prepareAuthSession(
-            @ToolParam(description = "Target host or base URL for the authenticated flow") String targetUrl,
-            @ToolParam(description = "Auth kind: form, bearer, or api-key") String authKind,
-            @ToolParam(description = "Preferred secret reference such as env:SCAN_PASSWORD or file:/var/run/secrets/scan-password") String credentialReference,
-            @ToolParam(required = false, description = "Optional inline secret. Disabled by default; only use for local self-serve workflows when explicitly enabled.") String inlineSecret,
-            @ToolParam(required = false, description = "Optional session label used to name the prepared session") String sessionLabel,
-            @ToolParam(required = false, description = "Optional context name for form auth flows") String contextName,
-            @ToolParam(required = false, description = "Optional login URL for form auth flows") String loginUrl,
-            @ToolParam(required = false, description = "Optional login username for form auth flows") String username,
-            @ToolParam(required = false, description = "Optional scan user name for form auth flows") String userName,
-            @ToolParam(required = false, description = "Optional username field name for form auth flows (default: username)") String usernameField,
-            @ToolParam(required = false, description = "Optional password field name for form auth flows (default: password)") String passwordField,
-            @ToolParam(required = false, description = "Optional header name for bearer or api-key auth (default: Authorization for bearer, X-API-Key for api-key)") String headerName,
-            @ToolParam(required = false, description = "Optional logged-in indicator regex for form auth flows") String loggedInIndicatorRegex,
-            @ToolParam(required = false, description = "Optional logged-out indicator regex for form auth flows") String loggedOutIndicatorRegex
+            @ToolParam(description = "Operator-configured authentication profile ID") String profileId,
+            @ToolParam(description = "Target URL on the profile's authorized origin; paths may vary") String targetUrl
     ) {
-        return guidedAuthSessionService.prepareSession(
-                targetUrl,
-                authKind,
-                credentialReference,
-                inlineSecret,
-                sessionLabel,
-                contextName,
-                loginUrl,
-                username,
-                userName,
-                usernameField,
-                passwordField,
-                headerName,
-                loggedInIndicatorRegex,
-                loggedOutIndicatorRegex
-        );
+        return guidedAuthSessionService.prepareSession(profileId, targetUrl);
     }
 
     @Tool(

@@ -1,7 +1,6 @@
 package mcp.server.zap.core.service;
 
 import java.nio.charset.StandardCharsets;
-import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.util.Base64;
@@ -735,22 +734,18 @@ public class GuidedScanWorkflowService {
                     "Prepared auth session is not bound to a reusable ZAP context/user. Re-run zap_auth_session_prepare for a form-login flow."
             );
         }
-        if (!sameAuthority(targetUrl, session.target().baseUrl())) {
+        if (session.authorizedOrigin() == null) {
             throw new IllegalArgumentException(
-                    "authSessionId target host does not match the requested targetUrl. Reuse the session only on the same app host."
+                    "Prepared auth session has no authorized profile origin. Re-run zap_auth_session_prepare."
+            );
+        }
+        if (!session.authorizedOrigin().matches(session.target().baseUrl())
+                || !session.authorizedOrigin().matches(targetUrl)) {
+            throw new IllegalArgumentException(
+                    "authSessionId is not authorized for the requested targetUrl origin. Reuse the session only on its auth profile origin."
             );
         }
         return session;
-    }
-
-    private boolean sameAuthority(String left, String right) {
-        URI leftUri = URI.create(requireText(left, "targetUrl"));
-        URI rightUri = URI.create(requireText(right, "sessionTargetUrl"));
-        String leftScheme = leftUri.getScheme() == null ? "" : leftUri.getScheme().trim().toLowerCase(Locale.ROOT);
-        String rightScheme = rightUri.getScheme() == null ? "" : rightUri.getScheme().trim().toLowerCase(Locale.ROOT);
-        String leftAuthority = leftUri.getAuthority() == null ? "" : leftUri.getAuthority().trim().toLowerCase(Locale.ROOT);
-        String rightAuthority = rightUri.getAuthority() == null ? "" : rightUri.getAuthority().trim().toLowerCase(Locale.ROOT);
-        return leftScheme.equals(rightScheme) && leftAuthority.equals(rightAuthority);
     }
 
     private record GuidedOperation(

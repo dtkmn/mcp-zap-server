@@ -4,15 +4,14 @@ package mcp.server.zap.core.service.auth.bootstrap;
  * Gateway request model for guided auth bootstrap preparation.
  */
 public record AuthBootstrapRequest(
-        String sessionLabel,
+        String profileId,
         String targetUrl,
         AuthBootstrapKind authKind,
+        HttpOrigin allowedOrigin,
         String credentialReference,
-        String inlineSecret,
-        String contextName,
         String loginUrl,
         String username,
-        String userName,
+        String zapUserName,
         String usernameField,
         String passwordField,
         String headerName,

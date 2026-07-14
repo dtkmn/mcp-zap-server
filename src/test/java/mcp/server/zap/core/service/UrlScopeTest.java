@@ -36,4 +36,15 @@ class UrlScopeTest {
 
         assertThat(UrlScope.parse("https://target").contains("not-a-url")).isFalse();
     }
+
+    @Test
+    void rejectsAmbiguousAuthoritiesAndEncodedPaths() {
+        UrlScope scope = UrlScope.parse("https://target/app");
+
+        assertThat(scope.contains("https://user@target/app")).isFalse();
+        assertThat(scope.contains("https://target:65536/app")).isFalse();
+        assertThat(scope.contains("https://target/app/%5csecret")).isFalse();
+        assertThat(scope.contains("https://target/app/%255csecret")).isFalse();
+        assertThat(scope.contains("https://tärget/app")).isFalse();
+    }
 }

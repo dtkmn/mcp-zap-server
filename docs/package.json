@@ -16,7 +16,7 @@
     "@astrojs/starlight": "^0.41.3",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/rajdhani": "^5.2.7",
-    "astro": "^7.0.6",
+    "astro": "^7.0.9",
     "sharp": "^0.35.3"
   },
   "devDependencies": {

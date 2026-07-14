@@ -50,6 +50,16 @@ class UrlValidationServiceTest {
     }
 
     @Test
+    void rejectsTerminalDotBeforePolicyResolution() {
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> service.validateUrl("https://example.com./account")
+        );
+
+        assertEquals("URL host must not end with a dot", exception.getMessage());
+    }
+
+    @Test
     void rejectsLocalhostByDefault() {
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://localhost"));
         assertThrows(IllegalArgumentException.class, () -> service.validateUrl("http://127.0.0.1"));

@@ -14,6 +14,7 @@ import mcp.server.zap.core.gateway.UnsupportedEngineCapabilityException;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.HttpOrigin;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class GuidedSecurityToolsServiceTest {
@@ -348,6 +350,30 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
+    void preparedProfileCannotBeReusedForCrawlOnAnotherOrigin() {
+        PreparedAuthSession session = preparedFormSession("auth-crawl", "https://app.example.com", "1", "7");
+        when(guidedAuthSessionService.getPreparedSession("auth-crawl")).thenReturn(session);
+
+        assertThatThrownBy(() -> service.startCrawl("https://attacker.example", "http", null, "auth-crawl"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not authorized for the requested targetUrl origin");
+
+        verifyNoInteractions(spiderScanService, scanJobQueueService);
+    }
+
+    @Test
+    void preparedProfileCannotBeReusedForAttackOnAnotherOrigin() {
+        PreparedAuthSession session = preparedFormSession("auth-attack", "https://app.example.com", "1", "7");
+        when(guidedAuthSessionService.getPreparedSession("auth-attack")).thenReturn(session);
+
+        assertThatThrownBy(() -> service.startAttack("https://attacker.example", "true", "Baseline", null, "auth-attack"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not authorized for the requested targetUrl origin");
+
+        verifyNoInteractions(activeScanService, scanJobQueueService);
+    }
+
+    @Test
     void startCrawlRejectsBrowserStrategyWhenAuthSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-3", "https://app.example.com", "1", "7");
         when(guidedAuthSessionService.getPreparedSession("auth-3")).thenReturn(session);
@@ -365,6 +391,7 @@ class GuidedSecurityToolsServiceTest {
                 AuthBootstrapKind.API_KEY,
                 "gateway-header-reference",
                 new TargetDescriptor(TargetDescriptor.Kind.API, "https://api.example.com", "https://api.example.com"),
+                HttpOrigin.fromConfiguredOrigin("https://api.example.com"),
                 "env:ORDERS_API_KEY",
                 null,
                 null,
@@ -637,6 +664,7 @@ class GuidedSecurityToolsServiceTest {
                 AuthBootstrapKind.FORM,
                 "zap-form-login",
                 new TargetDescriptor(TargetDescriptor.Kind.WEB, targetUrl, "shop-auth"),
+                HttpOrigin.fromUrl(targetUrl),
                 "env:SHOP_PASSWORD",
                 "shop-auth",
                 contextId,

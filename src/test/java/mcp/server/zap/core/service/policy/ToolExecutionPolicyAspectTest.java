@@ -26,6 +26,28 @@ import static org.mockito.Mockito.when;
 class ToolExecutionPolicyAspectTest {
 
     @Test
+    void authProfileIdDoesNotHideTargetFromRuntimePolicy() throws Throwable {
+        ToolExecutionPolicyService policyService = mock(ToolExecutionPolicyService.class);
+        ToolExecutionPolicyAspect aspect = new ToolExecutionPolicyAspect(policyService);
+
+        Object response = aspect.enforcePolicy(
+                joinPointFor(
+                        "prepareAuthSession",
+                        new String[]{"profileId", "targetUrl"},
+                        new Object[]{"shop-staging", "https://shop.example.com/admin"}
+                ),
+                toolAnnotation("prepareAuthSession", String.class, String.class)
+        );
+
+        assertThat(response).isEqualTo("tool-result");
+        verify(policyService).enforce(
+                "zap_auth_session_prepare",
+                "https://shop.example.com/admin",
+                null
+        );
+    }
+
+    @Test
     void hostlessReportReadArgumentsCanBeAllowedByRuntimePolicy() throws Throwable {
         PolicyEnforcementProperties properties = new PolicyEnforcementProperties();
         properties.setMode(PolicyEnforcementProperties.Mode.ENFORCE);
@@ -199,6 +221,11 @@ class ToolExecutionPolicyAspectTest {
         @Tool(name = "zap_passive_scan_status")
         String passiveStatus() {
             return "unused";
+        }
+
+        @Tool(name = "zap_auth_session_prepare")
+        String prepareAuthSession(String profileId, String targetUrl) {
+            return profileId + ":" + targetUrl;
         }
     }
 }

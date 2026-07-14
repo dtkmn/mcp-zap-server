@@ -79,8 +79,9 @@ mcp:
             table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
             fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
       bootstrap:
-        allowInlineSecrets: ${MCP_AUTH_BOOTSTRAP_ALLOW_INLINE_SECRETS:false}
-        allowedCredentialReferences: ${MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES:}
+        # Profiles are operator-owned configuration. Each profile binds one exact credential
+        # reference to one canonical HTTP(S) origin; callers provide only profileId + targetUrl.
+        profiles: []
     protection:
       enabled: ${MCP_PROTECTION_ENABLED:true}
       retryAfterSeconds: ${MCP_PROTECTION_RETRY_AFTER_SECONDS:30}

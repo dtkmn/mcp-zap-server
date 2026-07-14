@@ -12,13 +12,13 @@ capability gap.
 Supported in the current gateway window:
 
 - form-login bootstrap backed by ZAP context and user configuration
-- bearer/API-key credential-reference preparation at the gateway layer
+- bearer/API-key profile preparation at the gateway layer
 - guided `zap_auth_session_prepare` and `zap_auth_session_validate`
 - authenticated guided crawl/attack with prepared form-login sessions
 
 Important caveat:
 
-- bearer/API-key sessions validate credential references, but current guided ZAP
+- bearer/API-key sessions validate their configured credential references, but current guided ZAP
   flows do not automatically inject those headers into engine execution yet
 
 Unsupported today:
@@ -34,8 +34,8 @@ Capture these before changing anything:
 
 - `correlationId` from the client response or request headers
 - tool name: `zap_auth_session_prepare`, `zap_auth_session_validate`,
-  `zap_crawl`, or `zap_attack`
-- `authKind`
+  `zap_crawl_start`, or `zap_attack_start`
+- `profileId` and the profile's configured auth kind
 - `targetUrl`
 - whether the session reports `Engine Binding: ZAP context/user ready` or
   `Engine Binding: gateway contract only`
@@ -45,20 +45,17 @@ Then classify the failure:
 
 | Symptom | Likely Cause | First Action |
 | --- | --- | --- |
-| `authKind must be one of: form, bearer, api-key` | Unsupported or misspelled auth kind | Use `form`, `bearer`, or `api-key` only. |
+| `Unknown auth profile ID` | Caller selected a profile that is not configured | Use an operator-configured profile ID or add the profile before retrying. |
+| `Auth profile ... is invalid` | Operator profile is incomplete or internally inconsistent | Fix the profile configuration and restart before exposing the service. |
 | `targetUrl cannot be null or blank` | Missing target URL | Supply the target host or base URL. |
-| `loginUrl cannot be null or blank` | Form login request is incomplete | Supply the actual login form URL. |
-| `username cannot be null or blank` | Form login username missing | Supply the login username. |
-| `loggedInIndicatorRegex cannot be null or blank` | No success indicator for validation | Provide a regex that appears only after login. |
-| `Provide credentialReference or inlineSecret` | No secret source | Prefer `credentialReference`. |
-| `inlineSecret is disabled by default` | Inline secret used outside local mode | Use `env:NAME` or `file:/absolute/path`, or explicitly enable inline secrets only for local workflows. |
-| `credentialReference is not in the operator allowlist` | Caller selected an env var or file path that operators did not pre-approve | Add the exact `env:NAME` or `file:/absolute/path` to `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES`, or reject the workflow. |
-| `Environment variable ... is missing or blank` | Secret env var unavailable to the MCP process | Fix the deployment secret/env injection. |
+| `targetUrl origin is not authorized for auth profile` | Caller selected a target outside the profile's exact scheme, host, and port | Use a target path on the configured origin or select the correct profile. |
+| `loginUrl origin is not authorized for auth profile` | Operator configured a form login URL outside the credential's allowed origin | Correct the profile; never widen the origin merely to make the request pass. |
+| `loginUrl cannot be null or blank` | Form profile is incomplete | Configure the actual login form URL in the profile. |
+| `username cannot be null or blank` | Form profile username missing | Configure the login username in the profile. |
+| `loggedInIndicatorRegex cannot be null or blank` | Form profile has no success indicator | Configure a regex that appears only after login. |
 | `credentialReference file path must be absolute` | Relative secret path | Use `file:/absolute/path`. |
-| `Unable to read credentialReference file` | File missing or unreadable | Fix mount path and file permissions for the MCP runtime. |
-| `reference_missing` | Header session was prepared from inline secret | Re-prepare with `credentialReference`. |
+| `Auth profile credential could not be resolved` | Configured environment variable or secret file is missing, blank, or unreadable | Inspect the correlated operator log for the exact environment name or file path, then fix deployment injection or mount permissions. Do not return that metadata to MCP callers. |
 | `authentication_failed` | ZAP could not authenticate the configured user | Check credentials, login URL, field names, and login indicators. |
-| `loginUrl must share the same origin as targetUrl` | Form login points to a different scheme, host, or port than the scan target | Keep login and target on the same origin; do not use auth bootstrap for cross-origin credential forwarding. |
 | `usernameField contains unsupported characters` or `passwordField contains unsupported characters` | Form field name could inject extra ZAP auth config parameters | Use simple field names containing letters, numbers, dot, underscore, dash, colon, or brackets. |
 | `Unknown auth session ID` | Session ID lost or wrong | Re-run `zap_auth_session_prepare`. |
 | `form-login sessions only` | Header session passed to guided scan | Use a form-login session or omit `authSessionId`. |
@@ -68,19 +65,20 @@ Then classify the failure:
 
 Form-login preparation needs all of this:
 
+- operator-configured `profileId`
 - `targetUrl`
-- `loginUrl`
-- `username`
-- operator-allowlisted `credentialReference` or allowed local `inlineSecret`
-- `loggedInIndicatorRegex`
+- profile `allowed-origin`
+- profile `login-url`
+- profile `username`
+- exact profile `credential-reference`
+- profile `logged-in-indicator-regex`
 
-Optional but often necessary:
+Optional profile settings:
 
-- `contextName`
-- `userName`
-- `usernameField`
-- `passwordField`
-- `loggedOutIndicatorRegex`
+- profile `zap-user-name`
+- profile `username-field`
+- profile `password-field`
+- profile `logged-out-indicator-regex`
 
 If preparation fails before a session ID is returned, fix input or secret
 resolution first. There is no session to validate yet.
@@ -89,13 +87,13 @@ If preparation returns a session but validation fails:
 
 1. Confirm the credential source resolves inside the MCP runtime, not only on
    the operator laptop.
-2. Confirm `loginUrl` is the form POST entrypoint ZAP can use.
-3. Confirm `usernameField` and `passwordField` match the form field names.
-4. Confirm `loggedInIndicatorRegex` appears only after successful login.
-5. Confirm `loggedOutIndicatorRegex`, if supplied, does not also match
+2. Confirm `login-url` is the form POST entrypoint ZAP can use.
+3. Confirm `username-field` and `password-field` match the form field names.
+4. Confirm `logged-in-indicator-regex` appears only after successful login.
+5. Confirm `logged-out-indicator-regex`, if supplied, does not also match
    authenticated pages.
-6. Use lower-level context/user tools only after the guided request is known to
-   be structurally correct.
+6. Do not mutate a guided profile's managed context with lower-level tools.
+   Fix the profile and prepare a new session; use separate contexts for expert flows.
 
 Validation output should include:
 
@@ -103,8 +101,8 @@ Validation output should include:
 - `contextId=...`
 - `userId=...`
 
-If `likelyAuthenticated=false`, do not continue to an authenticated scan and
-pretend the result is meaningful.
+If `likelyAuthenticated` is anything other than `true`, do not continue to an
+authenticated scan and pretend the result is meaningful.
 
 ## Staging Checklist: Form-Login Prepare And Validate
 
@@ -112,32 +110,35 @@ Use this checklist before calling an authenticated pilot ready. It is for
 staging/manual validation of form-login prepare and validate behavior, not for
 capturing real credentials in docs or tickets.
 
-Inputs to prepare:
+Operator profile:
 
-- `targetUrl=https://staging.example.test`
-- `authKind=form`
-- `credentialReference=env:STAGING_SCAN_PASSWORD` or
-  `credentialReference=file:/absolute/path/to/mounted/secret`
-- `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES` includes the exact
-  reference, or an operator-approved prefix such as `env:STAGING_SCAN_*` or
-  `file:/var/run/secrets/mcp-zap/*`
-- file wildcards are directory containment rules; sibling-prefix paths and
-  symlink escapes are intentionally rejected
-- `sessionLabel=staging-form-auth`
-- `contextName=staging-form-auth`
-- `loginUrl=https://staging.example.test/login`
+- `id=staging-form`
+- `kind=form`
+- `allowed-origin=https://staging.example.test`
+- `credential-reference=env:STAGING_SCAN_PASSWORD` or
+  `credential-reference=file:/absolute/path/to/mounted/secret`
+- credential references are exact; wildcards and inline secrets are not supported
+- derived ZAP context `staging-form-auth` (profile ID plus `-auth`)
+- `login-url=https://staging.example.test/login`
 - `username=<scan-user-name>`
-- `usernameField=<login-form-username-field>`
-- `passwordField=<login-form-password-field>`
+- `username-field=<login-form-username-field>`
+- `password-field=<login-form-password-field>`
 - field names may contain letters, numbers, dot, underscore, dash, colon, or
   brackets only; ZAP auth config values are URL-encoded by the server
-- `loggedInIndicatorRegex=<text-only-visible-after-login>`
-- optional `loggedOutIndicatorRegex=<text-only-visible-before-login>`
+- `logged-in-indicator-regex=<text-only-visible-after-login>`
+- optional `logged-out-indicator-regex=<text-only-visible-before-login>`
+
+Inputs to prepare:
+
+- `profileId=staging-form`
+- `targetUrl=https://staging.example.test`
 
 Expected prepare evidence:
 
 - response starts with `Guided auth session prepared.`
+- response includes `Auth Profile: staging-form`
 - response includes `Auth Kind: form`
+- response includes `Authorized Origin: https://staging.example.test`
 - response includes `Provider: zap-form-login`
 - response includes `Engine Binding: ZAP context/user ready`
 - response includes `Context ID:` and `User ID:`
@@ -160,22 +161,20 @@ actually authenticated.
 
 ## Bearer And API-Key Prepare Failures
 
-Bearer and API-key bootstrap currently prepares a gateway credential-reference
+Bearer and API-key profiles currently prepare a gateway credential-reference
 session. It does not prove the target accepts that credential, and it does not
 automatically inject the header into current guided ZAP execution.
 
 Expected validation behavior:
 
-- `reference_valid` means the credential reference resolves
-- `reference_missing` means the session was prepared from inline secret and
-  cannot be revalidated later
+- `reference_valid` means the profile's credential reference resolves
 
 For production-like use:
 
-- use `credentialReference=env:NAME` or `credentialReference=file:/absolute/path`
+- configure an exact `credential-reference=env:NAME` or
+  `credential-reference=file:/absolute/path` in the profile
 - verify the secret is present in the MCP container or pod
-- verify the reference is allowlisted by operators
-- do not rely on inline secrets for repeatable operator workflows
+- verify `allowed-origin` is the exact relying origin
 - do not present header-based bootstrap as authenticated scan execution until
   header injection is implemented in the engine path
 
@@ -184,7 +183,7 @@ For production-like use:
 Authenticated guided crawl/attack currently accepts prepared form-login
 sessions only.
 
-If `zap_crawl` or `zap_attack` fails after adding `authSessionId`:
+If `zap_crawl_start` or `zap_attack_start` fails after adding `authSessionId`:
 
 1. Validate the session first with `zap_auth_session_validate`.
 2. Confirm the session reports `Auth Kind: form`.
@@ -202,13 +201,14 @@ For every auth bootstrap incident, capture:
 - request `correlationId`
 - MCP client ID and workspace ID
 - tool name and request ID
-- session ID, if one was created
+- SHA-256 fingerprint of the session ID, if one was created; never capture the raw session ID
 - validation outcome and diagnostics
 - relevant MCP service logs around the same `correlationId`
 - relevant ZAP logs for context/user authentication attempts
 
-Do not capture raw secrets in tickets, logs, screenshots, or support notes.
-Credential references are acceptable; secret values are not.
+Do not capture raw secrets or exact credential references in caller-visible errors,
+tickets, screenshots, or support notes. Exact environment names and mounted paths
+belong only in restricted operator logs. Secret values must never be logged.
 
 ## Escalation Rules
 
@@ -221,7 +221,7 @@ Escalate as product work, not operator configuration, when:
 
 Escalate as deployment work when:
 
-- env/file credential references do not resolve in the runtime
+- profile env/file credential references do not resolve in the runtime
 - secret mounts differ between MCP and ZAP containers
 - ingress, proxy, or target allowlist rules block the login flow
 

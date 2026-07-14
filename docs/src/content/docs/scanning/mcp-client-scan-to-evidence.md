@@ -78,8 +78,10 @@ For simple auth, prepare and validate a guided auth session:
 1. `zap_auth_session_prepare`
 2. `zap_auth_session_validate`
 
-Use credential references such as `env:NAME` or `file:/absolute/path`. Inline
-secrets should stay disabled except for local throwaway testing.
+Select an operator-managed auth profile and provide a target URL on that
+profile's allowed origin. Profiles hold exact `env:NAME` or
+`file:/absolute/path` credential references; MCP callers never provide secret
+references or inline secrets.
 
 Current guided authenticated crawl and attack support prepared form-login
 sessions. Bearer and API-key session preparation is useful as a contract and
@@ -296,7 +298,7 @@ Not today:
 | Client keeps asking for ZAP scan IDs | It is following expert guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
 | Findings look empty immediately after scan | Passive analysis has not drained. | Run `zap_passive_scan_wait`, then check findings again. |
 | Handoff has caveats | Evidence window is incomplete or direct-only. | Review `zap_scan_history_release_evidence` warnings and rerun with stronger coverage if needed. |
-| Authenticated scan fails | Session target, login indicators, or credential reference is wrong. | Re-run `zap_auth_session_prepare`, then `zap_auth_session_validate`. |
+| Authenticated scan fails | Profile origin, login indicators, or configured credential reference is wrong. | Fix the operator-managed profile, then re-run `zap_auth_session_prepare` and `zap_auth_session_validate`. |
 
 ## Related Docs
 

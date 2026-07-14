@@ -80,16 +80,17 @@ Pre-flight configuration:
   bundle
 - the pilot policy bundle allows the staging host and the exact tools used in
   this scenario
-- the credential is supplied by `credentialReference`, not an inline secret
+- an operator-managed auth profile binds the staging origin, login settings,
+  and exact credential reference
 
 Run sequence:
 
-1. Call `zap_auth_session_prepare` with `authKind=form`, the staging
-   `targetUrl`, `loginUrl`, `username`, field names, login indicators, and a
-   credential reference.
-2. Record the response `correlationId`, `Session ID`, `Context ID`, `User ID`,
-   provider, and `Engine Binding`.
-3. Call `zap_auth_session_validate` with that session ID.
+1. Call `zap_auth_session_prepare` with the staging `profileId` and a
+   `targetUrl` on that profile's authorized origin.
+2. Record the response `correlationId`, `Auth Profile`, `Authorized Origin`,
+   `Context ID`, `User ID`, provider, and `Engine Binding`. Keep the raw session
+   ID only for this live workflow; retain only its SHA-256 fingerprint.
+3. Call `zap_auth_session_validate` with the raw session ID.
 4. Confirm `Valid: true`, `Outcome: authenticated`, and
    `likelyAuthenticated=true`.
 5. Call `zap_crawl_start` with the same target, `strategy=http`, and the
@@ -118,7 +119,7 @@ Expected operator evidence:
 | Evidence | Required proof |
 | --- | --- |
 | Correlation IDs | One for auth prepare, auth validate, crawl, attack, passive wait, findings, and report generation. |
-| Auth evidence | Session ID, context ID, user ID, provider, engine binding, validation outcome, and diagnostics. |
+| Auth evidence | Session ID SHA-256 fingerprint (never raw), context ID, user ID, provider, engine binding, validation outcome, and diagnostics. |
 | Policy evidence | `policy_decision` audit event with bounded tags and the same correlation ID as the tool call. |
 | Scan evidence | Guided operation ID plus backend scan ID or queued job ID where available. |
 | Passive evidence | Passive scan wait result after crawl and after attack. |

@@ -52,6 +52,15 @@ assert_file_contains() {
   fi
 }
 
+assert_file_not_matches() {
+  local file="$1"
+  local pattern="$2"
+  if grep -Eq "$pattern" "$file"; then
+    echo "Expected ${file} not to match: ${pattern}" >&2
+    exit 1
+  fi
+}
+
 assert_bind_count() {
   local file="$1"
   local needle="$2"
@@ -175,8 +184,9 @@ if [[ "${SKIP_GRADLE}" -eq 0 ]]; then
     ./gradlew dependencyInsight --dependency spring-boot-starter-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt"
   )
   assert_file_contains "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt" "org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}"
-  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0 -> 4.0.7"
-  pass "Spring AI ${expected_spring_ai_version} resolves against the managed Spring Boot 4.0.7 runtime"
+  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0"
+  assert_file_not_matches "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" 'org\.springframework\.boot:spring-boot-starter-webflux:[^[:space:]]+[[:space:]]+->'
+  pass "Spring AI ${expected_spring_ai_version} aligns with the managed Spring Boot 4.1.0 runtime"
 
   log_step "Run Docker image packaging architecture guard"
   (

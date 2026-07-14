@@ -145,7 +145,7 @@ repositories {
 
 dependencies {
     compileOnly "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"
-    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.0.7'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.1.0'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'
     testImplementation 'org.assertj:assertj-core:3.27.6'

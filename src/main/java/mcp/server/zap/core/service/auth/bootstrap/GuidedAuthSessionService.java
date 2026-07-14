@@ -12,44 +12,18 @@ import org.springframework.stereotype.Service;
 public class GuidedAuthSessionService {
     private final List<AuthBootstrapProvider> providers;
     private final PreparedAuthSessionRegistry preparedAuthSessionRegistry;
+    private final AuthProfileResolver authProfileResolver;
 
     public GuidedAuthSessionService(List<AuthBootstrapProvider> providers,
-                                    PreparedAuthSessionRegistry preparedAuthSessionRegistry) {
+                                    PreparedAuthSessionRegistry preparedAuthSessionRegistry,
+                                    AuthProfileResolver authProfileResolver) {
         this.providers = providers;
         this.preparedAuthSessionRegistry = preparedAuthSessionRegistry;
+        this.authProfileResolver = authProfileResolver;
     }
 
-    public String prepareSession(String targetUrl,
-                                 String authKind,
-                                 String credentialReference,
-                                 String inlineSecret,
-                                 String sessionLabel,
-                                 String contextName,
-                                 String loginUrl,
-                                 String username,
-                                 String userName,
-                                 String usernameField,
-                                 String passwordField,
-                                 String headerName,
-                                 String loggedInIndicatorRegex,
-                                 String loggedOutIndicatorRegex) {
-        AuthBootstrapRequest request = new AuthBootstrapRequest(
-                sessionLabel,
-                targetUrl,
-                AuthBootstrapKind.fromWireValue(authKind),
-                trimToNull(credentialReference),
-                trimToNull(inlineSecret),
-                trimToNull(contextName),
-                trimToNull(loginUrl),
-                trimToNull(username),
-                trimToNull(userName),
-                trimToNull(usernameField),
-                trimToNull(passwordField),
-                trimToNull(headerName),
-                trimToNull(loggedInIndicatorRegex),
-                trimToNull(loggedOutIndicatorRegex)
-        );
-
+    public String prepareSession(String profileId, String targetUrl) {
+        AuthBootstrapRequest request = authProfileResolver.resolve(profileId, targetUrl);
         AuthBootstrapProvider provider = resolveProvider(request);
         AuthSessionPrepareResult result = provider.prepare(request);
         PreparedAuthSession session = preparedAuthSessionRegistry.save(result.session());
@@ -57,10 +31,11 @@ public class GuidedAuthSessionService {
         StringBuilder output = new StringBuilder()
                 .append("Guided auth session prepared.\n")
                 .append("Session ID: ").append(session.sessionId()).append('\n')
-                .append("Session Label: ").append(session.sessionLabel()).append('\n')
+                .append("Auth Profile: ").append(session.profileId()).append('\n')
                 .append("Auth Kind: ").append(session.authKind().wireValue()).append('\n')
                 .append("Provider: ").append(session.providerId()).append('\n')
                 .append("Target URL: ").append(session.target().baseUrl()).append('\n')
+                .append("Authorized Origin: ").append(session.authorizedOrigin()).append('\n')
                 .append("Engine Binding: ").append(session.engineBound() ? "ZAP context/user ready" : "gateway contract only").append('\n');
         if (hasText(session.contextName())) {
             output.append("Context Name: ").append(session.contextName()).append('\n');
@@ -68,19 +43,14 @@ public class GuidedAuthSessionService {
         if (hasText(session.contextId())) {
             output.append("Context ID: ").append(session.contextId()).append('\n');
         }
-        if (hasText(session.userName())) {
-            output.append("User Name: ").append(session.userName()).append('\n');
+        if (hasText(session.zapUserName())) {
+            output.append("ZAP User Name: ").append(session.zapUserName()).append('\n');
         }
         if (hasText(session.userId())) {
             output.append("User ID: ").append(session.userId()).append('\n');
         }
         if (hasText(session.headerName())) {
             output.append("Header Name: ").append(session.headerName()).append('\n');
-        }
-        if (hasText(session.credentialReference())) {
-            output.append("Credential Source: ").append(session.credentialReference()).append('\n');
-        } else {
-            output.append("Credential Source: inline-secret\n");
         }
         output.append("Next Step: call zap_auth_session_validate with this session ID before running authenticated crawl or attack flows.");
 
@@ -156,10 +126,6 @@ public class GuidedAuthSessionService {
             throw new IllegalArgumentException(fieldName + " cannot be null or blank");
         }
         return value.trim();
-    }
-
-    private String trimToNull(String value) {
-        return hasText(value) ? value.trim() : null;
     }
 
     private boolean hasText(String value) {

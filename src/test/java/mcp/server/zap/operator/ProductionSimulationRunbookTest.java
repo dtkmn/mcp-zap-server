@@ -48,6 +48,7 @@ class ProductionSimulationRunbookTest {
                 "Release evidence",
                 "Customer handoff",
                 "Secret handling",
+                "Session ID SHA-256 fingerprint (never raw)",
                 "guided operation ID and backend scan/job ID"
         );
         assertThat(runbook).doesNotContain("top-secret-token", "StrongPassword123!");

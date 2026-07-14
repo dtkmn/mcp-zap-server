@@ -77,7 +77,11 @@ public class UrlValidationService {
             throw new IllegalArgumentException("Only HTTP and HTTPS protocols are allowed, got: " + protocol);
         }
 
-        String host = normalizeHost(url.getHost());
+        String originalHost = url.getHost();
+        if (originalHost != null && originalHost.endsWith(".")) {
+            throw new IllegalArgumentException("URL host must not end with a dot");
+        }
+        String host = normalizeHost(originalHost);
         if (host.isEmpty()) {
             throw new IllegalArgumentException("URL must include a valid host");
         }

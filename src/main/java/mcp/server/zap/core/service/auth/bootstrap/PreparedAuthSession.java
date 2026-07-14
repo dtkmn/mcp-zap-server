@@ -7,14 +7,15 @@ import mcp.server.zap.core.gateway.TargetDescriptor;
  */
 public record PreparedAuthSession(
         String sessionId,
-        String sessionLabel,
+        String profileId,
         AuthBootstrapKind authKind,
         String providerId,
         TargetDescriptor target,
+        HttpOrigin authorizedOrigin,
         String credentialReference,
         String contextName,
         String contextId,
-        String userName,
+        String zapUserName,
         String userId,
         String headerName,
         String loginUrl,

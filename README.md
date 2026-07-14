@@ -119,7 +119,7 @@ The default posture is intentionally conservative:
 - `none` mode is for explicit local dev/test only.
 - Docker Compose binds published ports to loopback by default.
 - URL validation blocks localhost, private networks, and link-local targets by default.
-- Guided auth uses credential reference allowlisting for server-side secrets.
+- Guided auth uses operator-managed profiles that bind exact server-side credential references and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
 - Public auth exchange endpoints are rate-limited.
 - MCP request bodies have a hard early size cap.
 

@@ -1,9 +1,7 @@
 package mcp.server.zap.core.service.auth.bootstrap;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.service.UrlValidationService;
@@ -35,16 +33,22 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
 
     @Override
     public AuthSessionPrepareResult prepare(AuthBootstrapRequest request) {
+        String profileId = requireText(request.profileId(), "profileId");
         String targetUrl = requireText(request.targetUrl(), "targetUrl");
         urlValidationService.validateUrl(targetUrl);
-        credentialReferenceResolver.resolveSecret(request.credentialReference(), request.inlineSecret());
+        if (request.allowedOrigin() == null) {
+            throw new IllegalArgumentException("Auth profile allowedOrigin cannot be null");
+        }
+        request.allowedOrigin().requireMatch(targetUrl, "targetUrl");
+        credentialReferenceResolver.resolveSecret(request.credentialReference());
 
         PreparedAuthSession session = new PreparedAuthSession(
                 UUID.randomUUID().toString(),
-                defaultSessionLabel(request.sessionLabel(), targetUrl, request.authKind()),
+                profileId,
                 request.authKind(),
                 providerId(),
                 new TargetDescriptor(TargetDescriptor.Kind.API, targetUrl, targetUrl),
+                request.allowedOrigin(),
                 trimToNull(request.credentialReference()),
                 null,
                 null,
@@ -56,9 +60,6 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
         );
 
         List<String> warnings = new ArrayList<>();
-        if (!hasText(request.credentialReference()) && hasText(request.inlineSecret())) {
-            warnings.add("Inline secret was accepted for this local workflow. Prefer credentialReference for repeatable operator paths.");
-        }
         warnings.add("Current guided ZAP flows do not automatically inject header-based auth yet. This session is stored as a gateway contract and validation scaffold.");
 
         return new AuthSessionPrepareResult(session, warnings);
@@ -66,18 +67,11 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
 
     @Override
     public AuthSessionValidationResult validate(PreparedAuthSession session) {
-        if (!hasText(session.credentialReference())) {
-            return new AuthSessionValidationResult(
-                    session,
-                    false,
-                    "reference_missing",
-                    List.of(
-                            "This session was prepared from an inline secret and cannot be revalidated without re-preparing it.",
-                            "Prefer credentialReference values like env:NAME or file:/absolute/path for repeatable operator workflows."
-                    )
-            );
+        if (session.authorizedOrigin() == null) {
+            throw new IllegalArgumentException("Prepared auth session has no authorized profile origin");
         }
-        credentialReferenceResolver.resolveSecret(session.credentialReference(), null);
+        session.authorizedOrigin().requireMatch(session.target().baseUrl(), "auth session target");
+        credentialReferenceResolver.resolveSecret(session.credentialReference());
         List<String> diagnostics = new ArrayList<>();
         diagnostics.add("credentialReference resolved successfully");
         diagnostics.add("headerName=" + session.headerName());
@@ -92,15 +86,6 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
 
     private String defaultHeaderName(AuthBootstrapKind authKind) {
         return authKind == AuthBootstrapKind.BEARER ? "Authorization" : "X-API-Key";
-    }
-
-    private String defaultSessionLabel(String sessionLabel, String targetUrl, AuthBootstrapKind authKind) {
-        if (hasText(sessionLabel)) {
-            return sessionLabel.trim();
-        }
-        URI uri = URI.create(targetUrl);
-        String host = uri.getHost() == null ? "target" : uri.getHost().toLowerCase(Locale.ROOT);
-        return host + "-" + authKind.wireValue();
     }
 
     private String requireText(String value, String fieldName) {

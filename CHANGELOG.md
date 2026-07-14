@@ -8,10 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Changed `zap_auth_session_prepare` to accept only `profileId` and `targetUrl`. Deployments must replace `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES` and `MCP_AUTH_BOOTSTRAP_ALLOW_INLINE_SECRETS` with operator-managed `mcp.server.auth.bootstrap.profiles` configuration.
+- Added executable-JAR, Compose, and Helm migration recipes with secret injection, required restart behavior, and live prepare/validate verification.
 - Updated to Boot-managed Testcontainers `2.0.5` modules and run tagged Docker integration tests before main and release image publication.
 - Updated Spring Boot to `4.1.0` and aligned the standalone extension and CI dependency-resolution proofs with the managed runtime.
 - Updated the runtime to consume `io.github.dtkmn:mcp-gateway-core` and `io.github.dtkmn:mcp-gateway-spring-webflux` `0.7.1`.
 - Limited continuous container publication to successful `main` pushes while keeping CI builds on development and feature branches.
+
+### Security
+- Bound each guided-auth credential and login configuration to one operator-approved canonical origin, removed caller-selected credentials and login settings, and recheck that origin before validation and authenticated crawl or attack dispatch.
+- Made each guided profile's ZAP context scope immutable and origin-wide, validate login indicators before secret resolution or engine mutation, and keep credential-source metadata out of MCP caller errors.
+- Made form-login validation fail closed unless ZAP reports `likelyAuthenticated=true`, and reject terminal-dot target hosts before URL policy checks or engine dispatch.
+- Made the JVM container run as UID/GID 1000 and made the authenticated-profile Helm migration verify and deploy the exact main-commit image tag.
 
 ## [0.9.1] - 2026-06-26
 

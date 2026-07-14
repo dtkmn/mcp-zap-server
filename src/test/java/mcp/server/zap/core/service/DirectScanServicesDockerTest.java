@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -18,7 +19,8 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class DirectScanServicesDockerTest {
     private static final Pattern SCAN_ID_PATTERN = Pattern.compile("Scan ID: ([^\\n]+)");
     private static final Network NETWORK = Network.newNetwork();

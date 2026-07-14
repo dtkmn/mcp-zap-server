@@ -7,6 +7,7 @@ import com.github.dockerjava.api.model.Volume;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineAutomationAccess;
+import org.junit.jupiter.api.Tag;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -31,7 +32,8 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class AutomationPlanServiceDockerTest {
     private static final Pattern PLAN_ID_PATTERN = Pattern.compile("Plan ID: ([^\\n]+)");
     private static final Pattern PLAN_FILE_PATTERN = Pattern.compile("Plan File: ([^\\n]+)");

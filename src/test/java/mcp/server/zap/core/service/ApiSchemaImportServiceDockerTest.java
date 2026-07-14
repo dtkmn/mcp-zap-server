@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineApiImportAccess;
+import org.junit.jupiter.api.Tag;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -22,7 +23,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class ApiSchemaImportServiceDockerTest {
     private static final Network NETWORK = Network.newNetwork();
 

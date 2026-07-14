@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEnginePassiveScanAccess;
+import org.junit.jupiter.api.Tag;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.junit.jupiter.Container;
@@ -13,7 +14,8 @@ import org.zaproxy.clientapi.core.ClientApi;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class PassiveScanServiceDockerTest {
     private static final Network NETWORK = Network.newNetwork();
 

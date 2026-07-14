@@ -65,6 +65,51 @@ class McpGatewayGovernanceFilterIntegrationTest {
         assertThat(auditEvent.path("principal").asText()).isEqualTo("anonymous");
     }
 
+    @Test
+    void activeGovernanceRejectsDuplicateJsonRpcFields() {
+        assertInvalidRequest(
+                """
+                        {"jsonrpc":"2.0","method":"tools/list","method":"tools/call","id":1,"params":{"name":"zap_spider_scan"}}
+                """,
+                "duplicate-json-rpc-field",
+                "invalid_json_rpc_request"
+        );
+    }
+
+    @Test
+    void activeGovernanceRejectsPaddedJsonRpcIdentifiers() {
+        assertInvalidRequest(
+                """
+                        {"jsonrpc":"2.0","method":" tools/list ","id":1}
+                """,
+                "padded-json-rpc-method",
+                "invalid_request_shape"
+        );
+        assertInvalidRequest(
+                """
+                        {"jsonrpc":"2.0","method":"tools/call","id":2,"params":{"name":" zap_spider_scan "}}
+                """,
+                "padded-json-rpc-tool",
+                "invalid_request_shape"
+        );
+    }
+
+    private void assertInvalidRequest(String body, String correlationId, String reason) {
+        client().post()
+                .uri("/mcp")
+                .header("X-API-Key", "governance-api-key")
+                .header("X-Correlation-Id", correlationId)
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body)
+                .exchange()
+                .expectStatus().isBadRequest()
+                .expectBody()
+                .jsonPath("$.error").isEqualTo("invalid_json_rpc_request")
+                .jsonPath("$.reason").isEqualTo(reason)
+                .jsonPath("$.correlationId").isEqualTo(correlationId);
+    }
+
     private WebTestClient client() {
         return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
     }

@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'maven-publish'
-    id 'org.springframework.boot' version '4.0.7'
+    id 'org.springframework.boot' version '4.1.0'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'org.cyclonedx.bom' version '3.2.4'
 }
@@ -48,7 +48,6 @@ ext {
     set('springAiVersion', "2.0.0")
     set('jackson-2-bom.version', "2.22.0")
     set('logback.version', "1.5.36")
-    set('testcontainersVersion', "1.20.6")
     set('netty.version', "4.2.15.Final")
     set('postgresql.version', "42.7.11")
     set('commonsCompressVersion', "1.28.0")
@@ -78,8 +77,8 @@ dependencies {
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
@@ -96,7 +95,6 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
-        mavenBom "org.testcontainers:testcontainers-bom:${testcontainersVersion}"
     }
 }
 
@@ -251,11 +249,25 @@ tasks.register('verifyPublicPreviewExtensionApiPublication') {
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'docker'
+    }
     dependsOn tasks.named('extensionApiJar')
     dependsOn tasks.named('samplePolicyMetadataExtensionJar')
     dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
     finalizedBy tasks.named('cleanStandalonePolicyMetadataExtensionOutput')
+}
+
+tasks.register('dockerTest', Test) {
+    group = 'verification'
+    description = 'Runs the Docker-backed integration tests.'
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'docker'
+    }
+    shouldRunAfter tasks.named('test')
 }
 
 tasks.named('check') {

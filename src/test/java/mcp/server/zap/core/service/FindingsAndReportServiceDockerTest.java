@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
 import mcp.server.zap.core.gateway.ZapEngineReportAccess;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import org.junit.jupiter.api.Tag;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -34,7 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class FindingsAndReportServiceDockerTest {
     private static final Network NETWORK = Network.newNetwork();
     private static final Path REPORT_DIR = createReportDirectory();

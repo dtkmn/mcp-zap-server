@@ -67,6 +67,13 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build --scan --no-daemon --stacktrace --info
 
+      - name: Run Docker-backed integration tests
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main')
+        run: ./gradlew dockerTest --scan --no-daemon --stacktrace --info
+
       - name: Verify extension API publication
         run: ./gradlew verifyExtensionApiPublication --scan --no-daemon --stacktrace --info
 
@@ -82,7 +89,9 @@ jobs:
           retention-days: 7
           path: |
             build/test-results/test/**
+            build/test-results/dockerTest/**
             build/reports/tests/test/**
+            build/reports/tests/dockerTest/**
             build/reports/problems/problems-report.html
 
   docker-publish:

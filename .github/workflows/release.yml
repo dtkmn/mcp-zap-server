@@ -89,6 +89,9 @@ jobs:
       - name: Build with Gradle and generate SBOM
         run: ./gradlew build cyclonedxBom --scan --no-daemon --stacktrace --info
 
+      - name: Run Docker-backed integration tests
+        run: ./gradlew dockerTest --scan --no-daemon --stacktrace --info
+
       - name: Verify extension API publication
         run: ./gradlew verifyExtensionApiPublication --scan --no-daemon --stacktrace --info
 

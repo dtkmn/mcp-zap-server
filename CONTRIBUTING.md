@@ -92,7 +92,10 @@ Run the smallest meaningful set locally before opening a PR:
 
 - `./gradlew test` for Java changes
 - `./gradlew build` for dependency or packaging changes
+- `./gradlew dockerTest` for Docker/Testcontainers changes
 - `cd docs && npm run check && npm run build` for docs-site changes
+
+The normal build excludes Docker-tagged tests. CI runs them for pull requests targeting `main`, pushes to `main` before image publication, manual workflow runs, and releases. Development and feature pushes skip them.
 
 If you cannot run something locally, say so in the PR and explain why.
 

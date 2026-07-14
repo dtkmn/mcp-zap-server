@@ -6,6 +6,7 @@ Describe the problem this PR solves and the chosen approach.
 
 - [ ] `./gradlew test`
 - [ ] `./gradlew build`
+- [ ] `./gradlew dockerTest` if Docker/Testcontainers behavior changed
 - [ ] `cd docs && npm run check && npm run build` if docs changed
 - [ ] Not run locally, with explanation below
 

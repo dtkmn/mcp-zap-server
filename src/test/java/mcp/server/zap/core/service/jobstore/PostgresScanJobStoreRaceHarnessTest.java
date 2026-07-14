@@ -9,10 +9,11 @@ import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -32,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 class PostgresScanJobStoreRaceHarnessTest {
 
     private static final int RACE_ROUNDS = 8;
@@ -40,7 +42,7 @@ class PostgresScanJobStoreRaceHarnessTest {
     private static final Instant BASE_TIME = Instant.parse("2026-05-06T00:00:00Z");
 
     @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
 
     @BeforeAll
     static void migrateSchema() {

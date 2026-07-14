@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -13,7 +14,8 @@ import org.zaproxy.clientapi.core.ClientApi;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
-@Testcontainers(disabledWithoutDocker = true)
+@Tag("docker")
+@Testcontainers
 public class ActiveScanPolicyToolsDockerTest {
 
     @Container

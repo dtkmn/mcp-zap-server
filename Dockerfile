@@ -20,9 +20,14 @@ RUN gradle bootJar -x test && \
 # Runtime stage
 FROM eclipse-temurin:25-jre-alpine
 LABEL io.modelcontextprotocol.server.name="io.github.dtkmn/mcp-zap-server"
-RUN apk add --no-cache --upgrade curl p11-kit p11-kit-trust
+RUN apk add --no-cache --upgrade curl p11-kit p11-kit-trust && \
+    addgroup -S -g 1000 app && \
+    adduser -S -D -H -u 1000 -G app app && \
+    mkdir -p /app /zap/wrk && \
+    chown -R 1000:1000 /app /zap/wrk
 WORKDIR /app
-COPY --from=builder /tmp/app.jar ./app.jar
+COPY --chown=1000:1000 --from=builder /tmp/app.jar ./app.jar
+USER 1000:1000
 EXPOSE 7456
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:7456/actuator/health || exit 1

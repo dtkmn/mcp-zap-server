@@ -275,7 +275,7 @@ class DockerPublishWorkflowArchitectureTest {
 
     private static ShellResult runShell(JsonNode step, Path directory, Map<String, String> environment)
             throws IOException, InterruptedException {
-        ProcessBuilder builder = new ProcessBuilder("bash", "-c", step.path("run").asString());
+        ProcessBuilder builder = new ProcessBuilder("/bin/bash", "-c", step.path("run").asString());
         builder.directory(directory.toFile());
         builder.redirectErrorStream(true);
         builder.environment().putAll(environment);
@@ -286,7 +286,7 @@ class DockerPublishWorkflowArchitectureTest {
 
     private static String git(Path repository, String... arguments) throws IOException, InterruptedException {
         List<String> command = new ArrayList<>();
-        command.add("git");
+        command.add("/usr/bin/git");
         command.addAll(List.of(arguments));
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(repository.toFile());

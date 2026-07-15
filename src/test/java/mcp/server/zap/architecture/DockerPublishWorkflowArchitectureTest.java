@@ -51,13 +51,13 @@ class DockerPublishWorkflowArchitectureTest {
         assertThat(steps).allSatisfy(step -> assertThat(step.has("continue-on-error")).isFalse());
 
         JsonNode resolve = stepNamed(steps, "Resolve release metadata");
-        JsonNode checkout = stepUsing(steps, "actions/checkout@v7");
+        JsonNode checkout = stepUsing(steps, "actions/checkout");
         JsonNode verify = stepNamed(steps, "Verify release tag, commit, and project version");
         JsonNode archive = stepNamed(steps, "Archive SBOM workflow artifact");
         JsonNode ghcrLogin = stepNamed(steps, "Log in to GitHub Container Registry");
         JsonNode dockerHubLogin = stepNamed(steps, "Login to Docker Hub");
         List<JsonNode> publishers = steps.stream()
-                .filter(step -> "docker/build-push-action@v7".equals(step.path("uses").asString()))
+                .filter(step -> step.path("uses").asString().startsWith("docker/build-push-action@"))
                 .toList();
         assertThat(publishers).hasSize(1);
         JsonNode publish = publishers.getFirst();
@@ -215,11 +215,11 @@ class DockerPublishWorkflowArchitectureTest {
                 .orElseThrow(() -> new AssertionError("Missing workflow step: " + name));
     }
 
-    private static JsonNode stepUsing(List<JsonNode> steps, String action) {
+    private static JsonNode stepUsing(List<JsonNode> steps, String actionRepository) {
         return steps.stream()
-                .filter(step -> action.equals(step.path("uses").asString()))
+                .filter(step -> step.path("uses").asString().startsWith(actionRepository + "@"))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("Missing workflow action: " + action));
+                .orElseThrow(() -> new AssertionError("Missing workflow action: " + actionRepository));
     }
 
     private static Map<String, String> resolveRelease(

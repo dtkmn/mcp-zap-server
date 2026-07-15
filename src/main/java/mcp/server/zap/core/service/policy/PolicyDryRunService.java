@@ -311,7 +311,8 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         }
 
         PolicyBundleMatch match = parseMatch(ruleNode.get("match"), prefix + ".match", errors);
-        if (id == null || decision == null || reason == null || match == null) {
+        // Description is required authoring metadata; runtime evaluation emits reason instead.
+        if (id == null || description == null || decision == null || reason == null || match == null) {
             return null;
         }
         PolicyBundleDecision decisionValue = RULE_DECISIONS.contains(decision)

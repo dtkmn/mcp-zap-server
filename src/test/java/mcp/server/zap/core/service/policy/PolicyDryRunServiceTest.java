@@ -1,6 +1,8 @@
 package mcp.server.zap.core.service.policy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -227,6 +229,28 @@ class PolicyDryRunServiceTest {
                 .anyMatch(error -> error.contains("toolName must be an exact known MCP tool or action"))
                 .anyMatch(error -> error.contains("target must be"))
                 .anyMatch(error -> error.contains("evaluatedAt must be"));
+    }
+
+    @Test
+    void dryRunRejectsRuleWithoutDescription() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode bundle = objectMapper.readTree(
+                Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"))
+        );
+        ((ObjectNode) bundle.at("/spec/rules/0")).remove("description");
+
+        Map<String, Object> response = service.dryRun(
+                objectMapper.writeValueAsString(bundle),
+                "zap_attack_start",
+                "https://api.sandbox.example.com/orders",
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", false);
+        assertThat(stringList(validation(response), "errors"))
+                .contains("bundle.spec.rules[0].description must be a non-empty string");
+        assertThat(decision(response)).containsEntry("result", "invalid");
+        assertThat(response).containsEntry("trace", List.of());
     }
 
     @Test

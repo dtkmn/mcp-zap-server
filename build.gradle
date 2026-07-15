@@ -7,7 +7,7 @@ plugins {
 }
 
 group = 'mcp.server.zap'
-version = '0.9.1'
+version = '0.10.0'
 def extensionApiPublicationVersion = version.toString()
 
 java {
@@ -76,6 +76,7 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'tools.jackson.dataformat:jackson-dataformat-yaml'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     constraints {
@@ -245,6 +246,7 @@ tasks.register('verifyPublicPreviewExtensionApiPublication') {
 }
 
 tasks.named('test') {
+    inputs.files('.github/workflows/ci.yml', '.github/workflows/release.yml')
     useJUnitPlatform {
         excludeTags 'docker'
     }

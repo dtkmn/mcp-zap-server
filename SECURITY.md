@@ -4,12 +4,12 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 ## Supported Versions
 
-| Version    | Supported                                      |
-| ---------- | ---------------------------------------------- |
-| `>= 0.9.1` | ✅ Active development; receives security fixes |
-| `0.9.0`    | ⚠️ Upgrade to `0.9.1` for dependency refresh  |
-| `0.8.x`    | ⚠️ Critical security fixes where practical     |
-| `< 0.8.0`  | ⚠️ Legacy versions; consider upgrading         |
+| Version     | Supported                                            |
+| ----------- | ---------------------------------------------------- |
+| `>= 0.10.0` | ✅ Active development; receives security fixes       |
+| `0.9.x`     | ⚠️ Upgrade to `0.10.0` for guided-auth security fixes |
+| `0.8.x`     | ⚠️ Critical security fixes where practical           |
+| `< 0.8.0`   | ⚠️ Legacy versions; consider upgrading               |
 
 ## Security Features
 

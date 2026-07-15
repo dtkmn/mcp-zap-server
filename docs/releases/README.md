@@ -6,6 +6,7 @@ GitHub Releases remains the canonical public release archive:
 
 ## Releases
 
+- [0.10.0](./RELEASE_NOTES_0.10.0.md)
 - [0.9.1](./RELEASE_NOTES_0.9.1.md)
 - [0.9.0](./RELEASE_NOTES_0.9.0.md)
 - [0.8.0](./RELEASE_NOTES_0.8.0.md)

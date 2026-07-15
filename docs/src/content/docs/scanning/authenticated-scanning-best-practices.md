@@ -14,7 +14,7 @@ If authentication is not proven immediately before the crawl or attack, the scan
 
 ## Recommended Path
 
-In current development builds, start with guided auth bootstrap:
+In `v0.10.0` and later, start with guided auth bootstrap:
 
 - `zap_auth_session_prepare`
 - `zap_auth_session_validate`
@@ -23,9 +23,9 @@ In current development builds, start with guided auth bootstrap:
 
 These tools are available on the default `guided` surface. The lower-level ZAP context and user tools still exist on the `expert` surface, but they are the advanced path now.
 
-The profile contract is newer than the published `v0.9.1` image. Traditional
-form-login support is limited to the HTTP spider and active scan paths; it does
-not imply OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
+The profile contract is available in `v0.10.0` and later. Traditional form-login
+support is limited to the HTTP spider and active scan paths; it does not imply
+OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
@@ -225,11 +225,11 @@ networkPolicy:
 overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
-deployment's explicit URL-policy approval. The commands below force the immutable
-`sha-<40-character commit SHA>` image produced by main CI for the commit containing
-this migration. Replace the variable placeholder before running them. Do not use
-an empty value or `v0.9.1`; either choice deploys code without the profile migration
-contract.
+deployment's explicit URL-policy approval. The chart now defaults to `v0.10.0`,
+the first release containing this profile contract. The commands below deliberately
+pin the immutable `sha-<40-character commit SHA>` image produced by main CI for the
+commit being migrated. Replace the variable placeholder before running them. Do
+not use `v0.9.1` or earlier; those images do not contain the profile contract.
 
 The repository does not contain a `production-values.yml`. The example below
 uses only the profile values file. If you maintain another values file, add its

@@ -2,9 +2,9 @@ name: CodeQL
 
 on:
   push:
-    branches: ["main", "dev"]
+    branches: ["main"]
   pull_request:
-    branches: ["main", "dev"]
+    branches: ["main"]
   schedule:
     - cron: "17 3 * * 1"
 
@@ -23,9 +23,15 @@ jobs:
         include:
           - name: java
             language: java-kotlin
-            build-mode: autobuild
+            build-mode: manual
           - name: javascript
             language: javascript-typescript
+            build-mode: none
+          - name: python
+            language: python
+            build-mode: none
+          - name: actions
+            language: actions
             build-mode: none
 
     steps:
@@ -47,9 +53,11 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
-      - name: Autobuild
-        if: matrix.build-mode == 'autobuild'
-        uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+      - name: Build Java
+        if: matrix.language == 'java-kotlin' && matrix.build-mode == 'manual'
+        run: |
+          ./gradlew clean testClasses sampleExtensionClasses verifyExtensionApiPublication --no-daemon --stacktrace
+          ./gradlew -p examples/extensions/standalone-policy-metadata-extension clean testClasses --no-daemon --stacktrace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4

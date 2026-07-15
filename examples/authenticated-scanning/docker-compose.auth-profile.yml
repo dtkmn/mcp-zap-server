@@ -1,0 +1,25 @@
+# Optional override for local form-login target authentication.
+# Use it together with docker-compose.yml and docker-compose.dev.yml.
+services:
+  zap:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  mcp-server:
+    environment:
+      SPRING_CONFIG_ADDITIONAL_LOCATION: file:/app/auth-profiles.yml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ${MCP_ZAP_AUTH_PROFILES_FILE:?set MCP_ZAP_AUTH_PROFILES_FILE to an absolute file path}
+        target: /app/auth-profiles.yml
+        read_only: true
+        bind:
+          create_host_path: false
+    secrets:
+      - target_form_password
+
+secrets:
+  target_form_password:
+    file: ${MCP_ZAP_FORM_PASSWORD_FILE:?set MCP_ZAP_FORM_PASSWORD_FILE to an absolute file path}

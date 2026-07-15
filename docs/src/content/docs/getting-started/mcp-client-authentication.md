@@ -3,6 +3,11 @@ title: "MCP Client Authentication"
 editUrl: false
 description: "Configure MCP clients for API-key or bearer-token access to the streamable HTTP endpoint."
 ---
+This page authenticates Cursor, Open WebUI, or another MCP client to MCP ZAP
+Server. It does not authenticate ZAP to the website being scanned. If the
+target itself requires a username/password form, finish the client connection
+here first, then use [Form-Login Target Authentication](../form-login-target-authentication/).
+
 This server exposes a streamable HTTP MCP endpoint at:
 
 ```text
@@ -17,7 +22,7 @@ The server supports:
 
 The practical truth: API-key mode is still the easiest self-serve client setup. Not every MCP desktop client handles remote HTTP transport, custom auth headers, or JWT refresh the same way.
 
-If you are starting from a fresh clone, use [Self-Serve First Run](./self-serve-first-run/) before tuning client-specific details here.
+If you are starting from a fresh clone, use [Self-Serve First Run](../self-serve-first-run/) before tuning client-specific details here.
 
 ## Recommended Paths
 
@@ -27,7 +32,8 @@ Use one of these paths:
 2. Cursor or another MCP client that supports streamable HTTP plus custom headers
 3. a custom client or script that can call the MCP endpoint directly
 
-This repository does not ship first-party desktop proxy helpers. Older proxy examples were fiction-by-documentation and needed to die.
+This repository does not ship a first-party desktop proxy helper. Use the
+direct streamable HTTP endpoint with a client that supports custom headers.
 
 ## Open WebUI
 
@@ -86,6 +92,9 @@ If you prefer a static bearer token instead of `X-API-Key`:
 
 Use API-key mode unless you already have a reason to manage token issuance outside Cursor.
 
+The API key or bearer token in `mcp.json` is only the MCP access credential.
+Never add the target website username or password to this file.
+
 ## Generic Streamable HTTP Clients
 
 Any MCP client that supports:
@@ -122,7 +131,9 @@ Claude Desktop's remote MCP flow is different from Cursor's:
 
 Because of that, Open WebUI or Cursor is the recommended self-serve path today.
 
-If you need first-class Claude Desktop remote onboarding, the right fix is not another ad hoc proxy snippet. The right fix is a supported auth path that matches Claude's connector model.
+First-class Claude Desktop remote onboarding would require an authentication
+path that matches Claude's connector model; an ad hoc local proxy is not a
+supported substitute.
 
 ## JWT Guidance
 
@@ -134,7 +145,7 @@ JWT is supported by the server, but desktop-client ergonomics depend on the clie
 
 That is why API-key mode remains the recommended self-serve option for local Compose, Open WebUI, and Cursor.
 
-For server-side JWT setup, see [JWT Setup](../security-modes/jwt-authentication/).
+For server-side JWT setup, see [JWT Setup](../../security-modes/jwt-authentication/).
 
 ## Test The Endpoint Manually
 
@@ -195,6 +206,14 @@ curl -H "Authorization: Bearer $ACCESS_TOKEN" \
 - initialize the MCP session first if you are testing manually
 - reuse the returned `Mcp-Session-Id` header on later requests
 
+### Cursor Connects But Target Login Fails
+
+That is a separate ZAP-to-target authentication problem. Keep the Cursor API
+key or JWT unchanged and follow
+[Form-Login Target Authentication](../form-login-target-authentication/).
+
 ### Claude Desktop Setup Feels Inconsistent
 
-That is because Claude's remote connector flow and generic JSON config examples on the internet are not the same thing. For this repository today, prefer Open WebUI or Cursor unless you are intentionally building a Claude-specific remote connector path.
+Claude's remote connector flow and generic JSON configuration examples are not
+the same thing. For this repository today, prefer Open WebUI or Cursor unless
+you are intentionally building a Claude-specific remote connector path.

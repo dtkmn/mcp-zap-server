@@ -104,22 +104,22 @@ Validation output should include:
 If `likelyAuthenticated` is anything other than `true`, do not continue to an
 authenticated scan and pretend the result is meaningful.
 
-## Staging Checklist: Form-Login Prepare And Validate
+## Authorized Target Checklist: Form-Login Prepare And Validate
 
-Use this checklist before calling an authenticated pilot ready. It is for
-staging/manual validation of form-login prepare and validate behavior, not for
-capturing real credentials in docs or tickets.
+Use this checklist before calling an authenticated pilot ready. It validates
+form-login prepare and validate behavior against any authorized target. It is
+not a reason to capture real credentials in docs or tickets.
 
 Operator profile:
 
-- `id=staging-form`
+- `id=target-form`
 - `kind=form`
-- `allowed-origin=https://staging.example.test`
-- `credential-reference=env:STAGING_SCAN_PASSWORD` or
+- `allowed-origin=https://app.example.test`
+- `credential-reference=env:TARGET_SCAN_PASSWORD` or
   `credential-reference=file:/absolute/path/to/mounted/secret`
 - credential references are exact; wildcards and inline secrets are not supported
-- derived ZAP context `staging-form-auth` (profile ID plus `-auth`)
-- `login-url=https://staging.example.test/login`
+- derived ZAP context `target-form-auth` (profile ID plus `-auth`)
+- `login-url=https://app.example.test/login`
 - `username=<scan-user-name>`
 - `username-field=<login-form-username-field>`
 - `password-field=<login-form-password-field>`
@@ -130,15 +130,15 @@ Operator profile:
 
 Inputs to prepare:
 
-- `profileId=staging-form`
-- `targetUrl=https://staging.example.test`
+- `profileId=target-form`
+- `targetUrl=https://app.example.test`
 
 Expected prepare evidence:
 
 - response starts with `Guided auth session prepared.`
-- response includes `Auth Profile: staging-form`
+- response includes `Auth Profile: target-form`
 - response includes `Auth Kind: form`
-- response includes `Authorized Origin: https://staging.example.test`
+- response includes `Authorized Origin: https://app.example.test`
 - response includes `Provider: zap-form-login`
 - response includes `Engine Binding: ZAP context/user ready`
 - response includes `Context ID:` and `User ID:`

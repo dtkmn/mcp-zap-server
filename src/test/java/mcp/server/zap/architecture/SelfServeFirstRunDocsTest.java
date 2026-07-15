@@ -47,7 +47,7 @@ class SelfServeFirstRunDocsTest {
                 .contains("./getting-started/self-serve-first-run/")
                 .contains("SELF_SERVE_FIRST_RUN");
         assertThat(Files.readString(CLIENT_AUTH_DOC))
-                .contains("[Self-Serve First Run](./self-serve-first-run/)");
+                .contains("[Self-Serve First Run](../self-serve-first-run/)");
 
         assertThat(Files.readString(RAW_GUIDE))
                 .contains("git clone https://github.com/dtkmn/mcp-zap-server.git")

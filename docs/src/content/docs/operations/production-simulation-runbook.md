@@ -19,7 +19,7 @@ real support boundary:
 
 ## Preconditions
 
-- [Production Readiness Checklist](./production-checklist/) is materially
+- [Production Readiness Checklist](../production-checklist/) is materially
   complete.
 - Runtime secrets come from a secret manager or Kubernetes Secret references.
 - ZAP remains private-only.
@@ -183,6 +183,6 @@ Principal engineering sign-off:
 
 ## Related Docs
 
-- [Production Readiness Checklist](./production-checklist/)
-- [Release Evidence Handoff Runbook](./release-evidence-handoff-runbook/)
-- [Queue Coordinator and Worker Claims](./queue-coordinator-leader-election/)
+- [Production Readiness Checklist](../production-checklist/)
+- [Release Evidence Handoff Runbook](../release-evidence-handoff-runbook/)
+- [Queue Coordinator and Worker Claims](../queue-coordinator-leader-election/)

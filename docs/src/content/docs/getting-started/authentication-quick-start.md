@@ -1,120 +1,140 @@
 ---
-title: "Authentication Quick Start Guide"
+title: "MCP Access Authentication"
 editUrl: false
-description: "Choose your authentication mode in 60 seconds."
+description: "Choose how Cursor, Open WebUI, or another MCP client authenticates to MCP ZAP Server."
 ---
-Choose your authentication mode in 60 seconds.
+This page configures access from Cursor, Open WebUI, or another MCP client to
+MCP ZAP Server. It does not configure ZAP to log in to the website being
+scanned.
+
+| Layer | Credential | Guide |
+| --- | --- | --- |
+| MCP client to MCP ZAP Server | API key or JWT | This page |
+| ZAP to an authorized target website | Optional website test account | [Form-Login Target Authentication](../form-login-target-authentication/) |
 
 For the shipped HTTP/server defaults, the base runtime starts in `api-key`. Use `none` only as an explicit local dev/test override.
 
-## 🚀 Quick Setup
+## Choose A Mode
 
-### Step 1: Choose Your Mode
+Edit `.env` and choose one of these configurations.
 
-Edit `.env` file:
+For the recommended API-key default:
 
 ```bash
-# Option 1: No Authentication (dev only)
-MCP_SECURITY_MODE=none
-
-# Option 2: API Key (simple)
 MCP_SECURITY_MODE=api-key
-MCP_API_KEY=your-secure-key-here
+MCP_API_KEY=replace-with-generated-api-key
+```
 
-# Option 3: JWT (shared or production-oriented deployments)
+For JWT in a deployment that manages token lifecycle:
+
+```bash
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
 JWT_SECRET=your-256-bit-secret-minimum-32-chars
-MCP_API_KEY=your-initial-key
+MCP_API_KEY=replace-with-bootstrap-api-key
 ```
 
-### Step 2: Generate Keys (if needed)
+For an isolated development test only:
 
 ```bash
-# Generate API key (Option 2 & 3)
+MCP_SECURITY_MODE=none
+```
+
+Generate credentials when needed:
+
+```bash
+# API-key and JWT bootstrap modes
 openssl rand -hex 32
 
-# Generate JWT secret (Option 3 only)
+# JWT signing secret
 openssl rand -base64 64
 ```
 
-### Step 3: Start Server
+Recreate the server after changing the mode:
 
 ```bash
-docker-compose up -d
+docker compose up -d --force-recreate mcp-server open-webui
 ```
 
-## 📝 Usage Examples
+Also update the credential in Cursor or any other client. Open WebUI receives
+the API key when its container is created, which is why it is recreated here.
+If you choose JWT, configure a pre-issued bearer token in each client; see
+[MCP Client Authentication](../mcp-client-authentication/).
 
-### Mode 1: No Authentication
+## What The Client Sends
 
-```bash
-# Just call the endpoint
-curl http://localhost:7456/mcp
+### API Key
+
+```http
+X-API-Key: replace-with-generated-api-key
 ```
 
-⚠️ **Development only!**
+Recommended for the default local Compose and Cursor setup.
 
-### Mode 2: API Key
-
-```bash
-# Add X-API-Key header
-curl -H "X-API-Key: your-key" http://localhost:7456/mcp
-```
-
-✅ **Good for simple deployments**
-
-### Mode 3: JWT
+### JWT
 
 ```bash
-# 1. Get token
-TOKEN=$(curl -X POST http://localhost:7456/auth/token \
+TOKEN=$(curl -fsS -X POST http://localhost:7456/auth/token \
   -H "Content-Type: application/json" \
-  -d '{"apiKey":"your-key","clientId":"client-1"}' | jq -r .accessToken)
-
-# 2. Use token
-curl -H "Authorization: Bearer $TOKEN" http://localhost:7456/mcp
+  -d '{"apiKey":"replace-with-bootstrap-api-key"}' | jq -r .accessToken)
 ```
 
-✅ **Best for shared deployments**
+The MCP client then sends:
 
-## 🔄 Quick Comparison
+```http
+Authorization: Bearer <access-token>
+```
 
-| Feature | None | API Key | JWT |
-|---------|------|---------|-----|
-| Setup Time | 10 sec | 30 sec | 60 sec |
-| Security | ❌ None | ⚠️ Basic | ✅ Strong |
-| Token Expiry | N/A | Never | 1 hour |
-| Use Case | Dev | Internal | Shared deployments |
+JWT is useful only when the deployment or client handles token issuance,
+expiry, refresh, and revocation. Cursor can send a pre-issued token but does not
+manage that lifecycle for this server.
 
-## 📚 Need More?
+### None
 
-- **Complete Guide**: [Security Modes](../security-modes/)
-- **JWT Details**: [JWT Authentication](../security-modes/jwt-authentication/)
-- **Client Setup**: [MCP Client Authentication](mcp-client-authentication/)
+No access credential is required. Never expose this mode to other users or
+networks.
 
-## 🆘 Troubleshooting
+## Comparison
+
+| Mode | Credential model | Recommended use |
+| --- | --- | --- |
+| `api-key` | Long-lived shared secret, rotate operationally | Default local Compose, Cursor, and small trusted deployments |
+| `jwt` | Signed access and refresh tokens with expiry/revocation | Shared deployments with token lifecycle support |
+| `none` | No client authentication | Isolated development tests only |
+
+## Next Reading
+
+- [Self-Serve First Run](../self-serve-first-run/)
+- [Cursor And MCP Client Setup](../mcp-client-authentication/)
+- [Optional Website Form-Login](../form-login-target-authentication/)
+- [Security Modes](../../security-modes/)
+- [JWT Authentication](../../security-modes/jwt-authentication/)
+
+## Troubleshooting
 
 ### "401 Unauthorized"
+
 - **Mode `api-key`**: Check `X-API-Key` header matches `.env`
 - **Mode `jwt`**: Token might be expired, get new one
 
 ### "Security is disabled" warning
-- You're in `none` mode - change to `api-key` or `jwt` for shared deployments
+
+You are in `none` mode. Change to `api-key` or `jwt` before allowing any other
+user or network to reach the server.
 
 ### Environment variables not loading
+
 ```bash
 # Recreate containers to pick up .env changes
-docker-compose down
-docker-compose up -d
+docker compose up -d --force-recreate mcp-server open-webui
 ```
 
-## 🎯 Recommendation
+## Recommendation
 
-- **Local Dev**: Use `none` mode
-- **Docker Compose**: Use `api-key` mode  
-- **Cloud/shared deployments**: Use `jwt` mode
+- **Default local Docker Compose and Cursor**: use `api-key` mode.
+- **Shared deployments with token lifecycle support**: consider `jwt` mode.
+- **Isolated development tests only**: use `none` only when authentication itself would block the test.
 
----
-
-**Time Investment**: 1 minute setup -> stronger deployment posture
+Your MCP access mode does not change whether the scan target is public or
+requires its own login. Configure target authentication only when the target
+actually needs it.

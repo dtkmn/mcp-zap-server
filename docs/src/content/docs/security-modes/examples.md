@@ -386,7 +386,7 @@ docker-compose up -d
 
 ## 📚 Related Documentation
 
-- [Security Modes Guide](./) - Detailed comparison
-- [JWT Authentication](jwt-authentication/) - JWT implementation
-- [MCP Client Config](../getting-started/mcp-client-authentication/) - Client setup
-- [Quick Start](../getting-started/authentication-quick-start/) - 60-second setup
+- [Security Modes Guide](../) - Detailed comparison
+- [JWT Authentication](../jwt-authentication/) - JWT implementation
+- [MCP Client Config](../../getting-started/mcp-client-authentication/) - Client setup
+- [MCP Access Authentication](../../getting-started/authentication-quick-start/) - Mode selection

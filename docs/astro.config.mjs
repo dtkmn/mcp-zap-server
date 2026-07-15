@@ -36,8 +36,9 @@ export default defineConfig({
 						{ label: 'root@localhost:~', link: '/' },
 						{ slug: 'getting-started/self-serve-first-run' },
 						{ slug: 'getting-started/authentication-quick-start' },
-						{ slug: 'getting-started/tool-surfaces' },
 						{ slug: 'getting-started/mcp-client-authentication' },
+						{ slug: 'getting-started/form-login-target-authentication' },
+						{ slug: 'getting-started/tool-surfaces' },
 						{ slug: 'getting-started/jwt-quick-start' },
 						{ slug: 'getting-started/tool-scope-authorization' },
 					],
@@ -45,8 +46,8 @@ export default defineConfig({
 				{
 					label: 'Scanning',
 					items: [
-						{ slug: 'scanning/scan-execution-modes' },
 						{ slug: 'scanning/mcp-client-scan-to-evidence' },
+						{ slug: 'scanning/scan-execution-modes' },
 						{ slug: 'scanning/ajax-spider' },
 						{ slug: 'scanning/passive-scan' },
 						{ slug: 'scanning/seeded-api-gate-playbook' },

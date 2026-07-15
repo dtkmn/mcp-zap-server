@@ -119,7 +119,7 @@ After crawl or attack completion:
 2. run `zap_passive_scan_wait`
 3. then read findings or generate reports
 
-See [Passive Scan](./passive-scan/).
+See [Passive Scan](../passive-scan/).
 
 ## Recommendation
 

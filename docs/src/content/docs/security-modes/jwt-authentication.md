@@ -173,7 +173,7 @@ That means:
 - switching from API key to JWT does not require rebuilding your authorization model
 - missing tool scopes still produce `403` even when authentication succeeds
 
-For scope setup, see [Tool Scope Authorization](../getting-started/tool-scope-authorization/).
+For scope setup, see [Tool Scope Authorization](../../getting-started/tool-scope-authorization/).
 
 ## Recommended Production Baseline
 

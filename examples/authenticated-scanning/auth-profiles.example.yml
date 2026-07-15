@@ -1,0 +1,18 @@
+# Non-secret example for an authorized application running on the Docker host.
+# Copy this file outside the repository, then replace every target-specific value.
+mcp:
+  server:
+    auth:
+      bootstrap:
+        profiles:
+          - id: local-form-app
+            kind: form
+            allowed-origin: http://host.docker.internal:8080
+            credential-reference: file:/run/secrets/target_form_password
+            login-url: http://host.docker.internal:8080/login
+            username: dedicated-zap-scan-user
+            username-field: username
+            password-field: password
+            # Replace these with stable, server-rendered text from your application.
+            logged-in-indicator-regex: "(?i).*logout.*"
+            logged-out-indicator-regex: "(?i).*(sign in|log in).*"

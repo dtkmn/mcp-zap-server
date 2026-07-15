@@ -69,6 +69,7 @@ The JVM image now runs as UID/GID `1000`. Existing bind mounts and mounted secre
 - Made form-login validation fail closed unless ZAP reports `likelyAuthenticated=true`.
 - Rejected terminal-dot hosts so URL policy and ZAP cannot resolve different destination identities.
 - Moved the JVM runtime image to a non-root user.
+- Hardened release provenance so only immutable releases from reviewed `main` history can publish, and pinned every remote GitHub Action to a verified full commit SHA.
 
 ## Extension API
 

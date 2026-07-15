@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Made each guided profile's ZAP context scope immutable and origin-wide, validated login indicators before secret resolution or engine mutation, and kept credential-source metadata out of MCP caller errors.
 - Made form-login validation fail closed unless ZAP reports `likelyAuthenticated=true`, and reject terminal-dot target hosts before URL policy checks or engine dispatch.
 - Made the JVM container run as UID/GID 1000 and made the authenticated-profile Helm migration verify and deploy the exact main-commit image tag.
+- Hardened release provenance so only immutable releases from reviewed `main` history can publish, and pinned every remote GitHub Action to a verified full commit SHA.
 
 ## [0.9.1] - 2026-06-26
 

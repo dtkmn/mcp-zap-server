@@ -40,9 +40,8 @@ APIs, and JavaScript-heavy single-page applications may require a future
 browser/client-script provider or ZAP's expert controls. ZAP itself recommends
 [browser-based or client-script authentication for modern flows](https://www.zaproxy.org/blog/2025-07-03-authentication-improvements/).
 
-The profile workflow is newer than the published `v0.9.1` image. Use a build
-whose source contains `mcp.server.auth.bootstrap.profiles`; `v0.9.1` does not
-contain this contract.
+The profile workflow is available in `v0.10.0` and later. `v0.9.1` and earlier
+do not contain this contract.
 
 ## Before You Start
 

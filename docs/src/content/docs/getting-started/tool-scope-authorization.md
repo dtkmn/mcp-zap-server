@@ -129,4 +129,4 @@ Normal MCP clients handle this automatically.
 - disable wildcard scopes once migration is complete
 - review scope grants when you switch from `guided` to `expert`
 
-For surface selection, see [Tool Surfaces](./tool-surfaces/).
+For surface selection, see [Tool Surfaces](../tool-surfaces/).

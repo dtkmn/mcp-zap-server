@@ -97,22 +97,23 @@ These docs now call out expert-only pages explicitly.
 
 Pages that matter to almost everyone:
 
-- [Authentication Quick Start](./authentication-quick-start/)
-- [MCP Client Authentication](./mcp-client-authentication/)
-- [JWT Quick Start](./jwt-quick-start/)
-- [Tool Scope Authorization](./tool-scope-authorization/)
-- [Scan Execution Modes](../scanning/scan-execution-modes/)
-- [Authenticated Scanning Best Practices](../scanning/authenticated-scanning-best-practices/)
-- [Passive Scan](../scanning/passive-scan/)
-- [Scan History Ledger](../operations/scan-history-ledger/)
+- [MCP Access Authentication](../authentication-quick-start/)
+- [MCP Client Authentication](../mcp-client-authentication/)
+- [Optional Target Form-Login](../form-login-target-authentication/)
+- [JWT Quick Start](../jwt-quick-start/)
+- [Tool Scope Authorization](../tool-scope-authorization/)
+- [Scan Execution Modes](../../scanning/scan-execution-modes/)
+- [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/)
+- [Passive Scan](../../scanning/passive-scan/)
+- [Scan History Ledger](../../operations/scan-history-ledger/)
 
 Pages that require `expert`:
 
-- [AJAX Spider](../scanning/ajax-spider/)
-- [API Schema Imports](../scanning/api-schema-imports/)
-- [Scan Policy Controls](../scanning/scan-policy-controls/)
-- [Findings and Reports](../scanning/findings-and-reports/)
-- [Automation Framework](../scanning/automation-framework/)
+- [AJAX Spider](../../scanning/ajax-spider/)
+- [API Schema Imports](../../scanning/api-schema-imports/)
+- [Scan Policy Controls](../../scanning/scan-policy-controls/)
+- [Findings and Reports](../../scanning/findings-and-reports/)
+- [Automation Framework](../../scanning/automation-framework/)
 
 ## Recommendation
 

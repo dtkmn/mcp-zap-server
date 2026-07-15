@@ -77,10 +77,20 @@ tool call.
 - The default Compose stack wires Open WebUI to the local MCP server with the
   generated API key.
 
-## 5. Use The Guided Happy Path
+## 5. Decide Whether The Target Needs Login
+
+Most first runs should skip target authentication. The bundled Juice Shop and
+Petstore examples can be scanned without an auth profile.
+
+If your authorized target requires a traditional username/password HTML form,
+use [Form-Login Target Authentication](../form-login-target-authentication/).
+That optional setup is separate from the API key or JWT used by Cursor. Never
+put the website password in Cursor or an MCP prompt.
+
+## 6. Use The Guided Happy Path
 
 For the full target-to-evidence workflow, use the
-[MCP Client Scan-To-Evidence Guide](../scanning/mcp-client-scan-to-evidence/).
+[MCP Client Scan-To-Evidence Guide](../../scanning/mcp-client-scan-to-evidence/).
 
 Use prompts like these:
 
@@ -93,7 +103,7 @@ Use prompts like these:
 That is enough to prove the end-to-end self-serve path without dragging a new
 user through every advanced feature in the repo.
 
-## 6. If It Breaks
+## 7. If It Breaks
 
 Use this order:
 

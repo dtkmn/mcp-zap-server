@@ -71,9 +71,12 @@ Use this for:
 Skip this when the target is a normal crawlable web app and you only need page
 discovery.
 
-### 2. Optional Auth Session
+### 2. Optional Target Authentication
 
-For simple auth, prepare and validate a guided auth session:
+Skip this step for public routes and unauthenticated APIs. If the authorized
+target has a traditional username/password HTML form, complete the
+[first-timer form-login setup](../../getting-started/form-login-target-authentication/),
+then prepare and validate a guided auth session:
 
 1. `zap_auth_session_prepare`
 2. `zap_auth_session_validate`
@@ -88,6 +91,10 @@ sessions. Bearer and API-key session preparation is useful as a contract and
 validation path, but do not assume every guided scan mode consumes those
 session types yet.
 
+The target's website password never belongs in the MCP client or prompt. The
+operator stores it in a mounted secret; MCP Server resolves it server-side to
+configure the corresponding ZAP user.
+
 ### 3. Start A Guided Crawl
 
 Call `zap_crawl_start`.
@@ -95,7 +102,7 @@ Call `zap_crawl_start`.
 Recommended parameters:
 
 - `targetUrl`: the container-reachable target, such as `http://juice-shop:3000`
-- `strategy`: `auto` for most first runs
+- `strategy`: `auto` for unauthenticated first runs; use `http` with a prepared form-login session
 - `authSessionId`: only when you prepared and validated a form-login session
 
 The response returns a guided `Operation ID`. Use that operation ID with
@@ -240,6 +247,18 @@ When the crawl completes, wait for passive analysis, then produce findings,
 report, release evidence, and customer handoff. Do not start an active scan.
 ```
 
+For a target with a configured form-login profile:
+
+```text
+Use only the guided ZAP tools. Prepare form-login profile `local-form-app` for
+http://host.docker.internal:8080/account and validate the returned session. Stop unless
+the result contains `Valid: true`, `Outcome: authenticated`, and
+`likelyAuthenticated=true`. If validation succeeds, start an HTTP crawl with
+the returned authSessionId, poll until complete, wait for passive analysis,
+and summarize findings. Never ask for or echo the website password. Do not
+start an active scan.
+```
+
 ## What The IDs Mean
 
 | ID | Why it appears | What to do with it |
@@ -298,11 +317,13 @@ Not today:
 | Client keeps asking for ZAP scan IDs | It is following expert guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
 | Findings look empty immediately after scan | Passive analysis has not drained. | Run `zap_passive_scan_wait`, then check findings again. |
 | Handoff has caveats | Evidence window is incomplete or direct-only. | Review `zap_scan_history_release_evidence` warnings and rerun with stronger coverage if needed. |
-| Authenticated scan fails | Profile origin, login indicators, or configured credential reference is wrong. | Fix the operator-managed profile, then re-run `zap_auth_session_prepare` and `zap_auth_session_validate`. |
+| Authenticated scan fails | Profile origin, login indicators, form fields, or configured credential reference is wrong. | Use the [form-login troubleshooting guide](../../getting-started/form-login-target-authentication/#troubleshooting), fix the profile, then prepare and validate a new session. |
 
 ## Related Docs
 
 - [MCP Client Authentication](../../getting-started/mcp-client-authentication/)
+- [Form-Login Target Authentication](../../getting-started/form-login-target-authentication/)
+- [Authenticated Scanning Reference](../authenticated-scanning-best-practices/)
 - [Scan Execution Modes](../scan-execution-modes/)
 - [Passive Scan](../passive-scan/)
 - [Findings And Reports](../findings-and-reports/)

@@ -1,15 +1,20 @@
 ---
-title: "Authenticated Scanning Best Practices"
+title: "Authenticated Scanning Reference"
 editUrl: false
-description: "Prepare, validate, and use guided authenticated scan sessions safely."
+description: "Advanced deployment, migration, validation, and expert guidance for authenticated scans."
 ---
+This is the advanced operator reference. If this is your first target that
+requires login, start with
+[Optional: Form-Login Target Authentication](../../getting-started/form-login-target-authentication/)
+for the local Compose setup and a Cursor-ready example.
+
 Authenticated scans are where most business-critical vulnerabilities live. They are also where teams most often fool themselves.
 
 If authentication is not proven immediately before the crawl or attack, the scan is usually just an unauthenticated scan wearing a nicer label.
 
 ## Recommended Path
 
-For 0.7.0 and later, start with guided auth bootstrap:
+In current development builds, start with guided auth bootstrap:
 
 - `zap_auth_session_prepare`
 - `zap_auth_session_validate`
@@ -17,6 +22,10 @@ For 0.7.0 and later, start with guided auth bootstrap:
 - `zap_attack_start` with `authSessionId`
 
 These tools are available on the default `guided` surface. The lower-level ZAP context and user tools still exist on the `expert` surface, but they are the advanced path now.
+
+The profile contract is newer than the published `v0.9.1` image. Traditional
+form-login support is limited to the HTTP spider and active scan paths; it does
+not imply OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
@@ -39,10 +48,10 @@ mcp:
     auth:
       bootstrap:
         profiles:
-          - id: shop-staging
+          - id: shop-form
             kind: form
             allowed-origin: https://shop.example.com
-            credential-reference: env:STAGING_SCAN_PASSWORD
+            credential-reference: env:TARGET_SCAN_PASSWORD
             login-url: https://shop.example.com/login
             username: zap-scan-user
             zap-user-name: zap-scan-user
@@ -82,10 +91,10 @@ mcp:
     auth:
       bootstrap:
         profiles:
-          - id: shop-staging
+          - id: shop-form
             kind: form
             allowed-origin: https://shop.example.com
-            credential-reference: ${SHOP_SCAN_CREDENTIAL_REFERENCE:env:SHOP_SCAN_PASSWORD}
+            credential-reference: ${TARGET_SCAN_CREDENTIAL_REFERENCE:env:TARGET_SCAN_PASSWORD}
             login-url: https://shop.example.com/login
             username: zap-scan-user
             username-field: username
@@ -100,10 +109,10 @@ Inject the password through the existing service manager or secret store. This
 foreground example avoids placing it in shell history:
 
 ```bash
-printf 'Shop scan password: ' >&2
-IFS= read -r -s SHOP_SCAN_PASSWORD
+printf 'Target scan password: ' >&2
+IFS= read -r -s TARGET_SCAN_PASSWORD
 printf '\n' >&2
-export SHOP_SCAN_PASSWORD
+export TARGET_SCAN_PASSWORD
 
 ./gradlew bootJar
 APP_VERSION=$(./gradlew -q properties | awk '/^version:/ {print $2}')
@@ -120,39 +129,31 @@ that restart.
 ### Docker Compose
 
 Keep the password in a host file outside the repository, readable by Docker, and
-use a Compose secret rather than a container environment variable. Create
-`docker-compose.auth-profile.yml` in the repository root:
+use a Compose secret rather than a container environment variable. Reuse the
+checked-in
+[`auth-profiles.example.yml`](https://github.com/dtkmn/mcp-zap-server/blob/main/examples/authenticated-scanning/auth-profiles.example.yml)
+and
+[`docker-compose.auth-profile.yml`](https://github.com/dtkmn/mcp-zap-server/blob/main/examples/authenticated-scanning/docker-compose.auth-profile.yml)
+instead of maintaining another copy of the override. Copy and edit the profile
+outside the repository first.
 
-```yaml
-services:
-  mcp-server:
-    environment:
-      SPRING_CONFIG_ADDITIONAL_LOCATION: file:/app/config/auth-profiles.yml
-      SHOP_SCAN_CREDENTIAL_REFERENCE: file:/run/secrets/shop_scan_password
-    volumes:
-      - ${AUTH_PROFILES_FILE:?set AUTH_PROFILES_FILE}:/app/config/auth-profiles.yml:ro
-    secrets:
-      - shop_scan_password
-
-secrets:
-  shop_scan_password:
-    file: ${SHOP_SCAN_PASSWORD_FILE:?set SHOP_SCAN_PASSWORD_FILE}
-```
-
-Then validate the merged deployment and recreate the MCP container:
+Set fully expanded absolute paths, validate the merged deployment, and recreate
+the MCP container:
 
 ```bash
-export AUTH_PROFILES_FILE=/etc/mcp-zap/auth-profiles.yml
-export SHOP_SCAN_PASSWORD_FILE=/run/operator-secrets/shop-staging-password
-test -r "$AUTH_PROFILES_FILE" && test -r "$SHOP_SCAN_PASSWORD_FILE"
+export MCP_ZAP_AUTH_PROFILES_FILE=/etc/mcp-zap/auth-profiles.yml
+export MCP_ZAP_FORM_PASSWORD_FILE=/run/operator-secrets/shop-form-password
+test -r "$MCP_ZAP_AUTH_PROFILES_FILE" && test -r "$MCP_ZAP_FORM_PASSWORD_FILE"
 
 docker compose \
   -f docker-compose.yml \
-  -f docker-compose.auth-profile.yml \
+  -f docker-compose.dev.yml \
+  -f examples/authenticated-scanning/docker-compose.auth-profile.yml \
   config --quiet
 docker compose \
   -f docker-compose.yml \
-  -f docker-compose.auth-profile.yml \
+  -f docker-compose.dev.yml \
+  -f examples/authenticated-scanning/docker-compose.auth-profile.yml \
   up -d --build --force-recreate --wait --wait-timeout 180 mcp-server
 ```
 
@@ -171,7 +172,7 @@ variable referenced by the profile:
 export NAMESPACE=mcp-zap
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$NAMESPACE" create secret generic mcp-zap-auth-profile \
-  --from-file=SHOP_SCAN_PASSWORD=/run/operator-secrets/shop-staging-password \
+  --from-file=TARGET_SCAN_PASSWORD=/run/operator-secrets/shop-form-password \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -188,10 +189,10 @@ mcp:
               "auth": {
                 "bootstrap": {
                   "profiles": [{
-                    "id": "shop-staging",
+                    "id": "shop-form",
                     "kind": "form",
                     "allowedOrigin": "https://shop.example.com",
-                    "credentialReference": "env:SHOP_SCAN_PASSWORD",
+                    "credentialReference": "env:TARGET_SCAN_PASSWORD",
                     "loginUrl": "https://shop.example.com/login",
                     "username": "zap-scan-user",
                     "usernameField": "username",
@@ -230,6 +231,10 @@ this migration. Replace the variable placeholder before running them. Do not use
 an empty value or `v0.9.1`; either choice deploys code without the profile migration
 contract.
 
+The repository does not contain a `production-values.yml`. The example below
+uses only the profile values file. If you maintain another values file, add its
+real path with another `-f` argument.
+
 Render before applying, then wait for the MCP rollout:
 
 ```bash
@@ -243,19 +248,16 @@ MCP_ZAP_IMAGE_TAG=sha-REPLACE_WITH_FULL_MAIN_COMMIT_SHA
 }
 
 helm lint helm/mcp-zap-server \
-  -f production-values.yml \
   -f auth-profile-values.yml \
   --set-string "mcp.image.tag=$MCP_ZAP_IMAGE_TAG"
 helm template mcp-zap helm/mcp-zap-server \
   --namespace "$NAMESPACE" \
-  -f production-values.yml \
   -f auth-profile-values.yml \
   --set-string "mcp.image.tag=$MCP_ZAP_IMAGE_TAG" \
   --show-only templates/mcp-deployment.yaml \
   | grep -E "^[[:space:]]+image: \"[^\"]+:${MCP_ZAP_IMAGE_TAG}\"$" >/dev/null
 helm upgrade --install mcp-zap helm/mcp-zap-server \
   --namespace "$NAMESPACE" \
-  -f production-values.yml \
   -f auth-profile-values.yml \
   --set-string "mcp.image.tag=$MCP_ZAP_IMAGE_TAG" \
   --atomic --wait
@@ -328,7 +330,7 @@ curl -sS --fail-with-body \
   -H 'Accept: application/json,text/event-stream' \
   -H 'Content-Type: application/json' \
   "$MCP_URL" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"zap_auth_session_prepare","arguments":{"profileId":"shop-staging","targetUrl":"https://shop.example.com"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"zap_auth_session_prepare","arguments":{"profileId":"shop-form","targetUrl":"https://shop.example.com"}}}' \
   >"$PREPARE_RAW"
 
 PREPARE_JSON=$(normalize_mcp_response "$PREPARE_RAW")
@@ -338,7 +340,7 @@ PREPARE_TEXT=$(printf '%s' "$PREPARE_JSON" | jq -er '
   if startswith("\"") and endswith("\"") then fromjson else . end
 ')
 printf '%s\n' "$PREPARE_TEXT" | grep -F 'Guided auth session prepared.'
-printf '%s\n' "$PREPARE_TEXT" | grep -F 'Auth Profile: shop-staging'
+printf '%s\n' "$PREPARE_TEXT" | grep -F 'Auth Profile: shop-form'
 printf '%s\n' "$PREPARE_TEXT" | grep -F 'Authorized Origin: https://shop.example.com'
 AUTH_SESSION_ID=$(printf '%s\n' "$PREPARE_TEXT" | sed -n 's/^Session ID: //p')
 test -n "$AUTH_SESSION_ID"
@@ -379,7 +381,7 @@ Use a dedicated least-privilege scan account and a tight target scope.
 {
   "tool": "zap_auth_session_prepare",
   "arguments": {
-    "profileId": "shop-staging",
+    "profileId": "shop-form",
     "targetUrl": "https://shop.example.com"
   }
 }
@@ -388,7 +390,7 @@ Use a dedicated least-privilege scan account and a tight target scope.
 The response should include:
 
 - `Session ID`
-- `Auth Profile: shop-staging`
+- `Auth Profile: shop-form`
 - `Auth Kind: form`
 - `Authorized Origin: https://shop.example.com`
 - `Provider: zap-form-login`
@@ -529,4 +531,5 @@ If `zap_auth_test_user` cannot prove the user is authenticated, the scan is not 
 - Header session validates but crawl is still unauthenticated: bearer/API-key header injection is not in the guided engine path yet.
 - Browser strategy rejects auth: authenticated browser/AJAX guided crawl is not supported yet.
 
-If you are debugging an incident, use the operator runbook at `docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md`.
+If you are debugging an incident, use the
+[Auth Bootstrap Failure Runbook](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md).

@@ -159,6 +159,6 @@ Date:
 
 ## Related Docs
 
-- [Scan History Ledger](./scan-history-ledger/)
-- [Production Readiness Checklist](./production-checklist/)
-- [Production Simulation Runbook](./production-simulation-runbook/)
+- [Scan History Ledger](../scan-history-ledger/)
+- [Production Readiness Checklist](../production-checklist/)
+- [Production Simulation Runbook](../production-simulation-runbook/)

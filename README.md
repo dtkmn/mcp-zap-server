@@ -74,10 +74,16 @@ The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP
 Client setup:
 
 - [Self-Serve First Run](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/)
-- [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
+- [MCP Access Authentication](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Configuration](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+- [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
 - [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
 - [Agent install notes](./llms-install.md)
+
+There are two independent authentication layers. The API key or JWT lets
+Cursor call MCP ZAP Server. An optional target-auth profile lets ZAP log in to
+an application you are authorized to scan. Most first runs need only the MCP
+API key; never put a target website password in Cursor or an MCP prompt.
 
 ## Discovery Metadata
 
@@ -119,7 +125,7 @@ The default posture is intentionally conservative:
 - `none` mode is for explicit local dev/test only.
 - Docker Compose binds published ports to loopback by default.
 - URL validation blocks localhost, private networks, and link-local targets by default.
-- Guided auth uses operator-managed profiles that bind exact server-side credential references and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
+- Target authentication is optional and profiles default to an empty list. When enabled, guided auth binds an exact server-side credential reference and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
 - Public auth exchange endpoints are rate-limited.
 - MCP request bodies have a hard early size cap.
 
@@ -127,7 +133,8 @@ Production and shared deployments should review:
 
 - [Security Modes](https://danieltse.org/mcp-zap-server/security-modes/)
 - [JWT Authentication](https://danieltse.org/mcp-zap-server/security-modes/jwt-authentication/)
-- [Authenticated Scanning Best Practices](https://danieltse.org/mcp-zap-server/scanning/authenticated-scanning-best-practices/)
+- [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
+- [Authenticated Scanning Reference](https://danieltse.org/mcp-zap-server/scanning/authenticated-scanning-best-practices/)
 - [Abuse Protection](https://danieltse.org/mcp-zap-server/operations/abuse-protection/)
 - [Production Readiness Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/)
 - [Security Policy](./SECURITY.md)
@@ -176,8 +183,9 @@ Start here:
 - [Full documentation](https://danieltse.org/mcp-zap-server/)
 - [Self-Serve First Run](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/)
 - [OSS Extension Model](./docs/extensions/README.md)
-- [Authentication Quick Start](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
+- [MCP Access Authentication](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Authentication](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+- [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
 - [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
 
 Scanning:

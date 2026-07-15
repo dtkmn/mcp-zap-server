@@ -157,7 +157,7 @@ Common causes:
 
 ## Next Steps
 
-- read the [full JWT guide](../security-modes/jwt-authentication/)
-- configure client scopes with [Tool Scope Authorization](./tool-scope-authorization/)
-- choose the right [Tool Surface](./tool-surfaces/)
-- configure your real client with [MCP Client Authentication](./mcp-client-authentication/)
+- read the [full JWT guide](../../security-modes/jwt-authentication/)
+- configure client scopes with [Tool Scope Authorization](../tool-scope-authorization/)
+- choose the right [Tool Surface](../tool-surfaces/)
+- configure your real client with [MCP Client Authentication](../mcp-client-authentication/)

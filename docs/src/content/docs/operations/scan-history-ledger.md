@@ -138,4 +138,4 @@ Before relying on the ledger for release evidence:
    customer, design partner, or pilot reviewer needs a readable summary.
 
 For the exact handoff sequence and sign-off template, use
-[Release Evidence Handoff Runbook](./release-evidence-handoff-runbook/).
+[Release Evidence Handoff Runbook](../release-evidence-handoff-runbook/).

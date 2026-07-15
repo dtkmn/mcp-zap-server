@@ -6,47 +6,86 @@ env:
 on:
   release:
     types: [published]
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: Git ref to build (tag, branch, or commit SHA)
-        required: true
-        type: string
-      version:
-        description: Version tag to publish
-        required: true
-        type: string
-      publish_latest:
-        description: Also update the latest tag
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   docker-release:
-    name: Publish release images and SBOM
+    name: Publish release images and archive SBOM
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
-
       - name: Resolve release metadata
         id: vars
+        env:
+          RELEASE_VERSION: ${{ github.event.release.tag_name }}
+          RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_IS_IMMUTABLE: ${{ github.event.release.immutable }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "publish_latest=${{ inputs.publish_latest }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${GITHUB_REF##*/}" >> "$GITHUB_OUTPUT"
-            echo "publish_latest=true" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          if [ "$RELEASE_IS_IMMUTABLE" != "true" ]; then
+            echo "GitHub immutable releases must be enabled before publication" >&2
+            exit 1
           fi
+
+          if [[ ! "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "Release version must be a strict vMAJOR.MINOR.PATCH tag with an optional prerelease suffix" >&2
+            exit 1
+          fi
+
+          publish_latest=true
+          if [ "$RELEASE_IS_PRERELEASE" = "true" ] || [[ "$RELEASE_VERSION" == *-* ]]; then
+            publish_latest=false
+          fi
+
+          printf 'version=%s\n' "$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          printf 'publish_latest=%s\n' "$publish_latest" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release tag, commit, and project version
+        env:
+          RELEASE_VERSION: ${{ steps.vars.outputs.version }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Release event commit must be a full lowercase SHA-1" >&2
+            exit 1
+          fi
+
+          tag_commit="$(git rev-parse --verify "refs/tags/${RELEASE_VERSION}^{commit}")"
+          head_commit="$(git rev-parse HEAD)"
+          test "$head_commit" = "$EXPECTED_COMMIT" || {
+            echo "Checked-out HEAD must equal the release event commit" >&2
+            exit 1
+          }
+          test "$tag_commit" = "$EXPECTED_COMMIT" || {
+            echo "${RELEASE_VERSION} must still reference the release event commit" >&2
+            exit 1
+          }
+
+          git rev-parse --verify "refs/remotes/origin/main^{commit}" >/dev/null || {
+            echo "origin/main is unavailable; refusing to execute release code" >&2
+            exit 1
+          }
+          git merge-base --is-ancestor "$EXPECTED_COMMIT" refs/remotes/origin/main || {
+            echo "Release event commit must be reachable from origin/main" >&2
+            exit 1
+          }
+
+          project_version="$(sed -n "s/^version = '\([^']*\)'$/\1/p" build.gradle)"
+          test -n "$project_version"
+          test "$RELEASE_VERSION" = "v${project_version}" || {
+            echo "Release tag must be v${project_version}" >&2
+            exit 1
+          }
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
@@ -98,25 +137,31 @@ jobs:
       - name: Verify standalone extension against staged API
         run: ./gradlew -p examples/extensions/standalone-policy-metadata-extension clean build --scan --no-daemon --stacktrace --info
 
-      - name: Upload SBOM artifact
+      - name: Archive SBOM workflow artifact
         uses: actions/upload-artifact@v7
         with:
           name: sbom-${{ steps.vars.outputs.version }}
           path: build/reports/cyclonedx-direct/bom.json
+          if-no-files-found: error
 
       - name: Compute release image tags
         id: image-tags
+        env:
+          RELEASE_VERSION: ${{ steps.vars.outputs.version }}
+          PUBLISH_LATEST: ${{ steps.vars.outputs.publish_latest }}
+          GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          DOCKER_HUB_IMAGE: ${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
         run: |
-          version="${{ steps.vars.outputs.version }}"
+          set -euo pipefail
 
           {
             echo "tags<<EOF"
-            echo "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${version}"
-            echo "${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${version}"
+            echo "${GHCR_IMAGE}:${RELEASE_VERSION}"
+            echo "${DOCKER_HUB_IMAGE}:${RELEASE_VERSION}"
 
-            if [ "${{ steps.vars.outputs.publish_latest }}" = "true" ]; then
-              echo "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest"
-              echo "${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest"
+            if [ "$PUBLISH_LATEST" = "true" ]; then
+              echo "${GHCR_IMAGE}:latest"
+              echo "${DOCKER_HUB_IMAGE}:latest"
             fi
 
             echo "EOF"

@@ -68,7 +68,7 @@ class ZapSecurityPackCoreConsumptionArchitectureTest {
         String settingsFile = Files.readString(SETTINGS_GRADLE);
         String propertiesFile = Files.readString(GRADLE_PROPERTIES);
 
-        assertThat(propertiesFile).contains("gatewayCoreVersion=0.7.1");
+        assertThat(propertiesFile).contains("gatewayCoreVersion=0.7.2");
         assertThat(buildFile)
                 .contains("implementation \"io.github.dtkmn:mcp-gateway-core:${gatewayCoreVersion}\"")
                 .contains("implementation \"io.github.dtkmn:mcp-gateway-spring-webflux:${gatewayCoreVersion}\"")

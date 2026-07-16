@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` to `0.7.2` so Streamable HTTP responses to server-initiated requests reach the downstream MCP runtime instead of being rejected as methodless requests.
+
 ## [0.10.0] - 2026-07-15
 
 ### Changed

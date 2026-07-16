@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-16
+
+### Changed
+- Bumped runtime, MCP server metadata, Helm chart metadata, MCP Registry package metadata, extension proof defaults, and current install examples to `0.10.1` / `v0.10.1`.
+- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.1` to `0.7.2`.
+- Expanded CodeQL coverage to Java, JavaScript/TypeScript, Python, and GitHub Actions, with an explicit Java build and `main`-focused triggers.
+- Aligned policy dry-run partial-rule construction with the existing required-description validation and added regression coverage for missing descriptions.
+
 ### Fixed
-- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` to `0.7.2` so Streamable HTTP responses to server-initiated requests reach the downstream MCP runtime instead of being rejected as methodless requests.
+- Restored Streamable HTTP responses to server-initiated requests so Cursor keepalive replies reach the downstream MCP runtime and complete with HTTP `202` instead of being rejected as methodless requests.
 
 ## [0.10.0] - 2026-07-15
 

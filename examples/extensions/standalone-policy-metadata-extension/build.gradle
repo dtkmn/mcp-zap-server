@@ -11,7 +11,7 @@ java {
     }
 }
 
-def defaultExtensionApiVersion = '0.10.0'
+def defaultExtensionApiVersion = '0.10.1'
 def rootBuildFile = file('../../../build.gradle')
 if (rootBuildFile.isFile()) {
     def matcher = rootBuildFile.text =~ /(?m)^version = '([^']+)'$/

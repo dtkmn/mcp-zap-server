@@ -225,8 +225,8 @@ networkPolicy:
 overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
-deployment's explicit URL-policy approval. The chart now defaults to `v0.10.0`,
-the first release containing this profile contract. The commands below deliberately
+deployment's explicit URL-policy approval. The chart now defaults to `v0.10.1`;
+the profile contract was introduced in `v0.10.0`. The commands below deliberately
 pin the immutable `sha-<40-character commit SHA>` image produced by main CI for the
 commit being migrated. Replace the variable placeholder before running them. Do
 not use `v0.9.1` or earlier; those images do not contain the profile contract.

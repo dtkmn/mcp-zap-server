@@ -36,24 +36,24 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-wrk:/zap/wrk
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-home:/home/zap/.ZAP
 
-  open-webui:
-    image: ghcr.io/open-webui/open-webui:main
-    depends_on:
-      mcp-server:
-        condition: service_started
-    ports:
-      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3000:8080"
-    environment:
-      TOOL_SERVER_CONNECTIONS: >-
-        [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY:-change-me-to-secure-random-key}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP scanning and reporting tools exposed by the local MCP server."}}]
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    volumes:
-      - open-webui:/app/backend/data
+#  open-webui:
+#    image: ghcr.io/open-webui/open-webui:main
+#    depends_on:
+#      mcp-server:
+#        condition: service_started
+#    ports:
+#      - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3000:8080"
+#    environment:
+#      TOOL_SERVER_CONNECTIONS: >-
+#        [{"url":"http://mcp-server:7456/mcp","path":"","type":"mcp","auth_type":"none","headers":{"X-API-Key":"${MCP_API_KEY:-change-me-to-secure-random-key}"},"config":{"enable":true},"info":{"id":"zap-security","name":"ZAP Security","description":"OWASP ZAP scanning and reporting tools exposed by the local MCP server."}}]
+#    healthcheck:
+#      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 30s
+#    volumes:
+#      - open-webui:/app/backend/data
 
   mcp-server:
     build:
@@ -121,5 +121,5 @@ services:
     ports:
       - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3002:8080"
 
-volumes:
-  open-webui:
+#volumes:
+#  open-webui:

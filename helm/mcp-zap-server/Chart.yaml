@@ -2,8 +2,8 @@ apiVersion: v2
 name: mcp-zap-server
 description: A Helm chart for MCP ZAP Server - Model Context Protocol server for OWASP ZAP security scanning
 type: application
-version: 0.10.0
-appVersion: "v0.10.0"
+version: 0.10.1
+appVersion: "v0.10.1"
 keywords:
   - mcp
   - zap

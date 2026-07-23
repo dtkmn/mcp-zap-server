@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('snyk-open-source.sarif') != ''
-        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           sarif_file: snyk-open-source.sarif
           category: snyk-open-source
@@ -144,7 +144,7 @@ jobs:
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('snyk-container.sarif') != ''
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           sarif_file: snyk-container.sarif
           category: snyk-container
@@ -213,7 +213,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('snyk-iac.sarif') != ''
-        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
         with:
           sarif_file: snyk-iac.sarif
           category: snyk-iac

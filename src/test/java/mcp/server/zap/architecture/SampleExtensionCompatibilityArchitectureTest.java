@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.core.service.policy.PolicyDryRunService;
 import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;

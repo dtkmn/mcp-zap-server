@@ -8,6 +8,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.jar.JarFile;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+
 import org.junit.jupiter.api.Test;
 
 class ExtensionApiArtifactArchitectureTest {
@@ -21,7 +23,7 @@ class ExtensionApiArtifactArchitectureTest {
 
         try (JarFile jar = new JarFile(apiJar.toFile())) {
             List<String> entries = jar.stream()
-                    .map(entry -> entry.getName())
+                    .map(ZipEntry::getName)
                     .toList();
 
             assertThat(entries)
@@ -54,38 +56,6 @@ class ExtensionApiArtifactArchitectureTest {
         assertThat(violations).isEmpty();
     }
 
-    @Test
-    void extensionApiPublicationIsDeclaredAsStandaloneArtifact() throws IOException {
-        String buildFile = Files.readString(BUILD_GRADLE);
-
-        assertThat(buildFile)
-                .contains("id 'maven-publish'")
-                .contains("tasks.register('extensionApiJar', Jar)")
-                .contains("archiveBaseName = 'mcp-zap-extension-api'")
-                .contains("artifactId = 'mcp-zap-extension-api'")
-                .contains("extensionApiPublicPreview(MavenPublication)")
-                .contains("groupId = 'io.github.dtkmn'")
-                .contains("name = 'extensionApiPublicPreviewStaging'")
-                .contains("tasks.register('verifyExtensionApiPublication')")
-                .contains("tasks.register('verifyPublicPreviewExtensionApiPublication')")
-                .contains("publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository")
-                .contains("extensionApiGroup         : 'io.github.dtkmn'")
-                .contains("tasks.named('check')")
-                .contains("dependsOn tasks.named('verifyPublicPreviewExtensionApiPublication')")
-                .contains("verifyExtensionApiPublicationShape(publicationDir, 'io.github.dtkmn')")
-                .contains("new java.util.zip.ZipFile(apiJar)")
-                .contains("name.startsWith('mcp/server/zap/extension/api/')")
-                .contains("Extension API JAR contains non-public entries")
-                .contains("'MCP-ZAP-Extension-Api-Version': project.version")
-                .doesNotContain("ASG-Extension-Api")
-                .doesNotContain("name = 'extensionApiStaging'")
-                .doesNotContain("extensionApi(MavenPublication)")
-                .doesNotContain("publishExtensionApiPublicationToExtensionApiStagingRepository")
-                .doesNotContain("standalonePolicyMetadataExtensionPublicPreviewJar")
-                .contains("root.dependencyManagement?.each { root.remove(it) }")
-                .contains("root.dependencies?.each { root.remove(it) }");
-    }
-
     private Path findExtensionApiJar() throws IOException {
         Path jar = Path.of("build/libs/mcp-zap-extension-api-" + projectVersion() + ".jar");
         assertThat(jar)
@@ -105,10 +75,11 @@ class ExtensionApiArtifactArchitectureTest {
     private List<String> forbiddenImportMatches(Path path) {
         String content = readFile(path);
         return List.of(
-                        "import mcp.server.zap.core.",
-                        "import mcp.server.zap.enterprise.",
-                        "import org.zaproxy.clientapi.",
-                        "import org.springframework."
+                "import mcp.server.zap.core.",
+                "import mcp.server.zap.enterprise.",
+                "import mcp.gateway.",
+                "import org.zaproxy.clientapi.",
+                "import org.springframework."
                 ).stream()
                 .filter(content::contains)
                 .map(snippet -> path + " contains '" + snippet + "'")

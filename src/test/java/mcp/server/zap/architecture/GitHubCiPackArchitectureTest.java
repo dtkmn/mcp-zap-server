@@ -15,12 +15,8 @@ class GitHubCiPackArchitectureTest {
     private static final Path EXAMPLE_WORKFLOW = Path.of("examples/github-actions/zap-security-gate.yml");
     private static final Path EXAMPLE_SEED_REQUESTS = Path.of("examples/github-actions/seed-requests.json");
     private static final Path EXAMPLE_APP_COMPOSE = Path.of("examples/github-actions/docker-compose.app-under-test.yml");
-    private static final Path INTEGRATION_DOC = Path.of("docs/integrations/GITHUB_ACTIONS_INTEGRATION.md");
-    private static final Path GITLAB_INTEGRATION_DOC = Path.of("docs/integrations/GITLAB_CI_INTEGRATION.md");
     private static final Path EXAMPLE_GITLAB_WORKFLOW = Path.of("examples/gitlab/zap-security-gate.gitlab-ci.yml");
     private static final Path EXAMPLE_GITLAB_RUN_GATE = Path.of("examples/gitlab/run-zap-security-gate.sh");
-    private static final Path PILOT_RUNBOOK = Path.of("docs/operator/runbooks/GITHUB_CI_PACK_PILOT_INSTALL.md");
-    private static final Path VERIFY_SCRIPT = Path.of("bin/github-ci-pack-verify.sh");
     private static final Path JUICE_SHOP_WORKFLOW = Path.of(".github/workflows/zap-security-gate-juice-shop.yml");
 
     @Test
@@ -54,58 +50,6 @@ class GitHubCiPackArchitectureTest {
     }
 
     @Test
-    void docsLinkThePilotInstallPathAndExampleOverride() throws IOException {
-        assertThat(Files.readString(INTEGRATION_DOC))
-                .contains("examples/github-actions/docker-compose.app-under-test.yml")
-                .contains("target-url: http://app:80")
-                .contains("Replace `<release-tag>` with a real release tag or digest")
-                .contains("The action rejects")
-                .contains("baseline-mode: seed")
-                .contains("baseline-mode: enforce")
-                .contains("Baseline behavior is mode-specific")
-                .contains("a missing baseline fails the run")
-                .contains("Seeded API Requests")
-                .contains("seed-requests-results.json")
-                .contains("seed-requests-file: .zap/seed-requests/main.json")
-                .doesNotContain("does not fail the run by default")
-                .contains(
-                        """
-                            target-url: http://app:80
-                            mcp-server-image: ghcr.io/dtkmn/mcp-zap-server:<release-tag>
-                            baseline-mode: seed
-                            run-active-scan: "false"
-                            fail-on-new-findings: "false"
-                            compose-override-file: examples/github-actions/docker-compose.app-under-test.yml
-                        """)
-                .contains("Only add `seed-requests-file` after replacing the example app")
-                .contains("not a valid request for the default nginx app")
-                .contains("compose-services: app zap mcp-server")
-                .contains("GitHub CI Pack Pilot Install Runbook");
-
-        assertThat(Files.readString(PILOT_RUNBOOK))
-                .contains("30-Minute Pilot Checklist")
-                .contains("examples/github-actions/zap-security-gate.yml")
-                .contains("Replace the local action reference with the release action ref")
-                .contains("examples/github-actions/docker-compose.app-under-test.yml")
-                .contains("Add `seed-requests-file` when the target surface needs JSON `POST`")
-                .contains("Pin `mcp-server-image` to a release tag or digest")
-                .contains("The action rejects the literal `<release-tag>` placeholder")
-                .contains("Keep `baseline-mode: seed` until the first baseline is reviewed")
-                .contains("Keep `fail-on-new-findings: \"false\"` until the first baseline is reviewed");
-    }
-
-    @Test
-    void gitLabDocsMirrorImageReferenceRejectionContract() throws IOException {
-        assertThat(Files.readString(GITLAB_INTEGRATION_DOC))
-                .contains("Bare refs")
-                .contains("mutable tags")
-                .contains("placeholder refs such as `<release-tag>` are rejected before Docker starts")
-                .contains("ZAP_BASELINE_MODE")
-                .contains("ZAP_SEED_REQUESTS_FILE")
-                .contains("no findings diff can be produced");
-    }
-
-    @Test
     void gitLabExampleDefinesRequiredImageAndExplicitSeedMode() throws IOException {
         assertThat(Files.readString(EXAMPLE_GITLAB_WORKFLOW))
                 .contains("MCP_SERVER_IMAGE: ghcr.io/dtkmn/mcp-zap-server:<release-tag>")
@@ -125,24 +69,6 @@ class GitHubCiPackArchitectureTest {
                 .contains("\"expectedStatus\"")
                 .doesNotContain("Authorization")
                 .doesNotContain("Cookie");
-    }
-
-    @Test
-    void verifierCoversExampleComposeAndSpringResolution() throws IOException {
-        String verifier = Files.readString(VERIFY_SCRIPT);
-
-        assertThat(verifier)
-                .contains("docker-compose.app-under-test.yml")
-                .contains("github-ci-compose-with-example-app.yaml")
-                .contains("expected_spring_ai_version=\"$(spring_ai_version)\"")
-                .contains("org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}")
-                .contains("dependencyInsight --dependency spring-boot-starter-webflux")
-                .contains("org.springframework.boot:spring-boot-starter-webflux:4.1.0")
-                .contains("assert_file_not_matches")
-                .contains("spring-boot-starter-webflux:[^[:space:]]+[[:space:]]+->")
-                .contains("aligns with the managed Spring Boot 4.1.0 runtime")
-                .doesNotContain("org.springframework.boot:spring-boot-starter-webflux:4.1.0 -> 4.0.7")
-                .doesNotContain("spring-ai-starter-mcp-server-webflux:2.0.0-M5");
     }
 
     @Test

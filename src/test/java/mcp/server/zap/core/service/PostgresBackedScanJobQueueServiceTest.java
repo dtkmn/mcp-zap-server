@@ -1,6 +1,6 @@
 package mcp.server.zap.core.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;

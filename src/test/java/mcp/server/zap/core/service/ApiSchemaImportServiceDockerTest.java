@@ -20,12 +20,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 @Tag("docker")
 @Testcontainers
-public class ApiSchemaImportServiceDockerTest {
+class ApiSchemaImportServiceDockerTest {
     private static final Network NETWORK = Network.newNetwork();
 
     @Container
@@ -95,17 +96,17 @@ public class ApiSchemaImportServiceDockerTest {
         awaitImportedUrl("http://api-schema-fixtures/soap");
     }
 
-    private static void awaitImportedUrl(String expectedUrl) throws Exception {
-        long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
-        List<String> seenUrls = List.of();
-        while (System.nanoTime() < deadline) {
-            seenUrls = readUrls("http://api-schema-fixtures");
-            if (seenUrls.stream().anyMatch(url -> url.equals(expectedUrl))) {
-                return;
-            }
-            Thread.sleep(500);
-        }
-        throw new IllegalStateException("Expected imported URL not found: " + expectedUrl + " seen=" + seenUrls);
+    private static void awaitImportedUrl(String expectedUrl) {
+        await()
+                .atMost(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(500))
+                .untilAsserted(() -> {
+                    List<String> seenUrls = readUrls("http://api-schema-fixtures");
+                    assertTrue(
+                            seenUrls.contains(expectedUrl),
+                            () -> "Expected imported URL not found: " + expectedUrl + " seen=" + seenUrls
+                    );
+                });
     }
 
     private static List<String> readUrls(String baseUrl) throws Exception {

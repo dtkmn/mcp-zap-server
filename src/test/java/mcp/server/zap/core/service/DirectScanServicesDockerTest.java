@@ -21,7 +21,7 @@ import static org.mockito.Mockito.mock;
 
 @Tag("docker")
 @Testcontainers
-public class DirectScanServicesDockerTest {
+class DirectScanServicesDockerTest {
     private static final Pattern SCAN_ID_PATTERN = Pattern.compile("Scan ID: ([^\\n]+)");
     private static final Network NETWORK = Network.newNetwork();
 

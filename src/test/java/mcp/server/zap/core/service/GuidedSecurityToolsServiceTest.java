@@ -125,9 +125,10 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startCrawl("https://spa.example.com", "auto", null, null);
 
-        assertThat(response).contains("Guided crawl started.");
-        assertThat(response).contains("Strategy: browser");
-        assertThat(response).contains("Auto strategy fell back");
+        assertThat(response)
+            .contains("Guided crawl started.")
+            .contains("Strategy: browser")
+            .contains("Auto strategy fell back");
     }
 
     @Test
@@ -146,14 +147,14 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(startResponse).contains("Guided attack started.");
-        assertThat(startResponse).contains("Execution Mode: queue");
-        assertThat(startResponse).contains("Next Actions:");
-        assertThat(startResponse).contains("Poll: call zap_attack_status");
-        assertThat(startResponse).contains("When attack is complete: call zap_passive_scan_wait");
-        assertThat(statusResponse).contains("Guided attack status.");
-        assertThat(statusResponse).contains("Job ID: job-7");
-        assertThat(statusResponse).contains("Continue: call zap_attack_status");
+        assertThat(startResponse).contains("Guided attack started.")
+            .contains("Execution Mode: queue")
+            .contains("Next Actions:")
+            .contains("Poll: call zap_attack_status")
+            .contains("When attack is complete: call zap_passive_scan_wait");
+        assertThat(statusResponse).contains("Guided attack status.")
+            .contains("Job ID: job-7")
+            .contains("Continue: call zap_attack_status");
     }
 
     @Test
@@ -211,7 +212,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void failedQueueStatusWithFullProgressDoesNotReturnSuccessNextActions() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq((String) null), eq((String) null)))
+        when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq(null), eq(null)))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: job-failed
@@ -229,11 +230,12 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(service.startAttack("https://example.com", "true", null, null, null));
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(statusResponse).contains("Guided attack status.");
-        assertThat(statusResponse).contains("Status: FAILED");
-        assertThat(statusResponse).contains("Progress: 100%");
-        assertThat(statusResponse).contains("Review the status/error above before trusting this scan as evidence.");
-        assertThat(statusResponse).doesNotContain("Settle passive analysis: call zap_passive_scan_wait");
+        assertThat(statusResponse)
+            .contains("Guided attack status.")
+            .contains("Status: FAILED")
+            .contains("Progress: 100%")
+            .contains("Review the status/error above before trusting this scan as evidence.")
+            .doesNotContain("Settle passive analysis: call zap_passive_scan_wait");
     }
 
     @Test
@@ -252,8 +254,9 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String stopResponse = service.stopCrawl(operationId);
 
-        assertThat(stopResponse).contains("Guided crawl stop requested.");
-        assertThat(stopResponse).contains("Scan job job-11 cancelled");
+        assertThat(stopResponse)
+            .contains("Guided crawl stop requested.")
+            .contains("Scan job job-11 cancelled");
         verify(scanJobQueueService).cancelScanJob("job-11");
     }
 

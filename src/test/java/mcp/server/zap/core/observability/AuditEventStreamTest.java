@@ -3,7 +3,7 @@ package mcp.server.zap.core.observability;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.Map;

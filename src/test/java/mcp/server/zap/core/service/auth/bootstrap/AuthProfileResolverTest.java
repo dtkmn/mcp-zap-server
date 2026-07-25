@@ -126,8 +126,8 @@ class AuthProfileResolverTest {
                 .resolve("shop-staging", "https://shop.example.com/account");
 
         assertThat(request.profileId()).isEqualTo("shop-staging");
-        assertThat(request.allowedOrigin().toString()).isEqualTo("https://shop.example.com");
-        assertThat(request.loginUrl()).isEqualTo("https://shop.example.com/login");
+        assertThat(request.allowedOrigin().toString()).hasToString("https://shop.example.com");
+        assertThat(request.loginUrl()).hasToString("https://shop.example.com/login");
         assertThat(request.zapUserName()).isEqualTo("shop-zap-user");
     }
 

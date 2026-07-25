@@ -16,7 +16,7 @@ import static org.mockito.Mockito.mock;
 
 @Tag("docker")
 @Testcontainers
-public class ActiveScanPolicyToolsDockerTest {
+class ActiveScanPolicyToolsDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
@@ -52,7 +52,7 @@ public class ActiveScanPolicyToolsDockerTest {
     }
 
     @Test
-    void scanPolicyToolsWorkAgainstRealZap() throws Exception {
+    void scanPolicyToolsWorkAgainstRealZap() {
         String list = service.listScanPolicies();
         String originalView = service.viewScanPolicy("Default Policy", "40012", "1");
 

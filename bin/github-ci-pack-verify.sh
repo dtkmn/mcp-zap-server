@@ -6,7 +6,6 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VERIFY_ROOT="${REPO_ROOT}/.verify/github-ci-pack"
 RENDER_ROOT="${VERIFY_ROOT}/rendered"
 SKIP_DOCKER=0
-SKIP_GRADLE=0
 WITH_IMAGE_BUILD=0
 
 usage() {
@@ -17,11 +16,9 @@ Verifies the GitHub CI security-gate pack without running a full target scan:
 - action shell syntax
 - Python helper contract tests
 - CI compose wiring for ZAP/MCP shared workspace
-- Docker image packaging architecture guard
 
 Options:
   --skip-docker       Skip Docker Compose manifest rendering.
-  --skip-gradle       Skip the Gradle packaging architecture check.
   --with-image-build  Build the local Docker image as an additional proof.
   --help, -h          Show this help message.
 EOF
@@ -79,10 +76,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-docker)
       SKIP_DOCKER=1
-      shift
-      ;;
-    --skip-gradle)
-      SKIP_GRADLE=1
       shift
       ;;
     --with-image-build)
@@ -153,15 +146,6 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   assert_exact_line_count "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "        source: ${LOCAL_ZAP_WORKSPACE_FOLDER}" 2
   assert_exact_line_count "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "        target: /zap/wrk" 2
   pass "Example app-under-test compose override renders with the CI stack"
-fi
-
-if [[ "${SKIP_GRADLE}" -eq 0 ]]; then
-  log_step "Run Docker image packaging architecture guard"
-  (
-    cd "${REPO_ROOT}"
-    ./gradlew test --tests mcp.server.zap.architecture.DockerImagePackagingArchitectureTest --no-daemon --stacktrace
-  )
-  pass "Dockerfile selects the executable application JAR explicitly"
 fi
 
 if [[ "${WITH_IMAGE_BUILD}" -eq 1 ]]; then

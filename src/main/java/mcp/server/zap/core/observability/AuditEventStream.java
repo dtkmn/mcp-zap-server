@@ -1,6 +1,6 @@
 package mcp.server.zap.core.observability;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -72,7 +72,7 @@ public class AuditEventStream implements GatewayAuditSink {
 
         try {
             auditLog.info("audit.event {}", objectMapper.writeValueAsString(payload));
-        } catch (Exception e) {
+        } catch (Exception _) {
             auditLog.info("audit.event type={} principal={} outcome={} details={}",
                     normalizedType, normalizedPrincipal, normalizedOutcome, data);
         }

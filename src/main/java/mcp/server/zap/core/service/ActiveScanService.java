@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import jakarta.annotation.Nullable;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
@@ -373,6 +375,7 @@ public class ActiveScanService {
         return List.copyOf(parsedRuleIds);
     }
 
+    @Nullable
     private Boolean parseEnabledFlag(String enabled) {
         if (!hasText(enabled)) {
             return null;

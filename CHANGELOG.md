@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.2` to `0.8.0`, aligned the runtime on Jackson `3.1.5`, and migrated application JSON usage and WebFlux adapter wiring from Jackson 2 to Jackson 3.
+
 ## [0.10.1] - 2026-07-16
 
 ### Changed

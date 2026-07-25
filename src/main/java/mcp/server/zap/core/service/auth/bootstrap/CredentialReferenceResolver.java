@@ -19,7 +19,7 @@ public class CredentialReferenceResolver {
         CredentialReference reference;
         try {
             reference = normalizeReference(credentialReference);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             log.warn("Auth profile credential reference is invalid at runtime");
             throw callerFailure();
         }

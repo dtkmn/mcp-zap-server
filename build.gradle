@@ -47,6 +47,7 @@ repositories {
 ext {
     set('springAiVersion', "2.0.0")
     set('commonsCompressVersion', "1.28.0")
+    set('jackson-bom.version', "3.1.5")
 }
 
 dependencies {

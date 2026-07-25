@@ -158,7 +158,7 @@ public class AuthController {
             
             return ResponseEntity.ok(response);
             
-        } catch (Exception e) {
+        } catch (Exception _) {
             log.error("Error refreshing token");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -192,7 +192,7 @@ public class AuthController {
                     "tokenId", tokenId,
                     "expiresAt", expiresAt.toString()
             ));
-        } catch (JwtException e) {
+        } catch (JwtException _) {
             log.warn("Invalid token provided for revocation");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(Map.of("revoked", false, "error", "Invalid or expired JWT token"));
@@ -236,7 +236,7 @@ public class AuthController {
                     "expiresIn", expiresIn
             ));
             
-        } catch (Exception e) {
+        } catch (Exception _) {
             return ResponseEntity.ok(Map.of(
                     "valid", false,
                     "error", "Invalid or expired JWT token"

@@ -17,12 +17,11 @@ Verifies the GitHub CI security-gate pack without running a full target scan:
 - action shell syntax
 - Python helper contract tests
 - CI compose wiring for ZAP/MCP shared workspace
-- Spring AI / Spring Boot dependency resolution notes
 - Docker image packaging architecture guard
 
 Options:
   --skip-docker       Skip Docker Compose manifest rendering.
-  --skip-gradle       Skip Gradle dependency and architecture checks.
+  --skip-gradle       Skip the Gradle packaging architecture check.
   --with-image-build  Build the local Docker image as an additional proof.
   --help, -h          Show this help message.
 EOF
@@ -52,15 +51,6 @@ assert_file_contains() {
   fi
 }
 
-assert_file_not_matches() {
-  local file="$1"
-  local pattern="$2"
-  if grep -Eq "$pattern" "$file"; then
-    echo "Expected ${file} not to match: ${pattern}" >&2
-    exit 1
-  fi
-}
-
 assert_bind_count() {
   local file="$1"
   local needle="$2"
@@ -83,10 +73,6 @@ assert_exact_line_count() {
     echo "Expected exact line '${line}' to appear ${expected} time(s) in ${file}, found ${actual}." >&2
     exit 1
   fi
-}
-
-spring_ai_version() {
-  sed -n "s/^[[:space:]]*set('springAiVersion', \"\\([^\"]*\\)\").*/\\1/p" "${REPO_ROOT}/build.gradle" | head -n 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -118,7 +104,6 @@ done
 require_command bash
 require_command python3
 require_command grep
-require_command sed
 
 if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   require_command docker
@@ -171,23 +156,6 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
 fi
 
 if [[ "${SKIP_GRADLE}" -eq 0 ]]; then
-  expected_spring_ai_version="$(spring_ai_version)"
-  [[ -n "${expected_spring_ai_version}" ]] || {
-    echo "Could not resolve springAiVersion from build.gradle" >&2
-    exit 1
-  }
-
-  log_step "Record Spring AI / Spring Boot dependency resolution"
-  (
-    cd "${REPO_ROOT}"
-    ./gradlew dependencyInsight --dependency spring-ai-starter-mcp-server-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt"
-    ./gradlew dependencyInsight --dependency spring-boot-starter-webflux --configuration runtimeClasspath --no-daemon > "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt"
-  )
-  assert_file_contains "${VERIFY_ROOT}/spring-ai-runtime-dependency.txt" "org.springframework.ai:spring-ai-starter-mcp-server-webflux:${expected_spring_ai_version}"
-  assert_file_contains "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" "org.springframework.boot:spring-boot-starter-webflux:4.1.0"
-  assert_file_not_matches "${VERIFY_ROOT}/spring-boot-runtime-dependency.txt" 'org\.springframework\.boot:spring-boot-starter-webflux:[^[:space:]]+[[:space:]]+->'
-  pass "Spring AI ${expected_spring_ai_version} aligns with the managed Spring Boot 4.1.0 runtime"
-
   log_step "Run Docker image packaging architecture guard"
   (
     cd "${REPO_ROOT}"

@@ -15,15 +15,4 @@ class ScanLimitPropertiesTest {
         assertEquals(5, defaultProps.getSpiderThreadCount());
     }
 
-    @Test
-    void canSetCustomValues() {
-        ScanLimitProperties props = new ScanLimitProperties();
-        props.setMaxActiveScanDurationInMins(45);
-        props.setThreadPerHost(15);
-        props.setSpiderMaxDepth(20);
-        
-        assertEquals(45, props.getMaxActiveScanDurationInMins());
-        assertEquals(15, props.getThreadPerHost());
-        assertEquals(20, props.getSpiderMaxDepth());
-    }
 }

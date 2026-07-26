@@ -13,9 +13,9 @@ usage() {
 Usage: ./bin/github-ci-pack-verify.sh [options]
 
 Verifies the GitHub CI security-gate pack without running a full target scan:
-- action shell syntax
-- Python helper contract tests
-- CI compose wiring for ZAP/MCP shared workspace
+- GitHub and GitLab gate shell syntax
+- Python helper behavior tests
+- GitHub and GitLab Compose wiring for the ZAP/MCP shared workspace
 
 Options:
   --skip-docker       Skip Docker Compose manifest rendering.
@@ -39,37 +39,43 @@ require_command() {
   fi
 }
 
-assert_file_contains() {
-  local file="$1"
-  local needle="$2"
-  if ! grep -Fq "$needle" "$file"; then
-    echo "Expected ${file} to contain: ${needle}" >&2
-    exit 1
-  fi
-}
+verify_gate_compose_model() {
+  local model_file="$1"
+  local workspace_root="$2"
+  local stack_label="$3"
+  python3 - "${model_file}" "${workspace_root}" "${stack_label}" <<'PY'
+import json
+from pathlib import Path
+import sys
 
-assert_bind_count() {
-  local file="$1"
-  local needle="$2"
-  local expected="$3"
-  local actual
-  actual="$(grep -F -c "$needle" "$file" || true)"
-  if [[ "$actual" -ne "$expected" ]]; then
-    echo "Expected ${needle} to appear ${expected} time(s) in ${file}, found ${actual}." >&2
-    exit 1
-  fi
-}
+model = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+workspace = str(Path(sys.argv[2]).resolve())
+stack_label = sys.argv[3]
+services = model["services"]
 
-assert_exact_line_count() {
-  local file="$1"
-  local line="$2"
-  local expected="$3"
-  local actual
-  actual="$(grep -F -x -c "$line" "$file" || true)"
-  if [[ "$actual" -ne "$expected" ]]; then
-    echo "Expected exact line '${line}' to appear ${expected} time(s) in ${file}, found ${actual}." >&2
-    exit 1
-  fi
+actual_mounts = sorted(
+    (
+        service_name,
+        volume.get("type"),
+        volume.get("source"),
+        volume.get("target"),
+        bool(volume.get("read_only", False)),
+    )
+    for service_name in ("zap", "mcp-server")
+    for volume in services[service_name].get("volumes", [])
+)
+expected_mounts = sorted([
+    ("zap", "bind", workspace, "/zap/wrk", False),
+    ("zap", "bind", f"{workspace}/zap-home", "/home/zap/.ZAP", False),
+    ("mcp-server", "bind", workspace, "/zap/wrk", False),
+])
+if actual_mounts != expected_mounts:
+    raise SystemExit(f"Unexpected {stack_label} CI mounts: {actual_mounts}")
+
+surface = services["mcp-server"].get("environment", {}).get("MCP_SERVER_TOOLS_SURFACE")
+if surface != "expert":
+    raise SystemExit(f"{stack_label} CI MCP server must use expert surface, got {surface!r}")
+PY
 }
 
 while [[ $# -gt 0 ]]; do
@@ -96,7 +102,6 @@ done
 
 require_command bash
 require_command python3
-require_command grep
 
 if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   require_command docker
@@ -104,21 +109,18 @@ fi
 
 mkdir -p "${VERIFY_ROOT}" "${RENDER_ROOT}"
 
-log_step "Validate GitHub action shell syntax"
+log_step "Validate CI gate shell syntax"
 bash -n "${REPO_ROOT}/.github/actions/zap-security-gate/run-gate.sh"
 bash -n "${REPO_ROOT}/.github/actions/zap-webhook-callback/run-webhook.sh"
-pass "Composite action shell entrypoints parse"
+bash -n "${REPO_ROOT}/examples/gitlab/run-zap-security-gate.sh"
+pass "GitHub and GitLab gate shell entrypoints parse"
 
 log_step "Run CI helper Python tests"
 (
   cd "${REPO_ROOT}"
-  python3 -m unittest \
-    tests.python.test_mcp_zap_gate \
-    tests.python.test_ci_image_ref_validation \
-    tests.python.test_ci_tool_surface_defaults \
-    tests.python.test_send_zap_webhook
+  python3 -m unittest discover -s tests/python -p 'test_*.py'
 )
-pass "CI helper Python contracts pass"
+pass "CI helper Python behaviors pass"
 
 if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   log_step "Render GitHub CI compose stack"
@@ -128,24 +130,46 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   export MCP_SERVER_IMAGE="mcp-zap-server:verify-ci-pack"
   export ZAP_IMAGE="zaproxy/zap-stable:2.17.0"
   mkdir -p "${LOCAL_ZAP_WORKSPACE_FOLDER}/reports" "${LOCAL_ZAP_WORKSPACE_FOLDER}/automation" "${LOCAL_ZAP_WORKSPACE_FOLDER}/zap-home"
-  docker compose -f "${REPO_ROOT}/.github/actions/zap-security-gate/docker-compose.ci.yml" config > "${RENDER_ROOT}/github-ci-compose.yaml"
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose.yaml" "        source: ${LOCAL_ZAP_WORKSPACE_FOLDER}" 2
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose.yaml" "        target: /zap/wrk" 2
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose.yaml" "        source: ${LOCAL_ZAP_WORKSPACE_FOLDER}/zap-home" 1
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose.yaml" "        target: /home/zap/.ZAP" 1
-  assert_file_contains "${RENDER_ROOT}/github-ci-compose.yaml" "MCP_SERVER_TOOLS_SURFACE: expert"
+  docker compose \
+    -f "${REPO_ROOT}/.github/actions/zap-security-gate/docker-compose.ci.yml" \
+    config --format json > "${RENDER_ROOT}/github-ci-compose.json"
+  verify_gate_compose_model \
+    "${RENDER_ROOT}/github-ci-compose.json" \
+    "${LOCAL_ZAP_WORKSPACE_FOLDER}" \
+    "GitHub"
   pass "CI compose stack keeps ZAP and MCP on the shared workspace"
 
   log_step "Render GitHub CI compose stack with example app"
   docker compose \
     -f "${REPO_ROOT}/.github/actions/zap-security-gate/docker-compose.ci.yml" \
     -f "${REPO_ROOT}/examples/github-actions/docker-compose.app-under-test.yml" \
-    config > "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml"
-  assert_file_contains "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "app:"
-  assert_file_contains "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "image: nginx:1.27-alpine"
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "        source: ${LOCAL_ZAP_WORKSPACE_FOLDER}" 2
-  assert_exact_line_count "${RENDER_ROOT}/github-ci-compose-with-example-app.yaml" "        target: /zap/wrk" 2
+    config --format json > "${RENDER_ROOT}/github-ci-compose-with-example-app.json"
+  verify_gate_compose_model \
+    "${RENDER_ROOT}/github-ci-compose-with-example-app.json" \
+    "${LOCAL_ZAP_WORKSPACE_FOLDER}" \
+    "GitHub example-app"
+  python3 - "${RENDER_ROOT}/github-ci-compose-with-example-app.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+model = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+services = model["services"]
+
+if services.get("app", {}).get("image") != "nginx:1.27-alpine":
+    raise SystemExit("Example app override did not resolve the expected app image")
+PY
   pass "Example app-under-test compose override renders with the CI stack"
+
+  log_step "Render GitLab CI compose stack"
+  docker compose \
+    -f "${REPO_ROOT}/examples/gitlab/docker-compose.gitlab-ci.yml" \
+    config --format json > "${RENDER_ROOT}/gitlab-ci-compose.json"
+  verify_gate_compose_model \
+    "${RENDER_ROOT}/gitlab-ci-compose.json" \
+    "${LOCAL_ZAP_WORKSPACE_FOLDER}" \
+    "GitLab"
+  pass "GitLab CI compose stack keeps ZAP and MCP on the shared workspace"
 fi
 
 if [[ "${WITH_IMAGE_BUILD}" -eq 1 ]]; then

@@ -82,8 +82,8 @@ public class ToolScopeRegistry {
         register(rules, "zap_scan_job_dead_letter_list", McpToolSurface.EXPERT, "zap:scan:read");
         register(rules, "zap_scan_job_dead_letter_requeue", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:queue:write");
         register(rules, "zap_scan_history_list", McpToolSurface.GUIDED, "zap:scan:read");
-        register(rules, "zap_scan_history_get", McpToolSurface.EXPERT, "zap:scan:read");
-        register(rules, "zap_scan_history_export", McpToolSurface.EXPERT, "zap:scan:read");
+        register(rules, "zap_scan_history_get", McpToolSurface.GUIDED, "zap:scan:read");
+        register(rules, "zap_scan_history_export", McpToolSurface.GUIDED, "zap:scan:read");
         register(rules, "zap_scan_history_release_evidence", McpToolSurface.GUIDED, "zap:scan:read");
         register(rules, "zap_scan_history_customer_handoff", McpToolSurface.GUIDED, "zap:scan:read");
 

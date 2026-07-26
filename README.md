@@ -100,7 +100,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Scan queue and history**: queued active, spider, and AJAX Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
-- **Deployment paths**: local Docker Compose, production-oriented Compose, and Helm charts for Kubernetes.
+- **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
 ## Latest Release
 
@@ -203,7 +203,6 @@ Operations:
 - [Observability](https://danieltse.org/mcp-zap-server/operations/observability/)
 - [Production Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/)
 - [Release Evidence Handoff](https://danieltse.org/mcp-zap-server/operations/release-evidence-handoff-runbook/)
-- [Native Image Performance](https://danieltse.org/mcp-zap-server/operations/native-image-performance/)
 
 ## Open Source Core And Extension Model
 

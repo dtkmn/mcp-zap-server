@@ -49,35 +49,39 @@ ensure_writable_workspace_dirs() {
   done
 }
 
-ensure_immutable_image_ref() {
+ensure_pinned_image_ref() {
   local ref="$1"
   local label="$2"
   local image_name tag
 
   if [[ -z "$ref" ]]; then
-    echo "${label} must be set to an immutable image tag or digest." >&2
+    echo "${label} must be set to a pinned release tag or sha256 digest." >&2
     exit 1
   fi
 
   if [[ "$ref" == *"<"* || "$ref" == *">"* || "$ref" == *"release-tag"* ]]; then
-    echo "${label} still contains placeholder text (${ref}). Replace <release-tag> with a real release tag or digest." >&2
+    echo "${label} still contains placeholder text (${ref}). Replace <release-tag> with a pinned release tag or sha256 digest." >&2
     exit 1
   fi
 
-  if [[ "$ref" == *@sha256:* ]]; then
-    return 0
+  if [[ "$ref" == *@* ]]; then
+    if [[ "$ref" =~ ^[^@[:space:]]+@sha256:[0-9a-fA-F]{64}$ ]]; then
+      return 0
+    fi
+    echo "${label} digest must use @sha256: followed by exactly 64 hexadecimal characters." >&2
+    exit 1
   fi
 
   image_name="${ref##*/}"
   if [[ "$image_name" != *:* ]]; then
-    echo "${label} must include an explicit release tag or digest. Bare image refs are not allowed." >&2
+    echo "${label} must include a pinned release tag or sha256 digest. Bare image refs are not allowed." >&2
     exit 1
   fi
 
   tag="${image_name##*:}"
   case "$tag" in
     latest|dev|main|nightly|edge|canary)
-      echo "${label} must not use the mutable :${tag} tag. Use a release tag or digest instead." >&2
+      echo "${label} must not use the mutable :${tag} tag. Use a pinned release tag or sha256 digest instead." >&2
       exit 1
       ;;
   esac
@@ -87,6 +91,8 @@ if [[ -z "${ZAP_TARGET_URL:-}" ]]; then
   echo "ZAP_TARGET_URL must be set for the GitLab security gate." >&2
   exit 1
 fi
+
+ensure_pinned_image_ref "${MCP_SERVER_IMAGE:-}" "MCP_SERVER_IMAGE"
 
 run_active_scan="$(to_bool "${ZAP_RUN_ACTIVE_SCAN:-true}")"
 fail_on_new_findings="$(to_bool "${ZAP_FAIL_ON_NEW_FINDINGS:-true}")"
@@ -125,8 +131,6 @@ export ZAP_API_KEY="${ZAP_API_KEY:-$(random_hex)}"
 export MCP_API_KEY="${MCP_API_KEY:-$(random_hex)}"
 export MCP_SERVER_IMAGE="${MCP_SERVER_IMAGE:-}"
 export ZAP_IMAGE="${ZAP_IMAGE:-zaproxy/zap-stable:2.17.0}"
-
-ensure_immutable_image_ref "${MCP_SERVER_IMAGE}" "MCP_SERVER_IMAGE"
 
 compose_args=(-f "${workspace_root}/examples/gitlab/docker-compose.gitlab-ci.yml")
 if [[ -n "${ZAP_COMPOSE_OVERRIDE_FILE:-}" ]]; then

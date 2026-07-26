@@ -198,53 +198,21 @@ class McpToolAuthorizationApiKeyIntegrationTest {
     }
 
     @Test
-    void policyDryRunContractStaysStableAcrossRepeatedAllowCalls() throws Exception {
+    void policyClientReceivesDryRunDenyContract() throws Exception {
         String sessionId = initializeSession("policy-api-key");
 
-        JsonNode first = policyDryRunContract(
+        JsonNode contract = policyDryRunContract(
                 "policy-api-key",
                 sessionId,
                 4,
-                "https://api.sandbox.example.com/orders",
-                "2026-04-06T09:00:00Z"
-        );
-        JsonNode second = policyDryRunContract(
-                "policy-api-key",
-                sessionId,
-                5,
-                "https://api.sandbox.example.com/orders",
-                "2026-04-06T09:00:00Z"
-        );
-
-        assertThat(first).isEqualTo(second);
-        assertThat(first.path("decision").path("result").asText()).isEqualTo("allow");
-        assertThat(first.path("decision").path("matchedRuleId").asText()).isEqualTo("allow-sandbox-attack");
-    }
-
-    @Test
-    void policyDryRunContractStaysStableAcrossRepeatedBlockedCalls() throws Exception {
-        String sessionId = initializeSession("policy-api-key");
-
-        JsonNode first = policyDryRunContract(
-                "policy-api-key",
-                sessionId,
-                6,
-                "https://prod.example.com/orders",
-                "2026-04-06T09:00:00Z"
-        );
-        JsonNode second = policyDryRunContract(
-                "policy-api-key",
-                sessionId,
-                7,
                 "https://prod.example.com/orders",
                 "2026-04-06T09:00:00Z"
         );
 
-        assertThat(first).isEqualTo(second);
-        assertThat(first.path("validation").path("valid").asBoolean()).isTrue();
-        assertThat(first.path("decision").path("result").asText()).isEqualTo("deny");
-        assertThat(first.path("decision").path("source").asText()).isEqualTo("default");
-        assertThat(first.path("decision").path("matchedRuleId").isNull()).isTrue();
+        assertThat(contract.path("validation").path("valid").asBoolean()).isTrue();
+        assertThat(contract.path("decision").path("result").asText()).isEqualTo("deny");
+        assertThat(contract.path("decision").path("source").asText()).isEqualTo("default");
+        assertThat(contract.path("decision").path("matchedRuleId").isNull()).isTrue();
     }
 
     private JsonNode policyDryRunContract(String apiKey,

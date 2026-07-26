@@ -71,6 +71,22 @@ class CoreServiceTest {
     }
 
     @Test
+    void inventoryUrlReadsRejectAmbiguousAuthoritiesAndEncodedBackslashes() {
+        when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("https://target/app")).thenReturn(true);
+        when(inventoryAccess.listUrls("https://target/app")).thenReturn(List.of(
+                "https://target/app/allowed",
+                "https://user@target/app",
+                "https://target:65536/app",
+                "https://target/app/%5csecret",
+                "https://target/app/%255csecret",
+                "https://tärget/app"
+        ));
+
+        assertThat(service.getUrls("https://target/app"))
+                .containsExactly("https://target/app/allowed");
+    }
+
+    @Test
     void inventoryAlertReadsPostFilterReturnedUrls() {
         when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("https://target/app")).thenReturn(true);
         when(inventoryAccess.loadAlertSummaries("https://target/app")).thenReturn(List.of(

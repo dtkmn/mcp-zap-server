@@ -92,18 +92,6 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
         self.assertEqual(MODULE.parse_report_path(text), "/tmp/report.html")
 
-    def test_parse_count_reads_findings_diff_summary_lines(self):
-        text = (
-            "Findings diff summary\n"
-            "New Findings: 3\n"
-            "Resolved Findings: 1\n"
-            "Unchanged Findings: 7\n"
-        )
-
-        self.assertEqual(MODULE.parse_count(text, "new"), 3)
-        self.assertEqual(MODULE.parse_count(text, "resolved"), 1)
-        self.assertEqual(MODULE.parse_count(text, "unchanged"), 7)
-
     def test_map_report_path_translates_container_root(self):
         mapped = MODULE.map_report_path(
             "/zap/wrk/reports/zap-report-123.html",

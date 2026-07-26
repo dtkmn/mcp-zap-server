@@ -89,9 +89,10 @@ zap_security_gate:
 Important variables used by the wrapper script:
 
 - `ZAP_TARGET_URL`: required target URL reachable from the ZAP container
-- `MCP_SERVER_IMAGE`: required immutable release tag or digest for the MCP server
-  image. Bare refs, mutable tags such as `latest`, `dev`, and `main`, and
-  placeholder refs such as `<release-tag>` are rejected before Docker starts.
+- `MCP_SERVER_IMAGE`: required pinned release tag or sha256 digest for the MCP
+  server image. Bare refs, malformed digests, mutable tags such as `latest`,
+  `dev`, and `main`, and placeholder refs such as `<release-tag>` are rejected
+  before Docker starts.
 - `ZAP_BASELINE_FILE`: optional path to a prior `zap_findings_snapshot` JSON file
 - `ZAP_BASELINE_MODE`: `seed` allows first-run baseline review; `enforce`
   fails when `ZAP_FAIL_ON_NEW_FINDINGS=true` but no findings diff can be produced

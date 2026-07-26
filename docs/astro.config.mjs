@@ -7,6 +7,9 @@ export default defineConfig({
 	site: 'https://danieltse.org',
 	base: '/mcp-zap-server',
 	trailingSlash: 'always',
+	redirects: {
+		'/operations/native-image-performance': '/mcp-zap-server/operations/production-checklist/',
+	},
 	integrations: [
 		starlight({
 			title: 'MCP ZAP Server',
@@ -83,7 +86,6 @@ export default defineConfig({
 						{ slug: 'operations/scan-history-ledger' },
 						{ slug: 'operations/release-evidence-handoff-runbook' },
 						{ slug: 'operations/production-simulation-runbook' },
-						{ slug: 'operations/native-image-performance' },
 					],
 				},
 				{

@@ -94,7 +94,7 @@ inputs:
     required: false
     default: "30"
   mcp-server-image:
-    description: MCP server image ref used by the bundled CI compose stack. When start-stack is true, provide an immutable tag or digest.
+    description: MCP server image ref used by the bundled CI compose stack. When start-stack is true, provide a pinned release tag or sha256 digest.
     required: false
     default: ""
   zap-image:

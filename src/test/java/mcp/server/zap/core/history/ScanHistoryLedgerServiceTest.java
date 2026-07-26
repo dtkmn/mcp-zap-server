@@ -211,7 +211,7 @@ class ScanHistoryLedgerServiceTest {
 
     private Map<String, String> metadataFor(JsonNode root, String evidenceType) {
         for (JsonNode entry : root.path("entries")) {
-            if (evidenceType.equals(entry.path("evidenceType").asText())) {
+            if (evidenceType.equals(entry.path("evidenceType").asString())) {
                 ObjectMapper mapper = new ObjectMapper();
                 return mapper.convertValue(
                         entry.path("metadata"),
@@ -252,8 +252,8 @@ class ScanHistoryLedgerServiceTest {
         String bundle = service.exportReleaseEvidence("pilot-alpha", "api.example.com", 10);
         JsonNode root = objectMapper.readTree(bundle);
 
-        assertThat(root.path("purpose").asText()).isEqualTo("release_evidence");
-        assertThat(root.path("releaseName").asText()).isEqualTo("pilot-alpha");
+        assertThat(root.path("purpose").asString()).isEqualTo("release_evidence");
+        assertThat(root.path("releaseName").asString()).isEqualTo("pilot-alpha");
         assertThat(root.path("summary").path("entryCount").asInt()).isEqualTo(3);
         assertThat(root.path("summary").path("byEvidenceType").path("scan_job").asInt()).isEqualTo(1);
         assertThat(root.path("summary").path("byEvidenceType").path("scan_run").asInt()).isEqualTo(1);
@@ -284,7 +284,7 @@ class ScanHistoryLedgerServiceTest {
                 service.exportReleaseEvidence("empty-release", "missing.example.com", 5)
         );
 
-        assertThat(scanOnly.path("releaseName").asText()).isEqualTo("unnamed-release");
+        assertThat(scanOnly.path("releaseName").asString()).isEqualTo("unnamed-release");
         assertThat(scanOnly.path("summary").path("hasScanEvidence").asBoolean()).isTrue();
         assertThat(scanOnly.path("summary").path("hasReportArtifact").asBoolean()).isFalse();
         assertThat(scanOnly.path("warnings").toString())

@@ -110,9 +110,9 @@ class McpStreamableHttpProtocolRegressionTest {
         assertThat(sessionId).isNotBlank();
 
         JsonNode envelope = OBJECT_MAPPER.readTree(result.getResponseBody());
-        String negotiatedProtocolVersion = envelope.path("result").path("protocolVersion").asText();
+        String negotiatedProtocolVersion = envelope.path("result").path("protocolVersion").asString();
         assertThat(negotiatedProtocolVersion).isNotBlank();
-        String serverInfoVersion = envelope.path("result").path("serverInfo").path("version").asText();
+        String serverInfoVersion = envelope.path("result").path("serverInfo").path("version").asString();
         assertThat(serverInfoVersion).isNotBlank();
         return new Session(sessionId, negotiatedProtocolVersion, serverInfoVersion);
     }

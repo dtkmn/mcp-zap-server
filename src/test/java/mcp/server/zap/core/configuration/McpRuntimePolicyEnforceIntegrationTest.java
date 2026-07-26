@@ -55,7 +55,7 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
         String responseBody = normalizeResponseBody(result.getResponseBody());
         assertThat(result.getStatus().value()).isEqualTo(200);
         JsonNode envelope = OBJECT_MAPPER.readTree(responseBody);
-        String errorText = envelope.path("result").path("content").path(0).path("text").asText();
+        String errorText = envelope.path("result").path("content").path(0).path("text").asString();
         assertThat(envelope.path("result").path("isError").asBoolean()).isTrue();
         assertThat(errorText)
                 .contains(APPROVAL_REQUIRED_REASON)
@@ -69,7 +69,7 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
                 "policy-enforce-client-deny"
         );
         assertRuntimePolicyAudit(event, "deny", false);
-        assertThat(event.path("data").path("mode").asText()).isEqualTo("enforce");
+        assertThat(event.path("data").path("mode").asString()).isEqualTo("enforce");
 
         EntityExchangeResult<String> auditMetric = actuator(POLICY_API_KEY, "/actuator/metrics/mcp.zap.audit.events");
         assertThat(auditMetric.getResponseBody())

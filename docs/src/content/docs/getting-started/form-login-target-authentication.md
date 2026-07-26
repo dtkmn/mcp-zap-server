@@ -192,14 +192,29 @@ not load the override and can recreate `mcp-server` without the profile.
 ## 5. Check The Wiring Without Printing Secrets
 
 ```bash
+AUTH_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/mcp-zap-server/auth"
+test -r "$AUTH_HOME/auth-profiles.yml"
+test -r "$AUTH_HOME/target-form-password"
+test -s "$AUTH_HOME/target-form-password"
+
+MCP_CONTAINER_ID="$(
+  docker compose \
+    -f docker-compose.yml \
+    -f docker-compose.dev.yml \
+    -f examples/authenticated-scanning/docker-compose.auth-profile.yml \
+    ps -q mcp-server
+)"
+MCP_MOUNTS="$(docker inspect \
+  --format '{{range .Mounts}}{{println .Destination}}{{end}}' \
+  "$MCP_CONTAINER_ID")"
+printf '%s\n' "$MCP_MOUNTS" | grep -Fx /app/auth-profiles.yml
+printf '%s\n' "$MCP_MOUNTS" | grep -Fx /run/secrets/target_form_password
+
 docker compose \
   -f docker-compose.yml \
   -f docker-compose.dev.yml \
   -f examples/authenticated-scanning/docker-compose.auth-profile.yml \
-  exec -T mcp-server sh -c \
-  'test -r /app/auth-profiles.yml &&
-   test -r /run/secrets/target_form_password &&
-   test -s /run/secrets/target_form_password'
+  ps mcp-server
 
 docker compose \
   -f docker-compose.yml \
@@ -210,6 +225,13 @@ docker compose \
 
 ./bin/self-serve-doctor.sh
 ```
+
+The host checks prove that both source files are readable and the password is
+not empty. The mount inspection prints destination paths only, never secret
+contents. The MCP JVM image is Java 25 on a distroless Java 25 runtime, so it
+does not include `sh`, `curl`, or other interactive debugging tools. The
+image's built-in static HTTP probe still drives Docker Compose health status;
+the `ps` output should show the MCP service as `(healthy)`.
 
 The doctor proves MCP and ZAP connectivity. It does not prove the target login.
 Profiles are loaded when MCP Server starts, so a health check alone is not

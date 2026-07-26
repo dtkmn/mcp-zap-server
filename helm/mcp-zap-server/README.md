@@ -18,6 +18,11 @@ This chart deploys two main components in **separate pods**:
    - Lightweight (512MB-1GB RAM)
    - Auto-scaling is opt-in
 
+The MCP image remains a Java 25 application and uses a distroless Java 25
+runtime. It intentionally has no shell, `curl`, or package manager. The chart's
+startup, readiness, and liveness checks are Kubernetes-native HTTP probes; they
+do not execute commands inside the container.
+
 ## Prerequisites
 
 - Kubernetes 1.23+
@@ -286,12 +291,39 @@ kubectl describe pvc -n mcp-zap mcp-zap-zap-pvc
 ### MCP Server Cannot Connect to ZAP
 
 ```bash
-# Check if ZAP service is accessible
-kubectl exec -n mcp-zap deployment/mcp-zap-mcp -- curl http://mcp-zap-zap:8090
+# Check MCP readiness, probe failures, and application diagnostics
+kubectl get pods -n mcp-zap \
+  -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap
+kubectl describe pods -n mcp-zap \
+  -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap
+kubectl logs -n mcp-zap \
+  -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap
 
-# Verify environment variables
-kubectl exec -n mcp-zap deployment/mcp-zap-mcp -- env | grep ZAP
+# Verify the configured ZAP variable names without exposing secret values
+MCP_DEPLOYMENT="$(kubectl get deployment -n mcp-zap \
+  -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap \
+  -o jsonpath='{.items[0].metadata.name}')"
+kubectl get deployment -n mcp-zap "$MCP_DEPLOYMENT" \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="mcp-server")].env[*]}{.name}{"\n"}{end}' \
+  | grep '^ZAP_'
+
+# Test service DNS and HTTP reachability from an existing MCP pod
+MCP_POD="$(kubectl get pod -n mcp-zap \
+  -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap \
+  -o jsonpath='{.items[0].metadata.name}')"
+ZAP_SERVICE="$(kubectl get service -n mcp-zap \
+  -l app.kubernetes.io/name=zap-proxy,app.kubernetes.io/instance=mcp-zap \
+  -o jsonpath='{.items[0].metadata.name}')"
+kubectl exec -n mcp-zap "$MCP_POD" -c mcp-server -- \
+  /usr/local/bin/http-healthcheck "http://${ZAP_SERVICE}:8090/" \
+  && echo "ZAP service is reachable from the MCP pod"
 ```
+
+The MCP runtime is distroless and has no in-container shell, `curl`, or `env`
+executable. The last command executes only the image's built-in static HTTP
+probe; it prints a diagnostic and exits non-zero when DNS, TCP, or HTTP fails.
+If your Helm release or namespace is not `mcp-zap`, update the instance labels
+and namespace in these commands.
 
 ### Horizontal Pod Autoscaler Not Working
 

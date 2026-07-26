@@ -3,7 +3,7 @@ set -euo pipefail
 
 dockerfile="${1:-Dockerfile}"
 distroless_image="$(
-  awk '$1 == "FROM" && $2 ~ /^gcr.io\\/distroless\\// { print $2; exit }' "${dockerfile}"
+  awk '$1 == "FROM" && index($2, "gcr.io/distroless/") == 1 { print $2; exit }' "${dockerfile}"
 )"
 
 cosign verify \

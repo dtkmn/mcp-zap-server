@@ -4,7 +4,6 @@ import java.util.Locale;
 import mcp.server.zap.core.gateway.ArtifactRecord;
 import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
-import mcp.server.zap.core.gateway.FindingRecord;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.TargetDescriptor;
 import org.springframework.ai.tool.annotation.Tool;
@@ -142,13 +141,9 @@ public class GuidedSecurityToolsService {
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.FINDINGS_READ, "findings read");
         String normalizedBaseUrl = trimToEmpty(baseUrl);
-        FindingRecord findingRecord = gatewayRecordFactory.findingSummary(
-                engineAdapter,
-                gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB),
-                "summary"
-        );
+        TargetDescriptor target = gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB);
         String findingsSummary = findingsService.getFindingsSummary(normalizedBaseUrl);
-        return formatGuidedFindingsSummary(targetScope(findingRecord.target()), findingsSummary);
+        return formatGuidedFindingsSummary(targetScope(target), findingsSummary);
     }
 
     @Tool(

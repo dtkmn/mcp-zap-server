@@ -1,9 +1,5 @@
 name: CI
 
-env:
-  DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
-  IMAGE_NAME: mcp-zap-server
-
 on:
   pull_request:
     types: [opened, reopened, synchronize, edited]
@@ -41,9 +37,6 @@ jobs:
       - name: Build with Gradle
         run: ./gradlew build --scan --no-daemon --stacktrace --info
 
-      - name: Build published container image
-        run: docker build --tag mcp-zap-server:ci .
-
       - name: Run Docker-backed integration tests
         if: >-
           github.event_name == 'workflow_dispatch' ||
@@ -65,49 +58,21 @@ jobs:
             build/reports/tests/dockerTest/**
             build/reports/problems/problems-report.html
 
-  docker-publish:
-    name: Publish main images
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'dependabot[bot]'
+  container-build:
+    name: Build main container
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-    concurrency:
-      group: docker-publish-${{ github.ref }}
-      cancel-in-progress: true
-    env:
-      BRANCH_TAG: main
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4
-        with:
-          username: ${{ github.actor }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Verify Distroless runtime signature
+        run: ./scripts/verify-distroless-signature.sh
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-
-      - name: Build and push main images
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: |
-            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH_TAG }}
-            ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-            ${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ env.BRANCH_TAG }}
-            ${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+      - name: Build main container
+        run: docker build --platform linux/amd64 --tag mcp-zap-server:main-verify .

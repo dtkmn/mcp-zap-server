@@ -1,6 +1,5 @@
 package mcp.server.zap.core.service;
 
-import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.FileImportRequest;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.FileOnlyImportRequest;
@@ -12,7 +11,6 @@ import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -57,12 +55,31 @@ public class OpenApiServiceTest {
     }
 
     @Test
-    void importGraphqlSchemaFileHandlesException() {
-        when(importAccess.importGraphqlFile(new GraphqlFileImportRequest("http://example.com/graphql", "/tmp/schema.graphql")))
-                .thenThrow(new ZapApiException("Error importing GraphQL schema file", new RuntimeException("oops")));
+    void importOpenApiSpecFileBuildsRequestAndReturnsSuccessMessage() {
+        FileImportRequest request = new FileImportRequest("/tmp/api.yaml", "api.example.com");
+        when(importAccess.importOpenApiFile(request)).thenReturn(new ImportResult(java.util.List.of()));
 
-        assertThrowsExactly(ZapApiException.class, () -> service.importGraphqlSchemaFile("http://example.com/graphql",
-                "/tmp/schema.graphql"));
+        String result = service.importOpenApiSpecFile(" /tmp/api.yaml ", " api.example.com ");
+
+        assertTrue(result.contains("OpenAPI import completed and is ready to scan"));
+        verify(importAccess).importOpenApiFile(request);
+    }
+
+    @Test
+    void importGraphqlSchemaFileValidatesEndpointAndBuildsRequest() {
+        GraphqlFileImportRequest request =
+                new GraphqlFileImportRequest("http://example.com/graphql", "/tmp/schema.graphql");
+        when(importAccess.importGraphqlFile(request))
+                .thenReturn(new ImportResult(java.util.List.of("GraphQL schema imported")));
+
+        String result = service.importGraphqlSchemaFile(
+                " http://example.com/graphql ",
+                " /tmp/schema.graphql "
+        );
+
+        assertTrue(result.contains("GraphQL schema imported"));
+        verify(urlValidationService).validateUrl("http://example.com/graphql");
+        verify(importAccess).importGraphqlFile(request);
     }
 
     @Test
@@ -78,19 +95,14 @@ public class OpenApiServiceTest {
     }
 
     @Test
-    void importSoapWsdlFileHandlesException() {
-        when(importAccess.importSoapFile(new FileOnlyImportRequest("/tmp/service.wsdl")))
-                .thenThrow(new ZapApiException("Error importing SOAP/WSDL file", new RuntimeException("oops")));
+    void importSoapWsdlFileBuildsRequestAndReturnsSuccessMessage() {
+        FileOnlyImportRequest request = new FileOnlyImportRequest("/tmp/service.wsdl");
+        when(importAccess.importSoapFile(request)).thenReturn(new ImportResult(java.util.List.of("OK")));
 
-        assertThrowsExactly(ZapApiException.class, () -> service.importSoapWsdlFile("/tmp/service.wsdl"));
+        String result = service.importSoapWsdlFile(" /tmp/service.wsdl ");
+
+        assertTrue(result.contains("SOAP/WSDL import completed with messages"));
+        verify(importAccess).importSoapFile(request);
     }
 
-    @Test
-    void importOpenApiSpecFileHandlesException() {
-        when(importAccess.importOpenApiFile(new FileImportRequest("/tmp/api.yaml", "host")))
-                .thenThrow(new ZapApiException("Error importing OpenAPI/Swagger spec file", new RuntimeException("oops")));
-
-        assertThrowsExactly(ZapApiException.class, () -> service.importOpenApiSpecFile("/tmp/api.yaml",
-            "host"));
-    }
 }

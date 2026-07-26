@@ -48,6 +48,7 @@ ext {
     set('springAiVersion', "2.0.0")
     set('commonsCompressVersion', "1.28.0")
     set('jackson-bom.version', "3.1.5")
+    set('netty.version', '4.2.16.Final')
 }
 
 dependencies {
@@ -248,8 +249,6 @@ tasks.register('verifyPublicPreviewExtensionApiPublication') {
 tasks.named('test') {
     inputs.file('.github/workflows/release.yml')
     inputs.files(
-            fileTree('src/main/resources/db/migration') { include '*.sql' },
-            fileTree('helm/mcp-zap-server/files/db/migration') { include '*.sql' },
             fileTree('examples/policy-bundles') { include '*.json' }
     )
     useJUnitPlatform {

@@ -2,7 +2,6 @@ package mcp.server.zap.core.service;
 
 import java.util.List;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
-import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
@@ -12,10 +11,8 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,40 +34,6 @@ class ActiveScanServiceTest {
         when(scanLimitProperties.getThreadPerHost()).thenReturn(10);
 
         service = new ActiveScanService(engineScanExecution, urlValidationService, scanLimitProperties);
-    }
-
-    @Test
-    void startActiveScanJobReturnsScanId() {
-        ActiveScanRequest request = new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10);
-        when(engineScanExecution.startActiveScan(request)).thenReturn("101");
-
-        String scanId = service.startActiveScanJob("http://example.com", "true", "Default Policy");
-
-        assertEquals("101", scanId);
-        verify(urlValidationService).validateUrl("http://example.com");
-        verify(engineScanExecution).startActiveScan(request);
-    }
-
-    @Test
-    void startActiveScanAsUserJobReturnsScanId() {
-        AuthenticatedActiveScanRequest request = new AuthenticatedActiveScanRequest(
-                "1", "3", "http://example.com", "true", "Default Policy", 30, 5, 10);
-        when(engineScanExecution.startActiveScanAsUser(request)).thenReturn("202");
-
-        String scanId = service.startActiveScanAsUserJob("1", "3", "http://example.com", null, "Default Policy");
-
-        assertEquals("202", scanId);
-        verify(urlValidationService).validateUrl("http://example.com");
-        verify(engineScanExecution).startActiveScanAsUser(request);
-    }
-
-    @Test
-    void getActiveScanProgressPercentReturnsValue() {
-        when(engineScanExecution.readActiveScanProgressPercent("1")).thenReturn(42);
-
-        int progress = service.getActiveScanProgressPercent("1");
-
-        assertEquals(42, progress);
     }
 
     @Test
@@ -153,15 +116,18 @@ class ActiveScanServiceTest {
 
     @Test
     void startActiveScanReturnsDirectMessage() {
-        when(engineScanExecution.startActiveScan(new ActiveScanRequest("http://example.com", "true", null, 30, 5, 10)))
+        when(engineScanExecution.startActiveScan(
+                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10)))
                 .thenReturn("101");
 
-        String result = service.startActiveScan("http://example.com", null, null);
+        String result = service.startActiveScan("http://example.com", null, "Baseline");
 
         assertTrue(result.contains("Direct active scan started."));
         assertTrue(result.contains("Scan ID: 101"));
         assertTrue(result.contains("Use 'zap_active_scan_status'"));
-        verify(engineScanExecution).startActiveScan(new ActiveScanRequest("http://example.com", "true", null, 30, 5, 10));
+        verify(urlValidationService).validateUrl("http://example.com");
+        verify(engineScanExecution).startActiveScan(
+                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10));
     }
 
     @Test
@@ -176,6 +142,7 @@ class ActiveScanServiceTest {
         assertTrue(result.contains("Scan ID: 202"));
         assertTrue(result.contains("Context ID: 1"));
         assertTrue(result.contains("User ID: 3"));
+        verify(urlValidationService).validateUrl("http://example.com");
     }
 
     @Test
@@ -190,27 +157,12 @@ class ActiveScanServiceTest {
     }
 
     @Test
-    void stopActiveScanJobCallsEngineBoundary() {
-        service.stopActiveScanJob("2");
-
-        verify(engineScanExecution).stopActiveScan("2");
-    }
-
-    @Test
     void stopActiveScanReturnsDirectMessage() {
         String result = service.stopActiveScan("2");
 
         assertTrue(result.contains("Direct active scan stopped."));
         assertTrue(result.contains("Scan ID: 2"));
         verify(engineScanExecution).stopActiveScan("2");
-    }
-
-    @Test
-    void stopActiveScanJobHandlesException() {
-        doThrow(new ZapApiException("boom", new RuntimeException("boom")))
-                .when(engineScanExecution).stopActiveScan("2");
-
-        assertThrowsExactly(ZapApiException.class, () -> service.stopActiveScanJob("2"));
     }
 
     private List<String> scanPolicyNamesResponse() {

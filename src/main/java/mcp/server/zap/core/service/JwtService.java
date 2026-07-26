@@ -2,6 +2,7 @@ package mcp.server.zap.core.service;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.JwtProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.*;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -25,9 +27,16 @@ public class JwtService {
     private final JwtProperties jwtProperties;
     private final JwtEncoder jwtEncoder;
     private final JwtDecoder jwtDecoder;
+    private final Clock clock;
 
+    @Autowired
     public JwtService(JwtProperties jwtProperties) {
+        this(jwtProperties, Clock.systemUTC());
+    }
+
+    JwtService(JwtProperties jwtProperties, Clock clock) {
         this.jwtProperties = jwtProperties;
+        this.clock = clock == null ? Clock.systemUTC() : clock;
         
         // Initialize secret key
         if (jwtProperties.getSecret() == null || jwtProperties.getSecret().trim().isEmpty()) {
@@ -44,9 +53,13 @@ public class JwtService {
         
         // Initialize JWT encoder and decoder
         this.jwtEncoder = new NimbusJwtEncoder(new com.nimbusds.jose.jwk.source.ImmutableSecret<>(secretKey));
-        this.jwtDecoder = NimbusJwtDecoder.withSecretKey(secretKey)
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
+        JwtTimestampValidator timestampValidator = new JwtTimestampValidator();
+        timestampValidator.setClock(this.clock);
+        decoder.setJwtValidator(JwtValidators.createDefaultWithValidators(List.of(timestampValidator)));
+        this.jwtDecoder = decoder;
         
         log.info("JWT service initialized with issuer: {}", jwtProperties.getIssuer());
     }
@@ -59,7 +72,7 @@ public class JwtService {
      * @return JWT access token
      */
     public String generateAccessToken(String clientId, List<String> scopes) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant expiry = now.plusSeconds(jwtProperties.getAccessTokenExpiry());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -87,7 +100,7 @@ public class JwtService {
      * @return JWT refresh token
      */
     public String generateRefreshToken(String clientId) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant expiry = now.plusSeconds(jwtProperties.getRefreshTokenExpiry());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
@@ -181,7 +194,7 @@ public class JwtService {
     public boolean isTokenExpired(String token) {
         try {
             Jwt jwt = validateToken(token);
-            return jwt.getExpiresAt() != null && jwt.getExpiresAt().isBefore(Instant.now());
+            return jwt.getExpiresAt() != null && jwt.getExpiresAt().isBefore(clock.instant());
         } catch (JwtException e) {
             return true;
         }
@@ -200,7 +213,7 @@ public class JwtService {
             if (expiry == null) {
                 return 0;
             }
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             long seconds = expiry.getEpochSecond() - now.getEpochSecond();
             return Math.max(0, seconds);
         } catch (JwtException e) {

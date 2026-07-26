@@ -21,35 +21,7 @@ class GatewayRecordFactoryTest {
     }
 
     @Test
-    void unsupportedCapabilityFailsWithControlledMessage() {
-        EngineAdapter engineAdapter = new EngineAdapter() {
-            @Override
-            public String engineId() {
-                return "metadata";
-            }
-
-            @Override
-            public String displayName() {
-                return "Metadata Only";
-            }
-
-            @Override
-            public java.util.Set<EngineCapability> supportedCapabilities() {
-                return java.util.Set.of(EngineCapability.FINDINGS_READ);
-            }
-        };
-
-        assertThatThrownBy(() -> factory.requireCapability(
-                engineAdapter,
-                EngineCapability.GUIDED_ATTACK,
-                "guided attack"
-        ))
-                .isInstanceOf(UnsupportedEngineCapabilityException.class)
-                .hasMessage("Engine 'Metadata Only' does not support guided attack.");
-    }
-
-    @Test
-    void unsupportedCapabilityExceptionCarriesBoundedOperatorDetailsOnly() {
+    void unsupportedCapabilityFailureCarriesControlledMessageAndBoundedOperatorDetails() {
         EngineAdapter engineAdapter = new EngineAdapter() {
             @Override
             public String engineId() {
@@ -73,6 +45,7 @@ class GatewayRecordFactoryTest {
                 "guided attack"
         ))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
+                    assertThat(exception).hasMessage("Engine 'Metadata Only' does not support guided attack.");
                     assertThat(exception.engineId()).isEqualTo("metadata");
                     assertThat(exception.engineDisplayName()).isEqualTo("Metadata Only");
                     assertThat(exception.capability()).isEqualTo(EngineCapability.GUIDED_ATTACK);

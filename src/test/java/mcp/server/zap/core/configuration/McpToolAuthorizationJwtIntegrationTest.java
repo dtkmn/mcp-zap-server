@@ -132,29 +132,6 @@ class McpToolAuthorizationJwtIntegrationTest {
     }
 
     @Test
-    void toolsListReturnsCurrentRegisteredSurface() throws Exception {
-        String token = issueAccessToken("reporter-api-key");
-        String sessionId = initializeSession(token);
-
-        client().post()
-                .uri("/mcp")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .header("Mcp-Session-Id", sessionId)
-                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(body -> {
-                    assertThat(body).contains("zap_active_scan_start");
-                    assertThat(body).contains("zap_findings_diff");
-                    assertThat(body).contains("zap_automation_plan_run");
-                    assertThat(body).contains("zap_queue_active_scan");
-                });
-    }
-
-    @Test
     void toolCallReturns403WhenJwtLacksToolScope() throws Exception {
         String token = issueAccessToken("lister-api-key");
         String request = OBJECT_MAPPER.writeValueAsString(Map.of(

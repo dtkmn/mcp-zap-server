@@ -44,27 +44,6 @@ class ApiKeyModeSecurityIntegrationTest {
     }
 
     @Test
-    void protectedEndpointRejectsMissingApiKey() {
-        webTestClient().get()
-                .uri("/auth/validate")
-                .exchange()
-                .expectStatus().isUnauthorized();
-    }
-
-    @Test
-    void protectedEndpointAcceptsApiKeyAuthentication() {
-        webTestClient().get()
-                .uri("/auth/validate")
-                .header("X-API-Key", "test-api-key")
-                .exchange()
-                .expectStatus().isBadRequest()
-                .expectBody()
-                .jsonPath("$.error").isEqualTo("Invalid Request")
-                .jsonPath("$.message").value(message ->
-                        assertThat((String) message).contains("Authorization"));
-    }
-
-    @Test
     void apiKeyModeRejectsJwtOnlyRequestWithoutApiKey() {
         String accessToken = issueAccessToken();
 

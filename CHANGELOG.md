@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.2` to `0.8.0`, aligned the runtime on Jackson `3.1.5`, and migrated application JSON usage and WebFlux adapter wiring from Jackson 2 to Jackson 3.
 - Updated the managed Netty runtime from `4.2.15.Final` to `4.2.16.Final`.
 - Removed the unsupported native-image deployment facade (`Dockerfile.native`, `docker-compose.prod.yml`, and `prod.sh`) and its active performance guide; supported production paths now use the JVM container image or Helm, and the retired guide URL redirects to the production checklist.
+- Kept source compilation, bytecode, and runtime on Java 25 while moving the JVM
+  image to a digest-pinned distroless Java 25 runtime. The image now uses a
+  static HTTP probe instead of `curl`, preserving Docker and Docker Compose
+  health status while Kubernetes continues to use native HTTP probes.
+- Main-branch CI now verifies the signed distroless base and builds the AMD64
+  container without publishing rolling `main` or `sha-*` tags.
+  Multi-architecture image publication occurs only from the release workflow.
 
 ## [0.10.1] - 2026-07-16
 

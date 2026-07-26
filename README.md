@@ -57,6 +57,12 @@ Those scripts are the supported local happy path, not hidden magic:
 - `dev.sh` starts the Docker Compose stack with the faster JVM image.
 - `self-serve-doctor.sh` checks Docker, auth, MCP initialize, `tools/list`, guided tools, and a harmless tool call.
 
+The JVM image remains Java 25 end to end: source compilation, bytecode, and
+runtime all target Java 25. Its final runtime is distroless, so it intentionally
+contains no shell, package manager, or `curl`. A small built-in HTTP probe keeps
+the normal Docker Compose health status; `docker compose ps` still reports the
+MCP service as `(healthy)` after startup.
+
 Then open:
 
 - Open WebUI: `http://localhost:3000`
@@ -124,6 +130,9 @@ The default posture is intentionally conservative:
 - `api-key` mode is the base runtime default.
 - `none` mode is for explicit local dev/test only.
 - Docker Compose binds published ports to loopback by default.
+- The Java 25 JVM image uses a digest-pinned distroless runtime with no shell or
+  package manager; debug it through logs, metrics, and external diagnostic
+  containers rather than installing tools into the application container.
 - URL validation blocks localhost, private networks, and link-local targets by default.
 - Target authentication is optional and profiles default to an empty list. When enabled, guided auth binds an exact server-side credential reference and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
 - Public auth exchange endpoints are rate-limited.

@@ -61,8 +61,8 @@ class McpGatewayGovernanceFilterIntegrationTest {
                 "invalid_mcp_request",
                 "invalid-governance-request"
         );
-        assertThat(auditEvent.path("data").path("reason").asText()).isEqualTo("invalid_request_shape");
-        assertThat(auditEvent.path("principal").asText()).isEqualTo("anonymous");
+        assertThat(auditEvent.path("data").path("reason").asString()).isEqualTo("invalid_request_shape");
+        assertThat(auditEvent.path("principal").asString()).isEqualTo("anonymous");
     }
 
     @Test
@@ -127,8 +127,8 @@ class McpGatewayGovernanceFilterIntegrationTest {
     private JsonNode findAuditEvent(String responseBody, String type, String correlationId) throws Exception {
         JsonNode root = OBJECT_MAPPER.readTree(responseBody);
         for (JsonNode event : root.path("events")) {
-            if (type.equals(event.path("type").asText())
-                    && correlationId.equals(event.path("data").path("correlationId").asText())) {
+            if (type.equals(event.path("type").asString())
+                    && correlationId.equals(event.path("data").path("correlationId").asString())) {
                 return event;
             }
         }

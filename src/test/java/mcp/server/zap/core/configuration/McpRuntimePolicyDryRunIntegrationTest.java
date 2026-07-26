@@ -63,7 +63,7 @@ class McpRuntimePolicyDryRunIntegrationTest extends AbstractMcpRuntimePolicyInte
                 "policy-dry-run-client-deny"
         );
         assertRuntimePolicyAudit(event, "dry_run_deny", false);
-        assertThat(event.path("data").path("mode").asText()).isEqualTo("dry_run");
+        assertThat(event.path("data").path("mode").asString()).isEqualTo("dry_run");
 
         EntityExchangeResult<String> auditMetric = actuator(POLICY_API_KEY, "/actuator/metrics/mcp.zap.audit.events");
         assertThat(auditMetric.getResponseBody())

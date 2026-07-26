@@ -56,8 +56,8 @@ abstract class AbstractMcpRuntimePolicyIntegrationTest extends AbstractMcpProtec
     protected JsonNode findAuditEvent(String responseBody, String type, String correlationId) throws Exception {
         JsonNode root = OBJECT_MAPPER.readTree(responseBody);
         for (JsonNode event : root.path("events")) {
-            if (type.equals(event.path("type").asText())
-                    && correlationId.equals(event.path("data").path("correlationId").asText())) {
+            if (type.equals(event.path("type").asString())
+                    && correlationId.equals(event.path("data").path("correlationId").asString())) {
                 return event;
             }
         }
@@ -114,19 +114,19 @@ abstract class AbstractMcpRuntimePolicyIntegrationTest extends AbstractMcpProtec
 
     protected void assertRuntimePolicyAudit(JsonNode event, String expectedOutcome, boolean expectedAllowed) {
         JsonNode data = event.path("data");
-        assertThat(data.path("outcome").asText()).isEqualTo(expectedOutcome);
-        assertThat(data.path("mode").asText()).isIn("dry_run", "enforce");
+        assertThat(data.path("outcome").asString()).isEqualTo(expectedOutcome);
+        assertThat(data.path("mode").asString()).isIn("dry_run", "enforce");
         assertThat(data.path("allowed").asBoolean()).isEqualTo(expectedAllowed);
-        assertThat(data.path("tool").asText()).isEqualTo("zap_attack_start");
+        assertThat(data.path("tool").asString()).isEqualTo("zap_attack_start");
         assertThat(data.path("targetProvided").asBoolean()).isTrue();
-        assertThat(data.path("policyProvider").asText()).isEqualTo("basic_policy_bundle");
+        assertThat(data.path("policyProvider").asString()).isEqualTo("basic_policy_bundle");
         assertThat(data.path("policyProviderCount").asInt()).isGreaterThanOrEqualTo(1);
-        assertThat(data.path("policyName").asText()).isEqualTo("runtime-policy-client-proof");
-        assertThat(data.path("decisionResult").asText()).isEqualTo("deny");
-        assertThat(data.path("decisionSource").asText()).isEqualTo("rule");
-        assertThat(data.path("matchedRuleId").asText()).isEqualTo("deny-example-active-scan");
-        assertThat(data.path("reason").asText()).isEqualTo(APPROVAL_REQUIRED_REASON);
-        assertThat(data.path("normalizedHost").asText()).isEqualTo("example.com");
+        assertThat(data.path("policyName").asString()).isEqualTo("runtime-policy-client-proof");
+        assertThat(data.path("decisionResult").asString()).isEqualTo("deny");
+        assertThat(data.path("decisionSource").asString()).isEqualTo("rule");
+        assertThat(data.path("matchedRuleId").asString()).isEqualTo("deny-example-active-scan");
+        assertThat(data.path("reason").asString()).isEqualTo(APPROVAL_REQUIRED_REASON);
+        assertThat(data.path("normalizedHost").asString()).isEqualTo("example.com");
         assertThat(data.path("validationValid").asBoolean()).isTrue();
         assertThat(data.has("target")).isFalse();
         assertThat(data.toString()).doesNotContain(SECRET_TOKEN);

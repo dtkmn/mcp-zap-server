@@ -208,10 +208,10 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
                     if (!isKebabCase(key)) {
                         errors.add("bundle.metadata.labels key '" + key + "' must be lowercase kebab-case");
                     }
-                    if (!entry.getValue().isTextual() || entry.getValue().asText().isBlank()) {
+                    if (!entry.getValue().isString() || entry.getValue().asString().isBlank()) {
                         errors.add("bundle.metadata.labels['" + key + "'] must be a non-empty string");
                     } else {
-                        labels.put(key, entry.getValue().asText().trim());
+                        labels.put(key, entry.getValue().asString().trim());
                     }
                 });
             }
@@ -366,11 +366,11 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         Set<String> seen = new LinkedHashSet<>();
         for (int index = 0; index < toolsNode.size(); index++) {
             JsonNode toolNode = toolsNode.get(index);
-            if (!toolNode.isTextual() || toolNode.asText().isBlank()) {
+            if (!toolNode.isString() || toolNode.asString().isBlank()) {
                 errors.add(prefix + "[" + index + "] must be a non-empty string");
                 continue;
             }
-            String tool = toolNode.asText().trim().toLowerCase(Locale.ROOT);
+            String tool = toolNode.asString().trim().toLowerCase(Locale.ROOT);
             if (!seen.add(tool)) {
                 errors.add(prefix + " must not contain duplicate tools");
                 continue;
@@ -396,11 +396,11 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         Set<String> seen = new LinkedHashSet<>();
         for (int index = 0; index < hostsNode.size(); index++) {
             JsonNode hostNode = hostsNode.get(index);
-            if (!hostNode.isTextual() || hostNode.asText().isBlank()) {
+            if (!hostNode.isString() || hostNode.asString().isBlank()) {
                 errors.add(prefix + "[" + index + "] must be a non-empty string");
                 continue;
             }
-            String host = hostNode.asText().trim().toLowerCase(Locale.ROOT);
+            String host = hostNode.asString().trim().toLowerCase(Locale.ROOT);
             if (host.contains("://") || host.contains("/") || host.contains("?") || host.contains("#") || host.contains(":")) {
                 errors.add(prefix + " must use hostnames only, without scheme, path, query, fragment, or port");
                 continue;
@@ -448,11 +448,11 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
             Set<String> seenDays = new LinkedHashSet<>();
             for (int dayIndex = 0; dayIndex < daysNode.size(); dayIndex++) {
                 JsonNode dayNode = daysNode.get(dayIndex);
-                if (!dayNode.isTextual() || dayNode.asText().isBlank()) {
+                if (!dayNode.isString() || dayNode.asString().isBlank()) {
                     errors.add(windowPrefix + ".days[" + dayIndex + "] must be a non-empty string");
                     continue;
                 }
-                String day = dayNode.asText().trim().toLowerCase(Locale.ROOT);
+                String day = dayNode.asString().trim().toLowerCase(Locale.ROOT);
                 if (!DAY_NAMES.contains(day)) {
                     errors.add(windowPrefix + ".days contains invalid value '" + day + "'");
                     continue;
@@ -739,11 +739,11 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
 
     private String requiredText(JsonNode parent, String fieldName, String prefix, List<String> errors) {
         JsonNode value = parent.get(fieldName);
-        if (value == null || value.isNull() || !value.isTextual() || value.asText().isBlank()) {
+        if (value == null || value.isNull() || !value.isString() || value.asString().isBlank()) {
             errors.add(prefix + "." + fieldName + " must be a non-empty string");
             return null;
         }
-        return value.asText().trim();
+        return value.asString().trim();
     }
 
     private String optionalText(JsonNode parent, String fieldName, String prefix, List<String> errors) {
@@ -751,11 +751,11 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         if (value == null || value.isNull()) {
             return null;
         }
-        if (!value.isTextual() || value.asText().isBlank()) {
+        if (!value.isString() || value.asString().isBlank()) {
             errors.add(prefix + "." + fieldName + " must be a non-empty string when present");
             return null;
         }
-        return value.asText().trim();
+        return value.asString().trim();
     }
 
     private LocalTime parseLocalTime(String value, String prefix, List<String> errors) {

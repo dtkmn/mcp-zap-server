@@ -49,6 +49,8 @@ ext {
     set('commonsCompressVersion', "1.28.0")
     set('jackson-bom.version', "3.1.5")
     set('netty.version', '4.2.16.Final')
+    set('postgresql.version', '42.7.12')
+    set('logback.version', '1.5.36')
 }
 
 dependencies {

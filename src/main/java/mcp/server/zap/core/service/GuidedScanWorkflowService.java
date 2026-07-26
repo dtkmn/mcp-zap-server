@@ -12,8 +12,6 @@ import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
-import mcp.server.zap.core.gateway.ScanRunRecord;
-import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
@@ -81,13 +79,11 @@ public class GuidedScanWorkflowService {
     public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "guided crawl");
-        TargetDescriptor target = gatewayRecordFactory.targetFromUrl(normalizedTargetUrl, TargetDescriptor.Kind.WEB);
         PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
         return formatStartedOperation(
                 normalizedTargetUrl,
                 startCrawlOperation(
                         normalizedTargetUrl,
-                        target,
                         normalizeCrawlStrategy(strategy),
                         trimToNull(idempotencyKey),
                         preparedAuthSession
@@ -106,11 +102,10 @@ public class GuidedScanWorkflowService {
     public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "guided attack");
-        TargetDescriptor target = gatewayRecordFactory.targetFromUrl(normalizedTargetUrl, TargetDescriptor.Kind.WEB);
         PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
         return formatStartedOperation(
                 normalizedTargetUrl,
-                startAttackOperation(normalizedTargetUrl, target, recurse, policy, trimToNull(idempotencyKey), preparedAuthSession)
+                startAttackOperation(normalizedTargetUrl, recurse, policy, trimToNull(idempotencyKey), preparedAuthSession)
         );
     }
 
@@ -123,7 +118,6 @@ public class GuidedScanWorkflowService {
     }
 
     private StartedOperation startCrawlOperation(String targetUrl,
-                                                 TargetDescriptor target,
                                                  String requestedStrategy,
                                                  String idempotencyKey,
                                                  PreparedAuthSession preparedAuthSession) {
@@ -161,7 +155,6 @@ public class GuidedScanWorkflowService {
                     GuidedExecutionModeResolver.ExecutionMode.QUEUE,
                     effectiveStrategy,
                     extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
-                    target,
                     delegateResponse,
                     note,
                     preparedAuthSession
@@ -187,7 +180,6 @@ public class GuidedScanWorkflowService {
     }
 
     private StartedOperation startAttackOperation(String targetUrl,
-                                                  TargetDescriptor target,
                                                   String recurse,
                                                   String policy,
                                                   String idempotencyKey,
@@ -209,7 +201,6 @@ public class GuidedScanWorkflowService {
                     GuidedExecutionModeResolver.ExecutionMode.QUEUE,
                     STRATEGY_ACTIVE,
                     extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
-                    target,
                     delegateResponse,
                     preparedAuthSession != null
                             ? "Authenticated guided attack applied the prepared form-login session via ZAP context/user routing."
@@ -232,7 +223,6 @@ public class GuidedScanWorkflowService {
                 executionMode,
                 STRATEGY_ACTIVE,
                 extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
-                target,
                 delegateResponse,
                 preparedAuthSession != null
                         ? "Authenticated guided attack applied the prepared form-login session via ZAP context/user routing."
@@ -248,7 +238,6 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.DIRECT,
                 STRATEGY_HTTP,
                 extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
-                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
                 delegateResponse,
                 null,
                 null
@@ -262,7 +251,6 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.DIRECT,
                 STRATEGY_BROWSER,
                 UUID.randomUUID().toString(),
-                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
                 delegateResponse,
                 note,
                 null
@@ -283,7 +271,6 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.DIRECT,
                 STRATEGY_HTTP,
                 extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
-                gatewayRecordFactory.targetFromUrl(targetUrl, TargetDescriptor.Kind.WEB),
                 delegateResponse,
                 "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.",
                 preparedAuthSession
@@ -296,7 +283,6 @@ public class GuidedScanWorkflowService {
                 GuidedExecutionModeResolver.ExecutionMode.QUEUE,
                 strategy,
                 extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
-                new TargetDescriptor(TargetDescriptor.Kind.WEB, null, "All targets"),
                 delegateResponse,
                 note,
                 null
@@ -307,22 +293,11 @@ public class GuidedScanWorkflowService {
                                               GuidedExecutionModeResolver.ExecutionMode executionMode,
                                               String strategy,
                                               String backendId,
-                                              TargetDescriptor target,
                                               String delegateResponse,
                                               String note,
                                               PreparedAuthSession preparedAuthSession) {
-        ScanRunRecord scanRun = gatewayRecordFactory.scanRun(
-                engineAdapter,
-                backendId,
-                kind.wireValue(),
-                "started",
-                target,
-                formatExecutionMode(executionMode),
-                backendId
-        );
         return new StartedOperation(
                 new GuidedOperation(kind, executionMode, strategy, backendId),
-                scanRun,
                 delegateResponse,
                 note,
                 preparedAuthSession
@@ -758,7 +733,6 @@ public class GuidedScanWorkflowService {
 
     private record StartedOperation(
             GuidedOperation operation,
-            ScanRunRecord scanRun,
             String delegateResponse,
             String note,
             PreparedAuthSession preparedAuthSession

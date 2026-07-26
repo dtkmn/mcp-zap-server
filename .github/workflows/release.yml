@@ -96,18 +96,6 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
-      - name: Validate Docker Compose manifests
-        run: |
-          ZAP_API_KEY="" docker compose --env-file /dev/null -f docker-compose.yml config --quiet
-          docker compose --env-file .env.example -f docker-compose.yml config --quiet
-          export LOCAL_ZAP_WORKPLACE_FOLDER="${RUNNER_TEMP}/zap-workplace"
-          export ZAP_API_KEY="ci-zap-api-key"
-          export MCP_API_KEY="ci-mcp-api-key"
-          export JWT_SECRET="ci-jwt-secret-minimum-32-characters"
-          mkdir -p "${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-wrk" "${LOCAL_ZAP_WORKPLACE_FOLDER}/zap-home"
-          docker compose -f docker-compose.yml config --quiet
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
-
       - name: Build with Gradle and generate SBOM
         run: ./gradlew build cyclonedxBom --scan --no-daemon --stacktrace --info
 

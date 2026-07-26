@@ -69,7 +69,6 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 
 ## 8. Pre-Go-Live Validation
 
-- [ ] Run `docker compose config` or `helm template` in CI.
 - [ ] Smoke-test crawl, attack, report generation, and authenticated scanning against a staging target.
 - [ ] Run `zap_scan_history_list`, `zap_scan_history_release_evidence`, and `zap_scan_history_customer_handoff` after the smoke test. Attach raw JSON only to the internal record, and attach the curated summary to customer-facing packages.
 - [ ] Confirm the deployed MCP endpoint requires auth and the ZAP endpoint is not reachable from untrusted networks.

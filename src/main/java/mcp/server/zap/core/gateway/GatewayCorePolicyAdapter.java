@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import mcp.gateway.core.context.GatewayToolExecutionContext;
-import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.gateway.core.policy.ToolPolicyDecision;
 import mcp.gateway.core.policy.ToolPolicyEvaluationContext;
 import mcp.server.zap.extension.api.policy.PolicyEnforcementDecision;
@@ -23,16 +22,6 @@ public class GatewayCorePolicyAdapter {
             "policyProviderCount",
             "abstainedPolicyProviders"
     );
-
-    public ToolPolicyEvaluationContext evaluationContext(String toolName, String target, String correlationId) {
-        return evaluationContext(GatewayToolExecutionContext.of(
-                null,
-                null,
-                correlationId,
-                McpToolInvocation.fromJsonRpc(McpToolInvocation.METHOD_TOOLS_CALL, toolName),
-                target
-        ));
-    }
 
     public ToolPolicyEvaluationContext evaluationContext(GatewayToolExecutionContext context) {
         return ToolPolicyEvaluationContext.from(context);

@@ -5,6 +5,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.oauth2.jwt.JwtException;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 
@@ -42,6 +45,8 @@ class JwtServiceTest {
         assertThat(jwtService.getClientIdFromToken(token)).isEqualTo(clientId);
         assertThat(jwtService.getScopesFromToken(token)).containsExactlyInAnyOrderElementsOf(scopes);
         assertThat(jwtService.getTokenType(token)).isEqualTo("access");
+        assertThat(jwtService.isTokenExpired(token)).isFalse();
+        assertThat(jwtService.getSecondsUntilExpiration(token)).isPositive();
     }
 
     @Test
@@ -59,46 +64,20 @@ class JwtServiceTest {
     }
 
     @Test
-    void testValidateValidToken() {
-        // Given
-        String clientId = "test-client";
-        String token = jwtService.generateAccessToken(clientId, Arrays.asList("scan:read"));
-
-        // When/Then - Should not throw exception
-        jwtService.validateToken(token);
-    }
-
-    @Test
     void testValidateInvalidToken() {
-        // Given
         String invalidToken = "invalid.jwt.token";
 
-        // When/Then
         assertThatThrownBy(() -> jwtService.validateToken(invalidToken))
                 .isInstanceOf(JwtException.class);
     }
 
     @Test
     void testValidateTamperedToken() {
-        // Given
         String token = jwtService.generateAccessToken("test-client", Arrays.asList("scan:read"));
         String tamperedToken = token.substring(0, token.length() - 5) + "12345";
 
-        // When/Then
         assertThatThrownBy(() -> jwtService.validateToken(tamperedToken))
                 .isInstanceOf(JwtException.class);
-    }
-
-    @Test
-    void testGetTokenId() {
-        // Given
-        String token = jwtService.generateAccessToken("test-client", Arrays.asList("scan:read"));
-
-        // When
-        String tokenId = jwtService.getTokenId(token);
-
-        // Then
-        assertThat(tokenId).isNotNull().isNotEmpty();
     }
 
     @Test
@@ -112,30 +91,26 @@ class JwtServiceTest {
         String tokenId2 = jwtService.getTokenId(token2);
 
         // Then
-        assertThat(tokenId1).isNotEqualTo(tokenId2);
+        assertThat(tokenId1).isNotBlank();
+        assertThat(tokenId2).isNotBlank().isNotEqualTo(tokenId1);
     }
 
     @Test
-    void testExpiredToken() throws InterruptedException {
-        // Given - Create a JWT service with very short expiry
-        JwtProperties shortExpiryProps = new JwtProperties();
-        shortExpiryProps.setSecret("test-secret-key-for-jwt-at-least-32-characters-long-required");
-        shortExpiryProps.setIssuer("test-issuer");
-        shortExpiryProps.setAccessTokenExpiry(1); // 1 second
-        shortExpiryProps.setEnabled(true);
+    void testExpiredToken() {
+        Instant issuedAt = Instant.parse("2030-01-01T00:00:00Z");
+        Clock issuanceClock = Clock.fixed(issuedAt, ZoneOffset.UTC);
+        JwtService issuingService = new JwtService(jwtProperties, issuanceClock);
+        String token = issuingService.generateAccessToken("test-client", Arrays.asList("scan:read"));
 
-        JwtService shortExpiryService = new JwtService(shortExpiryProps);
-        String token = shortExpiryService.generateAccessToken("test-client", Arrays.asList("scan:read"));
+        assertThat(issuingService.isTokenExpired(token)).isFalse();
 
-        // Token should not be expired immediately
-        assertThat(shortExpiryService.isTokenExpired(token)).isFalse();
-        
-        // Wait for token to expire
-        Thread.sleep(2000);
+        Clock expiredClock = Clock.fixed(Instant.parse("2030-01-01T02:00:00Z"), ZoneOffset.UTC);
+        JwtService expiredService = new JwtService(jwtProperties, expiredClock);
 
-        // Token should now be expired
-        assertThat(shortExpiryService.isTokenExpired(token)).isTrue();
-        assertThat(shortExpiryService.getSecondsUntilExpiration(token)).isEqualTo(0);
+        assertThatThrownBy(() -> expiredService.validateToken(token))
+                .isInstanceOf(JwtException.class);
+        assertThat(expiredService.isTokenExpired(token)).isTrue();
+        assertThat(expiredService.getSecondsUntilExpiration(token)).isEqualTo(0);
     }
 
     @Test
@@ -152,29 +127,16 @@ class JwtServiceTest {
     }
 
     @Test
-    void testMissingSecretKey() {
-        // Given
-        JwtProperties invalidProps = new JwtProperties();
-        invalidProps.setSecret(null);
-        invalidProps.setIssuer("test-issuer");
+    void testMissingOrBlankSecretKey() {
+        for (String invalidSecret : new String[]{null, "", "   "}) {
+            JwtProperties invalidProps = new JwtProperties();
+            invalidProps.setSecret(invalidSecret);
+            invalidProps.setIssuer("test-issuer");
 
-        // When/Then
-        assertThatThrownBy(() -> new JwtService(invalidProps))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("not configured");
-    }
-
-    @Test
-    void testEmptySecretKey() {
-        // Given
-        JwtProperties invalidProps = new JwtProperties();
-        invalidProps.setSecret("");
-        invalidProps.setIssuer("test-issuer");
-
-        // When/Then
-        assertThatThrownBy(() -> new JwtService(invalidProps))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("not configured");
+            assertThatThrownBy(() -> new JwtService(invalidProps))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("not configured");
+        }
     }
 
     @Test

@@ -14,16 +14,6 @@ class GatewayCorePolicyAdapterTest {
     private final GatewayCorePolicyAdapter adapter = new GatewayCorePolicyAdapter();
 
     @Test
-    void adaptsRuntimeInputsIntoGatewayCorePolicyContext() {
-        ToolPolicyEvaluationContext context =
-                adapter.evaluationContext(" zap_attack_start ", " https://example.com ", " corr-1 ");
-
-        assertThat(context.toolName()).isEqualTo("zap_attack_start");
-        assertThat(context.target()).isEqualTo("https://example.com");
-        assertThat(context.correlationId()).isEqualTo("corr-1");
-    }
-
-    @Test
     void adaptsGatewayCorePolicyContextIntoExtensionHookContext() {
         ToolExecutionPolicyContext context = adapter.extensionContext(
                 new ToolPolicyEvaluationContext("tool", "target", "corr")

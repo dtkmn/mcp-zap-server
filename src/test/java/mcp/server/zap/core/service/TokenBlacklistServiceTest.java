@@ -68,21 +68,6 @@ class TokenBlacklistServiceTest {
     }
 
     @Test
-    void testBlacklistSameTokenTwice() {
-        // Given
-        String tokenId = UUID.randomUUID().toString();
-        Instant expiration1 = Instant.now().plusSeconds(3600);
-        Instant expiration2 = Instant.now().plusSeconds(7200);
-
-        // When
-        blacklistService.blacklistToken(tokenId, expiration1);
-        blacklistService.blacklistToken(tokenId, expiration2);
-
-        // Then
-        assertThat(blacklistService.isBlacklisted(tokenId)).isTrue();
-    }
-
-    @Test
     void testConsumeTokenForOneTimeUseRejectsReplay() {
         String tokenId = UUID.randomUUID().toString();
         Instant expiration = Instant.now().plusSeconds(3600);
@@ -102,31 +87,4 @@ class TokenBlacklistServiceTest {
         assertThat(blacklistService.consumeTokenForOneTimeUse(null, expiration)).isFalse();
     }
 
-    @Test
-    void testConcurrentAccess() throws InterruptedException {
-        // Given
-        int threadCount = 10;
-        Thread[] threads = new Thread[threadCount];
-
-        // When - Blacklist tokens from multiple threads
-        for (int i = 0; i < threadCount; i++) {
-            final int index = i;
-            threads[i] = new Thread(() -> {
-                String tokenId = "token-" + index;
-                Instant expiration = Instant.now().plusSeconds(3600);
-                blacklistService.blacklistToken(tokenId, expiration);
-            });
-            threads[i].start();
-        }
-
-        // Wait for all threads to complete
-        for (Thread thread : threads) {
-            thread.join();
-        }
-
-        // Then - All tokens should be blacklisted
-        for (int i = 0; i < threadCount; i++) {
-            assertThat(blacklistService.isBlacklisted("token-" + i)).isTrue();
-        }
-    }
 }

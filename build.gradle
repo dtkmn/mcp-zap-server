@@ -248,8 +248,6 @@ tasks.register('verifyPublicPreviewExtensionApiPublication') {
 tasks.named('test') {
     inputs.file('.github/workflows/release.yml')
     inputs.files(
-            fileTree('src/main/resources/db/migration') { include '*.sql' },
-            fileTree('helm/mcp-zap-server/files/db/migration') { include '*.sql' },
             fileTree('examples/policy-bundles') { include '*.json' }
     )
     useJUnitPlatform {

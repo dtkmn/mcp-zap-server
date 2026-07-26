@@ -1,7 +1,7 @@
 package mcp.server.zap.core.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import mcp.gateway.core.url.UrlScope;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineFindingAccess;
@@ -196,7 +196,7 @@ public class FindingsService {
         FindingsSnapshot snapshot = buildSnapshot(baseUrl);
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(snapshot);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             log.error("Error serializing findings snapshot for base URL {}: {}", baseUrl, e.getMessage(), e);
             throw new ZapApiException("Error serializing findings snapshot", e);
         }
@@ -446,7 +446,7 @@ public class FindingsService {
                 throw new IllegalArgumentException("Baseline snapshot is missing fingerprints");
             }
             return snapshot;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("baselineSnapshot must be valid JSON exported by zap_findings_snapshot", e);
         }
     }

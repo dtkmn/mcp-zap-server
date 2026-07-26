@@ -1,7 +1,7 @@
 package mcp.server.zap.core.history;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +30,7 @@ class ScanHistoryLedgerServiceTest {
     void setUp() {
         RequestIdentityHolder.set("client-a", "client-a");
         scanJobStore = new InMemoryScanJobStore();
-        objectMapper = new ObjectMapper().findAndRegisterModules();
+        objectMapper = new ObjectMapper().rebuild().findAndAddModules().build();
         ScanHistoryLedgerProperties properties = new ScanHistoryLedgerProperties();
         properties.setMaxListEntries(10);
         properties.setMaxExportEntries(10);
@@ -106,7 +106,7 @@ class ScanHistoryLedgerServiceTest {
                 .contains("/zap/wrk/zap-report-77.json");
         assertThat(root.path("version").asInt()).isEqualTo(1);
         assertThat(root.path("entryCount").asInt()).isEqualTo(2);
-        assertThat(root.path("entries").findValuesAsText("evidenceType"))
+        assertThat(root.path("entries").findValuesAsString("evidenceType"))
                 .contains("scan_run", "report_artifact");
     }
 
@@ -261,7 +261,7 @@ class ScanHistoryLedgerServiceTest {
         assertThat(root.path("summary").path("hasScanEvidence").asBoolean()).isTrue();
         assertThat(root.path("summary").path("hasReportArtifact").asBoolean()).isTrue();
         assertThat(root.path("summary").path("nonTerminalScanJobs").asInt()).isEqualTo(1);
-        assertThat(root.path("entries").findValuesAsText("id"))
+        assertThat(root.path("entries").findValuesAsString("id"))
                 .contains("job:job-release-running");
         assertThat(root.path("warnings").toString())
                 .contains("not terminal")

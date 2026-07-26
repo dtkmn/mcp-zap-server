@@ -1,6 +1,6 @@
 package mcp.server.zap.core.service.policy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.stream.Stream;

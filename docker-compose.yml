@@ -58,7 +58,7 @@ services:
   mcp-server:
     build:
       context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}  # Use Dockerfile.native for native image
+      dockerfile: ${DOCKERFILE:-Dockerfile}
     image: dtkmn/mcp-zap-server:${IMAGE_TAG:-latest}
     restart: always
     depends_on:

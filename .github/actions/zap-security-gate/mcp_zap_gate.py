@@ -24,12 +24,6 @@ OPERATION_ID_PATTERN = re.compile(r"^Operation ID:\s*(.+)$", re.MULTILINE)
 REPORT_PATH_PATTERN = re.compile(r"^Path:\s*(.+)$", re.MULTILINE)
 COMPLETED_PATTERN = re.compile(r"^Completed:\s*(yes|no)$", re.MULTILINE | re.IGNORECASE)
 PROGRESS_PATTERN = re.compile(r"^Progress:\s*(\d+)%$", re.MULTILINE)
-COUNT_PATTERNS = {
-    "new": re.compile(r"^New Findings:\s*(\d+)$", re.MULTILINE),
-    "resolved": re.compile(r"^Resolved Findings:\s*(\d+)$", re.MULTILINE),
-    "unchanged": re.compile(r"^Unchanged Findings:\s*(\d+)$", re.MULTILINE),
-}
-
 CI_GATE_RESULT_CONTRACT_VERSION = "ci_gate_result/v1"
 CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v1"
 CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION = "ci_gate_findings_diff/v1"
@@ -148,14 +142,6 @@ def parse_completed(text: str) -> bool:
         return match.group(1).strip().lower() == "yes"
     progress = PROGRESS_PATTERN.search(text)
     return bool(progress and int(progress.group(1)) >= 100)
-
-
-def parse_count(text: str, kind: str) -> int | None:
-    pattern = COUNT_PATTERNS[kind]
-    match = pattern.search(text)
-    if not match:
-        return None
-    return int(match.group(1))
 
 
 def parse_report_path(text: str) -> str:

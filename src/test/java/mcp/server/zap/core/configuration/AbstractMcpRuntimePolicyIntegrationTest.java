@@ -1,6 +1,6 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.Map;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;

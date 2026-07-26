@@ -17,7 +17,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class AutomationPlanServiceTest {
+class AutomationPlanServiceTest {
     private EngineAutomationAccess automationAccess;
     private AutomationPlanService service;
     private Path automationRoot;
@@ -78,7 +78,7 @@ public class AutomationPlanServiceTest {
     }
 
     @Test
-    void getAutomationPlanStatusFormatsProgressState() throws Exception {
+    void getAutomationPlanStatusFormatsProgressState() {
         when(automationAccess.loadAutomationPlanProgress("11")).thenReturn(new AutomationPlanProgress(
                 "2026-03-14T09:00:00Z",
                 null,

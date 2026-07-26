@@ -157,11 +157,10 @@ docker compose \
   up -d --build --force-recreate --wait --wait-timeout 180 mcp-server
 ```
 
-This migration recipe uses the JVM image built by `Dockerfile`; do not add
-`docker-compose.prod.yml`. The native build is not a supported migration path in
-this revision because `nativeCompile` is not configured and its build inputs are
-incomplete. Recreate `mcp-server` after secret-only rotation. The secret target
-must be readable, and the `/zap/wrk` bind mount writable, by runtime UID/GID 1000.
+This migration recipe uses the supported JVM image built by `Dockerfile`.
+Native-image builds are not supported in this revision. Recreate `mcp-server`
+after secret-only rotation. The secret target must be readable, and the
+`/zap/wrk` bind mount writable, by runtime UID/GID 1000.
 
 ### Helm
 
@@ -243,7 +242,7 @@ set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
 MCP_ZAP_IMAGE_TAG=sha-REPLACE_WITH_FULL_MAIN_COMMIT_SHA
 [[ "$MCP_ZAP_IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the immutable full-SHA image tag from main CI" >&2
+  echo "MCP_ZAP_IMAGE_TAG must be the pinned full-SHA image tag from main CI" >&2
   exit 1
 }
 

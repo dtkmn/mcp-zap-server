@@ -1,7 +1,7 @@
 package mcp.server.zap.core.history;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -99,9 +99,10 @@ public class ScanHistoryLedgerService {
         this.clientWorkspaceResolver = clientWorkspaceResolver;
         this.gatewayRecordFactory = gatewayRecordFactory;
         this.objectMapper = (objectMapper == null ? new ObjectMapper() : objectMapper)
-                .copy()
-                .findAndRegisterModules()
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+                .rebuild()
+                .findAndAddModules()
+                .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .build();
         this.evidenceMetadataEnrichers = evidenceMetadataEnrichers == null
                 ? List.of()
                 : evidenceMetadataEnrichers.stream()

@@ -1,5 +1,6 @@
 package mcp.server.zap.core.gateway;
 
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -55,7 +56,8 @@ public class GatewayCoreAuditAdapter {
         Map<String, Object> payload = new LinkedHashMap<>();
         Map<String, Object> reservedDetails = new LinkedHashMap<>();
         Object existingExtensionDetails = null;
-        for (Map.Entry<String, Object> entry : details.entrySet()) {
+        for (Iterator<Map.Entry<String, Object>> iterator = details.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<String, Object> entry = iterator.next();
             String key = entry.getKey();
             Object value = entry.getValue();
             if (key == null || value == null) {

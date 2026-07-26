@@ -1,8 +1,8 @@
 package mcp.server.zap.core.history;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.DateTimeFeature;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.gateway.TargetDescriptor;
@@ -32,9 +32,10 @@ public class PostgresScanHistoryStore implements ScanHistoryStore {
 
     public PostgresScanHistoryStore(ScanHistoryLedgerProperties.Postgres properties, ObjectMapper objectMapper) {
         this.properties = properties;
-        this.objectMapper = objectMapper.copy()
-                .findAndRegisterModules()
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = objectMapper.rebuild()
+                .findAndAddModules()
+                .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .build();
         this.tableName = validateTableName(properties.getTableName());
     }
 

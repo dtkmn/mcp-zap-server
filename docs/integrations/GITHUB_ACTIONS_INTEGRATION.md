@@ -234,8 +234,8 @@ Only add `seed-requests-file` after replacing the example app with a service
 that actually serves the seeded endpoint. The bundled example seed file is an
 API shape example, not a valid request for the default nginx app.
 
-Replace `<release-tag>` with a real release tag or digest. The action rejects
-the placeholder before it starts Docker so pilot failures stay obvious.
+Replace `<release-tag>` with a pinned release tag or sha256 digest. The action
+rejects the placeholder before it starts Docker so pilot failures stay obvious.
 
 Use `baseline-mode: seed` for the first evidence run. Use
 `baseline-mode: enforce` only after the baseline exists and has been reviewed.
@@ -294,7 +294,9 @@ Important action inputs:
 - `suppressions-file`: optional suppression contract file for temporary accepted exceptions
 - `scan-policy`: optional ZAP active-scan policy name
 - `compose-override-file`: caller-owned compose file for an app-under-test service
-- `mcp-server-image`: when `start-stack=true`, set this to an immutable MCP server image tag or digest. Bare refs and mutable channel tags such as `latest`, `dev`, and `main` are rejected.
+- `mcp-server-image`: when `start-stack=true`, set this to a pinned MCP server
+  release tag or sha256 digest. Bare refs, malformed digests, and mutable channel
+  tags such as `latest`, `dev`, and `main` are rejected.
 
 ## Outputs
 

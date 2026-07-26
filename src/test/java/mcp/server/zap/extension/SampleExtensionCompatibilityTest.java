@@ -1,4 +1,4 @@
-package mcp.server.zap.architecture;
+package mcp.server.zap.extension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.core.service.policy.PolicyDryRunService;
 import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
@@ -22,7 +22,7 @@ import org.springframework.boot.context.annotation.ImportCandidates;
 import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
-class SampleExtensionCompatibilityArchitectureTest {
+class SampleExtensionCompatibilityTest {
 
     private static final Path BUILD_GRADLE = Path.of("build.gradle");
     private static final Path STANDALONE_SAMPLE_LIBS =
@@ -138,10 +138,10 @@ class SampleExtensionCompatibilityArchitectureTest {
         }
     }
 
-    private String standalonePolicyBundle() throws IOException {
+    private String standalonePolicyBundle() {
         return """
                 {
-                  "apiVersion": "%s",
+                  "apiVersion": "mcp.zap.policy/v1",
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "standalone-extension-proof",
@@ -170,15 +170,7 @@ class SampleExtensionCompatibilityArchitectureTest {
                     ]
                   }
                 }
-                """.formatted(policyBundleApiVersion());
-    }
-
-    private String policyBundleApiVersion() throws IOException {
-        return Files.readAllLines(Path.of("src/main/java/mcp/server/zap/core/service/policy/PolicyDryRunService.java")).stream()
-                .filter(line -> line.contains("policy/v1") && line.contains(".equals(apiVersion)"))
-                .map(line -> line.substring(line.indexOf('"') + 1, line.lastIndexOf('"')))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Could not resolve policy bundle API version"));
+                """;
     }
 
     private Map<String, Object> enrichBundleSummaryThroughAutoConfiguration(

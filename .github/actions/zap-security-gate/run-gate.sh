@@ -54,35 +54,39 @@ ensure_writable_workspace_dirs() {
   done
 }
 
-ensure_immutable_image_ref() {
+ensure_pinned_image_ref() {
   local ref="$1"
   local label="$2"
   local image_name tag
 
   if [[ -z "$ref" ]]; then
-    echo "${label} must be set to an immutable image tag or digest." >&2
+    echo "${label} must be set to a pinned release tag or sha256 digest." >&2
     exit 1
   fi
 
   if [[ "$ref" == *"<"* || "$ref" == *">"* || "$ref" == *"release-tag"* ]]; then
-    echo "${label} still contains placeholder text (${ref}). Replace <release-tag> with a real release tag or digest." >&2
+    echo "${label} still contains placeholder text (${ref}). Replace <release-tag> with a pinned release tag or sha256 digest." >&2
     exit 1
   fi
 
-  if [[ "$ref" == *@sha256:* ]]; then
-    return 0
+  if [[ "$ref" == *@* ]]; then
+    if [[ "$ref" =~ ^[^@[:space:]]+@sha256:[0-9a-fA-F]{64}$ ]]; then
+      return 0
+    fi
+    echo "${label} digest must use @sha256: followed by exactly 64 hexadecimal characters." >&2
+    exit 1
   fi
 
   image_name="${ref##*/}"
   if [[ "$image_name" != *:* ]]; then
-    echo "${label} must include an explicit release tag or digest. Bare image refs are not allowed." >&2
+    echo "${label} must include a pinned release tag or sha256 digest. Bare image refs are not allowed." >&2
     exit 1
   fi
 
   tag="${image_name##*:}"
   case "$tag" in
     latest|dev|main|nightly|edge|canary)
-      echo "${label} must not use the mutable :${tag} tag. Use a release tag or digest instead." >&2
+      echo "${label} must not use the mutable :${tag} tag. Use a pinned release tag or sha256 digest instead." >&2
       exit 1
       ;;
   esac
@@ -99,6 +103,10 @@ case "${baseline_mode}" in
     exit 1
     ;;
 esac
+
+if [[ "${start_stack}" == "true" ]]; then
+  ensure_pinned_image_ref "${INPUT_MCP_SERVER_IMAGE:-}" "mcp-server-image"
+fi
 
 local_workspace_folder="$(resolve_path "${INPUT_LOCAL_ZAP_WORKSPACE_FOLDER:-.zap-work}")"
 output_dir="$(resolve_path "${INPUT_OUTPUT_DIR:-zap-artifacts}")"
@@ -175,8 +183,6 @@ wait_for_health() {
 }
 
 if [[ "${start_stack}" == "true" ]]; then
-  ensure_immutable_image_ref "${MCP_SERVER_IMAGE}" "mcp-server-image"
-
   trap cleanup EXIT
 
   read -r -a compose_services <<< "${INPUT_COMPOSE_SERVICES:-zap mcp-server}"

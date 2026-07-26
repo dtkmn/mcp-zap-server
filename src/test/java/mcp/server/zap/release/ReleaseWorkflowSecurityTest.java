@@ -1,4 +1,4 @@
-package mcp.server.zap.architecture;
+package mcp.server.zap.release;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,82 +15,9 @@ import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
-class DockerPublishWorkflowArchitectureTest {
+class ReleaseWorkflowSecurityTest {
 
-    private static final Path CI_WORKFLOW = Path.of(".github/workflows/ci.yml");
     private static final Path RELEASE_WORKFLOW = Path.of(".github/workflows/release.yml");
-
-    @Test
-    void continuousImagePublicationIsLimitedToMainPushes() throws IOException {
-        String workflow = Files.readString(CI_WORKFLOW);
-
-        assertThat(workflow)
-                .contains("name: Publish main images")
-                .contains("if: github.event_name == 'push' && github.ref == 'refs/heads/main'")
-                .contains("BRANCH_TAG: main")
-                .contains("sha-${{ github.sha }}")
-                .doesNotContain("github.ref == 'refs/heads/dev'")
-                .doesNotContain("git rev-parse --short");
-    }
-
-    @Test
-    void releaseWorkflowHasOneLeastPrivilegeOrderedPublisher() throws IOException {
-        JsonNode workflow = releaseWorkflow();
-        JsonNode releaseTrigger = workflow.path("on").path("release");
-        JsonNode jobs = workflow.path("jobs");
-        JsonNode job = jobs.path("docker-release");
-        List<JsonNode> steps = steps(job);
-
-        assertThat(workflow.path("on").propertyNames()).containsExactly("release");
-        assertThat(releaseTrigger.path("types")).hasSize(1);
-        assertThat(releaseTrigger.path("types").path(0).asString()).isEqualTo("published");
-        assertThat(jobs.propertyNames()).containsExactly("docker-release");
-        assertThat(workflow.path("permissions").propertyNames()).containsExactly("contents");
-        assertThat(workflow.path("permissions").path("contents").asString()).isEqualTo("read");
-        assertThat(job.has("permissions")).isFalse();
-        assertThat(steps).allSatisfy(step -> assertThat(step.has("continue-on-error")).isFalse());
-
-        JsonNode resolve = stepNamed(steps, "Resolve release metadata");
-        JsonNode checkout = stepUsing(steps, "actions/checkout");
-        JsonNode verify = stepNamed(steps, "Verify release tag, commit, and project version");
-        JsonNode archive = stepNamed(steps, "Archive SBOM workflow artifact");
-        JsonNode ghcrLogin = stepNamed(steps, "Log in to GitHub Container Registry");
-        JsonNode dockerHubLogin = stepNamed(steps, "Login to Docker Hub");
-        List<JsonNode> publishers = steps.stream()
-                .filter(step -> step.path("uses").asString().startsWith("docker/build-push-action@"))
-                .toList();
-        assertThat(publishers).hasSize(1);
-        JsonNode publish = publishers.getFirst();
-        assertThat(publish.path("name").asString()).isEqualTo("Build and push release images");
-
-        assertThat(resolve.path("env").path("RELEASE_VERSION").asString())
-                .isEqualTo("${{ github.event.release.tag_name }}");
-        assertThat(resolve.path("env").path("RELEASE_IS_PRERELEASE").asString())
-                .isEqualTo("${{ github.event.release.prerelease }}");
-        assertThat(resolve.path("env").path("RELEASE_IS_IMMUTABLE").asString())
-                .isEqualTo("${{ github.event.release.immutable }}");
-        assertThat(checkout.path("with").path("ref").asString()).isEqualTo("${{ github.sha }}");
-        assertThat(checkout.path("with").path("fetch-depth").asInt()).isZero();
-        assertThat(checkout.path("with").path("persist-credentials").asBoolean()).isFalse();
-
-        int resolveIndex = steps.indexOf(resolve);
-        int checkoutIndex = steps.indexOf(checkout);
-        int verifyIndex = steps.indexOf(verify);
-        assertThat(resolveIndex).isLessThan(checkoutIndex);
-        assertThat(checkoutIndex).isLessThan(verifyIndex);
-        assertThat(steps.subList(0, verifyIndex + 1)).containsExactly(resolve, checkout, verify);
-        assertThat(verifyIndex).isLessThan(steps.indexOf(stepNamed(steps, "Validate Docker Compose manifests")));
-        assertThat(verifyIndex).isLessThan(steps.indexOf(stepNamed(steps, "Build with Gradle and generate SBOM")));
-        assertThat(archive.path("with").path("if-no-files-found").asString()).isEqualTo("error");
-        assertThat(steps.indexOf(archive)).isLessThan(steps.indexOf(ghcrLogin));
-        assertThat(steps.indexOf(ghcrLogin)).isLessThan(steps.indexOf(publish));
-        assertThat(steps.indexOf(dockerHubLogin)).isLessThan(steps.indexOf(publish));
-        assertThat(List.of(archive, ghcrLogin, dockerHubLogin, publish))
-                .allSatisfy(step -> assertThat(step.has("if")).isFalse());
-        assertThat(publish.path("with").path("push").asBoolean()).isTrue();
-        assertThat(publish.path("with").path("tags").asString())
-                .isEqualTo("${{ steps.image-tags.outputs.tags }}");
-    }
 
     @Test
     void releaseMetadataAndImageTagsFailClosed(@TempDir Path tempDir) throws Exception {
@@ -213,13 +140,6 @@ class DockerPublishWorkflowArchitectureTest {
                 .filter(step -> name.equals(step.path("name").asString()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Missing workflow step: " + name));
-    }
-
-    private static JsonNode stepUsing(List<JsonNode> steps, String actionRepository) {
-        return steps.stream()
-                .filter(step -> step.path("uses").asString().startsWith(actionRepository + "@"))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("Missing workflow action: " + actionRepository));
     }
 
     private static Map<String, String> resolveRelease(

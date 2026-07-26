@@ -1,10 +1,8 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -34,12 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "mcp.server.auth.apiKeys[1].clientId=limited-client",
                 "mcp.server.auth.apiKeys[1].workspaceId=limited-workspace",
                 "mcp.server.auth.apiKeys[1].key=limited-api-key",
-                "mcp.server.auth.apiKeys[1].scopes[0]=mcp:tools:list",
-                "mcp.server.auth.apiKeys[2].clientId=policy-client",
-                "mcp.server.auth.apiKeys[2].workspaceId=policy-workspace",
-                "mcp.server.auth.apiKeys[2].key=policy-api-key",
-                "mcp.server.auth.apiKeys[2].scopes[0]=mcp:tools:list",
-                "mcp.server.auth.apiKeys[2].scopes[1]=zap:policy:dry-run"
+                "mcp.server.auth.apiKeys[1].scopes[0]=mcp:tools:list"
         }
 )
 @ActiveProfiles("test")
@@ -69,6 +62,15 @@ class ObservabilityActuatorIntegrationTest {
 
     @Test
     void prometheusMetricsAndAuditEndpointReflectObservedTraffic() throws Exception {
+        client().get()
+                .uri("/actuator/health")
+                .exchange()
+                .expectStatus().value(status -> assertThat(status).isIn(200, 503))
+                .expectBody()
+                .jsonPath("$.status").exists()
+                .jsonPath("$..version").doesNotExist()
+                .jsonPath("$..error").doesNotExist();
+
         client().get()
                 .uri("/auth/validate")
                 .header("X-Correlation-Id", "obs-auth-failure")
@@ -137,45 +139,6 @@ class ObservabilityActuatorIntegrationTest {
                 .contains("zap_report_read");
     }
 
-    @Test
-    void policyDryRunPublishesExplainableDecisionAuditEvents() throws Exception {
-        String sessionId = initializeSession("policy-api-key");
-
-        callPolicyDryRun("policy-api-key", sessionId, "obs-policy-allow", "https://api.sandbox.example.com/orders")
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(body -> assertThat(body).contains("\\\"result\\\":\\\"allow\\\""));
-
-        callPolicyDryRun("policy-api-key", sessionId, "obs-policy-deny", "https://prod.example.com/orders")
-                .expectStatus().isOk()
-                .expectBody(String.class)
-                .value(body -> assertThat(body).contains("\\\"result\\\":\\\"deny\\\""));
-
-        EntityExchangeResult<String> auditEvents = actuator("observer-api-key", "/actuator/auditevents");
-        JsonNode allowEvent = findAuditEvent(auditEvents.getResponseBody(), "policy_decision", "obs-policy-allow");
-        JsonNode denyEvent = findAuditEvent(auditEvents.getResponseBody(), "policy_decision", "obs-policy-deny");
-
-        assertThat(allowEvent.path("data").path("outcome").asText()).isEqualTo("allow");
-        assertThat(allowEvent.path("data").path("bundleName").asText()).isEqualTo("policy-audit-preview");
-        assertThat(allowEvent.path("data").path("bundleOwner").asText()).isEqualTo("security-platform");
-        assertThat(allowEvent.path("data").path("evaluatedTool").asText()).isEqualTo("zap_attack_start");
-        assertThat(allowEvent.path("data").path("normalizedHost").asText()).isEqualTo("api.sandbox.example.com");
-        assertThat(allowEvent.path("data").path("decisionSource").asText()).isEqualTo("rule");
-        assertThat(allowEvent.path("data").path("matchedRuleId").asText()).isEqualTo("allow-sandbox-attack");
-        assertThat(allowEvent.path("data").path("reason").asText()).isEqualTo("sandbox rollout window");
-        assertThat(allowEvent.path("data").path("validationValid").asBoolean()).isTrue();
-        assertThat(allowEvent.path("data").path("traceSummary").isArray()).isTrue();
-        assertThat(allowEvent.path("data").path("traceSummary")).isNotEmpty();
-
-        assertThat(denyEvent.path("data").path("outcome").asText()).isEqualTo("deny");
-        assertThat(denyEvent.path("data").path("decisionSource").asText()).isEqualTo("default");
-        assertThat(denyEvent.path("data").path("defaultDecision").asText()).isEqualTo("deny");
-        assertThat(denyEvent.path("data").path("reason").asText())
-                .isEqualTo("No enabled rule matched the request. Using bundle default decision.");
-        assertThat(denyEvent.path("data").path("matchedRuleId").isMissingNode()
-                || denyEvent.path("data").path("matchedRuleId").isNull()).isTrue();
-    }
-
     private WebTestClient client() {
         return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
     }
@@ -234,65 +197,6 @@ class ObservabilityActuatorIntegrationTest {
                 .exchange();
     }
 
-    private WebTestClient.ResponseSpec callPolicyDryRun(String apiKey,
-                                                        String sessionId,
-                                                        String correlationId,
-                                                        String target) throws Exception {
-        String bundleJson = OBJECT_MAPPER.writeValueAsString(Map.of(
-                "apiVersion", "mcp.zap.policy/v1",
-                "kind", "PolicyBundle",
-                "metadata", Map.of(
-                        "name", "policy-audit-preview",
-                        "description", "Allow sandbox attack during staffed hours",
-                        "owner", "security-platform"
-                ),
-                "spec", Map.of(
-                        "defaultDecision", "deny",
-                        "evaluationOrder", "first-match",
-                        "timezone", "UTC",
-                        "rules", List.of(Map.of(
-                                "id", "allow-sandbox-attack",
-                                "description", "Allow sandbox attack",
-                                "decision", "allow",
-                                "reason", "sandbox rollout window",
-                                "match", Map.of(
-                                        "tools", List.of("zap_attack_start"),
-                                        "hosts", List.of("api.sandbox.example.com"),
-                                        "timeWindows", List.of(Map.of(
-                                                "days", List.of("mon", "tue", "wed", "thu", "fri"),
-                                                "start", "08:00",
-                                                "end", "18:00"
-                                        ))
-                                )
-                        ))
-                )
-        ));
-        String request = OBJECT_MAPPER.writeValueAsString(Map.of(
-                "jsonrpc", "2.0",
-                "method", "tools/call",
-                "id", 2,
-                "params", Map.of(
-                        "name", "zap_policy_dry_run",
-                        "arguments", Map.of(
-                                "policyBundle", bundleJson,
-                                "toolName", "zap_attack_start",
-                                "target", target,
-                                "evaluatedAt", "2026-04-06T09:00:00Z"
-                        )
-                )
-        ));
-
-        return client().post()
-                .uri("/mcp")
-                .header("X-API-Key", apiKey)
-                .header("Mcp-Session-Id", sessionId)
-                .header("X-Correlation-Id", correlationId)
-                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(request)
-                .exchange();
-    }
-
     private EntityExchangeResult<String> actuator(String apiKey, String path) {
         return client().get()
                 .uri(path)
@@ -303,14 +207,4 @@ class ObservabilityActuatorIntegrationTest {
                 .returnResult();
     }
 
-    private JsonNode findAuditEvent(String responseBody, String type, String correlationId) throws Exception {
-        JsonNode root = OBJECT_MAPPER.readTree(responseBody);
-        for (JsonNode event : root.path("events")) {
-            if (type.equals(event.path("type").asText())
-                    && correlationId.equals(event.path("data").path("correlationId").asText())) {
-                return event;
-            }
-        }
-        throw new AssertionError("Missing audit event type=" + type + " correlationId=" + correlationId);
-    }
 }

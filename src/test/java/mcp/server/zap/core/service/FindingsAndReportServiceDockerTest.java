@@ -37,7 +37,7 @@ import static org.mockito.Mockito.when;
 
 @Tag("docker")
 @Testcontainers
-public class FindingsAndReportServiceDockerTest {
+class FindingsAndReportServiceDockerTest {
     private static final Network NETWORK = Network.newNetwork();
     private static final Path REPORT_DIR = createReportDirectory();
 

@@ -249,7 +249,7 @@ public class AutomationPlanServiceDockerTest {
                     PosixFilePermission.OTHERS_WRITE,
                     PosixFilePermission.OTHERS_EXECUTE
             ));
-        } catch (UnsupportedOperationException ignored) {
+        } catch (UnsupportedOperationException _) {
             boolean readable = directory.toFile().setReadable(true, false);
             boolean writable = directory.toFile().setWritable(true, false);
             boolean executable = directory.toFile().setExecutable(true, false);

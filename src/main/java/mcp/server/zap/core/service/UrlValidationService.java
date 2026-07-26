@@ -378,15 +378,4 @@ public class UrlValidationService {
         return normalized;
     }
 
-    /**
-     * Get validation configuration summary for logging/debugging.
-     */
-    public String getConfigurationSummary() {
-        return String.format(
-            "URL Validation Config: allowLocalhost=%s, allowPrivateNetworks=%s, whitelist=%s, blacklist=%s",
-            allowLocalhost, allowPrivateNetworks, 
-            whitelist.isEmpty() ? "[]" : whitelist,
-            blacklist.isEmpty() ? "[]" : blacklist
-        );
-    }
 }

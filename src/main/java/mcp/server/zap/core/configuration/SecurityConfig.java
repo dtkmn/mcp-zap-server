@@ -7,7 +7,7 @@ import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.protection.AuthEndpointRateLimiter;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;

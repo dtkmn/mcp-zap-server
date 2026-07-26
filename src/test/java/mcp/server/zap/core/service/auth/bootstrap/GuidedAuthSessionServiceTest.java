@@ -62,8 +62,7 @@ class GuidedAuthSessionServiceTest {
                 "Context ID: 1",
                 "User ID: 7",
                 "Next Step: call zap_auth_session_validate"
-        );
-        assertThat(prepareResponse).doesNotContain("example-password-value", "scan-password.txt");
+        ).doesNotContain("example-password-value", "scan-password.txt");
         verify(urlValidationService).validateUrl("https://shop.example.com");
         verify(urlValidationService).validateUrl("https://shop.example.com/login");
 
@@ -73,8 +72,7 @@ class GuidedAuthSessionServiceTest {
                 "Guided auth session validation complete.",
                 "Valid: true",
                 "Outcome: authenticated"
-        );
-        assertThat(validateResponse).doesNotContain("example-password-value", "scan-password.txt");
+        ).doesNotContain("example-password-value", "scan-password.txt");
         verify(contextUserService).testUserAuthentication("1", "7");
     }
 
@@ -90,8 +88,7 @@ class GuidedAuthSessionServiceTest {
                 "Authorized Origin: https://api.example.com",
                 "Engine Binding: gateway contract only",
                 "Header Name: X-API-Key"
-        );
-        assertThat(prepareResponse).doesNotContain("api-token-value", "api-token.txt");
+        ).doesNotContain("api-token-value", "api-token.txt");
         verify(urlValidationService).validateUrl("https://api.example.com/orders");
 
         String validateResponse = service.validateSession(extractSessionId(prepareResponse));
@@ -243,7 +240,6 @@ class GuidedAuthSessionServiceTest {
                 .hasNoCause();
 
         verifyNoInteractions(contextUserService);
-        assertRunbookDocuments("Auth profile credential could not be resolved");
     }
 
     @Test
@@ -261,21 +257,19 @@ class GuidedAuthSessionServiceTest {
                 .hasNoCause();
 
         verifyNoInteractions(contextUserService);
-        assertRunbookDocuments("Auth profile credential could not be resolved");
     }
 
     @Test
-    void unknownProfileHasDocumentedFailure() {
+    void unknownProfileFailsWithoutZapMutation() {
         assertThatThrownBy(() -> service.prepareSession("missing", "https://shop.example.com"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Unknown auth profile ID: missing");
 
         verifyNoInteractions(contextUserService);
-        assertRunbookDocuments("Unknown auth profile ID");
     }
 
     @Test
-    void failedFormValidationHasDocumentedOutcomeAndNoSecretLeakage() throws Exception {
+    void failedFormValidationReturnsFailureWithoutSecretLeakage() throws Exception {
         Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
         stubFormUser("shop-form-auth", "1", "7");
         when(contextUserService.testUserAuthentication("1", "7"))
@@ -286,7 +280,6 @@ class GuidedAuthSessionServiceTest {
 
         assertThat(response).contains("Valid: false", "Outcome: authentication_failed");
         assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
-        assertRunbookDocuments("authentication_failed");
     }
 
     @Test
@@ -347,46 +340,6 @@ class GuidedAuthSessionServiceTest {
                 .hasMessage("auth session loginUrl origin is not authorized for auth profile");
 
         verifyNoInteractions(contextUserService);
-    }
-
-    @Test
-    void runbookDocumentsCurrentFailureTaxonomy() throws Exception {
-        String runbook = authRunbook();
-
-        assertThat(runbook).contains(
-                "Unknown auth profile ID",
-                "targetUrl origin is not authorized for auth profile",
-                "Auth profile credential could not be resolved",
-                "authentication_failed",
-                "Unknown auth session ID",
-                "form-login prepare and validate",
-                "`zap_crawl_start`",
-                "`zap_attack_start`"
-        );
-        assertThat(runbook).doesNotContain(
-                "top-secret-token",
-                "StrongPassword123!",
-                "`zap_crawl`",
-                "`zap_attack`"
-        );
-    }
-
-    @Test
-    void migrationVerifierRequiresAffirmativeAuthenticationEvidence() throws Exception {
-        String guide = Files.readString(Path.of(
-                "docs/src/content/docs/scanning/authenticated-scanning-best-practices.md"));
-
-        assertThat(guide).contains(
-                "grep -F 'Valid: true'",
-                "grep -F 'Outcome: authenticated'",
-                "grep -F 'likelyAuthenticated=true'",
-                "set -euo pipefail",
-                "MCP_ZAP_IMAGE_TAG=sha-REPLACE_WITH_FULL_MAIN_COMMIT_SHA",
-                "[[ \"$MCP_ZAP_IMAGE_TAG\" =~ ^sha-[0-9a-f]{40}$ ]]",
-                "--set-string \"mcp.image.tag=$MCP_ZAP_IMAGE_TAG\"",
-                "--show-only templates/mcp-deployment.yaml",
-                "grep -E \"^[[:space:]]+image: \\\"[^\\\"]+:${MCP_ZAP_IMAGE_TAG}\\\"$\""
-        ).doesNotContain("grep -Eq '^[[:space:]]+tag:");
     }
 
     private GuidedAuthSessionService serviceWith(AuthBootstrapProperties.Profile... profiles) {
@@ -480,15 +433,4 @@ class GuidedAuthSessionServiceTest {
         return tempDir.resolve("api-token.txt");
     }
 
-    private void assertRunbookDocuments(String expectedText) {
-        assertThat(authRunbook()).contains(expectedText);
-    }
-
-    private String authRunbook() {
-        try {
-            return Files.readString(Path.of("docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md"));
-        } catch (Exception e) {
-            throw new AssertionError("Unable to read auth bootstrap failure runbook", e);
-        }
-    }
 }

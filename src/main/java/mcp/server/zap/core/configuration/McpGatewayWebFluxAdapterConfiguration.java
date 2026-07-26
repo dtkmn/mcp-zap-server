@@ -1,6 +1,5 @@
 package mcp.server.zap.core.configuration;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Collection;
 import mcp.gateway.core.authz.ToolAuthorizationDecision;
 import mcp.gateway.core.context.GatewayToolExecutionContext;
@@ -26,6 +25,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.web.server.SecurityWebFiltersOrder;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Wires the public Spring WebFlux adapter to the OSS ZAP/security runtime.
@@ -134,7 +134,7 @@ public class McpGatewayWebFluxAdapterConfiguration {
 
     @Bean
     McpGatewayWebFluxGovernanceFilter mcpGatewayWebFluxGovernanceFilter(
-            ObjectProvider<ObjectMapper> objectMapperProvider,
+            ObjectProvider<JsonMapper> jsonMapperProvider,
             McpGatewayWebFluxProperties properties,
             McpGatewayAuthorizationEvaluator authorizationEvaluator,
             McpGatewayAbuseProtectionEvaluator protectionEvaluator,
@@ -144,7 +144,7 @@ public class McpGatewayWebFluxAdapterConfiguration {
             McpGatewayCorrelationIdResolver correlationIdResolver,
             McpInvalidRequestObserver invalidRequestObserver) {
         return new McpGatewayWebFluxGovernanceFilter(
-                objectMapperProvider.getIfAvailable(ObjectMapper::new),
+                jsonMapperProvider.getIfAvailable(() -> JsonMapper.builder().build()),
                 properties,
                 authorizationEvaluator,
                 protectionEvaluator,

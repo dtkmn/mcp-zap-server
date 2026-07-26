@@ -7,7 +7,7 @@
 - Integrated `mcp-gateway-core` and the `mcp-gateway-spring-webflux` adapter module at `0.5.9` through dedicated audit, policy, protection, and Spring WebFlux boundaries.
 - Replaced bespoke MCP authorization and abuse-protection filters with shared gateway-core enforcement paths.
 - Added reusable GitHub Actions for ZAP security gates and webhook callbacks, plus GitLab CI examples and seeded API scan contracts.
-- Added a Juice Shop CI gate pilot workflow, CI pack verification script, and image-reference validation for immutable release tags.
+- Added a Juice Shop CI gate pilot workflow, CI pack verification script, and image-reference validation for pinned release tags.
 - Added self-serve bootstrap and doctor scripts with first-run documentation for local setup and MCP client validation.
 - Improved MCP client timeout handling and report path mapping for CI/evidence workflows.
 - Updated Spring AI, Netty, Astro, and related dependencies.
@@ -33,7 +33,7 @@ Operators should validate policy dry-run and enforcement behavior in their own b
 
 ### CI security gate pack
 
-The GitHub Actions and GitLab examples expect immutable MCP server image tags or digests. Mutable tags such as `latest`, `dev`, `main`, and `nightly` are rejected by the validation scripts.
+The GitHub Actions and GitLab examples expect pinned MCP server release tags or digests. Mutable tags such as `latest`, `dev`, `main`, and `nightly` are rejected by the validation scripts.
 
 ## Added
 

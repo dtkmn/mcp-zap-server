@@ -157,14 +157,6 @@ class UrlValidationServiceTest {
     }
 
     @Test
-    void getConfigurationSummaryReturnsValidString() {
-        String summary = service.getConfigurationSummary();
-        assertNotNull(summary);
-        assertTrue(summary.contains("allowLocalhost"));
-        assertTrue(summary.contains("allowPrivateNetworks"));
-    }
-
-    @Test
     void validationCanBeDisabledGlobally() {
         ReflectionTestUtils.setField(service, "validationEnabled", false);
 

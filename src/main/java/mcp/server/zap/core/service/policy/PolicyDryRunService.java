@@ -1,7 +1,7 @@
 package mcp.server.zap.core.service.policy;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -774,7 +774,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         if (node == null || !node.isObject()) {
             return;
         }
-        node.fieldNames().forEachRemaining(fieldName -> {
+        node.propertyNames().forEach(fieldName -> {
             if (!allowedKeys.contains(fieldName)) {
                 errors.add(prefix + " contains unsupported field '" + fieldName + "'");
             }

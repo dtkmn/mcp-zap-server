@@ -24,7 +24,6 @@ sourceSets {
         resources {
             srcDirs = ['examples/extensions/policy-metadata-extension/src/main/resources']
         }
-        runtimeClasspath += output + compileClasspath
     }
 }
 
@@ -76,10 +75,8 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
-    testImplementation 'io.projectreactor:reactor-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     constraints {
@@ -245,7 +242,6 @@ tasks.register('cleanStandalonePolicyMetadataExtensionOutput', Delete) {
 tasks.register('verifyPublicPreviewExtensionApiPublication') {
     group = 'verification'
     description = 'Stages the planned public-preview extension API coordinate and verifies the standalone sample resolves it.'
-    dependsOn tasks.named('verifyExtensionApiPublication')
     dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
 }
 

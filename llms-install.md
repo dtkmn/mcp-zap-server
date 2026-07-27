@@ -87,7 +87,7 @@ export MCP_API_KEY="$(openssl rand -hex 32)"
 docker run --rm \
   --user root \
   -v mcp-zap-wrk:/zap/wrk \
-  zaproxy/zap-stable \
+  zaproxy/zap-stable:2.17.0 \
   sh -c 'mkdir -p /zap/wrk && chown -R 1000:1000 /zap/wrk && chmod -R u+rwX,g+rwX /zap/wrk'
 ```
 
@@ -99,7 +99,7 @@ docker run -d \
   --network mcp-zap-network \
   -v mcp-zap-wrk:/zap/wrk \
   -e ZAP_API_KEY="$ZAP_API_KEY" \
-  zaproxy/zap-stable \
+  zaproxy/zap-stable:2.17.0 \
   zap.sh -daemon -host 0.0.0.0 -port 8090 \
   -config "api.key=$ZAP_API_KEY" \
   -config "api.addrs.addr.name=.*" \
@@ -122,7 +122,7 @@ docker run -d \
   -e MCP_SECURITY_ENABLED=true \
   -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
   -e MCP_API_KEY="$MCP_API_KEY" \
-  ghcr.io/dtkmn/mcp-zap-server:v0.10.1
+  ghcr.io/dtkmn/mcp-zap-server:v0.11.0
 ```
 
 Check the MCP server:

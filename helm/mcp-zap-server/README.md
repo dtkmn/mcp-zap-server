@@ -135,7 +135,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 See [values.yaml](values.yaml) for all available options.
 For an AWS/EKS multi-replica baseline, see [values-ha.yaml](values-ha.yaml).
 For opinionated cloud overlays, see [values-aws.yaml](values-aws.yaml) and [values-gcp.yaml](values-gcp.yaml).
-Before exposing the service broadly, run the [production checklist](../../docs/operator/PRODUCTION_CHECKLIST.md).
+Before exposing the service broadly, run the [production checklist](../../docs/src/content/docs/operations/production-checklist.md).
 
 Automation Framework note:
 
@@ -244,7 +244,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=v0.10.1
+  --set mcp.image.tag=v0.11.0
 ```
 
 ## Uninstalling

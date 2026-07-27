@@ -93,7 +93,7 @@ API key; never put a target website password in Cursor or an MCP prompt.
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.10.1` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.11.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
 
 Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
 
@@ -110,16 +110,17 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 ## Latest Release
 
-`v0.10.1` restores reliable Streamable HTTP keepalive handling for Cursor and other MCP clients:
+`v0.11.0` modernizes the runtime and container supply chain without changing MCP tool names or input schemas:
 
-- gateway-core and its WebFlux adapter `0.7.2` correctly pass client responses to server-initiated requests downstream instead of rejecting them as methodless requests
-- the normal 30-second keepalive remains enabled; Cursor responses are accepted with HTTP `202` without `invalid_mcp_request` or keepalive timeout errors
-- no MCP tool schema, authentication configuration, Helm values, or database migration changes are required from `v0.10.0`
-- Spring Boot `4.1.0`, Spring AI `2.0.0`, Gradle `9.6.1`, and Testcontainers `2.0.5` remain unchanged
+- gateway-core and its WebFlux adapter move to `0.8.0`, with application data binding migrated to Jackson 3 and managed by the Jackson `3.2.1` BOM
+- the final Java 25 image is built on a Cosign-verified, digest-pinned distroless runtime with a shell-free HTTP health probe
+- the unsupported native-image deployment facade is removed; use the versioned JVM image or Helm
+- main CI no longer publishes rolling `main` or `sha-*` images; stable AMD64 and ARM64 images are published only from GitHub immutable-release events
+- no database migration or authentication configuration change is required; the container remains UID/GID `1000`, now stated explicitly in Helm
 
 Read the full notes:
 
-- [Release notes](./docs/releases/RELEASE_NOTES_0.10.1.md)
+- [Release notes](./docs/releases/RELEASE_NOTES_0.11.0.md)
 - [Changelog](./CHANGELOG.md)
 - [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 

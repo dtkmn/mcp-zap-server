@@ -11,7 +11,7 @@ java {
     }
 }
 
-def defaultExtensionApiVersion = '0.10.1'
+def defaultExtensionApiVersion = '0.11.0'
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion).get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup').orElse('io.github.dtkmn').get()
 def extensionApiCoordinate = "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"

@@ -6,9 +6,9 @@ All security vulnerabilities in this project should be reported responsibly and 
 
 | Version     | Supported                                                     |
 | ----------- | ------------------------------------------------------------- |
-| `>= 0.10.1` | ✅ Active development; receives security fixes                |
-| `0.10.0`    | ⚠️ Upgrade to `0.10.1` for Streamable HTTP client compatibility |
-| `0.9.x`     | ⚠️ Upgrade to `0.10.1` for guided-auth security fixes         |
+| `>= 0.11.0` | ✅ Active development; receives security fixes                |
+| `0.10.x`    | ⚠️ Upgrade to `0.11.0` for the current hardened runtime       |
+| `0.9.x`     | ⚠️ Upgrade to `0.11.0` for guided-auth security fixes         |
 | `0.8.x`     | ⚠️ Critical security fixes where practical                    |
 | `< 0.8.0`   | ⚠️ Legacy versions; consider upgrading                        |
 

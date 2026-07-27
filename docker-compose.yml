@@ -1,6 +1,6 @@
 services:
   zap:
-    image: zaproxy/zap-stable
+    image: zaproxy/zap-stable:2.17.0
     restart: always
     command:
       - zap.sh

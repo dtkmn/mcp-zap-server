@@ -7,17 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-27
+
 ### Changed
-- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.2` to `0.8.0`, aligned the runtime on Jackson `3.1.5`, and migrated application JSON usage and WebFlux adapter wiring from Jackson 2 to Jackson 3.
-- Updated the managed Netty runtime from `4.2.15.Final` to `4.2.16.Final`.
-- Removed the unsupported native-image deployment facade (`Dockerfile.native`, `docker-compose.prod.yml`, and `prod.sh`) and its active performance guide; supported production paths now use the JVM container image or Helm, and the retired guide URL redirects to the production checklist.
-- Kept source compilation, bytecode, and runtime on Java 25 while moving the JVM
-  image to a digest-pinned distroless Java 25 runtime. The image now uses a
-  static HTTP probe instead of `curl`, preserving Docker and Docker Compose
-  health status while Kubernetes continues to use native HTTP probes.
-- Main-branch CI now verifies the signed distroless base and builds the AMD64
-  container without publishing rolling `main` or `sha-*` tags.
-  Multi-architecture image publication occurs only from the release workflow.
+- Bumped runtime, MCP server metadata, Helm chart metadata, MCP Registry package metadata, extension proof defaults, and current installation examples to `0.11.0` / `v0.11.0`.
+- Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.2` to `0.8.0` and migrated application JSON handling and WebFlux governance wiring to Jackson 3 data binding, managed through the Jackson `3.2.1` BOM.
+- Kept compilation, bytecode, and runtime on Java 25 while moving the final JVM image from Temurin Alpine to a digest-pinned distroless Java 25 Debian 13 runtime. Docker health checks now use a static HTTP probe instead of `curl`; Kubernetes continues to use native HTTP probes.
+- Updated Netty from `4.2.15.Final` to `4.2.16.Final`, PostgreSQL JDBC to `42.7.12`, Logback to `1.5.36`, and the CycloneDX plugin to `3.3.0`.
+- Pinned the active Docker Compose and standalone installation paths to OWASP ZAP `2.17.0`, matching Helm and Docker-backed integration coverage.
+- Main-branch CI now verifies and builds the AMD64 container without publishing rolling `main` or `sha-*` tags. Versioned multi-architecture image publication remains release-only.
+- Updated the documentation stack to Astro `7.1.3`, Starlight `0.41.4`, and refreshed supporting packages.
+
+### Removed
+- Removed the unsupported native-image deployment facade: `Dockerfile.native`, `docker-compose.prod.yml`, `prod.sh`, and the active native-image performance guide. Supported production paths now use the versioned JVM image or Helm, and the retired guide URL redirects to the production checklist.
+- Removed the legacy repository-only `bin/github-ci-pack-verify.sh` aggregate verifier. CI-helper behavior remains covered by Python unit tests and the live Juice Shop workflow.
+
+### Fixed
+- Aligned the authoritative tool registry with the existing guided runtime exposure of `zap_scan_history_get` and `zap_scan_history_export`.
+
+### Security
+- Pinned the container build, health-probe, runtime, and release BuildKit inputs by digest, and added Cosign verification of the upstream distroless base image in main and release workflows.
+- Hardened GitHub and GitLab security-gate image validation so malformed SHA-256 digests are rejected before workspace directories are created.
+- Made Helm explicitly run the MCP container as UID/GID `1000`.
 
 ## [0.10.1] - 2026-07-16
 

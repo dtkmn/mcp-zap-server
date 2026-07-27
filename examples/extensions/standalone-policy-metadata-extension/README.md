@@ -24,7 +24,7 @@ Then build the standalone sample:
 ./gradlew -p examples/extensions/standalone-policy-metadata-extension build
 ```
 
-The sample defaults to the documented `0.10.1` API and reads the artifact from
+The sample defaults to the documented `0.11.0` API and reads the artifact from
 `build/extension-api-public-preview-publication`. The root verification task
 passes the current project version explicitly. Outside this repository, pass
 `-PextensionApiVersion=<version>` and

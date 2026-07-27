@@ -69,34 +69,15 @@ without custom engineering, the pack is not ready for that pilot yet.
 
 ## Verify This Repository Before Installing
 
-Run the local pack verification command:
+Run the CI helper behavior tests:
 
 ```bash
-./bin/github-ci-pack-verify.sh
+python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
-For a heavier proof that also builds the current Docker image:
-
-```bash
-./bin/github-ci-pack-verify.sh --with-image-build
-```
-
-This command verifies:
-
-- action shell entrypoints parse
-- CI helper Python contracts pass
-- GitHub CI compose wiring keeps ZAP and MCP on the shared workspace
-- the CI stack forces the expert tool surface needed for snapshot and diff
-  contracts
-- the configured Spring AI version resolves against the managed Spring Boot `4.1.0`
-  runtime
-- the Dockerfile selects the executable app JAR instead of sidecar artifacts
-
-The Spring AI/Spring Boot check is intentional. The verifier derives the current
-Spring AI version from `build.gradle` and confirms its transitive Spring Boot
-request aligns with the repository-managed `4.1.0` runtime. Treat any future
-version substitution as a compatibility change that must be explained and
-verified before release.
+These tests cover helper behavior and execute both GitHub and GitLab gate
+entrypoints. The repository's Juice Shop workflow is the live end-to-end proof
+for the action, Compose stack, MCP server, ZAP, and generated artifacts.
 
 ## Install In A Pilot Repository
 

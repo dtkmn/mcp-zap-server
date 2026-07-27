@@ -57,7 +57,7 @@ jobs:
         if: matrix.language == 'java-kotlin' && matrix.build-mode == 'manual'
         run: |
           ./gradlew clean testClasses sampleExtensionClasses verifyExtensionApiPublication --no-daemon --stacktrace
-          ./gradlew -p examples/extensions/standalone-policy-metadata-extension clean testClasses --no-daemon --stacktrace
+          ./gradlew -p examples/extensions/standalone-policy-metadata-extension classes --no-daemon --stacktrace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4

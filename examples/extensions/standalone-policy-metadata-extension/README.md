@@ -9,7 +9,6 @@ It depends on only:
 - `io.github.dtkmn:mcp-zap-extension-api` from the local staged public-preview
   publication
 - Spring Boot auto-configuration annotations
-- test libraries
 
 ## Build
 
@@ -25,11 +24,10 @@ Then build the standalone sample:
 ./gradlew -p examples/extensions/standalone-policy-metadata-extension build
 ```
 
-Inside this repository, the sample derives the default API version from the
-root `build.gradle` and reads the API artifact from
-`build/extension-api-public-preview-publication` so the compatibility proof
-tracks the current project version without relying on stale `mavenLocal()`
-state. Outside this repository, pass `-PextensionApiVersion=<version>` and
+The sample defaults to the documented `0.10.1` API and reads the artifact from
+`build/extension-api-public-preview-publication`. The root verification task
+passes the current project version explicitly. Outside this repository, pass
+`-PextensionApiVersion=<version>` and
 `-PextensionApiRepositoryUrl=<maven-repository-url>` when you want to target a
 specific API release.
 

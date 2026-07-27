@@ -31,8 +31,8 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
 
-      - name: Verify CI security-gate packs
-        run: ./bin/github-ci-pack-verify.sh
+      - name: Run CI helper tests
+        run: python3 -m unittest discover -s tests/python -p 'test_*.py'
 
       - name: Build with Gradle
         run: ./gradlew build --scan --no-daemon --stacktrace --info

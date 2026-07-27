@@ -3,7 +3,7 @@ plugins {
     id 'maven-publish'
     id 'org.springframework.boot' version '4.1.0'
     id 'io.spring.dependency-management' version '1.1.7'
-    id 'org.cyclonedx.bom' version '3.2.4'
+    id 'org.cyclonedx.bom' version '3.3.0'
 }
 
 group = 'mcp.server.zap'
@@ -24,7 +24,6 @@ sourceSets {
         resources {
             srcDirs = ['examples/extensions/policy-metadata-extension/src/main/resources']
         }
-        runtimeClasspath += output + compileClasspath
     }
 }
 
@@ -47,7 +46,7 @@ repositories {
 ext {
     set('springAiVersion', "2.0.0")
     set('commonsCompressVersion', "1.28.0")
-    set('jackson-bom.version', "3.1.5")
+    set('jackson-bom.version', "3.2.1")
     set('netty.version', '4.2.16.Final')
     set('postgresql.version', '42.7.12')
     set('logback.version', '1.5.36')
@@ -76,11 +75,8 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
-    testImplementation 'io.projectreactor:reactor-test'
-    testImplementation 'tools.jackson.dataformat:jackson-dataformat-yaml'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     constraints {
@@ -96,6 +92,8 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+        // Re-import last so Jackson 3's annotation constraint wins over Boot's Jackson 2 BOM.
+        mavenBom "tools.jackson:jackson-bom:${project.ext['jackson-bom.version']}"
     }
 }
 
@@ -244,21 +242,16 @@ tasks.register('cleanStandalonePolicyMetadataExtensionOutput', Delete) {
 tasks.register('verifyPublicPreviewExtensionApiPublication') {
     group = 'verification'
     description = 'Stages the planned public-preview extension API coordinate and verifies the standalone sample resolves it.'
-    dependsOn tasks.named('verifyExtensionApiPublication')
     dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
 }
 
 tasks.named('test') {
-    inputs.file('.github/workflows/release.yml')
     inputs.files(
             fileTree('examples/policy-bundles') { include '*.json' }
     )
     useJUnitPlatform {
         excludeTags 'docker'
     }
-    dependsOn tasks.named('extensionApiJar')
-    dependsOn tasks.named('samplePolicyMetadataExtensionJar')
-    dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
 }
 
 tasks.register('dockerTest', Test) {

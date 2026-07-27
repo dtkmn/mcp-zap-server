@@ -61,15 +61,15 @@ The out-of-the-box template is best for targets that are already reachable from 
 
 Start from [`examples/github-actions/zap-security-gate.yml`](../../examples/github-actions/zap-security-gate.yml).
 
-Before copying it into another repository, run:
+Before copying it into another repository, run the helper behavior tests:
 
 ```bash
-./bin/github-ci-pack-verify.sh
+python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
-That command verifies the action scripts, helper contracts, CI compose wiring,
-Docker image packaging guard, and the current Spring AI / Spring Boot dependency
-resolution used by the MCP server image.
+These tests cover the gate helper behavior and execute both GitHub and GitLab
+gate entrypoints. The repository's Juice Shop workflow provides the live
+container end-to-end coverage.
 
 If you are using this repository directly, copy it into `.github/workflows/zap-security-gate.yml`.
 

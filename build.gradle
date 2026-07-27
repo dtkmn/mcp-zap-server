@@ -80,7 +80,6 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testImplementation 'io.projectreactor:reactor-test'
-    testImplementation 'tools.jackson.dataformat:jackson-dataformat-yaml'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     constraints {
@@ -251,16 +250,12 @@ tasks.register('verifyPublicPreviewExtensionApiPublication') {
 }
 
 tasks.named('test') {
-    inputs.file('.github/workflows/release.yml')
     inputs.files(
             fileTree('examples/policy-bundles') { include '*.json' }
     )
     useJUnitPlatform {
         excludeTags 'docker'
     }
-    dependsOn tasks.named('extensionApiJar')
-    dependsOn tasks.named('samplePolicyMetadataExtensionJar')
-    dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
 }
 
 tasks.register('dockerTest', Test) {

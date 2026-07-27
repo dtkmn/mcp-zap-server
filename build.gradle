@@ -47,7 +47,7 @@ repositories {
 ext {
     set('springAiVersion', "2.0.0")
     set('commonsCompressVersion', "1.28.0")
-    set('jackson-bom.version', "3.1.5")
+    set('jackson-bom.version', "3.2.1")
     set('netty.version', '4.2.16.Final')
     set('postgresql.version', '42.7.12')
     set('logback.version', '1.5.36')
@@ -96,6 +96,8 @@ dependencies {
 dependencyManagement {
     imports {
         mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+        // Re-import last so Jackson 3's annotation constraint wins over Boot's Jackson 2 BOM.
+        mavenBom "tools.jackson:jackson-bom:${project.ext['jackson-bom.version']}"
     }
 }
 

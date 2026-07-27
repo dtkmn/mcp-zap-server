@@ -164,21 +164,48 @@ after secret-only rotation. The secret target must be readable, and the
 
 ### Helm
 
-Create the Kubernetes Secret from a protected file. The key becomes the environment
-variable referenced by the profile:
+Create the runtime and target-auth Kubernetes Secrets from protected files:
 
 ```bash
 export NAMESPACE=mcp-zap
+export MCP_ZAP_ZAP_API_KEY_FILE=/run/operator-secrets/zap-api-key
+export MCP_ZAP_API_KEY_FILE=/run/operator-secrets/mcp-api-key
+export MCP_ZAP_FORM_PASSWORD_FILE=/run/operator-secrets/shop-form-password
+test -s "$MCP_ZAP_ZAP_API_KEY_FILE" \
+  && test -s "$MCP_ZAP_API_KEY_FILE" \
+  && test -s "$MCP_ZAP_FORM_PASSWORD_FILE"
+
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NAMESPACE" create secret generic mcp-zap-runtime \
+  --from-file=ZAP_API_KEY="$MCP_ZAP_ZAP_API_KEY_FILE" \
+  --from-file=MCP_API_KEY="$MCP_ZAP_API_KEY_FILE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$NAMESPACE" create secret generic mcp-zap-auth-profile \
-  --from-file=TARGET_SCAN_PASSWORD=/run/operator-secrets/shop-form-password \
+  --from-file=TARGET_SCAN_PASSWORD="$MCP_ZAP_FORM_PASSWORD_FILE" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+Each protected file must contain only the raw secret value, without a trailing
+newline.
 
 Merge this into the values used by the deployment as `auth-profile-values.yml`:
 
 ```yaml
+zap:
+  config:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
+
 mcp:
+  security:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: MCP_API_KEY
+  zapClient:
+    existingSecret:
+      name: mcp-zap-runtime
+      apiKeyKey: ZAP_API_KEY
   env:
     - name: SPRING_APPLICATION_JSON
       value: |-
@@ -224,11 +251,11 @@ networkPolicy:
 overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
-deployment's explicit URL-policy approval. The chart now defaults to `v0.10.1`;
-the profile contract was introduced in `v0.10.0`. The commands below deliberately
-pin the immutable `sha-<40-character commit SHA>` image produced by main CI for the
-commit being migrated. Replace the variable placeholder before running them. Do
-not use `v0.9.1` or earlier; those images do not contain the profile contract.
+deployment's explicit URL-policy approval. The chart now defaults to `v0.11.0`;
+the profile contract was introduced in `v0.10.0`. The commands below use the
+versioned `v0.11.0` image published from its GitHub immutable-release event.
+Main CI no longer publishes rolling `main` or `sha-*` tags. Do not use `v0.9.1`
+or earlier; those images do not contain the profile contract.
 
 The repository does not contain a `production-values.yml`. The example below
 uses only the profile values file. If you maintain another values file, add its
@@ -240,9 +267,9 @@ Render before applying, then wait for the MCP rollout:
 (
 set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
-MCP_ZAP_IMAGE_TAG=sha-REPLACE_WITH_FULL_MAIN_COMMIT_SHA
-[[ "$MCP_ZAP_IMAGE_TAG" =~ ^sha-[0-9a-f]{40}$ ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the pinned full-SHA image tag from main CI" >&2
+MCP_ZAP_IMAGE_TAG=v0.11.0
+[[ "$MCP_ZAP_IMAGE_TAG" == "v0.11.0" ]] || {
+  echo "MCP_ZAP_IMAGE_TAG must be the v0.11.0 release image tag" >&2
   exit 1
 }
 

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.3",
-    "@astrojs/starlight": "^0.41.4",
+    "@astrojs/starlight": "^0.41.6",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/rajdhani": "^5.3.0",
     "astro": "^7.1.3",

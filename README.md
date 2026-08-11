@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.dtkmn%2Fmcp-zap-server.svg)](https://mcptoplist.com/server/io.github.dtkmn%2Fmcp-zap-server)
+
 <p align="center">
   <img src="images/brand.png" alt="MCP ZAP Server logo" width="180">
 </p>

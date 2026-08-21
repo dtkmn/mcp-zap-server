@@ -45,7 +45,7 @@ jobs:
           cache-dependency-path: docs/package-lock.json
 
       - name: Set up Snyk CLI
-        uses: snyk/actions/setup@8e119fbb6c251787721d34ba683ed48eba792766 # master
+        uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master
 
       - name: Require Snyk configuration
         env:
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('snyk-open-source.sarif') != ''
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           sarif_file: snyk-open-source.sarif
           category: snyk-open-source

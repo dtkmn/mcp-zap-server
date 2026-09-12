@@ -112,7 +112,8 @@ runtime if Spring has no registration metadata or import hook.
 An external extension should depend on the API artifact instead of depending on
 the full application.
 
-Current local proof shape:
+Local extension API dependency example (version `0.11.1`, resolved from a locally
+staged Maven repository):
 
 ```gradle
 plugins {
@@ -120,7 +121,7 @@ plugins {
 }
 
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
-        .orElse('0.11.0')
+        .orElse('0.11.1')
         .get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
         .orElse('io.github.dtkmn')
@@ -157,11 +158,19 @@ tasks.named('test') {
 }
 ```
 
-First run `./gradlew verifyPublicPreviewExtensionApiPublication` from the
-gateway repository so `build/extension-api-public-preview-publication` exists.
+First stage the API from the gateway repository:
+
+```bash
+./gradlew publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository
+```
+
+Alternatively, `./gradlew standalonePolicyMetadataExtensionJar` stages the API
+and compiles the bundled standalone sample. Both are optional developer tasks;
+normal builds do not stage or verify the Maven publication.
+
 The `exclusiveContent` block is intentional: it prevents
 `io.github.dtkmn:mcp-zap-extension-api` from resolving from Maven Central or a
-stale public mirror while this proof is supposed to use the freshly staged
+stale public mirror while this example is supposed to use the freshly staged
 artifact.
 
 This coordinate describes the planned public-preview publication shape. Treat

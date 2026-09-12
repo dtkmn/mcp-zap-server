@@ -2,6 +2,12 @@
 
 This directory contains Helm charts for deploying MCP ZAP Server to Kubernetes.
 
+Use the chart from the same release as your MCP image. Its `appVersion` sets
+the default image tag. Before installing, confirm image availability in
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+corresponding release workflow. See
+[chart and image versions](mcp-zap-server/README.md#chart-and-image-versions).
+
 ## Quick Start
 
 ### Prerequisites

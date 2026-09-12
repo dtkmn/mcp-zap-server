@@ -32,6 +32,20 @@ Valid values:
 - `guided`
 - `expert`
 
+## Availability And Permissions
+
+The selected surface determines which tools are registered at startup. A scope
+grant, including `*`, does not register or enable an expert-only tool in the
+guided surface. Change the surface configuration and restart the server to
+change the registered tool set. Startup validation rejects registered tools
+without permission mappings.
+
+**In v0.11.1 and later**, calls to unknown tools and tools disabled
+by the selected surface receive the same generic MCP error before scope checks.
+This error contract is not included in v0.11.0. See
+[Unknown And Disabled Tools](../tool-scope-authorization/#unknown-and-disabled-tools)
+for the exact response and version requirements.
+
 ## Guided Surface
 
 `guided` is the default because most users do not need the full ZAP control plane on day one.

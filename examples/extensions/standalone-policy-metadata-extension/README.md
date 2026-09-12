@@ -12,24 +12,31 @@ It depends on only:
 
 ## Build
 
-First verify the local experimental API publication from the repository root:
+The optional root task stages the local extension API and compiles the
+standalone sample:
 
 ```bash
-./gradlew verifyPublicPreviewExtensionApiPublication
+./gradlew standalonePolicyMetadataExtensionJar
 ```
 
-Then build the standalone sample:
+To stage the API and build the standalone sample separately, use:
 
 ```bash
+./gradlew publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository
 ./gradlew -p examples/extensions/standalone-policy-metadata-extension build
 ```
 
-The sample defaults to the documented `0.11.0` API and reads the artifact from
-`build/extension-api-public-preview-publication`. The root verification task
+Local extension API dependency example (version `0.11.1`, resolved from a locally
+staged Maven repository): the sample reads the artifact from
+`build/extension-api-public-preview-publication`. The optional root build task
 passes the current project version explicitly. Outside this repository, pass
 `-PextensionApiVersion=<version>` and
 `-PextensionApiRepositoryUrl=<maven-repository-url>` when you want to target a
 specific API release.
+
+Normal builds do not stage or verify the Maven publication. The commands above
+perform local build operations, not custom publication-verification gates or
+remote uploads.
 
 This is still an experimental path. It proves the decoupled extension shape,
 not a public binary compatibility promise.

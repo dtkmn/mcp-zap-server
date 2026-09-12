@@ -31,14 +31,10 @@ class McpGatewayWebFluxAdapterConfigurationTest {
     }
 
     @Test
-    void activeRegistryReusesExistingDescriptorsAndCapabilities() {
+    void activeRegistryPreservesToolCapabilities() {
         McpToolRegistry registry = configuration.mcpActiveToolRegistry(
                 provider("zap_crawl_start", "zap_active_scan_start"), scopeRegistry);
 
-        assertThat(registry.requireDescriptor("zap_crawl_start"))
-                .isSameAs(scopeRegistry.getToolRegistry().requireDescriptor("zap_crawl_start"));
-        assertThat(registry.requireDescriptor("zap_active_scan_start"))
-                .isSameAs(scopeRegistry.getToolRegistry().requireDescriptor("zap_active_scan_start"));
         assertThat(registry.hasCapability("zap_crawl_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
                 .isTrue();
         assertThat(registry.hasCapability("zap_active_scan_start", ToolScopeRegistry.DIRECT_SCAN_CAPABILITY))

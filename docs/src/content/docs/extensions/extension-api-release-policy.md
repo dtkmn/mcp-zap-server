@@ -18,8 +18,8 @@ Current status: `experimental-local`.
 That means:
 
 - the project builds `mcp-zap-extension-api`
-- normal builds verify a local staged Maven publication using the planned
-  public-preview coordinate
+- local Maven staging and the standalone sample build are optional developer
+  tasks; normal builds do not stage or verify the Maven publication
 - the standalone sample resolves the API from
   `build/extension-api-public-preview-publication`
 - no public artifact repository is promised
@@ -32,8 +32,23 @@ io.github.dtkmn:mcp-zap-extension-api:<version>
 ```
 
 Treat that coordinate as local-only until a public repository is declared. The
-coordinate is intentional: CI should prove the namespace builders will use
-later, even before Maven Central publication exists.
+coordinate is intentional: the optional standalone build uses the namespace
+builders will use later, even before Maven Central publication exists.
+
+To stage the API and compile the standalone sample, run:
+
+```bash
+./gradlew standalonePolicyMetadataExtensionJar
+```
+
+To stage only the API publication, run:
+
+```bash
+./gradlew publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository
+```
+
+These are local build operations, not custom publication-verification gates or
+remote uploads.
 
 ## Release Stages
 
@@ -116,7 +131,6 @@ While `experimental-local`:
 
 - breaking changes may happen in minor releases
 - docs and samples must be updated in the same change
-- the staged publication proof must pass before merge
 
 When `public-preview`:
 
@@ -145,13 +159,6 @@ Breaking changes include:
 
 Before public preview, CI must prove:
 
-- `verifyExtensionApiPublication` passes for the staged
-  `io.github.dtkmn:mcp-zap-extension-api` coordinate
-- `verifyPublicPreviewExtensionApiPublication` passes, including standalone
-  sample resolution from the staged public-preview repository
-- the staged POM has no runtime dependencies or dependency management
-- the staged JAR contains only `mcp/server/zap/extension/api/**` plus manifest
-  entries
 - a standalone extension builds using only the API artifact and third-party
   dependencies
 - a compatibility test loads the standalone extension JAR into the gateway and
@@ -186,11 +193,9 @@ Before publishing any public extension API artifact:
 
 - confirm the artifact comes from the OSS-safe source tree
 - confirm the Maven Central namespace and public coordinate are verified
-- run `./gradlew verifyExtensionApiPublication`
-- run `./gradlew verifyPublicPreviewExtensionApiPublication`
+- build the standalone extension with `./gradlew standalonePolicyMetadataExtensionJar`
 - confirm the standalone extension build resolves the API from the staged
   public-preview repository, not Maven Central
-- inspect the staged POM and JAR shape
 - run the external-extension runtime wiring compatibility test
 - generate the sources JAR, Javadoc JAR, POM metadata, and required signatures
 - update `EXTENSION_API_COMPATIBILITY.md`

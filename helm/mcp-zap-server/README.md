@@ -2,6 +2,14 @@
 
 This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for OWASP ZAP) on Kubernetes.
 
+## Chart And Image Versions
+
+Chart `0.11.1` defaults to MCP image `v0.11.1`. Use the chart from the same release
+as your image, and confirm that the corresponding release workflow has published
+the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+is the source for publication status. The unknown/disabled-tool response fix
+applies to `v0.11.1` and later, not `v0.11.0`.
+
 ## Architecture
 
 This chart deploys two main components in **separate pods**:
@@ -244,7 +252,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=v0.11.0
+  --set mcp.image.tag=v0.11.1
 ```
 
 ## Uninstalling

@@ -93,7 +93,12 @@ API key; never put a target website password in Cursor or an MCP prompt.
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.11.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json).
+Use metadata from the same version as the image you deploy. The image includes
+the MCP server name expected by registry and catalog tooling. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+release workflow before installing a versioned image or publishing its package
+metadata; repository metadata alone is not proof of image availability.
 
 Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
 
@@ -110,19 +115,20 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 ## Latest Release
 
-`v0.11.0` modernizes the runtime and container supply chain without changing MCP tool names or input schemas:
+See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
+for the latest published version and its publication date. Version-specific
+documentation describes that version's behavior; it does not announce image
+availability. Deploy only after the corresponding release workflow succeeds
+and the versioned image is available in your registry.
 
-- gateway-core and its WebFlux adapter move to `0.8.0`, with application data binding migrated to Jackson 3 and managed by the Jackson `3.2.1` BOM
-- the final Java 25 image is built on a Cosign-verified, digest-pinned distroless runtime with a shell-free HTTP health probe
-- the unsupported native-image deployment facade is removed; use the versioned JVM image or Helm
-- main CI no longer publishes rolling `main` or `sha-*` images; stable AMD64 and ARM64 images are published only from GitHub immutable-release events
-- no database migration or authentication configuration change is required; the container remains UID/GID `1000`, now stated explicitly in Helm
+**In `v0.11.1` and later**, unknown and disabled tools receive the same generic
+JSON-RPC error, using gateway `0.10.0`. Enabled tools still require their existing
+permissions. This fix is not included in `v0.11.0`; no tool names, input schemas,
+or database schemas change in `v0.11.1`.
 
-Read the full notes:
-
-- [Release notes](./docs/releases/RELEASE_NOTES_0.11.0.md)
+- [0.11.1 release notes](./docs/releases/RELEASE_NOTES_0.11.1.md)
+- [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
-- [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 
 ## Security Defaults
 

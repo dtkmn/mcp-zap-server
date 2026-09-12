@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1]
+
+Version-specific changes are listed below. Publication dates and availability
+are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
+
+### Fixed
+
+- Fixed [#227](https://github.com/dtkmn/mcp-zap-server/issues/227): unknown tools and tools disabled by the selected surface now return the same HTTP `200` JSON-RPC `-32602` (`Unknown tool`) response, without an authentication challenge or disclosure of required scopes. Authentication still runs first; enabled tools with insufficient scope still return HTTP `403` when authorization is enforced.
+- Derived the adapter's active tool registry from the callbacks actually registered by ZAP, reusing existing tool descriptors. Availability checks remain active in authorization `off`/`warn` and security `none` modes; a wildcard scope does not enable disabled tools.
+- Prevented id-less `tools/call` messages from executing: they receive HTTP `202` with no body. Invalid tool-call IDs receive HTTP `400` with JSON-RPC `-32600`.
+
+### Changed
+
+- Upgraded `mcp-gateway-core` and `mcp-gateway-spring-webflux` from ZAP `v0.11.0`'s `0.8.0` to `0.10.0`, and adopted the adapter's named builder configuration.
+- Updated Spring Boot to `4.1.1`, Spring AI to `2.0.1`, Gradle to `9.7.1`, documentation dependencies, pinned GitHub Actions, and the distroless runtime image digest.
+- Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.11.1` / `v0.11.1`.
+
+### Added
+
+- Regression coverage for unavailable-tool responses, authentication and permission boundaries, guided/expert discovery consistency, request IDs, and startup registry validation.
+
 ## [0.11.0] - 2026-07-27
 
 ### Changed

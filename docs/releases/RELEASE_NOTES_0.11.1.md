@@ -10,6 +10,7 @@ has successfully published the versioned image to your registry.
 - Fixes [#227](https://github.com/dtkmn/mcp-zap-server/issues/227): unknown tools and tools disabled by the selected surface receive the same generic unknown-tool response instead of a misleading permission error.
 - Integrates `mcp-gateway-core` and `mcp-gateway-spring-webflux` `0.10.0`, using ZAP's actual registered callbacks and existing descriptors for tool availability.
 - Updates Spring Boot to `4.1.1`, Spring AI to `2.0.1`, Gradle to `9.7.1`, and documentation/build dependencies.
+- Includes upstream security fixes in Netty `4.2.17.Final` and documentation-build dependency Undici `8.10.2`; aligns the health probe's preferred Go toolchain with the container's `1.27.1` and raises its minimum to `1.26.6`.
 
 ## Tool-Call Behavior
 

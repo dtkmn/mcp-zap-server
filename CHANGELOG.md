@@ -22,6 +22,7 @@ are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releas
 
 - Upgraded `mcp-gateway-core` and `mcp-gateway-spring-webflux` from ZAP `v0.11.0`'s `0.8.0` to `0.10.0`, and adopted the adapter's named builder configuration.
 - Updated Spring Boot to `4.1.1`, Spring AI to `2.0.1`, Gradle to `9.7.1`, documentation dependencies, pinned GitHub Actions, and the distroless runtime image digest.
+- Updated Netty to `4.2.17.Final` and the documentation build's Undici dependency to `8.10.2` for upstream security fixes. The health probe now requires Go `1.26.6` or later and selects Go `1.27.1` by default, matching the container builder.
 - Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.11.1` / `v0.11.1`.
 
 ### Added

@@ -1,5 +1,5 @@
 module github.com/dtkmn/mcp-zap-server/tools/healthcheck
 
-go 1.26.3
+go 1.26.6
 
-toolchain go1.26.5
+toolchain go1.27.1

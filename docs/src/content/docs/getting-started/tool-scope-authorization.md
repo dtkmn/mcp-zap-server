@@ -89,7 +89,7 @@ Common scopes:
 
 ## Deny Contract
 
-When authorization is enforced and a caller lacks scope, the server returns `403` with a bounded machine-readable body:
+For a registered, enabled tool, when authorization is enforced and a caller lacks scope, the server returns `403` with a bounded machine-readable body:
 
 ```json
 {
@@ -110,6 +110,43 @@ The response also includes:
 - `correlationId` and `requestId` for log correlation
 
 If a public MCP tool is exposed without a scope mapping, startup validation fails instead of silently leaving an authorization gap.
+
+## Unknown And Disabled Tools
+
+The server uses gateway-core and its WebFlux adapter `0.10.0`. After authentication
+in API-key or JWT mode, it checks whether the requested tool is registered and
+enabled before checking scopes or abuse-protection policies.
+
+A nonexistent tool and a tool disabled by the selected surface receive the same
+HTTP `200` JSON response, without a `WWW-Authenticate` challenge:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "error": {"code": -32602, "message": "Unknown tool"}
+}
+```
+
+The original string or integer request ID is preserved. The error does not reveal
+the requested name, whether the tool is disabled, or its required scopes. Granting
+the scope or a wildcard does not enable a disabled tool. This availability check
+also applies in authorization `warn`/`off` and security `none` modes; it does not
+turn authentication back on when security is disabled.
+
+The adapter's immutable registry is derived from the same `ToolCallbackProvider`
+used by Spring AI, reusing descriptors from `ToolScopeRegistry`. The full
+permission inventory may include disabled tools, but discovery and the adapter's
+active registry contain only registered tools. No separate tool-name list is
+maintained. This wiring assumes the application's current single provider;
+adding another registration path or runtime tool changes requires updating the
+registry assembly and its discovery-consistency tests together. Surface changes
+take effect when the application restarts.
+
+Tool calls require a request ID: id-less `tools/call` messages receive HTTP `202`
+with no body and do not execute. Explicit null, fractional, or non-string/non-integer
+IDs receive HTTP `400` with JSON-RPC `-32600` (`Invalid Request`). Ordinary
+notifications retain their existing protocol handling.
 
 ## Streamable HTTP Note
 

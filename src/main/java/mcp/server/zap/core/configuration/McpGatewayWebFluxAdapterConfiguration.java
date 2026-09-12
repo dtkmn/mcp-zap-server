@@ -1,5 +1,7 @@
 package mcp.server.zap.core.configuration;
 
+import java.util.Arrays;
+import mcp.gateway.core.tool.McpToolRegistry;
 import mcp.gateway.spring.webflux.McpGatewayAuthorizationMode;
 import mcp.gateway.spring.webflux.McpGatewayCorrelationIdResolver;
 import mcp.gateway.spring.webflux.McpGatewayWebFluxGovernanceFilter;
@@ -7,8 +9,10 @@ import mcp.gateway.spring.webflux.McpGatewayWebFluxProperties;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
+import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.McpAbuseProtectionService;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -23,8 +27,20 @@ import tools.jackson.databind.json.JsonMapper;
 public class McpGatewayWebFluxAdapterConfiguration {
 
     @Bean
+    McpToolRegistry mcpActiveToolRegistry(ToolCallbackProvider toolCallbackProvider,
+                                        ToolScopeRegistry toolScopeRegistry) {
+        // Derive availability from the same provider used by Spring AI, not the
+        // full permission inventory, which also describes disabled tools.
+        McpToolRegistry knownTools = toolScopeRegistry.getToolRegistry();
+        return McpToolRegistry.of(Arrays.stream(toolCallbackProvider.getToolCallbacks())
+                .map(callback -> knownTools.requireDescriptor(callback.getToolDefinition().name()))
+                .toList());
+    }
+
+    @Bean
     McpGatewayWebFluxGovernanceFilter mcpGatewayWebFluxGovernanceFilter(
             ObjectProvider<JsonMapper> jsonMapperProvider,
+            McpToolRegistry mcpActiveToolRegistry,
             ClientWorkspaceResolver clientWorkspaceResolver,
             ToolAuthorizationService toolAuthorizationService,
             McpAbuseProtectionService protectionService,
@@ -54,6 +70,7 @@ public class McpGatewayWebFluxAdapterConfiguration {
                         toolAuthorizationService::authorize
                 )
                 .protection(protectionService::isEnabled, protectionService::evaluate)
+                .toolRegistry(mcpActiveToolRegistry)
                 .authorizationObserver(observation -> observabilityService.recordAuthorization(
                         observation.actionName(),
                         observation.outcome(),

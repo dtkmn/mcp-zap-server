@@ -28,6 +28,11 @@ are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releas
 
 - Regression coverage for unavailable-tool responses, authentication and permission boundaries, guided/expert discovery consistency, request IDs, and startup registry validation.
 
+### Removed
+
+- Removed custom extension API POM/JAR structure checks and their mandatory build hook. The standalone extension build is optional; API packaging and local Maven publication remain available.
+- Removed descriptor object-identity assertions and Java-parameter reflection checks from tests, retaining tool capability checks and testing guided-auth inputs through the generated MCP schema.
+
 ## [0.11.0] - 2026-07-27
 
 ### Changed

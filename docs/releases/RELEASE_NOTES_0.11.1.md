@@ -40,6 +40,14 @@ non-string/non-integer IDs receive HTTP `400` with JSON-RPC `-32600`.
 - MCP Registry metadata references `v0.11.1`; publish it only after both referenced release images are available.
 - The extension API remains `experimental-local`. Its local publication and sample dependency version are `0.11.1`; the release workflow does not publish this API to Maven Central.
 
+## Build Changes
+
+Normal builds no longer run custom extension API POM/JAR structure checks or
+automatically stage and build the standalone extension. API packaging remains
+part of the build. To work on the standalone sample, run
+`./gradlew standalonePolicyMetadataExtensionJar`; this stages the API locally
+and builds the sample without a separate structure-verification gate.
+
 ## Release Availability
 
 Main CI builds and tests the application and container but does not publish

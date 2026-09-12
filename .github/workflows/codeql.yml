@@ -56,7 +56,7 @@ jobs:
       - name: Build Java
         if: matrix.language == 'java-kotlin' && matrix.build-mode == 'manual'
         run: |
-          ./gradlew clean testClasses sampleExtensionClasses verifyExtensionApiPublication --no-daemon --stacktrace
+          ./gradlew clean testClasses sampleExtensionClasses publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository --no-daemon --stacktrace
           ./gradlew -p examples/extensions/standalone-policy-metadata-extension classes --no-daemon --stacktrace
 
       - name: Perform CodeQL Analysis

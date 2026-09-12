@@ -16,8 +16,14 @@ Authentication answers who is calling. Authorization still answers which MCP too
 **⚠️ WARNING: Use ONLY for development/testing. NOT recommended for production.**
 
 - **Use Case**: Local development, testing, debugging
-- **Security**: None - all requests are permitted
+- **Security**: Authentication and per-tool scope checks are disabled
 - **Setup**: Minimal configuration required
+
+This does not enable tools outside the selected surface or make every request
+valid. In **v0.11.1 and later**, adapter tool-availability and request-validation
+checks remain active in `none` mode. The
+[unknown/disabled-tool error contract](../getting-started/tool-scope-authorization/#unknown-and-disabled-tools)
+is not included in v0.11.0; see that section for version requirements.
 
 **Configuration:**
 ```yaml

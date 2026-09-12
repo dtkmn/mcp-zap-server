@@ -113,9 +113,15 @@ If a public MCP tool is exposed without a scope mapping, startup validation fail
 
 ## Unknown And Disabled Tools
 
-The server uses gateway-core and its WebFlux adapter `0.10.0`. After authentication
-in API-key or JWT mode, it checks whether the requested tool is registered and
-enabled before checking scopes or abuse-protection policies.
+**Applies to MCP ZAP Server v0.11.1 and later.** The behavior below is not included
+in v0.11.0. Publishing gateway-core and its WebFlux adapter `0.10.0` does not
+update existing ZAP Server installations; upgrade ZAP Server itself to a version
+that includes this integration.
+
+For v0.11.1, the integration uses gateway-core and its WebFlux adapter `0.10.0`.
+After authentication in API-key or JWT mode, it checks whether the requested
+tool is registered and enabled before checking scopes or abuse-protection
+policies.
 
 A nonexistent tool and a tool disabled by the selected surface receive the same
 HTTP `200` JSON response, without a `WWW-Authenticate` challenge:

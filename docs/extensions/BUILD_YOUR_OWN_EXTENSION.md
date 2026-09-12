@@ -112,7 +112,7 @@ runtime if Spring has no registration metadata or import hook.
 An external extension should depend on the API artifact instead of depending on
 the full application.
 
-Current local proof shape:
+Current local proof shape (version `0.11.1`, not a published Maven artifact):
 
 ```gradle
 plugins {
@@ -120,7 +120,7 @@ plugins {
 }
 
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
-        .orElse('0.11.0')
+        .orElse('0.11.1')
         .get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
         .orElse('io.github.dtkmn')

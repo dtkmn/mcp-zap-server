@@ -1,11 +1,10 @@
 ---
 title: "MCP Access Authentication"
 editUrl: false
-description: "Choose how Cursor, Open WebUI, or another MCP client authenticates to MCP ZAP Server."
+description: "Configure API-key or JWT access from your MCP client to MCP ZAP Server."
 ---
-This page configures access from Cursor, Open WebUI, or another MCP client to
-MCP ZAP Server. It does not configure ZAP to log in to the website being
-scanned.
+This page configures access from your MCP client to MCP ZAP Server. It does
+not configure ZAP to log in to the website being scanned.
 
 | Layer | Credential | Guide |
 | --- | --- | --- |
@@ -53,11 +52,10 @@ openssl rand -base64 64
 Recreate the server after changing the mode:
 
 ```bash
-docker compose up -d --force-recreate mcp-server open-webui
+docker compose up -d --force-recreate mcp-server
 ```
 
-Also update the credential in Cursor or any other client. Open WebUI receives
-the API key when its container is created, which is why it is recreated here.
+Also update the credential in each MCP client and reconnect it.
 If you choose JWT, configure a pre-issued bearer token in each client; see
 [MCP Client Authentication](../mcp-client-authentication/).
 
@@ -125,8 +123,8 @@ user or network to reach the server.
 ### Environment variables not loading
 
 ```bash
-# Recreate containers to pick up .env changes
-docker compose up -d --force-recreate mcp-server open-webui
+# Recreate the server to pick up .env changes
+docker compose up -d --force-recreate mcp-server
 ```
 
 ## Recommendation

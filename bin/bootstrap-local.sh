@@ -122,5 +122,7 @@ Local demo behavior:
 Next steps:
 1. Start the default self-serve stack with ./dev.sh
 2. Run ./bin/self-serve-doctor.sh to verify the API-key MCP path
-3. Open the bundled browser client at http://localhost:3000, or connect Cursor with examples/cursor/mcp.json
+3. Connect your MCP client to http://localhost:7456/mcp using X-API-Key from MCP_API_KEY in .env
+   Cursor example: examples/cursor/mcp.json
+   Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
 EOF

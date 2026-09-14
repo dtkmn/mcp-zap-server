@@ -8,7 +8,6 @@ ENV_FILE="${REPO_ROOT}/.env"
 SERVER_URL="http://localhost:7456/mcp"
 HEALTH_URL="http://localhost:7456/actuator/health"
 ZAP_URL="http://localhost:8090/"
-OPEN_WEBUI_HEALTH_URL="http://localhost:3000/health"
 MCP_API_KEY="${MCP_API_KEY:-}"
 MCP_PROTOCOL_VERSION="${MCP_PROTOCOL_VERSION:-2025-11-25}"
 SKIP_DOCKER=0
@@ -261,16 +260,6 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
     else
       fail "Local zap container is not running. Start it with ./dev.sh."
     fi
-
-    if grep -qx 'open-webui' <<<"${running_services}"; then
-      if curl -fsS "${OPEN_WEBUI_HEALTH_URL}" >/dev/null 2>&1; then
-        pass "Open WebUI container is running"
-      else
-        note "Open WebUI container is running but its health endpoint is not ready yet"
-      fi
-    else
-      note "Open WebUI is not running. The default Compose stack normally includes it for the bundled browser client."
-    fi
   fi
 fi
 
@@ -374,8 +363,9 @@ cat <<'EOF'
 Self-serve API-key path looks healthy.
 
 Next steps:
-- Cursor: copy examples/cursor/mcp.json into your Cursor MCP config and keep MCP_API_KEY in your shell environment.
-- Open WebUI: open http://localhost:3000 when the default stack is running.
+- Connect your MCP client to http://localhost:7456/mcp using X-API-Key from MCP_API_KEY in .env.
+- Cursor: start from examples/cursor/mcp.json; see the client guide if GUI-launched Cursor does not inherit your shell environment.
+- Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
 - First-run guide: docs/getting-started/SELF_SERVE_FIRST_RUN.md
 - Published docs route: docs/src/content/docs/getting-started/self-serve-first-run.md
 EOF

@@ -53,8 +53,9 @@ This starts:
 
 - OWASP ZAP
 - the MCP server on `http://localhost:7456/mcp`
-- Open WebUI on `http://localhost:3000`
 - local demo targets such as Juice Shop
+
+Use your own MCP client; the stack does not include a chat interface.
 
 The default Compose stack binds published ports to `127.0.0.1`. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
@@ -75,7 +76,7 @@ Expected shape:
 The default local Compose stack is intentionally convenient, not hardened:
 
 - MCP auth defaults to `api-key`
-- Open WebUI is preconfigured to send `X-API-Key`
+- configure your MCP client to send `MCP_API_KEY` in the `X-API-Key` header
 - published host ports bind to loopback by default
 - local Compose defaults allow localhost and private-network targets for development convenience
 
@@ -91,15 +92,13 @@ ZAP_URL_WHITELIST=example.com,*.example.com
 
 ## Client Setup
 
-### Open WebUI
-
-Open [http://localhost:3000](http://localhost:3000). The default Compose stack already wires it to the local MCP server.
-
-This is the easiest local path.
+Use the [client compatibility and setup guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+to choose a client. The server requires Streamable HTTP and, for the default
+API-key setup, a custom `X-API-Key` request header.
 
 ### Cursor
 
-Example `.cursor/mcp.json`:
+Example `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (user-wide):
 
 ```json
 {
@@ -114,7 +113,26 @@ Example `.cursor/mcp.json`:
 }
 ```
 
+Set `MCP_API_KEY` in Cursor's environment. If GUI-launched Cursor does not
+inherit that environment, use the value from `.env` in the `X-API-Key` header
+and restart Cursor. Keep any config containing a real key out of version control.
+
 Do not send your API key as `Authorization: Bearer ...` unless you are actually using a JWT access token.
+
+### First Scan
+
+Ask the connected client:
+
+```text
+Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
+and passive analysis to finish, show a findings summary, generate an HTML
+report, and read it back through MCP. Do not run an active scan.
+```
+
+Expect a completed crawl, a findings summary, and a readable report. Use
+`http://juice-shop:3000` for the scan; `http://localhost:3001` is only the
+browser preview. If setup fails, run `./bin/self-serve-doctor.sh` and use the
+client guide's troubleshooting steps.
 
 ## Manual MCP Check
 

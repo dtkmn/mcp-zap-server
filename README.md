@@ -40,7 +40,7 @@ Prerequisites:
 
 - Docker 20.10+
 - Docker Compose v2 (`docker compose`)
-- an MCP-capable client, or the bundled Open WebUI client
+- your own MCP client with Streamable HTTP and custom-header support
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
@@ -63,17 +63,32 @@ contains no shell, package manager, or `curl`. A small built-in HTTP probe keeps
 the normal Docker Compose health status; `docker compose ps` still reports the
 MCP service as `(healthy)` after startup.
 
-Then open:
+Connect your MCP client:
 
-- Open WebUI: `http://localhost:3000`
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
+- Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
 - Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
+- [Client compatibility and setup](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+
+The stack runs the MCP server, ZAP, and demo targets. Install and configure
+your preferred MCP client separately.
 
 When scanning the bundled demo targets, use the container URLs that ZAP can
 reach from inside Compose:
 
 - Juice Shop scan target: `http://juice-shop:3000`
 - Petstore scan target: `http://petstore:8080`
+
+After connecting, try this first prompt:
+
+```text
+Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
+and passive analysis to finish, show a findings summary, generate an HTML
+report, and read it back through MCP. Do not run an active scan.
+```
+
+Expect a completed crawl, a findings summary, and a report the client can
+read. Finding counts vary; a connection or scan error is not a clean result.
 
 The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
@@ -159,7 +174,7 @@ Production and shared deployments should review:
 
 ```mermaid
 flowchart LR
-  Client["Open WebUI / MCP Client"] -->|"MCP over Streamable HTTP"| MCP["MCP ZAP Server"]
+  Client["Your MCP Client"] -->|"MCP over Streamable HTTP"| MCP["MCP ZAP Server"]
   MCP -->|"ZAP API"| ZAP["OWASP ZAP"]
   ZAP -->|"scan"| Target["Authorized target app"]
   MCP -->|"reports / findings / history"| Evidence["Evidence + reports"]

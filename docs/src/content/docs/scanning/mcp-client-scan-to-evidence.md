@@ -4,9 +4,8 @@ editUrl: false
 description: "Run the guided MCP workflow from target selection through findings, report readback, release evidence, and customer-safe handoff."
 ---
 
-Use this guide when you want to run MCP ZAP Server directly from Cursor,
-Open WebUI, or another MCP client. The GitHub Action pack is useful, but it is
-an integration on top of this flow, not the center of the product.
+Use this guide to run MCP ZAP Server from your own MCP client, from the first
+crawl through report readback and evidence handoff.
 
 ## What This Path Proves
 
@@ -27,11 +26,12 @@ runtime multi-engine gateway.
 
 ## Before You Start
 
-Use a supported MCP client:
-
-- Cursor with `X-API-Key` configured
-- Open WebUI from the bundled local stack
-- any MCP client that supports streamable HTTP and custom headers
+Connect your client using the
+[MCP Client Setup guide](../../getting-started/mcp-client-authentication/).
+It includes the Cursor example and client compatibility notes. The default
+local setup uses `http://localhost:7456/mcp` with an `X-API-Key` header.
+Other clients need Streamable HTTP and custom-header support; no browser chat
+UI is bundled.
 
 For local Compose, scan the container-reachable target URL, not the browser
 preview URL:
@@ -46,15 +46,20 @@ preview URL:
 Ask your MCP client:
 
 ```text
-Use the guided ZAP tools to scan http://juice-shop:3000.
-Start with a crawl, poll until it is complete, wait for passive analysis,
-show me a findings summary, generate an HTML report, read the report through
-MCP, then create release evidence and a customer-safe handoff summary.
+Run only a guided crawl against http://juice-shop:3000.
+Follow the server's Next Actions and poll until the crawl is complete.
+Wait for passive analysis to finish, summarize findings for this target,
+generate an HTML report, and read the report back through MCP.
+Do not start an active scan.
 ```
 
-Tool responses include `Next Actions`. Follow those first. They are the product
-lane. If a response also includes raw IDs, treat them as diagnostics, not as
-the main workflow.
+Expected result: a completed crawl, drained passive analysis, a target-scoped
+findings summary, and an HTML report the client can read through MCP. Finding
+counts vary. After this first report works, continue below for optional active
+scanning, release evidence, and customer handoff.
+
+Tool responses include `Next Actions`. Follow those first. If a response also
+includes raw IDs, treat them as diagnostics, not as the main workflow.
 
 ## Recommended Tool Sequence
 

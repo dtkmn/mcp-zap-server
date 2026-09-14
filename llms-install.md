@@ -39,12 +39,18 @@ docker compose up -d
 The default stack binds local ports to `127.0.0.1`.
 
 - MCP endpoint: `http://localhost:7456/mcp`
-- bundled Open WebUI: `http://localhost:3000`
 - browser-visible demo targets: Juice Shop on `http://localhost:3001`, Petstore on `http://localhost:3002`
+
+The stack does not bundle an MCP client. Install and configure your chosen
+client separately.
 
 ## MCP Client Configuration
 
-Use streamable HTTP with the `X-API-Key` header from `MCP_API_KEY`.
+Use Streamable HTTP with the `X-API-Key` header from `MCP_API_KEY` in `.env`.
+See the [client compatibility and setup guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+for the project's validation status and client-specific limitations.
+
+For Cursor, use `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (user-wide):
 
 ```json
 {
@@ -59,22 +65,15 @@ Use streamable HTTP with the `X-API-Key` header from `MCP_API_KEY`.
 }
 ```
 
-If your client requires explicit transport metadata, use:
+The environment variable must be available to Cursor. If a GUI launch does
+not inherit it, put the value from `.env` in the `X-API-Key` header and restart
+Cursor. Keep configs containing real keys out of version control.
 
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "protocol": "mcp",
-      "transport": "streamable-http",
-      "url": "http://localhost:7456/mcp",
-      "headers": {
-        "X-API-Key": "${env:MCP_API_KEY}"
-      }
-    }
-  }
-}
-```
+Other clients use their own configuration format. Set the endpoint to
+`http://localhost:7456/mcp`, select Streamable HTTP, and configure the
+`X-API-Key` header. Do not assume Cursor's JSON schema or environment-variable
+syntax is portable to every client. The localhost endpoint assumes the client
+runs on the same host as the published Compose ports.
 
 ## Standalone OCI Image With External ZAP
 
@@ -158,8 +157,15 @@ After the stack is running, ask the MCP client to list available ZAP tools befor
 Suggested first request:
 
 ```text
-List the available ZAP security tools, then run a passive-safe crawl against the local Juice Shop target at http://juice-shop:3000. Do not run an active scan yet.
+Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
+and passive analysis to finish, show a findings summary, generate an HTML
+report, and read it back through MCP. Do not run an active scan.
 ```
+
+Expect a completed crawl, a findings summary, and a readable report. Finding
+counts vary. If the client cannot list tools or the scan fails, resolve the
+error before interpreting the result. Run `./bin/self-serve-doctor.sh` for the
+local API-key connection check.
 
 For scans inside the default Compose stack, use the service URL reachable by the ZAP container:
 

@@ -51,7 +51,7 @@ docker compose up -d
 
 This starts:
 
-- OWASP ZAP
+- ZAP
 - the MCP server on `http://localhost:7456/mcp`
 - local demo targets such as Juice Shop
 

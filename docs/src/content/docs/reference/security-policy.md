@@ -180,7 +180,7 @@ This server tracks the [Model Context Protocol Security Best Practices](https://
 
 ### ZAP as a Security Tool
 
-- OWASP ZAP is designed for security testing and can be used maliciously
+- ZAP is designed for security testing and can be used maliciously
 - This server adds authentication and access controls to mitigate risks
 - Always run in isolated, controlled environments
 - Be aware of legal implications of security scanning

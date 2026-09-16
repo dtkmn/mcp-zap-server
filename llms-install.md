@@ -1,6 +1,6 @@
 # Install MCP ZAP Server For Agentic MCP Clients
 
-Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with an OWASP ZAP sidecar; do not install it as a stdio-only MCP package.
+Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
 The versioned image example targets `v0.11.1`. Before using it, confirm that
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
@@ -8,7 +8,7 @@ corresponding release workflow show successful publication to your registry.
 
 ## What This Server Does
 
-MCP ZAP Server lets MCP clients drive OWASP ZAP through guided, operator-controlled security workflows:
+MCP ZAP Server lets MCP clients drive ZAP through guided, operator-controlled security workflows:
 
 - spider, AJAX spider, active scan, passive scan, API import, findings, reports, and scan history tools
 - API-key or JWT authentication for the MCP endpoint
@@ -77,7 +77,7 @@ runs on the same host as the published Compose ports.
 
 ## Standalone OCI Image With External ZAP
 
-Use this path only when you already run, or are willing to run, OWASP ZAP separately. Marketplace and registry clients do not automatically start the ZAP sidecar for this package.
+Use this path only when you already run, or are willing to run, ZAP separately. Marketplace and registry clients do not automatically start the ZAP sidecar for this package.
 
 Create a shared network and report workspace volume, then initialize the volume for the standard ZAP container UID/GID:
 

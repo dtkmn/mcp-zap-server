@@ -4,7 +4,7 @@ This document explains how extensions fit around `mcp-zap-server`.
 
 The short version:
 
-- today, the shipped scanner engine is OWASP ZAP
+- today, the shipped scanner engine is ZAP
 - the product boundary is the MCP-native gateway runtime, not ZAP itself
 - extensions plug into public extension contracts
 - enterprise uses the same extension pattern privately

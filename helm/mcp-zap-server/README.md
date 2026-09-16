@@ -1,6 +1,6 @@
 # MCP ZAP Server Helm Chart
 
-This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for OWASP ZAP) on Kubernetes.
+This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZAP) on Kubernetes.
 
 ## Chart And Image Versions
 
@@ -15,7 +15,7 @@ applies to `v0.11.1` and later, not `v0.11.0`.
 This chart deploys two main components in **separate pods**:
 
 1. **ZAP Proxy Pod** (1 replica, stateful)
-   - OWASP ZAP security scanner
+   - ZAP security scanner
    - Handles all security scanning operations
    - Persistent storage for scan data
    - Resource-intensive (2-4GB RAM)

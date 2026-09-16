@@ -5,7 +5,7 @@
 <h1 align="center">MCP ZAP Server</h1>
 
 <p align="center">
-  Give AI agents a safe, self-hosted OWASP ZAP operator for guided web security scans, findings, reports, and production guardrails.
+  Give AI agents a safe, self-hosted ZAP operator for guided web security scans, findings, reports, and production guardrails.
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
   <img src="https://img.shields.io/github/license/dtkmn/mcp-zap-server" alt="GitHub license">
 </p>
 
-> **Note** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation.
+> **Note** This project is not affiliated with or endorsed by the ZAP project. It is an independent implementation.
 
-`mcp-zap-server` exposes OWASP ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
+`mcp-zap-server` exposes ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 
 Use it when you want:
 
@@ -115,7 +115,7 @@ the MCP server name expected by registry and catalog tooling. Check
 release workflow before installing a versioned image or publishing its package
 metadata; repository metadata alone is not proof of image availability.
 
-Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
+Docker Compose remains the easiest installation path because the MCP server is designed to operate with a ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where ZAP is already running and reachable from the MCP container.
 
 ## What You Get
 
@@ -175,7 +175,7 @@ Production and shared deployments should review:
 ```mermaid
 flowchart LR
   Client["Your MCP Client"] -->|"MCP over Streamable HTTP"| MCP["MCP ZAP Server"]
-  MCP -->|"ZAP API"| ZAP["OWASP ZAP"]
+  MCP -->|"ZAP API"| ZAP["ZAP"]
   ZAP -->|"scan"| Target["Authorized target app"]
   MCP -->|"reports / findings / history"| Evidence["Evidence + reports"]
 ```
@@ -237,7 +237,7 @@ Operations:
 
 ## Open Source Core And Extension Model
 
-`mcp-zap-server` is the Apache-2.0-licensed open-source core. It is intended to be useful on its own for self-hosted MCP and OWASP ZAP workflows.
+`mcp-zap-server` is the Apache-2.0-licensed open-source core. It is intended to be useful on its own for self-hosted MCP and ZAP workflows.
 
 Private or enterprise capabilities may be built as separate extensions around this core. Those extensions are not required to run the OSS project, and enterprise implementation code is not shipped in this repository.
 

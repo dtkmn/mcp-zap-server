@@ -1,18 +1,32 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
+import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 
 import java.time.Duration;
 
 final class ZapDockerTestSupport {
+    private static final String DEFAULT_ZAP_IMAGE = "zaproxy/zap-stable:2.17.0";
     private static final Duration ZAP_CONTAINER_STARTUP_TIMEOUT = Duration.ofMinutes(2);
     private static final Duration ZAP_API_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration ZAP_API_READY_POLL_INTERVAL = Duration.ofMillis(500);
 
     private ZapDockerTestSupport() {
+    }
+
+    static ClientApi clientApi(String host, int port) {
+        return new TimeoutZapClientApi(host, port, null, 5000, 10000);
+    }
+
+    static DockerImageName zapImage() {
+        String configuredImage = System.getenv("ZAP_TEST_IMAGE");
+        return DockerImageName.parse(configuredImage == null || configuredImage.isBlank()
+                ? DEFAULT_ZAP_IMAGE
+                : configuredImage.trim());
     }
 
     static WaitStrategy waitForZapPort() {

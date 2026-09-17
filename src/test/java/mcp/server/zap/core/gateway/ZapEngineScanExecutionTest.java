@@ -6,6 +6,8 @@ import java.util.Map;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
+import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
+import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
 import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +17,7 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Ascan;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Spider;
@@ -87,6 +90,54 @@ class ZapEngineScanExecutionTest {
     }
 
     @Test
+    void mapsExplicitBusyRejectionsForEveryScanLaunch() throws Exception {
+        assertScanLaunchFailures(new ClientApiException("Scan In Progress", "scan_in_progress", null),
+                EngineBusyException.class);
+    }
+
+    @Test
+    void preservesInternalErrorsForEveryScanLaunch() throws Exception {
+        assertScanLaunchFailures(new ClientApiException("Scan In Progress", "internal_error", null),
+                ZapApiException.class);
+    }
+
+    @Test
+    void doesNotInferBusyFromAnErrorMessage() throws Exception {
+        assertScanLaunchFailures(new ClientApiException("scan_in_progress"), ZapApiException.class);
+    }
+
+    @Test
+    void doesNotTreatConfigurationFailuresAsBusyLaunchRejections() throws Exception {
+        ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
+        when(spider.setOptionThreadCount(3)).thenThrow(failure);
+        when(ascan.enableAllScanners(null)).thenThrow(failure);
+
+        assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.startActiveScan(
+                new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10)))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+    }
+
+    @Test
+    void doesNotTreatReadOrStopFailuresAsBusyLaunchRejections() throws Exception {
+        ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
+        when(spider.status("1")).thenThrow(failure);
+        when(spider.stop("1")).thenThrow(failure);
+        when(ascan.status("1")).thenThrow(failure);
+        when(ascan.stop("1")).thenThrow(failure);
+
+        assertThatThrownBy(() -> execution.readSpiderProgressPercent("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.stopSpiderScan("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.readActiveScanProgressPercent("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.stopActiveScan("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+    }
+
+    @Test
     void rejectsNonNumericSpiderProgressValues() throws Exception {
         when(spider.status("spider-1")).thenReturn(new ApiResponseElement("status", "running"));
 
@@ -137,6 +188,27 @@ class ZapEngineScanExecutionTest {
         verify(ascan).setScannerAttackStrength("40018", "LOW", "Default Policy");
         verify(ascan).setScannerAlertThreshold("40012", "HIGH", "Default Policy");
         verify(ascan).setScannerAlertThreshold("40018", "HIGH", "Default Policy");
+    }
+
+    private void assertScanLaunchFailures(ClientApiException failure, Class<? extends RuntimeException> expected)
+            throws Exception {
+        when(spider.scan("http://example.com", "7", "true", "", "false")).thenThrow(failure);
+        when(spider.scanAsUser("1", "2", "http://example.com", "7", "true", "false")).thenThrow(failure);
+        when(ascan.scan("http://example.com", "true", "false", "Default Policy", null, null)).thenThrow(failure);
+        when(ascan.scanAsUser("http://example.com", "1", "2", "true", "Default Policy", null, null))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
+                .isExactlyInstanceOf(expected).hasCause(failure);
+        assertThatThrownBy(() -> execution.startSpiderScanAsUser(
+                new AuthenticatedSpiderScanRequest("1", "2", "http://example.com", "7", "true", "false", 3, 12)))
+                .isExactlyInstanceOf(expected).hasCause(failure);
+        assertThatThrownBy(() -> execution.startActiveScan(
+                new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10)))
+                .isExactlyInstanceOf(expected).hasCause(failure);
+        assertThatThrownBy(() -> execution.startActiveScanAsUser(
+                new AuthenticatedActiveScanRequest("1", "2", "http://example.com", "true", "Default Policy", 30, 5, 10)))
+                .isExactlyInstanceOf(expected).hasCause(failure);
     }
 
     private ApiResponseSet scannerRule(String id,

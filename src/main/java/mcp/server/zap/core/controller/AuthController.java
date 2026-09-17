@@ -236,7 +236,7 @@ public class AuthController {
                     "expiresIn", expiresIn
             ));
             
-        } catch (Exception _) {
+        } catch (JwtException _) {
             return ResponseEntity.ok(Map.of(
                     "valid", false,
                     "error", "Invalid or expired JWT token"

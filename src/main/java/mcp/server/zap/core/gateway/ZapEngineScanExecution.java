@@ -35,13 +35,21 @@ public class ZapEngineScanExecution implements EngineScanExecution {
             zap.spider.setOptionThreadCount(request.threadCount());
             zap.spider.setOptionMaxDuration(request.maxDurationMinutes());
 
-            ApiResponse response = zap.spider.scan(
-                    request.targetUrl(),
-                    String.valueOf(request.maxDepth()),
-                    "true",
-                    "",
-                    "false"
-            );
+            ApiResponse response;
+            try {
+                response = zap.spider.scan(
+                        request.targetUrl(),
+                        String.valueOf(request.maxDepth()),
+                        "true",
+                        "",
+                        "false"
+                );
+            } catch (ClientApiException e) {
+                if ("scan_in_progress".equals(e.getCode())) {
+                    throw new EngineBusyException("ZAP is busy with another Spider scan", e);
+                }
+                throw e;
+            }
             String scanId = responseValue(response, "spider.scan()");
             log.info("Spider scan started with ID: {} for URL: {}", scanId, request.targetUrl());
             return scanId;
@@ -69,14 +77,22 @@ public class ZapEngineScanExecution implements EngineScanExecution {
             zap.spider.setOptionThreadCount(request.threadCount());
             zap.spider.setOptionMaxDuration(request.maxDurationMinutes());
 
-            ApiResponse response = zap.spider.scanAsUser(
-                    request.contextId(),
-                    request.userId(),
-                    request.targetUrl(),
-                    request.maxChildren(),
-                    request.recurse(),
-                    request.subtreeOnly()
-            );
+            ApiResponse response;
+            try {
+                response = zap.spider.scanAsUser(
+                        request.contextId(),
+                        request.userId(),
+                        request.targetUrl(),
+                        request.maxChildren(),
+                        request.recurse(),
+                        request.subtreeOnly()
+                );
+            } catch (ClientApiException e) {
+                if ("scan_in_progress".equals(e.getCode())) {
+                    throw new EngineBusyException("ZAP is busy with another Spider scan", e);
+                }
+                throw e;
+            }
 
             String scanId = responseValue(response, "spider.scanAsUser()");
             log.info("Spider-as-user started with ID: {} for URL: {}, context: {}, user: {}",
@@ -114,14 +130,22 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     public String startActiveScan(ActiveScanRequest request) {
         try {
             configureActiveScan(request.maxDurationMinutes(), request.hostPerScan(), request.threadPerHost());
-            ApiResponseElement response = (ApiResponseElement) zap.ascan.scan(
-                    request.targetUrl(),
-                    request.recurse(),
-                    "false",
-                    request.policy(),
-                    null,
-                    null
-            );
+            ApiResponseElement response;
+            try {
+                response = (ApiResponseElement) zap.ascan.scan(
+                        request.targetUrl(),
+                        request.recurse(),
+                        "false",
+                        request.policy(),
+                        null,
+                        null
+                );
+            } catch (ClientApiException e) {
+                if ("scan_in_progress".equals(e.getCode())) {
+                    throw new EngineBusyException("ZAP is busy with another active scan", e);
+                }
+                throw e;
+            }
             String scanId = requireElementValue(
                     response,
                     "ascan.scan()",
@@ -141,15 +165,23 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     public String startActiveScanAsUser(AuthenticatedActiveScanRequest request) {
         try {
             configureActiveScan(request.maxDurationMinutes(), request.hostPerScan(), request.threadPerHost());
-            ApiResponseElement response = (ApiResponseElement) zap.ascan.scanAsUser(
-                    request.targetUrl(),
-                    request.contextId(),
-                    request.userId(),
-                    request.recurse(),
-                    request.policy(),
-                    null,
-                    null
-            );
+            ApiResponseElement response;
+            try {
+                response = (ApiResponseElement) zap.ascan.scanAsUser(
+                        request.targetUrl(),
+                        request.contextId(),
+                        request.userId(),
+                        request.recurse(),
+                        request.policy(),
+                        null,
+                        null
+                );
+            } catch (ClientApiException e) {
+                if ("scan_in_progress".equals(e.getCode())) {
+                    throw new EngineBusyException("ZAP is busy with another active scan", e);
+                }
+                throw e;
+            }
             String scanId = requireElementValue(
                     response,
                     "ascan.scanAsUser()",

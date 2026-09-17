@@ -43,7 +43,7 @@ class ApiSchemaImportServiceDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(FIXTURES)
                     .withExposedPorts(8090)
@@ -72,7 +72,7 @@ class ApiSchemaImportServiceDockerTest {
 
     @BeforeAll
     static void setupService() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
     }

@@ -410,6 +410,11 @@ public class GuidedScanWorkflowService {
 
     private String nextActionsForStatus(GuidedOperation operation, String operationId, String delegateResponse) {
         OperationState state = inferOperationState(delegateResponse);
+        if (state == OperationState.SUCCEEDED && operation.kind() == OperationKind.CRAWL
+                && STRATEGY_BROWSER.equals(operation.strategy())) {
+            // Queue success only confirms that the AJAX crawler stopped.
+            state = OperationState.STOPPED;
+        }
         String statusTool = statusToolFor(operation.kind());
         String stopTool = stopToolFor(operation.kind());
         StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
@@ -422,6 +427,11 @@ public class GuidedScanWorkflowService {
                     output.append("- Settle passive analysis: call zap_passive_scan_wait.\n")
                             .append("- Then review: call zap_findings_summary for the same target, then zap_report_generate when you need an artifact.");
                 }
+                yield output.toString();
+            }
+            case STOPPED -> {
+                output.append("- The browser crawl is no longer running; successful completion is unconfirmed.\n")
+                        .append("- Call zap_passive_scan_wait before reviewing available findings; check crawl coverage before continuing security testing.");
                 yield output.toString();
             }
             case FAILED, CANCELLED -> {
@@ -463,6 +473,9 @@ public class GuidedScanWorkflowService {
                 || normalized.contains("dead letter: true")
                 || normalized.contains("dead-letter=true")) {
             return OperationState.FAILED;
+        }
+        if (normalized.contains("ajax spider status: stopped")) {
+            return OperationState.STOPPED;
         }
         if (normalized.contains("status: succeeded")
                 || normalized.contains("status=succeeded")
@@ -769,6 +782,7 @@ public class GuidedScanWorkflowService {
         SUCCEEDED,
         FAILED,
         CANCELLED,
+        STOPPED,
         UNKNOWN
     }
 }

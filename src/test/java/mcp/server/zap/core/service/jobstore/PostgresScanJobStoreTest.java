@@ -10,9 +10,11 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PostgresScanJobStoreTest {
 
@@ -41,6 +43,21 @@ class PostgresScanJobStoreTest {
         );
 
         assertDoesNotThrow(() -> store.upsertAll(List.of(job)));
+    }
+
+    @Test
+    void ajaxLifecycleLockFailsClosedWhenDatabaseIsUnavailableEvenWithFailSoftStore() {
+        ScanJobStoreProperties.Postgres properties = new ScanJobStoreProperties.Postgres();
+        properties.setUrl("jdbc:postgresql://127.0.0.1:1/mcp_zap");
+        properties.setFailFast(false);
+        PostgresScanJobStore store = new PostgresScanJobStore(properties, new ObjectMapper());
+        AtomicInteger actionCalls = new AtomicInteger();
+
+        assertThrows(IllegalStateException.class, () -> store.tryWithAjaxLifecycleLock(snapshot -> {
+            actionCalls.incrementAndGet();
+            return "unsafe";
+        }));
+        assertEquals(0, actionCalls.get());
     }
 
     @Test

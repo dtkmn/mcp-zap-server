@@ -25,11 +25,13 @@ REPORT_PATH_PATTERN = re.compile(r"^Path:\s*(.+)$", re.MULTILINE)
 COMPLETED_PATTERN = re.compile(r"^Completed:\s*(yes|no)$", re.MULTILINE | re.IGNORECASE)
 PROGRESS_PATTERN = re.compile(r"^Progress:\s*(\d+)%$", re.MULTILINE)
 CI_GATE_RESULT_CONTRACT_VERSION = "ci_gate_result/v1"
-CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v1"
-CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION = "ci_gate_findings_diff/v1"
+CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v2"
+LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v1"
+CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION = "ci_gate_findings_diff/v2"
 CI_GATE_SUPPRESSIONS_CONTRACT_VERSION = "ci_gate_suppressions/v1"
 CI_GATE_ARTIFACT_MANIFEST_CONTRACT_VERSION = "ci_gate_artifact_manifest/v1"
 LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "legacy_zap_findings_snapshot/v1"
+FINDINGS_SNAPSHOT_CONTRACT_VERSION = "zap_findings_snapshot/v2"
 SUPPORTED_SUPPRESSION_MATCH_FIELDS = ("plugin_id", "alert_name", "risk", "confidence", "url", "param")
 RISK_RANKS = {
     "High": 3,
@@ -388,7 +390,19 @@ def normalize_url(value: str | None) -> str | None:
     return urllib.parse.urlunsplit((scheme, netloc, path, normalized_query, ""))
 
 
-def normalize_finding_record(raw: dict[str, Any]) -> dict[str, Any]:
+def finding_fingerprint(finding: dict[str, Any], identity_version: int = 1) -> str:
+    payload = {key: finding.get(key) for key in SUPPORTED_SUPPRESSION_MATCH_FIELDS}
+    if identity_version == 2:
+        # ZAP node names include the origin and structural parameters. They are
+        # opaque and case-sensitive; HTTP method is separate alert identity.
+        if finding.get("node_name"):
+            payload["url"] = {"node_name": finding["node_name"]}
+        payload["method"] = finding.get("method")
+    digest = hashlib.sha256(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")).hexdigest()
+    return f"sha256:{digest}"
+
+
+def normalize_finding_record(raw: dict[str, Any], identity_version: int = 1) -> dict[str, Any]:
     finding = {
         "plugin_id": compact_whitespace(raw.get("plugin_id") or raw.get("pluginId")),
         "alert_name": compact_whitespace(raw.get("alert_name") or raw.get("alertName") or raw.get("name")),
@@ -397,9 +411,15 @@ def normalize_finding_record(raw: dict[str, Any]) -> dict[str, Any]:
         "url": normalize_url(raw.get("url")),
         "param": compact_whitespace(raw.get("param")),
     }
-    payload = {key: finding[key] for key in SUPPORTED_SUPPRESSION_MATCH_FIELDS}
-    digest = hashlib.sha256(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")).hexdigest()
-    finding["fingerprint"] = f"sha256:{digest}"
+    if identity_version == 2:
+        node_name = str(raw.get("node_name") or raw.get("nodeName") or "").strip() or None
+        tags = raw.get("tags")
+        finding["node_name"] = node_name
+        finding["method"] = compact_whitespace(raw.get("method"))
+        finding["tags"] = dict(sorted(
+            (str(key), str(value)) for key, value in tags.items() if value is not None
+        )) if isinstance(tags, dict) else {}
+    finding["fingerprint"] = finding_fingerprint(finding, identity_version)
     return finding
 
 
@@ -423,37 +443,54 @@ def group_sort_key(group: dict[str, Any]) -> tuple[Any, ...]:
 
 
 def canonicalize_snapshot(payload: dict[str, Any], fallback_target_url: str | None = None) -> tuple[dict[str, Any], str]:
-    if payload.get("contract_version") == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION:
+    contract_version = payload.get("contract_version")
+    if contract_version in {
+        CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
+        LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
+    }:
         raw_findings = payload.get("findings")
         target_url = payload.get("target_url") or fallback_target_url
-        source_contract = CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION
-    elif payload.get("version") == 1 and isinstance(payload.get("fingerprints"), list):
+        source_contract = contract_version
+        identity_version = 2 if contract_version == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else 1
+    elif payload.get("version") in {1, 2} and isinstance(payload.get("fingerprints"), list):
         raw_findings = payload.get("fingerprints")
         target_url = payload.get("baseUrl") or fallback_target_url
-        source_contract = LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION
+        identity_version = payload["version"]
+        source_contract = (FINDINGS_SNAPSHOT_CONTRACT_VERSION if identity_version == 2
+                           else LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
     else:
         raise ValueError("Baseline snapshot must be valid JSON exported by zap_findings_snapshot or current-findings.json")
 
     if not isinstance(raw_findings, list):
         raise ValueError("Findings snapshot is missing findings")
 
-    deduped: dict[str, dict[str, Any]] = {}
+    deduped: dict[tuple[str, str], dict[str, Any]] = {}
     for item in raw_findings:
         if not isinstance(item, dict):
             continue
-        finding = normalize_finding_record(item)
-        deduped.setdefault(finding["fingerprint"], finding)
+        finding = normalize_finding_record(item, identity_version)
+        # Keep URL examples for legacy comparisons and URL/fingerprint suppressions.
+        # Distinct URLs can represent one ZAP node; do not discard them here.
+        key = (finding["fingerprint"], finding_fingerprint(finding))
+        existing = deduped.setdefault(key, finding)
+        if identity_version == 2:
+            existing["tags"] = dict(sorted({**existing["tags"], **finding["tags"]}.items()))
 
     findings = sorted(deduped.values(), key=finding_sort_key)
-    return (
-        {
-            "contract_version": CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
-            "target_url": normalize_url(target_url),
-            "finding_count": len(findings),
-            "findings": findings,
-        },
-        source_contract,
-    )
+    snapshot = {
+        "contract_version": (CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION if identity_version == 2
+                             else LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION),
+        "target_url": normalize_url(target_url),
+        "finding_count": len({finding["fingerprint"] for finding in findings}),
+        "findings": findings,
+    }
+    if identity_version == 2:
+        snapshot["recorded_example_count"] = len(findings)
+    return snapshot, source_contract
+
+
+def is_systemic(finding: dict[str, Any]) -> bool:
+    return "SYSTEMIC" in finding.get("tags", {})
 
 
 def render_findings_summary(snapshot: dict[str, Any]) -> str:
@@ -462,7 +499,9 @@ def render_findings_summary(snapshot: dict[str, Any]) -> str:
         "# CI Gate Findings Summary",
         "",
         f"Target: {snapshot.get('target_url') or 'All targets'}",
-        f"Unique Findings: {snapshot['finding_count']}",
+        f"Unique Recorded Findings: {snapshot['finding_count']}",
+        f"Recorded Examples: {len(findings)}",
+        "Counts describe recorded findings, not the total number of affected endpoints.",
         "",
     ]
 
@@ -470,25 +509,29 @@ def render_findings_summary(snapshot: dict[str, Any]) -> str:
         lines.append("No findings detected.")
         return "\n".join(lines) + "\n"
 
-    grouped: dict[str, dict[tuple[str | None, str | None], int]] = {}
+    grouped: dict[str, dict[tuple[str | None, str | None], set[str]]] = {}
+    systemic_groups: set[tuple[str, str | None, str | None]] = set()
     for finding in findings:
         risk = finding.get("risk") or "Unknown"
         key = (finding.get("alert_name"), finding.get("plugin_id"))
         grouped.setdefault(risk, {})
-        grouped[risk][key] = grouped[risk].get(key, 0) + 1
+        grouped[risk].setdefault(key, set()).add(finding["fingerprint"])
+        if is_systemic(finding):
+            systemic_groups.add((risk, *key))
 
     for risk in ("High", "Medium", "Low", "Informational", "Unknown"):
         risk_groups = grouped.get(risk)
         if not risk_groups:
             continue
         lines.append(f"## {risk} Risk")
-        for (alert_name, plugin_id), count in sorted(
+        for (alert_name, plugin_id), fingerprints in sorted(
             risk_groups.items(),
             key=lambda item: ((item[0][0] or "").lower(), (item[0][1] or "").lower()),
         ):
             label = alert_name or "<none>"
             plugin_label = plugin_id or "<none>"
-            lines.append(f"- {label} | Plugin ID: {plugin_label} | Count: {count}")
+            systemic_note = " | SYSTEMIC: may affect the whole site" if (risk, alert_name, plugin_id) in systemic_groups else ""
+            lines.append(f"- {label} | Plugin ID: {plugin_label} | Recorded Findings: {len(fingerprints)}{systemic_note}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -496,9 +539,12 @@ def render_findings_summary(snapshot: dict[str, Any]) -> str:
 
 def build_diff_groups(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[tuple[str | None, str | None, str | None], int] = {}
+    systemic_groups: set[tuple[str | None, str | None, str | None]] = set()
     for finding in findings:
         key = (finding.get("plugin_id"), finding.get("alert_name"), finding.get("risk"))
         grouped[key] = grouped.get(key, 0) + 1
+        if is_systemic(finding):
+            systemic_groups.add(key)
 
     groups = [
         {
@@ -506,6 +552,7 @@ def build_diff_groups(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "alert_name": alert_name,
             "risk": risk,
             "count": count,
+            "systemic": (plugin_id, alert_name, risk) in systemic_groups,
         }
         for (plugin_id, alert_name, risk), count in grouped.items()
     ]
@@ -520,11 +567,14 @@ def render_diff_text(diff_contract: dict[str, Any]) -> str:
         f"Target: {diff_contract.get('target_url') or 'All targets'}",
         f"Baseline Findings: {diff_contract['baseline']['finding_count']}",
         f"Current Findings: {diff_contract['current']['finding_count']}",
-        f"Suppressed Baseline Findings: {suppressions['suppressed_baseline_findings']}",
-        f"Suppressed Current Findings: {suppressions['suppressed_current_findings']}",
+        f"Suppressed Baseline Recorded Examples: {suppressions['suppressed_baseline_findings']}",
+        f"Suppressed Current Recorded Examples: {suppressions['suppressed_current_findings']}",
         f"New Findings: {counts['new']}",
         f"Resolved Findings: {counts['resolved']}",
         f"Unchanged Findings: {counts['unchanged']}",
+        ("Comparison: ZAP node identity (URL fallback)." if diff_contract["identity_version"] == 2
+         else "Comparison: legacy URL identity because at least one snapshot is version 1."),
+        "Counts describe recorded findings, not the total number of affected endpoints.",
         "",
     ]
 
@@ -542,7 +592,8 @@ def render_diff_text(diff_contract: dict[str, Any]) -> str:
                     f"{group.get('alert_name') or '<none>'}"
                     f" | Risk: {group.get('risk') or '<none>'}"
                     f" | Plugin ID: {group.get('plugin_id') or '<none>'}"
-                    f" | Count: {group['count']}"
+                    f" | Recorded Findings: {group['count']}"
+                    + (" | SYSTEMIC: may affect the whole site" if group.get("systemic") else "")
                 )
         lines.append("")
 
@@ -682,7 +733,9 @@ def load_suppressions_contract(path: Path, now: datetime | None = None) -> dict[
 def finding_matches_rule(finding: dict[str, Any], rule: dict[str, Any]) -> bool:
     match = rule["match"]
     expected_fingerprint = match.get("fingerprint")
-    if expected_fingerprint and finding["fingerprint"] != expected_fingerprint:
+    if expected_fingerprint and expected_fingerprint not in {
+        finding["fingerprint"], finding_fingerprint(finding)
+    }:
         return False
 
     for field in SUPPORTED_SUPPRESSION_MATCH_FIELDS:
@@ -725,8 +778,26 @@ def build_diff_contract(target_url: str,
         or baseline_snapshot.get("target_url")
         or normalize_url(target_url)
     )
-    baseline_map = {finding["fingerprint"]: finding for finding in baseline_snapshot["findings"]}
-    current_map = {finding["fingerprint"]: finding for finding in current_snapshot["findings"]}
+    identity_version = 2 if all(
+        snapshot["contract_version"] == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION
+        for snapshot in (baseline_snapshot, current_snapshot)
+    ) else 1
+
+    def comparison_map(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        compared: dict[str, dict[str, Any]] = {}
+        for finding in snapshot["findings"]:
+            key = finding_fingerprint(finding) if identity_version == 1 else finding["fingerprint"]
+            if key not in compared:
+                compared[key] = finding
+            elif finding.get("tags"):
+                compared[key] = {
+                    **compared[key],
+                    "tags": {**compared[key].get("tags", {}), **finding["tags"]},
+                }
+        return compared
+
+    baseline_map = comparison_map(baseline_snapshot)
+    current_map = comparison_map(current_snapshot)
 
     new_findings = sorted(
         [finding for fingerprint, finding in current_map.items() if fingerprint not in baseline_map],
@@ -739,14 +810,17 @@ def build_diff_contract(target_url: str,
 
     return {
         "contract_version": CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION,
+        "identity_version": identity_version,
         "target_url": normalized_target_url,
         "baseline": {
             "contract_version": baseline_snapshot["contract_version"],
-            "finding_count": baseline_snapshot["finding_count"],
+            "finding_count": len(baseline_map),
+            "recorded_example_count": len(baseline_snapshot["findings"]),
         },
         "current": {
             "contract_version": current_snapshot["contract_version"],
-            "finding_count": current_snapshot["finding_count"],
+            "finding_count": len(current_map),
+            "recorded_example_count": len(current_snapshot["findings"]),
         },
         "suppressions": suppressions_summary,
         "counts": {
@@ -1267,6 +1341,8 @@ def main(argv: list[str] | None = None) -> int:
                 current_findings_for_diff["findings"],
                 suppressions_contract,
             )
+            # Historical field names are retained; these count suppressed example
+            # records. Another URL example can keep the same node identity present.
             suppressions_summary["suppressed_baseline_findings"] = suppressed_baseline
             suppressions_summary["suppressed_current_findings"] = suppressed_current
             suppressions_summary["matched_rule_ids"] = sorted(set(baseline_rule_ids).union(current_rule_ids))

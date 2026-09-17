@@ -6,8 +6,8 @@ The helper now emits these stable contracts under the configured output director
 
 - `gate-metadata.json`: `ci_gate_result/v1`
 - `seed-requests-results.json`: `ci_gate_seed_requests/v1` when seed requests are configured
-- `current-findings.json`: `ci_gate_findings_snapshot/v1`
-- `findings-diff.json`: `ci_gate_findings_diff/v1` when a baseline is used on the expert surface
+- `current-findings.json`: `ci_gate_findings_snapshot/v2` for version 2 server snapshots; `/v1` for legacy server snapshots
+- `findings-diff.json`: `ci_gate_findings_diff/v2` when a baseline is used on the expert surface
 - `artifact-manifest.json`: `ci_gate_artifact_manifest/v1`
 
 Human-readable companions remain alongside those contracts:
@@ -94,13 +94,16 @@ stored proxy URL is sanitized the same way.
 If any seed request returns an unexpected status or cannot be sent through the
 ZAP proxy, the helper fails before it claims scan coverage.
 
-## Findings Snapshot v1
+## Findings Snapshot v2
 
-`current-findings.json` now contains a normalized, deduplicated finding set:
+`current-findings.json` contains normalized findings and their recorded URL
+examples. Exact duplicates are removed, but distinct URL examples for the same
+ZAP node remain available for legacy comparisons and suppression matching.
 
 - `contract_version`
 - `target_url`
-- `finding_count`
+- `finding_count`: unique finding identities
+- `recorded_example_count`: retained example records (v2 only)
 - `findings`
 
 Each finding includes:
@@ -112,8 +115,15 @@ Each finding includes:
 - `confidence`
 - `url`
 - `param`
+- `node_name`, `method`, and `tags` in v2, preserved when available
 
 Fingerprints are recomputed from normalized fields rather than trusting legacy raw strings. This is what keeps reruns stable when the legacy snapshot export changes ordering or embeds different export timestamps.
+
+Version 2 uses the full, case-sensitive `node_name` plus HTTP method for endpoint
+identity, with a distinct URL fallback when the node name is absent. Rule,
+name, risk, confidence, and parameter distinctions remain. Tags are metadata,
+not identity. A `SYSTEMIC` tag means the finding is typically site-wide; counts
+describe recorded findings or examples, not all affected endpoints.
 
 Normalization now includes:
 
@@ -122,18 +132,22 @@ Normalization now includes:
 - lower-cased scheme and host for URLs
 - sorted query-string parameters so `?b=2&a=1` and `?a=1&b=2` fingerprint the same
 
-The helper still accepts legacy baseline files produced directly by `zap_findings_snapshot`:
+The helper accepts both server exports and normalized gate baselines:
 
-- legacy input: `version: 1` with `fingerprints`
-- current input: `contract_version: ci_gate_findings_snapshot/v1` with `findings`
+- server input: `version: 1` or `version: 2` with `fingerprints`
+- gate input: `ci_gate_findings_snapshot/v1` or `ci_gate_findings_snapshot/v2` with `findings`
 
-## Findings Diff v1
+Legacy input retains its v1 identity mode. Update the bundled gate alongside the
+server, and update external readers before consuming v2 artifacts.
+
+## Findings Diff v2
 
 `findings-diff.json` is the machine-readable diff contract when a baseline is available on the expert tool surface.
 
 It contains:
 
 - `contract_version`
+- `identity_version`
 - `target_url`
 - `baseline`
 - `current`
@@ -143,6 +157,13 @@ It contains:
 - `resolved_finding_groups`
 
 `findings-diff.txt` is the deterministic text rendering of the same contract.
+
+When both snapshots are v2, `identity_version` is `2` and comparisons use node
+identity with method and URL fallback. If either snapshot is v1, it is `1` and
+both sides use the legacy URL algorithm; the text output states this explicitly.
+The diff's `baseline` and `current` each include unique `finding_count` and
+`recorded_example_count` after suppressions. New, resolved, and unchanged counts
+refer to unique identities under the selected comparison mode.
 
 The helper intentionally avoids legacy exported-at timestamps in the diff output, because those make identical reruns look different for no security reason.
 
@@ -185,6 +206,11 @@ Suppressions are applied to the normalized baseline and current finding sets bef
 
 - raw findings stay in `current-findings.json`
 - policy-time suppression effects show up in `findings-diff.json` and `gate-metadata.json`
+
+For compatibility, the JSON counters `suppressed_baseline_findings` and
+`suppressed_current_findings` keep their names but count removed example records.
+The text output labels them as recorded examples. Suppressing one URL example
+does not remove a node identity if another unsuppressed example remains.
 
 ## Artifact Manifest v1
 

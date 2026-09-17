@@ -1,7 +1,9 @@
 package mcp.server.zap.core.gateway;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
 import org.springframework.stereotype.Component;
@@ -35,7 +37,7 @@ public class ZapEngineFindingAccess implements EngineFindingAccess {
             List<AlertSnapshot> alerts = new ArrayList<>();
             for (ApiResponse item : list.getItems()) {
                 if (item instanceof ApiResponseSet set) {
-                    alerts.add(toSnapshot(new Alert(set)));
+                    alerts.add(toSnapshot(set));
                 }
             }
             return List.copyOf(alerts);
@@ -45,7 +47,12 @@ public class ZapEngineFindingAccess implements EngineFindingAccess {
         }
     }
 
-    private AlertSnapshot toSnapshot(Alert alert) {
+    private AlertSnapshot toSnapshot(ApiResponseSet response) {
+        // The Java client Alert wrapper does not expose nodeName, method or tags.
+        String nodeName = response.getStringValue("nodeName");
+        String method = response.getStringValue("method");
+        Map<String, String> tags = readTags(response.getValue("tags"));
+        Alert alert = new Alert(response);
         return new AlertSnapshot(
                 stringValue(alert.getId()),
                 stringValue(alert.getPluginId()),
@@ -61,8 +68,29 @@ public class ZapEngineFindingAccess implements EngineFindingAccess {
                 stringValue(alert.getSolution()),
                 stringValue(alert.getMessageId()),
                 stringValue(alert.getCweId()),
-                stringValue(alert.getWascId())
+                stringValue(alert.getWascId()),
+                nodeName,
+                method,
+                tags
         );
+    }
+
+    private Map<String, String> readTags(ApiResponse response) {
+        if (response == null) {
+            return Map.of();
+        }
+        if (!(response instanceof ApiResponseList list)) {
+            throw new IllegalStateException("Unexpected alert tags response: expected a list");
+        }
+        Map<String, String> tags = new LinkedHashMap<>();
+        for (ApiResponse item : list.getItems()) {
+            if (!(item instanceof ApiResponseSet tag)
+                    || tag.getStringValue("key") == null || tag.getStringValue("value") == null) {
+                throw new IllegalStateException("Unexpected alert tag response: expected key and value");
+            }
+            tags.put(tag.getStringValue("key"), tag.getStringValue("value"));
+        }
+        return tags;
     }
 
     private String trimToNull(String value) {

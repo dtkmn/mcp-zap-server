@@ -15,6 +15,8 @@ zap:
     repository: zaproxy/zap-stable
     pullPolicy: IfNotPresent
     tag: "2.17.0"
+    # Optional sha256 digest overrides tag and pins the image, not runtime add-ons.
+    digest: ""
   
   service:
     type: ClusterIP
@@ -38,8 +40,9 @@ zap:
       apiKeyKey: ZAP_API_KEY
     api:
       # Restrict the ZAP API to loopback and RFC1918 sources by default.
-      # When left empty, the chart also permits the chart-managed ZAP service
-      # hostname used by the MCP server.
+      # ZAP also checks the Host header. The default permits its special API
+      # hostname "zap" and the chart-managed ZAP service hostname.
+      # Custom expressions must permit the client source and API hostname.
       allowedAddrRegex: ""
     addons:
       - spiderAjax
@@ -183,6 +186,8 @@ mcp:
   zapClient:
     url: ""  # Defaults to the chart-managed ZAP service name when empty
     port: 8090
+    connectTimeoutMs: 5000  # MCP -> ZAP API; must be positive
+    readTimeoutMs: 10000   # Response read inactivity; must be positive
     apiKey: ""  # Defaults to zap.config.apiKey when blank and no secret is configured
     existingSecret:
       name: ""
@@ -197,6 +202,7 @@ mcp:
       maxConcurrentSpiderScans: 5
       threadPerHost: 10
       hostPerScan: 5
+      # ZAP target timeout applied at startup (ZAP_CONNECTION_TIMEOUT).
       connectionTimeoutInSecs: 60
       spiderThreadCount: 5
       spiderMaxDepth: 10

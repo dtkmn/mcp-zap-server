@@ -7,9 +7,13 @@ import mcp.server.zap.core.service.SpiderScanService;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -145,17 +149,58 @@ class ScanJobRuntimeExecutorTest {
         );
 
         when(ajaxSpiderService.startAjaxSpiderJob("https://example.com")).thenReturn("ajax-1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(10);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String scanId = executor.startScan(
                 ScanJobType.AJAX_SPIDER,
                 Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com")
         );
-        int progress = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int runningSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int stoppedSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
         executor.stopScan(ScanJobType.AJAX_SPIDER, scanId);
 
         assertEquals("ajax-1", scanId);
-        assertEquals(10, progress);
+        assertEquals(0, runningSignal);
+        assertEquals(100, stoppedSignal);
         verify(ajaxSpiderService).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void queuedAjaxStartCarriesDurableOwnershipToService() {
+        AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService);
+        ScanJobClaimToken claim = new ScanJobClaimToken("worker", "fence");
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claim);
+        when(ajaxSpiderService.startAjaxSpiderJob("https://example.com", "ajax-job", claim)).thenReturn("ajax-1");
+
+        assertEquals("ajax-1", executor.startScan(target));
+
+        verify(ajaxSpiderService).startAjaxSpiderJob("https://example.com", "ajax-job", claim);
+    }
+
+    @Test
+    void queuedAjaxAcceptanceForwardsOriginalTargetAndScanId() {
+        AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
+        AtomicReference<ScanJobStartTarget> acceptedTarget = new AtomicReference<>();
+        AtomicReference<String> acceptedScanId = new AtomicReference<>();
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService, (target, scanId) -> {
+            acceptedTarget.set(target);
+            acceptedScanId.set(scanId);
+        });
+        ScanJobClaimToken claim = new ScanJobClaimToken("worker", "fence");
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claim);
+        when(ajaxSpiderService.startAjaxSpiderJob(eq("https://example.com"), eq("ajax-job"), eq(claim), any()))
+                .thenAnswer(invocation -> {
+                    Consumer<String> onAccepted = invocation.getArgument(3);
+                    onAccepted.accept("ajax-1");
+                    return "ajax-1";
+                });
+
+        assertEquals("ajax-1", executor.startScan(target));
+
+        assertEquals(target, acceptedTarget.get());
+        assertEquals("ajax-1", acceptedScanId.get());
     }
 }

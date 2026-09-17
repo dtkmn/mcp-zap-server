@@ -43,11 +43,6 @@ public class ScanLimitProperties {
     private int hostPerScan = 5;
 
     /**
-     * Connection timeout in seconds for ZAP operations.
-     */
-    private int connectionTimeoutInSecs = 60;
-
-    /**
      * Number of threads for spider scanning.
      */
     private int spiderThreadCount = 5;

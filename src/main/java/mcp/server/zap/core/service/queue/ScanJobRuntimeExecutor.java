@@ -6,18 +6,28 @@ import mcp.server.zap.core.service.AjaxSpiderService;
 import mcp.server.zap.core.service.SpiderScanService;
 
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 public class ScanJobRuntimeExecutor {
     private final ActiveScanService activeScanService;
     private final SpiderScanService spiderScanService;
     private final AjaxSpiderService ajaxSpiderService;
+    private final BiConsumer<ScanJobStartTarget, String> onAjaxStartAccepted;
 
     public ScanJobRuntimeExecutor(ActiveScanService activeScanService,
                                   SpiderScanService spiderScanService,
                                   AjaxSpiderService ajaxSpiderService) {
+        this(activeScanService, spiderScanService, ajaxSpiderService, null);
+    }
+
+    public ScanJobRuntimeExecutor(ActiveScanService activeScanService,
+                                  SpiderScanService spiderScanService,
+                                  AjaxSpiderService ajaxSpiderService,
+                                  BiConsumer<ScanJobStartTarget, String> onAjaxStartAccepted) {
         this.activeScanService = activeScanService;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
+        this.onAjaxStartAccepted = onAjaxStartAccepted;
     }
 
     public String startScan(ScanJobType type, Map<String, String> parameters) {
@@ -51,11 +61,26 @@ public class ScanJobRuntimeExecutor {
         };
     }
 
+    public String startScan(ScanJobStartTarget target) {
+        if (target.type() == ScanJobType.AJAX_SPIDER) {
+            if (onAjaxStartAccepted != null) {
+                return requireAjaxSpiderService().startAjaxSpiderJob(
+                        target.parameters().get(ScanJobParameterNames.TARGET_URL), target.jobId(), target.claimToken(),
+                        scanId -> onAjaxStartAccepted.accept(target, scanId));
+            }
+            return requireAjaxSpiderService().startAjaxSpiderJob(
+                    target.parameters().get(ScanJobParameterNames.TARGET_URL), target.jobId(), target.claimToken());
+        }
+        return startScan(target.type(), target.parameters());
+    }
+
     public int readProgress(ScanJobType type, String scanId) {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.getSpiderScanProgressPercent(scanId);
-            case AJAX_SPIDER -> requireAjaxSpiderService().getAjaxSpiderProgressPercent();
+            // AJAX has no percentage: these values only signal the queue lifecycle.
+            // A stopped crawler does not confirm a successful crawl.
+            case AJAX_SPIDER -> requireAjaxSpiderService().isAjaxSpiderRunning() ? 0 : 100;
         };
     }
 

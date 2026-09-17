@@ -35,7 +35,7 @@ class DirectScanServicesDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
@@ -61,7 +61,7 @@ class DirectScanServicesDockerTest {
 
     @BeforeAll
     static void setupServices() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         ScanLimitProperties scanLimitProperties = new ScanLimitProperties();

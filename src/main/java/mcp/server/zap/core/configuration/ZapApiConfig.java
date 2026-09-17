@@ -1,5 +1,6 @@
 package mcp.server.zap.core.configuration;
 
+import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -15,12 +16,11 @@ public class ZapApiConfig {
     public ClientApi zapClientApi(
             @Value("${zap.server.url:localhost}") String zapApiUrl,
             @Value("${zap.server.port:8090}") int zapApiPort,
-            @Value("${zap.server.apiKey}") String zapApiKey
+            @Value("${zap.server.apiKey}") String zapApiKey,
+            @Value("${zap.server.connect-timeout-ms:5000}") int connectTimeoutMs,
+            @Value("${zap.server.read-timeout-ms:10000}") int readTimeoutMs
     ) {
-        // The ZAP ClientApi uses default Java HTTP client settings
-        // Timeout issues are typically caused by ZAP server-side configuration
-        // Configure ZAP server timeouts via startup options in docker-compose.yml
-        return new ClientApi(zapApiUrl, zapApiPort, zapApiKey);
+        return new TimeoutZapClientApi(zapApiUrl, zapApiPort, zapApiKey, connectTimeoutMs, readTimeoutMs);
     }
 
 }

@@ -24,7 +24,6 @@ public class SpiderScanServiceTest {
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
 
-        when(scanLimitProperties.getConnectionTimeoutInSecs()).thenReturn(60);
         when(scanLimitProperties.getSpiderThreadCount()).thenReturn(5);
         when(scanLimitProperties.getMaxSpiderScanDurationInMins()).thenReturn(15);
         when(scanLimitProperties.getSpiderMaxDepth()).thenReturn(10);

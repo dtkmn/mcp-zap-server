@@ -38,7 +38,6 @@ zap:
     limits:
       maxActiveScanDurationInMins: 5
       maxSpiderScanDurationInMins: 3
-      connectionTimeoutInSecs: 30
     queue:
       coordinator:
         backend: single-node
@@ -50,6 +49,9 @@ zap:
       allowPrivateNetworks: true
       whitelist: ""
       blacklist: ""
+
+  initialization:
+    connectionTimeoutInSecs: 30
 
 logging:
   level:

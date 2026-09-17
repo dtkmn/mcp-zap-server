@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -51,7 +53,7 @@ class FindingsAndReportServiceDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
@@ -79,7 +81,7 @@ class FindingsAndReportServiceDockerTest {
 
     @BeforeAll
     static void setupServices() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
@@ -118,6 +120,16 @@ class FindingsAndReportServiceDockerTest {
 
         assertTrue(details.contains("Codex Test Alert"));
         assertTrue(instances.contains("Message ID: " + messageId));
+
+        var alert = new ZapEngineFindingAccess(clientApi).loadAlerts(targetUrl).stream()
+                .filter(finding -> "Codex Test Alert".equals(finding.name()))
+                .findFirst().orElseThrow();
+        assertEquals("GET", alert.method());
+        assertFalse(alert.nodeName() == null || alert.nodeName().isBlank());
+        assertTrue(instances.contains("Node Name: " + alert.nodeName()));
+        assertTrue(instances.contains("Method: GET"));
+        String snapshot = findingsService.exportFindingsSnapshot(targetUrl);
+        assertTrue(snapshot.contains("\"version\" : 2"));
 
         String reportTemplate = awaitReportTemplate();
         String reportSite = awaitReportSite(targetUrl);

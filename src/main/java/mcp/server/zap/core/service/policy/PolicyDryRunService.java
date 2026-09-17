@@ -786,7 +786,7 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
     }
 
     private boolean isHostPattern(String value) {
-        return value != null && value.matches("^(?:\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*$");
+        return value != null && value.matches("^(?:\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*+$");
     }
 
     @SuppressWarnings("unchecked")

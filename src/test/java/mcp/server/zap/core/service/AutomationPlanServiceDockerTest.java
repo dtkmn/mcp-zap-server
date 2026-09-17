@@ -53,7 +53,7 @@ public class AutomationPlanServiceDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
@@ -83,7 +83,7 @@ public class AutomationPlanServiceDockerTest {
 
     @BeforeAll
     static void setupService() throws Exception {
-        ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ClientApi clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 

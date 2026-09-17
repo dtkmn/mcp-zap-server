@@ -1,9 +1,12 @@
 package mcp.server.zap.core.service;
 
+import com.sun.net.httpserver.HttpServer;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineBusyException;
+import mcp.server.zap.core.gateway.TimeoutZapClientApi;
+import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
@@ -18,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -563,6 +567,65 @@ public class ScanJobQueueServiceTest {
             verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
         } finally {
             cancellingService.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void ajaxStopReadTimeoutReturnsWithCancellationPendingAndKeepsNewCrawlsBlocked() throws Exception {
+        CountDownLatch stopReceived = new CountDownLatch(1);
+        CountDownLatch releaseResponse = new CountDownLatch(1);
+        AtomicInteger requestCount = new AtomicInteger();
+        HttpServer zapServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        zapServer.createContext("/", exchange -> {
+            requestCount.incrementAndGet();
+            stopReceived.countDown();
+            try {
+                releaseResponse.await(10, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        zapServer.start();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        ScanJobQueueService cancellingService = null;
+        try {
+            var client = new TimeoutZapClientApi("127.0.0.1", zapServer.getAddress().getPort(), "", 200, 200);
+            ajaxSpiderService = new AjaxSpiderService(new ZapEngineAjaxSpiderExecution(client), urlValidationService);
+            InMemoryScanJobStore store = new InMemoryScanJobStore();
+            ajaxSpiderService.setScanJobStore(store);
+            ScanJob running = runningAjaxJob("stop-read-timeout", Instant.now());
+            ScanJob next = new ScanJob("next-after-timeout", ScanJobType.AJAX_SPIDER,
+                    Map.of("targetUrl", "http://example.com/next"), Instant.now(), 3);
+            store.upsertAll(List.of(running, next));
+            cancellingService = newAjaxCancellationService(store, 60_000, "timeout-worker");
+            ScanJobQueueService queue = cancellingService;
+
+            Future<String> cancellation = caller.submit(() -> queue.cancelScanJob(running.getId()));
+
+            assertTrue(stopReceived.await(3, TimeUnit.SECONDS), "The stop request should reach ZAP");
+            String response = cancellation.get(3, TimeUnit.SECONDS);
+            assertEquals(1L, releaseResponse.getCount(), "Cancellation must return while ZAP still withholds its response");
+            ScanJob pending = store.load(running.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.RUNNING, pending.getStatus());
+            assertTrue(pending.isCancellationPending());
+            assertEquals(1, pending.getCancelAttemptCount());
+            assertEquals(1, pending.getAttempts());
+            assertTrue(response.toLowerCase().contains("cancellation pending"));
+
+            queue.processQueueOnceForTesting();
+            assertEquals(ScanJobStatus.QUEUED, store.load(next.getId()).orElseThrow().getStatus());
+            assertThrows(EngineBusyException.class,
+                    () -> ajaxSpiderService.startAjaxSpider("http://example.com/direct"));
+            assertEquals(1, requestCount.get(), "A timed-out stop must not release capacity or trigger immediate retries");
+        } finally {
+            releaseResponse.countDown();
+            zapServer.stop(0);
+            caller.shutdownNow();
+            if (cancellingService != null) {
+                cancellingService.shutdownExecutor();
+            }
         }
     }
 

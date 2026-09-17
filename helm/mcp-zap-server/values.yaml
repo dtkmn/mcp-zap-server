@@ -186,6 +186,8 @@ mcp:
   zapClient:
     url: ""  # Defaults to the chart-managed ZAP service name when empty
     port: 8090
+    connectTimeoutMs: 5000  # MCP -> ZAP API; must be positive
+    readTimeoutMs: 10000   # Response read inactivity; must be positive
     apiKey: ""  # Defaults to zap.config.apiKey when blank and no secret is configured
     existingSecret:
       name: ""

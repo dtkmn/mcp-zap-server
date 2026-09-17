@@ -118,6 +118,8 @@ zap:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}
     apiKey: ${ZAP_API_KEY}
+    connect-timeout-ms: ${ZAP_API_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${ZAP_API_READ_TIMEOUT_MS:10000}
   
   scan:
     # Scan Limits and Timeouts

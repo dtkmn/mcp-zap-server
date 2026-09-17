@@ -54,7 +54,7 @@ public class PassiveScanServiceDockerTest {
 
     @BeforeAll
     static void setupClient() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new PassiveScanService(new ZapEnginePassiveScanAccess(clientApi));
     }

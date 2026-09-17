@@ -1,5 +1,6 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.containers.wait.strategy.WaitStrategy;
 import org.testcontainers.utility.DockerImageName;
@@ -15,6 +16,10 @@ final class ZapDockerTestSupport {
     private static final Duration ZAP_API_READY_POLL_INTERVAL = Duration.ofMillis(500);
 
     private ZapDockerTestSupport() {
+    }
+
+    static ClientApi clientApi(String host, int port) {
+        return new TimeoutZapClientApi(host, port, null, 5000, 10000);
     }
 
     static DockerImageName zapImage() {

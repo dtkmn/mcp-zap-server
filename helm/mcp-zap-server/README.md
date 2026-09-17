@@ -133,6 +133,8 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |
 | `mcp.image.tag` | MCP image tag | chart `appVersion` |
 | `mcp.zapClient.url` | ZAP API hostname/service | chart-managed service (`<release>-mcp-zap-server-zap`) |
+| `mcp.zapClient.connectTimeoutMs` | MCP to ZAP API connection timeout in milliseconds; must be positive | `5000` |
+| `mcp.zapClient.readTimeoutMs` | ZAP API response read inactivity timeout in milliseconds; must be positive | `10000` |
 | `mcp.security.existingSecret.name` | Existing Secret for MCP API key / JWT secret | `""` |
 | `mcp.zapClient.existingSecret.name` | Existing Secret for the ZAP API key used by MCP | `""` |
 | `mcp.zapClient.apiKey` | ZAP API key override used by MCP when not using `mcp.zapClient.existingSecret` | `""` |

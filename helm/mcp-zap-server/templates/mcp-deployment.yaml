@@ -58,6 +58,10 @@ spec:
           value: "{{ default (printf "%s-zap" (include "mcp-zap-server.fullname" .)) .Values.mcp.zapClient.url }}"
         - name: ZAP_API_PORT
           value: "{{ .Values.mcp.zapClient.port }}"
+        - name: ZAP_API_CONNECT_TIMEOUT_MS
+          value: "{{ .Values.mcp.zapClient.connectTimeoutMs }}"
+        - name: ZAP_API_READ_TIMEOUT_MS
+          value: "{{ .Values.mcp.zapClient.readTimeoutMs }}"
         - name: ZAP_API_KEY
           {{- if .Values.mcp.zapClient.existingSecret.name }}
           valueFrom:

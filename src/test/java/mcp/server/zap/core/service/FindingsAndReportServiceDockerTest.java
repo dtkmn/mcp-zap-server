@@ -81,7 +81,7 @@ class FindingsAndReportServiceDockerTest {
 
     @BeforeAll
     static void setupServices() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));

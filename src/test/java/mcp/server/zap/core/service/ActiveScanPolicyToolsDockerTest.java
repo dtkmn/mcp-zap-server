@@ -41,7 +41,7 @@ class ActiveScanPolicyToolsDockerTest {
 
     @BeforeAll
     static void setupService() throws Exception {
-        ClientApi clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        ClientApi clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new ActiveScanService(
                 new ZapEngineScanExecution(clientApi),

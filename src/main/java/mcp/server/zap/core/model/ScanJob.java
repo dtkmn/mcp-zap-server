@@ -23,6 +23,8 @@ public class ScanJob {
     private Instant startedAt;
     private Instant completedAt;
     private Instant nextAttemptAt;
+    private Instant busyWaitStartedAt;
+    private int busyWaitCount;
     private int lastKnownProgress;
     private int queuePosition;
     private String claimOwnerId;
@@ -158,6 +160,37 @@ public class ScanJob {
                 claimHeartbeatAt,
                 claimExpiresAt
         );
+    }
+
+    /** Restore a job including durable engine-busy waiting state. */
+    public static ScanJob restore(String id,
+                                  ScanJobType type,
+                                  Map<String, String> parameters,
+                                  Instant createdAt,
+                                  int maxAttempts,
+                                  String requesterId,
+                                  String idempotencyKey,
+                                  ScanJobStatus status,
+                                  int attempts,
+                                  String zapScanId,
+                                  String lastError,
+                                  Instant startedAt,
+                                  Instant completedAt,
+                                  Instant nextAttemptAt,
+                                  int lastKnownProgress,
+                                  int queuePosition,
+                                  String claimOwnerId,
+                                  String claimFenceId,
+                                  Instant claimHeartbeatAt,
+                                  Instant claimExpiresAt,
+                                  Instant busyWaitStartedAt,
+                                  int busyWaitCount) {
+        ScanJob job = restore(id, type, parameters, createdAt, maxAttempts, requesterId, idempotencyKey,
+                status, attempts, zapScanId, lastError, startedAt, completedAt, nextAttemptAt,
+                lastKnownProgress, queuePosition, claimOwnerId, claimFenceId, claimHeartbeatAt, claimExpiresAt);
+        job.busyWaitStartedAt = busyWaitStartedAt;
+        job.busyWaitCount = busyWaitCount;
+        return job;
     }
 
     /**
@@ -359,6 +392,14 @@ public class ScanJob {
         return nextAttemptAt;
     }
 
+    public Instant getBusyWaitStartedAt() {
+        return busyWaitStartedAt;
+    }
+
+    public int getBusyWaitCount() {
+        return busyWaitCount;
+    }
+
     /**
      * Return claim owner node ID when a replica currently owns this job.
      */
@@ -404,6 +445,8 @@ public class ScanJob {
         this.startedAt = Instant.now();
         this.completedAt = null;
         this.nextAttemptAt = null;
+        this.busyWaitStartedAt = null;
+        this.busyWaitCount = 0;
         this.queuePosition = 0;
     }
 
@@ -470,7 +513,18 @@ public class ScanJob {
         this.nextAttemptAt = retryAt;
         this.lastKnownProgress = 0;
         this.queuePosition = 0;
+        this.busyWaitStartedAt = null;
+        this.busyWaitCount = 0;
         clearClaim();
+    }
+
+    /** Defer a rejected start without consuming the normal startup retry budget. */
+    public void markWaitingForEngine(Instant now, Instant retryAt, String reason) {
+        Instant waitingSince = busyWaitStartedAt == null ? now : busyWaitStartedAt;
+        int waitingCount = busyWaitCount + 1;
+        markQueuedForRetry(retryAt, reason);
+        busyWaitStartedAt = waitingSince;
+        busyWaitCount = waitingCount;
     }
 
     /**

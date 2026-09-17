@@ -26,6 +26,8 @@ public class ScanJobResponseFormatter {
             sb.append('\n').append("Retry Not Before: ").append(job.getNextAttemptAt());
         }
 
+        appendEngineWaitDetail(sb, job);
+
         if (hasText(job.getZapScanId())) {
             sb.append('\n').append("ZAP Scan ID: ").append(job.getZapScanId());
         }
@@ -74,8 +76,11 @@ public class ScanJobResponseFormatter {
             sb.append('\n').append("Idempotency Key: ").append(job.getIdempotencyKey());
         }
         if (hasText(job.getLastError())) {
-            sb.append('\n').append("Last Error: ").append(job.getLastError());
+            if (!isWaitingForEngine(job)) {
+                sb.append('\n').append("Last Error: ").append(job.getLastError());
+            }
         }
+        appendEngineWaitDetail(sb, job);
         if (isDeadLetterJob(job)) {
             sb.append('\n').append("Dead Letter: true");
         }
@@ -132,6 +137,10 @@ public class ScanJobResponseFormatter {
             if (job.getStatus() == ScanJobStatus.QUEUED && job.getNextAttemptAt() != null) {
                 output.append(" | retryAt=").append(job.getNextAttemptAt());
             }
+            if (isWaitingForEngine(job)) {
+                output.append(" | waitingSince=").append(job.getBusyWaitStartedAt())
+                        .append(" | reason=").append(job.getLastError());
+            }
             appendClaimSummary(output, job, now);
             output.append('\n');
         }
@@ -170,6 +179,9 @@ public class ScanJobResponseFormatter {
     }
 
     private String formatStatus(ScanJob job) {
+        if (isWaitingForEngine(job)) {
+            return "QUEUED (waiting for engine)";
+        }
         if (job.getType() == ScanJobType.AJAX_SPIDER && job.getStatus() == ScanJobStatus.SUCCEEDED) {
             return "SUCCEEDED (ZAP reports stopped; crawl outcome unknown)";
         }
@@ -180,6 +192,17 @@ public class ScanJobResponseFormatter {
         return job.getType() == ScanJobType.AJAX_SPIDER
                 ? "unavailable (ZAP does not report a percentage)"
                 : job.getLastKnownProgress() + "%";
+    }
+
+    private boolean isWaitingForEngine(ScanJob job) {
+        return job.getStatus() == ScanJobStatus.QUEUED && job.getBusyWaitStartedAt() != null;
+    }
+
+    private void appendEngineWaitDetail(StringBuilder output, ScanJob job) {
+        if (isWaitingForEngine(job)) {
+            output.append('\n').append("Waiting Since: ").append(job.getBusyWaitStartedAt())
+                    .append('\n').append("Waiting Reason: ").append(job.getLastError());
+        }
     }
 
     private void appendClaimSummary(StringBuilder output, ScanJob job, Instant now) {

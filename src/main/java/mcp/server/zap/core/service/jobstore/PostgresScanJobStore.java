@@ -438,8 +438,9 @@ public class PostgresScanJobStore implements ScanJobStore {
         String sql = "INSERT INTO " + tableName + " ("
                 + "job_id, job_type, parameters_json, status, attempt_count, max_attempts, requester_id, idempotency_key, "
                 + "zap_scan_id, last_error, created_at, started_at, completed_at, next_attempt_at, last_known_progress, "
-                + "queue_position, claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, updated_at"
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "queue_position, claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, "
+                + "busy_wait_started_at, busy_wait_count, updated_at"
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (job_id) DO UPDATE SET "
                 + "job_type = EXCLUDED.job_type, "
                 + "parameters_json = EXCLUDED.parameters_json, "
@@ -460,6 +461,8 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "claim_fence_id = EXCLUDED.claim_fence_id, "
                 + "claim_heartbeat_at = EXCLUDED.claim_heartbeat_at, "
                 + "claim_expires_at = EXCLUDED.claim_expires_at, "
+                + "busy_wait_started_at = EXCLUDED.busy_wait_started_at, "
+                + "busy_wait_count = EXCLUDED.busy_wait_count, "
                 + "updated_at = EXCLUDED.updated_at";
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -483,7 +486,9 @@ public class PostgresScanJobStore implements ScanJobStore {
             statement.setString(18, job.getClaimFenceId());
             setTimestamp(statement, 19, job.getClaimHeartbeatAt());
             setTimestamp(statement, 20, job.getClaimExpiresAt());
-            statement.setTimestamp(21, Timestamp.from(Instant.now()));
+            setTimestamp(statement, 21, job.getBusyWaitStartedAt());
+            statement.setInt(22, job.getBusyWaitCount());
+            statement.setTimestamp(23, Timestamp.from(Instant.now()));
             statement.executeUpdate();
         }
     }
@@ -680,7 +685,9 @@ public class PostgresScanJobStore implements ScanJobStore {
                 resultSet.getString("claim_owner_id"),
                 resultSet.getString("claim_fence_id"),
                 toInstant(resultSet.getTimestamp("claim_heartbeat_at")),
-                toInstant(resultSet.getTimestamp("claim_expires_at"))
+                toInstant(resultSet.getTimestamp("claim_expires_at")),
+                toInstant(resultSet.getTimestamp("busy_wait_started_at")),
+                resultSet.getInt("busy_wait_count")
         );
     }
 

@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,17 +20,31 @@ public class ScanJobResultApplier {
     private final ScanJobClaimManager claimManager;
     private final ScanJobRetryPolicy activeRetryPolicy;
     private final ScanJobRetryPolicy spiderRetryPolicy;
+    private final Duration engineBusyMaxWait;
 
     public ScanJobResultApplier(ScanJobStore scanJobStore,
                                 String workerNodeId,
                                 ScanJobClaimManager claimManager,
                                 ScanJobRetryPolicy activeRetryPolicy,
                                 ScanJobRetryPolicy spiderRetryPolicy) {
+        this(scanJobStore, workerNodeId, claimManager, activeRetryPolicy, spiderRetryPolicy, Duration.ofMinutes(3));
+    }
+
+    public ScanJobResultApplier(ScanJobStore scanJobStore,
+                                String workerNodeId,
+                                ScanJobClaimManager claimManager,
+                                ScanJobRetryPolicy activeRetryPolicy,
+                                ScanJobRetryPolicy spiderRetryPolicy,
+                                Duration engineBusyMaxWait) {
         this.scanJobStore = scanJobStore;
         this.workerNodeId = workerNodeId;
         this.claimManager = claimManager;
         this.activeRetryPolicy = activeRetryPolicy;
         this.spiderRetryPolicy = spiderRetryPolicy;
+        if (engineBusyMaxWait.isNegative()) {
+            throw new IllegalArgumentException("engineBusyMaxWait must not be negative");
+        }
+        this.engineBusyMaxWait = engineBusyMaxWait;
     }
 
     public ScanJobApplyOutcome applyResults(
@@ -105,6 +120,10 @@ public class ScanJobResultApplier {
                         return job;
                     }
 
+                    if (result.engineBusy()) {
+                        deferBusyEngine(job, result.error(), appliedAt);
+                        return job;
+                    }
                     job.incrementAttempts();
                     if (result.success()) {
                         job.markRunning(result.scanId());
@@ -160,6 +179,19 @@ public class ScanJobResultApplier {
         }
 
         return new ScanJobApplyOutcome(stopRequests, firstPersistenceFailure);
+    }
+
+    private void deferBusyEngine(ScanJob job, String reason, Instant now) {
+        Instant waitingSince = job.getBusyWaitStartedAt() == null ? now : job.getBusyWaitStartedAt();
+        Instant deadline = waitingSince.plus(engineBusyMaxWait);
+        if (!now.isBefore(deadline)) {
+            job.markFailed("Engine busy wait timed out after " + engineBusyMaxWait.toMillis() + " ms: " + reason);
+            return;
+        }
+        long delayMs = policyFor(job.getType()).computeDelayMs(job.getBusyWaitCount() + 1);
+        Instant retryAt = now.plusMillis(delayMs);
+        job.markWaitingForEngine(now, retryAt.isAfter(deadline) ? deadline : retryAt, reason);
+        log.info("Scan job {} is waiting for the engine; next check at {}", job.getId(), job.getNextAttemptAt());
     }
 
     private void renewClaimWithoutShortening(ScanJob job, Instant heartbeatAt, Instant claimUntil) {

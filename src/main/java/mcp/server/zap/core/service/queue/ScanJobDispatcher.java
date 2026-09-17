@@ -1,5 +1,6 @@
 package mcp.server.zap.core.service.queue;
 
+import mcp.server.zap.core.gateway.EngineBusyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -267,6 +268,8 @@ public class ScanJobDispatcher implements AutoCloseable {
                 return ScanJobStartResult.failure(target, "Startup failed: dispatch timed out; late scan cleanup requested");
             }
             return ScanJobStartResult.success(target, scanId);
+        } catch (EngineBusyException e) {
+            return ScanJobStartResult.busy(target, e.getMessage());
         } catch (Exception e) {
             return ScanJobStartResult.failure(target, "Startup failed: " + e.getMessage());
         }

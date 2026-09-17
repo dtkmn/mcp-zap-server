@@ -150,6 +150,29 @@ class ScanJobResponseFormatterTest {
     }
 
     @Test
+    void explainsEngineWaitingWithoutPresentingItAsAStartupFailure() {
+        Instant now = Instant.parse("2026-05-06T00:00:00Z");
+        ScanJob job = new ScanJob("job-busy", ScanJobType.AJAX_SPIDER, Map.of(), now.minusSeconds(30), 2);
+        job.markWaitingForEngine(now, now.plusSeconds(10), "Engine is finishing another scan");
+
+        for (String output : List.of(formatter.formatSubmission(job, false, now),
+                formatter.formatJobDetail(job, 1, now))) {
+            assertThat(output)
+                    .contains("Status: QUEUED (waiting for engine)")
+                    .contains("Attempts: 0/2")
+                    .contains("Waiting Since: 2026-05-06T00:00:00Z")
+                    .contains("Waiting Reason: Engine is finishing another scan")
+                    .contains("Retry Not Before: 2026-05-06T00:00:10Z")
+                    .doesNotContain("Last Error:", "Dead Letter:");
+        }
+        assertThat(formatter.formatJobList(List.of(job), null, now))
+                .contains("QUEUED (waiting for engine)", "attempts=0/2")
+                .contains("waitingSince=2026-05-06T00:00:00Z")
+                .contains("reason=Engine is finishing another scan")
+                .contains("retryAt=2026-05-06T00:00:10Z");
+    }
+
+    @Test
     void formatsDeadLetterListWithFullContract() {
         Instant now = Instant.parse("2026-05-06T00:00:00Z");
         ScanJob job = ScanJob.restore(

@@ -1,5 +1,6 @@
 package mcp.server.zap.core.service.queue;
 
+import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.model.ScanJobType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,6 +71,19 @@ class ScanJobDispatcherTest {
         );
         verify(runtimeExecutor).readProgress(ScanJobType.ACTIVE_SCAN, "active-1");
         verify(runtimeExecutor).startScan(ScanJobType.SPIDER_SCAN, parameters);
+    }
+
+    @Test
+    void distinguishesEngineBusyFromStartupFailure() {
+        ScanJobStartTarget target = startTarget("job-busy", "https://example.com");
+        when(runtimeExecutor.startScan(target.type(), target.parameters()))
+                .thenThrow(new EngineBusyException("Engine is finishing another scan", null));
+
+        ScanJobDispatchResult result = dispatcher.dispatch(new ScanJobWorkPlan(List.of(), List.of(target)));
+
+        assertEquals(List.of(ScanJobStartResult.busy(target, "Engine is finishing another scan")),
+                result.startResults());
+        assertEquals(List.of(), result.pollResults());
     }
 
     @Test

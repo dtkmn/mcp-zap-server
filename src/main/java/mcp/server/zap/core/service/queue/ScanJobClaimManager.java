@@ -174,7 +174,9 @@ public class ScanJobClaimManager {
                 job.getClaimOwnerId(),
                 job.getClaimFenceId(),
                 job.getClaimHeartbeatAt(),
-                job.getClaimExpiresAt()
+                job.getClaimExpiresAt(),
+                job.getBusyWaitStartedAt(),
+                job.getBusyWaitCount()
         );
     }
 

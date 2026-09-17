@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
@@ -15,6 +16,7 @@ import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoo
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Instant;
 import java.util.List;
@@ -31,6 +33,7 @@ import java.util.function.UnaryOperator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -522,6 +525,123 @@ public class ScanJobQueueServiceTest {
         assertTrue(status.contains("Progress: unavailable"));
         assertFalse(status.contains("100%"));
         verify(ajaxSpiderService).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void busyEngineWaitsWithoutConsumingAttemptsAndThenStarts() {
+        ScanJobQueueService waitingService = newServiceWithPolicies(
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(2, 0, 0, 1));
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+                .thenThrow(new EngineBusyException("Engine is busy", null))
+                .thenReturn("active-after-wait");
+        try {
+            String response = waitingService.queueActiveScan("http://example.com", "true", null, null);
+            String jobId = extractJobId(response);
+            ScanJob waiting = waitingService.getJobForTesting(jobId);
+            assertTrue(response.contains("QUEUED (waiting for engine)"));
+            assertEquals(0, waiting.getAttempts());
+            assertEquals(1, waiting.getBusyWaitCount());
+            assertNull(waiting.getClaimOwnerId());
+
+            waitingService.processQueueOnceForTesting();
+
+            ScanJob running = waitingService.getJobForTesting(jobId);
+            assertEquals(ScanJobStatus.RUNNING, running.getStatus());
+            assertEquals(1, running.getAttempts());
+            assertNull(running.getBusyWaitStartedAt());
+        } finally {
+            waitingService.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void waitingJobCanBeCancelledBeforeEngineStarts() {
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString()))
+                .thenThrow(new EngineBusyException("Engine is busy", null));
+        String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com", null));
+
+        service.cancelScanJob(jobId);
+        service.processQueueOnceForTesting();
+
+        assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
+        assertEquals(0, service.getJobForTesting(jobId).getAttempts());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString());
+        verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void restoredBusyWaitExpiresDespiteFullCapacityAndLaterBackoffAndCanBeRetried() {
+        Instant now = Instant.now();
+        ScanJob waiting = new ScanJob("busy-expired", ScanJobType.AJAX_SPIDER,
+                Map.of("targetUrl", "http://example.com"), now.minusSeconds(300), 2);
+        waiting.markWaitingForEngine(now.minusSeconds(181), now.plusSeconds(600), "Engine is busy");
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        store.upsertAll(List.of(waiting));
+        when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(0);
+        ScanJobQueueService restored = new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store);
+        try {
+            restored.processQueueOnceForTesting();
+            ScanJob expired = store.load("busy-expired").orElseThrow();
+            assertEquals(ScanJobStatus.FAILED, expired.getStatus());
+            assertEquals(0, expired.getAttempts());
+            assertTrue(expired.getLastError().contains("Engine busy wait timed out after 180000 ms"));
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString());
+
+            when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
+            when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-after-manual-retry");
+            restored.retryScanJob("busy-expired");
+
+            assertEquals(ScanJobStatus.RUNNING, store.load("busy-expired").orElseThrow().getStatus());
+            assertEquals(1, store.load("busy-expired").orElseThrow().getAttempts());
+            assertNull(store.load("busy-expired").orElseThrow().getBusyWaitStartedAt());
+        } finally {
+            restored.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void busyWaitDeadlineDoesNotExpireAnotherWorkersLiveStartClaim() {
+        Instant now = Instant.now();
+        ScanJob waiting = new ScanJob("busy-in-flight", ScanJobType.AJAX_SPIDER,
+                Map.of("targetUrl", "http://example.com"), now.minusSeconds(300), 2);
+        waiting.markWaitingForEngine(now.minusSeconds(181), now.minusSeconds(1), "Engine is busy");
+        waiting.claim("another-worker", now, now.plusSeconds(60));
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        store.upsertAll(List.of(waiting));
+        ScanJobQueueService restored = new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store);
+        try {
+            restored.processQueueOnceForTesting();
+            assertEquals(ScanJobStatus.QUEUED, store.load("busy-in-flight").orElseThrow().getStatus());
+            assertEquals("another-worker", store.load("busy-in-flight").orElseThrow().getClaimOwnerId());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString());
+        } finally {
+            restored.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void configuredZeroEngineBusyWaitFailsImmediatelyWithoutConsumingAttempts() {
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString()))
+                .thenThrow(new EngineBusyException("Engine is busy", null));
+        new ApplicationContextRunner()
+                .withBean(ActiveScanService.class, () -> activeScanService)
+                .withBean(SpiderScanService.class, () -> spiderScanService)
+                .withBean(AjaxSpiderService.class, () -> ajaxSpiderService)
+                .withBean(UrlValidationService.class, () -> urlValidationService)
+                .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
+                .withUserConfiguration(ScanJobQueueService.class)
+                .withPropertyValues("zap.scan.queue.engine-busy-max-wait-ms=0")
+                .run(context -> {
+                    ScanJobQueueService configured = context.getBean(ScanJobQueueService.class);
+                    String jobId = extractJobId(configured.queueAjaxSpiderScan("http://example.com", null));
+                    ScanJob job = configured.getJobForTesting(jobId);
+                    assertEquals(ScanJobStatus.FAILED, job.getStatus());
+                    assertEquals(0, job.getAttempts());
+                    assertTrue(job.getLastError().contains("timed out after 0 ms"));
+                });
     }
 
     @Test

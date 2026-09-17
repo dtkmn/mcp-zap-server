@@ -2,6 +2,7 @@ package mcp.server.zap.core.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.gateway.core.policy.ToolPolicyDeniedException;
+import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.logging.RequestLogContext;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleZapApiException(ZapApiException ex, ServerWebExchange exchange) {
         log.error("ZAP API error: {}", ex.getMessage(), ex);
         return buildErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "ZAP API Error", ex.getMessage());
+    }
+
+    /**
+     * Preserve temporary unavailability for direct scan requests rejected by a busy engine.
+     */
+    @ExceptionHandler(EngineBusyException.class)
+    public ResponseEntity<Map<String, Object>> handleEngineBusyException(EngineBusyException ex, ServerWebExchange exchange) {
+        log.warn("Engine busy: {}", ex.getMessage());
+        return buildErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "Engine Busy", ex.getMessage());
     }
 
     /**

@@ -3,6 +3,7 @@ package mcp.server.zap.core.gateway;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
 import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationDiagnostics;
 import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutation;
@@ -19,6 +20,7 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
+import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.AjaxSpider;
 import org.zaproxy.clientapi.gen.Authentication;
 import org.zaproxy.clientapi.gen.Automation;
@@ -33,6 +35,7 @@ import org.zaproxy.clientapi.gen.Soap;
 import org.zaproxy.clientapi.gen.Users;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -260,6 +263,48 @@ class ZapEngineBoundaryAccessTest {
         assertThat(status.discoveredCount()).isEqualTo("12");
         verify(core).accessUrl("http://target", "true");
         verify(ajaxSpider).scan("http://target", "false", "", "");
+    }
+
+    @Test
+    void ajaxSpiderAdapterMapsExplicitBusyLaunchRejections() throws Exception {
+        when(ajaxSpider.optionMaxDuration()).thenReturn(element("optionMaxDuration", "5"));
+        ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
+        when(ajaxSpider.scan("http://target", "false", "", "")).thenThrow(failure);
+
+        assertThatThrownBy(() -> ajaxSpiderExecution.startAjaxSpider(
+                new EngineAjaxSpiderExecution.AjaxSpiderScanRequest("http://target")))
+                .isExactlyInstanceOf(EngineBusyException.class).hasCause(failure);
+    }
+
+    @Test
+    void ajaxSpiderAdapterPreservesOtherLaunchFailuresEvenWithBusyMessage() throws Exception {
+        when(ajaxSpider.optionMaxDuration()).thenReturn(element("optionMaxDuration", "5"));
+        ClientApiException internalError = new ClientApiException("Scan In Progress", "internal_error", null);
+        ClientApiException messageOnly = new ClientApiException("scan_in_progress");
+        when(ajaxSpider.scan("http://target", "false", "", "")).thenThrow(internalError, messageOnly);
+
+        assertThatThrownBy(() -> ajaxSpiderExecution.startAjaxSpider(
+                new EngineAjaxSpiderExecution.AjaxSpiderScanRequest("http://target")))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(internalError);
+        assertThatThrownBy(() -> ajaxSpiderExecution.startAjaxSpider(
+                new EngineAjaxSpiderExecution.AjaxSpiderScanRequest("http://target")))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(messageOnly);
+    }
+
+    @Test
+    void ajaxSpiderAdapterDoesNotClassifyReadStopOrAvailabilityFailuresAsBusyLaunchRejections() throws Exception {
+        ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
+        when(ajaxSpider.status()).thenThrow(failure);
+        when(ajaxSpider.stop()).thenThrow(failure);
+        when(ajaxSpider.optionMaxDuration()).thenThrow(failure);
+
+        assertThatThrownBy(() -> ajaxSpiderExecution.readAjaxSpiderStatus())
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> ajaxSpiderExecution.stopAjaxSpider())
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> ajaxSpiderExecution.startAjaxSpider(
+                new EngineAjaxSpiderExecution.AjaxSpiderScanRequest("http://target")))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
     }
 
     @Test

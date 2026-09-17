@@ -36,6 +36,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -80,6 +81,7 @@ public class ScanJobQueueService {
     private final String workerNodeId;
 
     private long claimLeaseMs = DEFAULT_CLAIM_LEASE_MS;
+    private Duration engineBusyMaxWait = Duration.ofMinutes(3);
     private ScanJobClaimManager claimManager;
     private ScanJobResultApplier resultApplier;
     private QueueStateMetrics queueStateMetrics = QueueStateMetrics.noop();
@@ -108,7 +110,8 @@ public class ScanJobQueueService {
                                @Value("${zap.scan.queue.retry.spider.max-attempts:2}") int spiderMaxAttempts,
                                @Value("${zap.scan.queue.retry.spider.initial-backoff-ms:1000}") long spiderInitialBackoffMs,
                                @Value("${zap.scan.queue.retry.spider.max-backoff-ms:10000}") long spiderMaxBackoffMs,
-                               @Value("${zap.scan.queue.retry.spider.multiplier:2.0}") double spiderBackoffMultiplier) {
+                               @Value("${zap.scan.queue.retry.spider.multiplier:2.0}") double spiderBackoffMultiplier,
+                               @Value("${zap.scan.queue.engine-busy-max-wait-ms:180000}") long engineBusyMaxWaitMs) {
         this(
                 activeScanService,
                 spiderScanService,
@@ -122,6 +125,10 @@ public class ScanJobQueueService {
                 queueLeadershipCoordinatorProvider.getIfAvailable(SingleNodeQueueLeadershipCoordinator::new)
         );
         this.claimLeaseMs = sanitizeClaimLeaseMs(claimLeaseMs);
+        if (engineBusyMaxWaitMs < 0) {
+            throw new IllegalArgumentException("zap.scan.queue.engine-busy-max-wait-ms must not be negative");
+        }
+        this.engineBusyMaxWait = Duration.ofMillis(engineBusyMaxWaitMs);
         MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
         this.claimManager = new ScanJobClaimManager(
                 this.scanJobStore,
@@ -133,7 +140,8 @@ public class ScanJobQueueService {
                 this.workerNodeId,
                 this.claimManager,
                 this.activeRetryPolicy,
-                this.spiderRetryPolicy
+                this.spiderRetryPolicy,
+                this.engineBusyMaxWait
         );
         this.queueStateMetrics = QueueStateMetrics.create(meterRegistry);
     }
@@ -662,6 +670,7 @@ public class ScanJobQueueService {
         observeLeadership();
         restoreStateFromStore(false);
         Instant now = Instant.now();
+        expireEngineBusyWaits(now);
         Instant claimUntil = now.plusMillis(claimLeaseMs);
         claimManager.renewInFlightClaims(now, claimUntil);
 
@@ -697,6 +706,30 @@ public class ScanJobQueueService {
         } finally {
             queueLock.unlock();
         }
+    }
+
+    private void expireEngineBusyWaits(Instant now) {
+        if (snapshotJobsForClaimObservation().stream().noneMatch(job -> busyWaitExpired(job, now))) {
+            return;
+        }
+        List<ScanJob> committedJobs = updateQueueState(state -> {
+            for (ScanJob job : state.jobs().values()) {
+                if (busyWaitExpired(job, now)) {
+                    job.markFailed("Engine busy wait timed out after " + engineBusyMaxWait.toMillis()
+                            + " ms: " + job.getLastError());
+                    state.queuedJobIds().remove(job.getId());
+                }
+            }
+            return state;
+        });
+        applyCommittedStoredJobs(committedJobs);
+    }
+
+    private boolean busyWaitExpired(ScanJob job, Instant now) {
+        return job.getStatus() == ScanJobStatus.QUEUED
+                && job.getBusyWaitStartedAt() != null
+                && !job.hasLiveClaim(now)
+                && !now.isBefore(job.getBusyWaitStartedAt().plus(engineBusyMaxWait));
     }
 
     void processQueueOnceForTesting() {

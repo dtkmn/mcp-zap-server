@@ -152,6 +152,7 @@ zap:
 
     queue:
       dispatch-interval-ms: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:2000}
+      engine-busy-max-wait-ms: ${ZAP_SCAN_QUEUE_ENGINE_BUSY_MAX_WAIT_MS:180000}
       claim-lease-ms: ${ZAP_SCAN_QUEUE_CLAIM_LEASE_MS:15000}
       virtual-threads:
         enabled: ${ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED:false}

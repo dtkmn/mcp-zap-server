@@ -1,11 +1,14 @@
 package mcp.server.zap.core.service.jobstore;
 
 import tools.jackson.databind.ObjectMapper;
+import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.configuration.ScanJobStoreProperties;
+import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
+import mcp.server.zap.core.service.postgres.PostgresSchemaReadinessValidator;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,8 +32,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Tag("docker")
@@ -56,6 +61,83 @@ class PostgresScanJobStoreRaceHarnessTest {
     @BeforeEach
     void setUp() throws Exception {
         clearScanJobs();
+    }
+
+    @Test
+    void readinessRequiresEngineBusyWaitMigration() throws Exception {
+        String schema = "before_busy_wait";
+        String url = POSTGRES.getJdbcUrl() + (POSTGRES.getJdbcUrl().contains("?") ? "&" : "?")
+                + "currentSchema=" + schema;
+        var migration = Flyway.configure()
+                .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+                .locations("classpath:db/migration")
+                .schemas(schema)
+                .defaultSchema(schema);
+        try {
+            migration.target("6").load().migrate();
+            ScanJobStoreProperties properties = new ScanJobStoreProperties();
+            properties.setBackend("postgres");
+            properties.getPostgres().setUrl(url);
+            properties.getPostgres().setUsername(POSTGRES.getUsername());
+            properties.getPostgres().setPassword(POSTGRES.getPassword());
+            PostgresSchemaReadinessValidator validator = new PostgresSchemaReadinessValidator(
+                    properties, new ScanHistoryLedgerProperties(), new TokenRevocationStoreProperties()
+            );
+
+            IllegalStateException error = assertThrows(IllegalStateException.class, validator::afterPropertiesSet);
+            assertTrue(error.getMessage().contains("Apply Flyway migrations"));
+            assertTrue(error.getMessage().contains("busy_wait_started_at"));
+            assertTrue(error.getMessage().contains("busy_wait_count"));
+
+            migration.target("latest").load().migrate();
+            assertDoesNotThrow(validator::afterPropertiesSet);
+        } finally {
+            try (Connection connection = DriverManager.getConnection(
+                    POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+                 Statement statement = connection.createStatement()) {
+                statement.execute("DROP SCHEMA IF EXISTS " + schema + " CASCADE");
+            }
+        }
+    }
+
+    @Test
+    void engineBusyDeferralsSurviveReloadAndClaimByAnotherWorker() {
+        ScanJob job = queuedJob("job-engine-busy", "http://example.com/waiting");
+        Instant firstWaitAt = BASE_TIME.plusSeconds(1);
+        Instant firstRetryAt = firstWaitAt.plusSeconds(10);
+        job.markWaitingForEngine(firstWaitAt, firstRetryAt, "Engine is busy");
+        newStore().admitQueuedJob(job);
+
+        ScanJob restored = newStore().load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.QUEUED, restored.getStatus());
+        assertEquals(firstWaitAt, restored.getBusyWaitStartedAt());
+        assertEquals(1, restored.getBusyWaitCount());
+        assertEquals(0, restored.getAttempts());
+        assertEquals(firstRetryAt, restored.getNextAttemptAt());
+        assertEquals("Engine is busy", restored.getLastError());
+        assertTrue(newStore().claimQueuedJobs(
+                "node-a", firstRetryAt.minusSeconds(1), firstRetryAt.plusSeconds(30), 1, 1
+        ).isEmpty());
+
+        ScanJob claimed = newStore().claimQueuedJobs(
+                "node-a", firstRetryAt, firstRetryAt.plusSeconds(30), 1, 1
+        ).getFirst();
+        Instant nextRetryAt = firstRetryAt.plusSeconds(20);
+        newStore().updateClaimedJob(job.getId(), ScanJobClaimToken.from(claimed), firstRetryAt, current -> {
+            current.markWaitingForEngine(firstRetryAt, nextRetryAt, "Engine is still busy");
+            return current;
+        }).orElseThrow();
+
+        ScanJob reclaimed = newStore().claimQueuedJobs(
+                "node-b", nextRetryAt, nextRetryAt.plusSeconds(30), 1, 1
+        ).getFirst();
+        assertEquals("node-b", reclaimed.getClaimOwnerId());
+        assertEquals(ScanJobStatus.QUEUED, reclaimed.getStatus());
+        assertEquals(firstWaitAt, reclaimed.getBusyWaitStartedAt());
+        assertEquals(2, reclaimed.getBusyWaitCount());
+        assertEquals(0, reclaimed.getAttempts());
+        assertEquals(nextRetryAt, reclaimed.getNextAttemptAt());
+        assertEquals("Engine is still busy", reclaimed.getLastError());
     }
 
     @Test

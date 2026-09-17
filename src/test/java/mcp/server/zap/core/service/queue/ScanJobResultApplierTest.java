@@ -5,7 +5,11 @@ import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +19,7 @@ import java.util.function.UnaryOperator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class ScanJobResultApplierTest {
 
@@ -395,6 +400,136 @@ class ScanJobResultApplierTest {
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
         assertEquals("node-a", unchangedJob.getClaimOwnerId());
         assertEquals(reclaimedAt, unchangedJob.getClaimHeartbeatAt());
+    }
+
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void busyDeferralsPreserveAttemptsAndFirstWaitTimeWhileUsingFamilyBackoff(ScanJobType type) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("job-busy", type, 3, "node-a");
+        job.incrementAttempts();
+        store.upsertAll(List.of(job));
+        ScanJobResultApplier applier = busyResultApplier(store, Duration.ofMinutes(3));
+        long initialBackoffMs = type.isActiveFamily() ? 2000 : 1000;
+
+        ScanJobApplyOutcome firstOutcome = applier.applyResults(List.of(),
+                List.of(ScanJobStartResult.busy(startTarget(job), "Engine is busy")),
+                Instant.now().plusSeconds(30));
+
+        ScanJob waitingJob = store.load(job.getId()).orElseThrow();
+        Instant firstWaitAt = waitingJob.getBusyWaitStartedAt();
+        assertEquals(ScanJobStatus.QUEUED, waitingJob.getStatus());
+        assertEquals(1, waitingJob.getAttempts());
+        assertEquals(1, waitingJob.getBusyWaitCount());
+        assertNotNull(firstWaitAt);
+        assertEquals(firstWaitAt.plusMillis(initialBackoffMs), waitingJob.getNextAttemptAt());
+        assertEquals("Engine is busy", waitingJob.getLastError());
+        assertNull(waitingJob.getClaimOwnerId());
+        assertNull(waitingJob.getClaimFenceId());
+        assertEquals(List.of(), firstOutcome.stopRequests());
+
+        Instant beforeSecondResult = Instant.now();
+        waitingJob.claim("node-a", beforeSecondResult, beforeSecondResult.plusSeconds(30));
+        applier.applyResults(List.of(),
+                List.of(ScanJobStartResult.busy(startTarget(waitingJob), "Engine is still busy")),
+                beforeSecondResult.plusSeconds(30));
+        Instant afterSecondResult = Instant.now();
+
+        ScanJob stillWaitingJob = store.load(job.getId()).orElseThrow();
+        assertEquals(1, stillWaitingJob.getAttempts());
+        assertEquals(2, stillWaitingJob.getBusyWaitCount());
+        assertEquals(firstWaitAt, stillWaitingJob.getBusyWaitStartedAt());
+        assertThat(stillWaitingJob.getNextAttemptAt()).isBetween(
+                beforeSecondResult.plusMillis(initialBackoffMs * 2),
+                afterSecondResult.plusMillis(initialBackoffMs * 2));
+        assertNull(stillWaitingJob.getClaimOwnerId());
+    }
+
+    @Test
+    void startAfterBusyDeferralConsumesOnlyTheRealAttemptAndClearsWaitingState() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("job-ready", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        store.upsertAll(List.of(job));
+        ScanJobResultApplier applier = busyResultApplier(store, Duration.ofMinutes(3));
+        applier.applyResults(List.of(),
+                List.of(ScanJobStartResult.busy(startTarget(job), "Engine is busy")),
+                Instant.now().plusSeconds(30));
+
+        ScanJob waitingJob = store.load(job.getId()).orElseThrow();
+        assertEquals(0, waitingJob.getAttempts());
+        Instant now = Instant.now();
+        waitingJob.claim("node-a", now, now.plusSeconds(30));
+        applier.applyResults(List.of(),
+                List.of(ScanJobStartResult.success(startTarget(waitingJob), "ajax-spider:1")),
+                now.plusSeconds(30));
+
+        ScanJob startedJob = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, startedJob.getStatus());
+        assertEquals(1, startedJob.getAttempts());
+        assertEquals("ajax-spider:1", startedJob.getZapScanId());
+        assertNull(startedJob.getBusyWaitStartedAt());
+        assertEquals(0, startedJob.getBusyWaitCount());
+        assertNull(startedJob.getNextAttemptAt());
+        assertNull(startedJob.getLastError());
+        assertEquals("node-a", startedJob.getClaimOwnerId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 3000})
+    void busyTimeoutFailsWithoutConsumingStartupAttempts(long maximumWaitMs) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("job-timeout", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        job.incrementAttempts();
+        if (maximumWaitMs > 0) {
+            Instant now = Instant.now();
+            job.markWaitingForEngine(now.minusSeconds(10), now, "Engine is busy");
+            job.claim("node-a", now, now.plusSeconds(30));
+        }
+        store.upsertAll(List.of(job));
+        ScanJobResultApplier applier = busyResultApplier(store, Duration.ofMillis(maximumWaitMs));
+
+        ScanJobApplyOutcome outcome = applier.applyResults(List.of(),
+                List.of(ScanJobStartResult.busy(startTarget(job), "Engine is still busy")),
+                Instant.now().plusSeconds(30));
+
+        ScanJob failedJob = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.FAILED, failedJob.getStatus());
+        assertEquals(1, failedJob.getAttempts());
+        assertThat(failedJob.getLastError()).contains("Engine busy wait timed out after " + maximumWaitMs + " ms",
+                "Engine is still busy");
+        assertNull(failedJob.getNextAttemptAt());
+        assertNull(failedJob.getClaimOwnerId());
+        assertEquals(List.of(), outcome.stopRequests());
+    }
+
+    @Test
+    void lateBusyResultDoesNotReviveCancelledJob() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("job-cancelled", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        ScanJobStartResult lateResult = ScanJobStartResult.busy(startTarget(job), "Engine is busy");
+        job.markCancelled();
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = busyResultApplier(store, Duration.ofMinutes(3))
+                .applyResults(List.of(), List.of(lateResult), Instant.now().plusSeconds(30));
+
+        ScanJob cancelledJob = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.CANCELLED, cancelledJob.getStatus());
+        assertEquals(0, cancelledJob.getAttempts());
+        assertNull(cancelledJob.getBusyWaitStartedAt());
+        assertNull(cancelledJob.getNextAttemptAt());
+        assertEquals(List.of(), outcome.stopRequests());
+    }
+
+    private ScanJobStartTarget startTarget(ScanJob job) {
+        return new ScanJobStartTarget(job.getId(), job.getType(), job.getParameters(), ScanJobClaimToken.from(job));
+    }
+
+    private ScanJobResultApplier busyResultApplier(InMemoryScanJobStore store, Duration maximumWait) {
+        return new ScanJobResultApplier(store, "node-a",
+                new ScanJobClaimManager(store, "node-a", ScanJobClaimMetrics.noop()),
+                new ScanJobRetryPolicy(3, 2000, 8000, 2),
+                new ScanJobRetryPolicy(2, 1000, 4000, 2), maximumWait);
     }
 
     private ScanJobResultApplier resultApplier(

@@ -131,7 +131,8 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
             String tableName
     ) {
         String sql = "SELECT job_id, queue_position, requester_id, idempotency_key, "
-                + "claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at "
+                + "claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, "
+                + "busy_wait_started_at, busy_wait_count "
                 + "FROM " + tableName + " LIMIT 0";
         try (Connection connection = openConnection(url, username, password);
              Statement statement = connection.createStatement()) {
@@ -142,7 +143,8 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
                     "Required Postgres schema for scan job is missing or not accessible. "
                             + "Apply Flyway migrations before starting MCP replicas. Expected table '"
                             + tableName + "' with columns 'queue_position', 'requester_id', 'idempotency_key', "
-                            + "'claim_owner_id', 'claim_fence_id', 'claim_heartbeat_at', and 'claim_expires_at'.",
+                            + "'claim_owner_id', 'claim_fence_id', 'claim_heartbeat_at', 'claim_expires_at', "
+                            + "'busy_wait_started_at', and 'busy_wait_count'.",
                     e
             );
         }

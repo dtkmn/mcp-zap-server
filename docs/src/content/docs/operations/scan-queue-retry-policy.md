@@ -19,6 +19,19 @@ This policy applies to queue-managed scan job families:
 
 `maxAttempts` includes the first execution attempt.
 
+## ZAP API Connection and Read Timeouts
+
+All calls from this server to ZAP use configurable HTTP timeouts:
+
+| Environment variable | Application property | Default |
+| --- | --- | --- |
+| `ZAP_API_CONNECT_TIMEOUT_MS` | `zap.server.connect-timeout-ms` | `5000` (5 seconds) |
+| `ZAP_API_READ_TIMEOUT_MS` | `zap.server.read-timeout-ms` | `10000` (10 seconds) |
+
+Both values must be positive; startup rejects zero or negative values. The connection timeout limits connection establishment, and the read timeout limits inactivity while receiving a response. They are per-request limits, not a total scan duration or a strict overall call deadline. Configure them in `.env`/Docker Compose, deployment environment variables, or Helm's `mcp.zapClient.connectTimeoutMs` and `mcp.zapClient.readTimeoutMs` values.
+
+A timeout does not prove that ZAP rejected an action: ZAP may still process it or may have completed it before its response was lost. Existing queue retry and cancellation policies still apply; cancellation stays unconfirmed until a stop is accepted or later status observation confirms it. The separate `ZAP_CONNECTION_TIMEOUT` setting controls ZAP's connections to scan targets, not this server's connections to ZAP.
+
 ## Waiting for a Busy Engine
 
 An explicit engine-busy rejection keeps the job `QUEUED (waiting for engine)` without consuming a startup attempt. The queue reuses the scan family's backoff settings, counting busy responses separately. Status and job listings show the waiting reason and next retry time. Waiting jobs can be cancelled normally.
@@ -41,7 +54,7 @@ The job retains its AJAX slot until stop is accepted or later status observation
 
 Managed AJAX starts and cancellation attempts share a lifecycle lock, including across PostgreSQL workers, because ZAP's stop API is global. Direct AJAX starts are rejected while a queued crawl owns the engine. Use the same job store for all replicas controlling one ZAP instance, and do not start unrelated AJAX crawls through ZAP's API/UI while this server owns it: synthetic AJAX IDs cannot fence those external callers.
 
-The deadline bounds retry scheduling. An individual in-flight ZAP API call still uses the existing Java client's transport behavior; its lifecycle lock is retained until the call returns, so an abandoned stop call cannot later stop a newer managed crawl. This is not a new socket timeout. PostgreSQL deployments require migration V8, included in the application and Helm migration bundles.
+The cancellation deadline bounds retry scheduling, separately from the connection and read timeouts above. An in-flight stop can outlast the cancellation retry window; its lifecycle lock is retained until the call returns, and a timed-out stop leaves cancellation unconfirmed. PostgreSQL deployments require migration V8, included in the application and Helm migration bundles.
 
 ## Retryable Errors
 

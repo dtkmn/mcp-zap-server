@@ -2,7 +2,7 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example targets `v0.11.1`. Before using it, confirm that
+The versioned image example targets `v0.12.0`. Before using it, confirm that
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
 corresponding release workflow show successful publication to your registry.
 
@@ -125,7 +125,7 @@ docker run -d \
   -e MCP_SECURITY_ENABLED=true \
   -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
   -e MCP_API_KEY="$MCP_API_KEY" \
-  ghcr.io/dtkmn/mcp-zap-server:v0.11.1
+  ghcr.io/dtkmn/mcp-zap-server:v0.12.0
 ```
 
 Check the MCP server:

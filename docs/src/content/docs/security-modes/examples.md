@@ -5,7 +5,7 @@ description: "Complete configuration examples for all three authentication modes
 ---
 Complete configuration examples for all three authentication modes.
 
-Versioned container examples target `v0.11.1`. Check
+Versioned container examples target `v0.12.0`. Check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
 corresponding release workflow for image availability before deploying.
 
@@ -79,7 +79,7 @@ MCP_CLIENT_ID=client-1
 version: '3.8'
 services:
   mcp-zap-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:v0.11.1
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.12.0
     environment:
       - MCP_SECURITY_MODE=api-key
       - MCP_API_KEY=${MCP_API_KEY}
@@ -149,7 +149,7 @@ JWT_REFRESH_TOKEN_EXPIRATION=604800
 version: '3.8'
 services:
   mcp-zap-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:v0.11.1
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.12.0
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - MCP_SECURITY_MODE=jwt

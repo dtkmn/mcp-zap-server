@@ -136,12 +136,12 @@ documentation describes that version's behavior; it does not announce image
 availability. Deploy only after the corresponding release workflow succeeds
 and the versioned image is available in your registry.
 
-**In `v0.11.1` and later**, unknown and disabled tools receive the same generic
-JSON-RPC error, using gateway `0.10.0`. Enabled tools still require their existing
-permissions. This fix is not included in `v0.11.0`; no tool names, input schemas,
-or database schemas change in `v0.11.1`.
+**Version `v0.12.0`** improves scan queue waiting, cancellation, and cleanup, and
+uses ZAP node identity for findings. Before upgrading, review the PostgreSQL
+V7/V8 migrations, snapshot v2 compatibility, and timeout changes in the release
+notes.
 
-- [0.11.1 release notes](./docs/releases/RELEASE_NOTES_0.11.1.md)
+- [0.12.0 release notes](./docs/releases/RELEASE_NOTES_0.12.0.md)
 - [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
 

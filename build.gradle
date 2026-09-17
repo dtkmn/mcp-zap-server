@@ -193,6 +193,10 @@ tasks.named('test') {
 tasks.register('dockerTest', Test) {
     group = 'verification'
     description = 'Runs the Docker-backed integration tests.'
+    // Optionally test a specific ZAP image tag or digest.
+    def zapTestImage = providers.environmentVariable('ZAP_TEST_IMAGE').orElse('')
+    inputs.property('zapTestImage', zapTestImage)
+    environment 'ZAP_TEST_IMAGE', zapTestImage.get()
     dependsOn tasks.named('testClasses')
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath

@@ -8,6 +8,8 @@ import java.util.UUID;
  * Mutable queue job state used by scan orchestration and persistence.
  */
 public class ScanJob {
+    public static final String CLEANUP_OF_JOB_ID = "cleanupOfJobId";
+
     private final String id;
     private final ScanJobType type;
     private final Map<String, String> parameters;
@@ -466,6 +468,16 @@ public class ScanJob {
         return isCancellationRequested() && cancelNextAttemptAt != null;
     }
 
+    /** Source job whose abandoned scan this job tracks for cleanup. */
+    public String getCleanupOfJobId() {
+        return parameters.get(CLEANUP_OF_JOB_ID);
+    }
+
+    public boolean isCleanupJob() {
+        String sourceJobId = getCleanupOfJobId();
+        return sourceJobId != null && !sourceJobId.isBlank();
+    }
+
     /** Preserve an existing pending request; an explicit retry opens a new window after failure. */
     public void requestCancellation(Instant now, Instant deadline) {
         if (isCancellationPending()) {
@@ -481,6 +493,11 @@ public class ScanJob {
         this.cancelAttemptCount += 1;
         this.cancelNextAttemptAt = retryAt;
         this.lastError = reason;
+    }
+
+    /** Reserve a stop attempt without counting it as a completed failure. */
+    public void deferCancellationAttempt(Instant nextAttemptAt) {
+        this.cancelNextAttemptAt = nextAttemptAt;
     }
 
     /** Stop automatic retries while retaining intent until cancellation can be confirmed. */

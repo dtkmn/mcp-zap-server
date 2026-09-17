@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class ScanJobDispatcher implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(ScanJobDispatcher.class);
@@ -30,37 +31,33 @@ public class ScanJobDispatcher implements AutoCloseable {
     private final ScanJobRuntimeExecutor runtimeExecutor;
     private final ExecutorService ioExecutor;
     private final Duration targetTimeout;
-    private final BiConsumer<String, String> ajaxCleanup;
+    private final Consumer<ScanJobStopRequest> scanCleanup;
 
     public ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor) {
         this(runtimeExecutor, ioExecutor, DEFAULT_TARGET_TIMEOUT);
     }
 
     ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor, Duration targetTimeout) {
-        this(runtimeExecutor, ioExecutor, targetTimeout, (jobId, scanId) -> {
-            throw new IllegalStateException("AJAX cleanup requires durable job ownership");
-        });
+        this(runtimeExecutor, ioExecutor, targetTimeout, defaultCleanup(runtimeExecutor));
     }
 
     ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor, Duration targetTimeout,
-                      BiConsumer<String, String> ajaxCleanup) {
+                      Consumer<ScanJobStopRequest> scanCleanup) {
         this.runtimeExecutor = runtimeExecutor;
         this.ioExecutor = ioExecutor;
         this.targetTimeout = requirePositiveTimeout(targetTimeout);
-        this.ajaxCleanup = Objects.requireNonNull(ajaxCleanup, "ajaxCleanup must not be null");
+        this.scanCleanup = Objects.requireNonNull(scanCleanup, "scanCleanup must not be null");
     }
 
     public static ScanJobDispatcher create(ScanJobRuntimeExecutor runtimeExecutor, boolean virtualThreadsEnabled) {
-        return create(runtimeExecutor, virtualThreadsEnabled, (jobId, scanId) -> {
-            throw new IllegalStateException("AJAX cleanup requires durable job ownership");
-        });
+        return create(runtimeExecutor, virtualThreadsEnabled, defaultCleanup(runtimeExecutor));
     }
 
     public static ScanJobDispatcher create(ScanJobRuntimeExecutor runtimeExecutor, boolean virtualThreadsEnabled,
-                                           BiConsumer<String, String> ajaxCleanup) {
+                                           Consumer<ScanJobStopRequest> scanCleanup) {
         if (virtualThreadsEnabled) {
             log.info("Scan queue IO dispatcher initialized with virtual threads");
-            return new ScanJobDispatcher(runtimeExecutor, Executors.newVirtualThreadPerTaskExecutor(), DEFAULT_TARGET_TIMEOUT, ajaxCleanup);
+            return new ScanJobDispatcher(runtimeExecutor, Executors.newVirtualThreadPerTaskExecutor(), DEFAULT_TARGET_TIMEOUT, scanCleanup);
         }
 
         ExecutorService executor = Executors.newCachedThreadPool(task -> {
@@ -70,7 +67,7 @@ public class ScanJobDispatcher implements AutoCloseable {
             return t;
         });
         log.info("Scan queue IO dispatcher initialized with cached platform thread pool");
-        return new ScanJobDispatcher(runtimeExecutor, executor, DEFAULT_TARGET_TIMEOUT, ajaxCleanup);
+        return new ScanJobDispatcher(runtimeExecutor, executor, DEFAULT_TARGET_TIMEOUT, scanCleanup);
     }
 
     public ScanJobDispatchResult dispatch(ScanJobWorkPlan workPlan) {
@@ -101,11 +98,7 @@ public class ScanJobDispatcher implements AutoCloseable {
     public void executeStopRequests(List<ScanJobStopRequest> stopRequests) {
         for (ScanJobStopRequest stopRequest : stopRequests) {
             try {
-                if (stopRequest.type() == ScanJobType.AJAX_SPIDER) {
-                    ajaxCleanup.accept(stopRequest.jobId(), stopRequest.scanId());
-                } else {
-                    executeStopRequest(stopRequest);
-                }
+                scanCleanup.accept(stopRequest);
             } catch (Exception e) {
                 log.warn("Failed to stop scan {} for cancelled job cleanup: {}", stopRequest.scanId(), e.getMessage());
             }
@@ -303,15 +296,7 @@ public class ScanJobDispatcher implements AutoCloseable {
             return;
         }
         try {
-            if (target.type() == ScanJobType.AJAX_SPIDER) {
-                ajaxCleanup.accept(target.jobId(), scanId);
-                return;
-            }
-            runtimeExecutor.stopScan(target.type(), scanId);
-            log.warn(
-                    "Stopped late scan start result for job {} after dispatch timeout",
-                    target.jobId()
-            );
+            scanCleanup.accept(new ScanJobStopRequest(target.type(), scanId, target.jobId()));
         } catch (Exception e) {
             log.warn(
                     "Failed to stop late scan start result {} for job {} after dispatch timeout: {}",
@@ -320,6 +305,15 @@ public class ScanJobDispatcher implements AutoCloseable {
                     e.getMessage()
             );
         }
+    }
+
+    private static Consumer<ScanJobStopRequest> defaultCleanup(ScanJobRuntimeExecutor runtimeExecutor) {
+        return request -> {
+            if (request.type() == ScanJobType.AJAX_SPIDER) {
+                throw new IllegalStateException("AJAX cleanup requires durable job ownership");
+            }
+            runtimeExecutor.stopScan(request.type(), request.scanId());
+        };
     }
 
     private IndexedDispatchResult awaitFuture(Future<IndexedDispatchResult> future) {

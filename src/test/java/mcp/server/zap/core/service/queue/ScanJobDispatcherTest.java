@@ -5,8 +5,11 @@ import mcp.server.zap.core.model.ScanJobType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -219,21 +222,25 @@ class ScanJobDispatcherTest {
         verify(runtimeExecutor).stopScan(ScanJobType.SPIDER_SCAN, "spider-late");
     }
 
-    @Test
-    void timedOutAjaxStartHandsJobAndScanIdentityToDurableCleanup() throws Exception {
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void timedOutStartHandsTypeJobAndScanIdentityToDurableCleanup(ScanJobType type) throws Exception {
         dispatcher.close();
         CountDownLatch startEntered = new CountDownLatch(1);
         CountDownLatch releaseStart = new CountDownLatch(1);
         CountDownLatch cleanupCalled = new CountDownLatch(1);
-        AtomicReference<List<String>> cleanupIdentity = new AtomicReference<>();
+        AtomicReference<ScanJobStopRequest> cleanupIdentity = new AtomicReference<>();
         dispatcher = new ScanJobDispatcher(runtimeExecutor, Executors.newSingleThreadExecutor(),
-                Duration.ofMillis(100), (jobId, scanId) -> {
-                    cleanupIdentity.set(List.of(jobId, scanId));
+                Duration.ofMillis(100), request -> {
+                    cleanupIdentity.set(request);
                     cleanupCalled.countDown();
                 });
-        ScanJobStartTarget target = new ScanJobStartTarget("ajax-late-job", ScanJobType.AJAX_SPIDER,
+        ScanJobStartTarget target = new ScanJobStartTarget("late-job", type,
                 Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claimToken());
-        when(runtimeExecutor.startScan(target)).thenAnswer(invocation -> {
+        var start = type == ScanJobType.AJAX_SPIDER
+                ? when(runtimeExecutor.startScan(target))
+                : when(runtimeExecutor.startScan(type, target.parameters()));
+        start.thenAnswer(invocation -> {
             startEntered.countDown();
             boolean released = false;
             while (!released) {
@@ -244,7 +251,7 @@ class ScanJobDispatcherTest {
                     // The remote start can complete despite dispatch cancellation.
                 }
             }
-            return "ajax-late";
+            return "scan-late";
         });
 
         try {
@@ -258,22 +265,47 @@ class ScanJobDispatcherTest {
         }
 
         assertTrue(cleanupCalled.await(1, TimeUnit.SECONDS));
-        assertEquals(List.of("ajax-late-job", "ajax-late"), cleanupIdentity.get());
-        verify(runtimeExecutor).startScan(target);
+        assertEquals(new ScanJobStopRequest(type, "scan-late", "late-job"), cleanupIdentity.get());
+        if (type == ScanJobType.AJAX_SPIDER) {
+            verify(runtimeExecutor).startScan(target);
+        } else {
+            verify(runtimeExecutor).startScan(type, target.parameters());
+        }
         verifyNoMoreInteractions(runtimeExecutor);
     }
 
-    @Test
-    void abandonedAjaxStartHandsJobAndScanIdentityToDurableCleanup() {
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void abandonedStartHandsTypeJobAndScanIdentityToDurableCleanup(ScanJobType type) {
         dispatcher.close();
-        AtomicReference<List<String>> cleanupIdentity = new AtomicReference<>();
+        AtomicReference<ScanJobStopRequest> cleanupIdentity = new AtomicReference<>();
         dispatcher = new ScanJobDispatcher(runtimeExecutor, Executors.newSingleThreadExecutor(),
-                Duration.ofSeconds(1), (jobId, scanId) -> cleanupIdentity.set(List.of(jobId, scanId)));
+                Duration.ofSeconds(1), cleanupIdentity::set);
 
         dispatcher.executeStopRequests(List.of(
-                new ScanJobStopRequest(ScanJobType.AJAX_SPIDER, "ajax-abandoned", "ajax-abandoned-job")));
+                new ScanJobStopRequest(type, "scan-abandoned", "abandoned-job")));
 
-        assertEquals(List.of("ajax-abandoned-job", "ajax-abandoned"), cleanupIdentity.get());
+        assertEquals(new ScanJobStopRequest(type, "scan-abandoned", "abandoned-job"), cleanupIdentity.get());
+        verifyNoInteractions(runtimeExecutor);
+    }
+
+    @Test
+    void durableCleanupRequestsContinueAfterIndividualPersistenceFailure() {
+        dispatcher.close();
+        List<ScanJobStopRequest> requested = new ArrayList<>();
+        ScanJobStopRequest first = new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-1", "active-job");
+        ScanJobStopRequest second = new ScanJobStopRequest(ScanJobType.SPIDER_SCAN, "spider-1", "spider-job");
+        dispatcher = new ScanJobDispatcher(runtimeExecutor, Executors.newSingleThreadExecutor(),
+                Duration.ofSeconds(1), request -> {
+                    requested.add(request);
+                    if (request.equals(first)) {
+                        throw new IllegalStateException("cleanup persistence unavailable");
+                    }
+                });
+
+        dispatcher.executeStopRequests(List.of(first, second));
+
+        assertEquals(List.of(first, second), requested);
         verifyNoInteractions(runtimeExecutor);
     }
 

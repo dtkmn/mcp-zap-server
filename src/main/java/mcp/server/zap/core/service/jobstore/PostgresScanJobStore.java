@@ -20,11 +20,13 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
@@ -271,10 +273,14 @@ public class PostgresScanJobStore implements ScanJobStore {
                     int spiderSlotsRemaining = Math.max(0,
                             maxConcurrentSpiderScans - countCapacityInUse(connection, false, now));
                     boolean ajaxBusy = hasAjaxCapacityInUse(connection, now);
+                    Set<String> awaitingCleanup = loadJobsAwaitingCleanup(connection);
 
                     List<ScanJob> candidates = loadClaimableQueuedJobs(connection, now);
                     ArrayList<ScanJob> claimedJobs = new ArrayList<>();
                     for (ScanJob job : candidates) {
+                        if (job.isCleanupJob() || awaitingCleanup.contains(job.getId())) {
+                            continue;
+                        }
                         boolean activeFamily = job.getType().isActiveFamily();
                         if (activeFamily && activeSlotsRemaining <= 0) {
                             continue;
@@ -440,6 +446,9 @@ public class PostgresScanJobStore implements ScanJobStore {
             try (Connection connection = openConnection()) {
                 connection.setAutoCommit(false);
                 try {
+                    // Acquire the membership lock before reading rows so a concurrent insert
+                    // cannot be absent from the snapshot and then overwritten by our upserts.
+                    lockTableForQueueMutation(connection);
                     List<ScanJob> currentJobs = loadAll(connection, true);
                     List<ScanJob> updatedJobs = Objects.requireNonNull(
                             updater.apply(currentJobs),
@@ -643,6 +652,26 @@ public class PostgresScanJobStore implements ScanJobStore {
                 }
                 jobs.sort(JOB_ORDER);
                 return jobs;
+            }
+        }
+    }
+
+    private Set<String> loadJobsAwaitingCleanup(Connection connection) throws SQLException {
+        String sql = "SELECT parameters_json::jsonb ->> ? AS source_job_id FROM " + tableName
+                + " WHERE status IN (?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, ScanJob.CLEANUP_OF_JOB_ID);
+            statement.setString(2, ScanJobStatus.QUEUED.name());
+            statement.setString(3, ScanJobStatus.RUNNING.name());
+            try (ResultSet resultSet = statement.executeQuery()) {
+                Set<String> sourceJobIds = new HashSet<>();
+                while (resultSet.next()) {
+                    String sourceJobId = resultSet.getString("source_job_id");
+                    if (hasText(sourceJobId)) {
+                        sourceJobIds.add(sourceJobId);
+                    }
+                }
+                return sourceJobIds;
             }
         }
     }

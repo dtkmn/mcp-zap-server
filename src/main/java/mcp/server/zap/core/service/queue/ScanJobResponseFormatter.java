@@ -57,6 +57,10 @@ public class ScanJobResponseFormatter {
                 .append("Progress: ").append(formatProgress(job)).append('\n')
                 .append("Submitted: ").append(job.getCreatedAt());
 
+        if (job.isCleanupJob()) {
+            sb.append('\n').append("Cleanup for Job ID: ").append(job.getCleanupOfJobId());
+        }
+
         if (job.getStartedAt() != null) {
             sb.append('\n').append("Started: ").append(job.getStartedAt());
         }
@@ -130,6 +134,9 @@ public class ScanJobResponseFormatter {
                     .append(job.getMaxAttempts())
                     .append(" | progress=")
                     .append(formatProgress(job));
+            if (job.isCleanupJob()) {
+                output.append(" | cleanupForJob=").append(job.getCleanupOfJobId());
+            }
             if (job.getQueuePosition() > 0) {
                 output.append(" | queuePosition=").append(job.getQueuePosition());
             }

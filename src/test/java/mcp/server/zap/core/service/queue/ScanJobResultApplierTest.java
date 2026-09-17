@@ -231,17 +231,18 @@ class ScanJobResultApplierTest {
                 Instant.now().plusSeconds(30)
         );
 
-        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-late")), outcome.stopRequests());
+        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-late", job.getId())), outcome.stopRequests());
         ScanJob unchangedJob = store.load("job-late").orElseThrow();
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
         assertEquals("node-b", unchangedJob.getClaimOwnerId());
     }
 
-    @Test
-    void alreadyPersistedAjaxStartDoesNotRequestCleanupAfterClaimMoved() {
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void alreadyPersistedStartDoesNotRequestCleanupAfterClaimMoved(ScanJobType type) {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJob job = runningJob("ajax-adopted-before-result", ScanJobType.AJAX_SPIDER, 2, "ajax-adopted");
-        ScanJobStartResult lateResult = ScanJobStartResult.success(startTarget(job), "ajax-adopted");
+        ScanJob job = runningJob("adopted-before-result", type, 2, "scan-adopted");
+        ScanJobStartResult lateResult = ScanJobStartResult.success(startTarget(job), "scan-adopted");
         Instant now = Instant.now();
         job.claim("node-b", now, now.plusSeconds(60));
         store.upsertAll(List.of(job));
@@ -249,26 +250,27 @@ class ScanJobResultApplierTest {
         ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2)
                 .applyResults(List.of(), List.of(lateResult), now.plusSeconds(60));
 
-        assertTrue(outcome.stopRequests().isEmpty(), "The newer claim still owns the same running AJAX crawl");
+        assertTrue(outcome.stopRequests().isEmpty(), "The newer claim still owns the same running scan");
         ScanJob preserved = store.load(job.getId()).orElseThrow();
         assertEquals(ScanJobStatus.RUNNING, preserved.getStatus());
-        assertEquals("ajax-adopted", preserved.getZapScanId());
+        assertEquals("scan-adopted", preserved.getZapScanId());
         assertEquals("node-b", preserved.getClaimOwnerId());
         assertEquals(1, preserved.getAttempts());
     }
 
-    @Test
-    void unadoptedAjaxStartRequestsCleanupWithJobIdentity() {
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void unadoptedStartRequestsCleanupWithJobIdentity(ScanJobType type) {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJob job = queuedClaimedJob("ajax-unadopted-job", ScanJobType.AJAX_SPIDER, 2, "node-b");
+        ScanJob job = queuedClaimedJob("unadopted-job", type, 2, "node-b");
         store.upsertAll(List.of(job));
         ScanJobStartTarget staleTarget = new ScanJobStartTarget(job.getId(), job.getType(), job.getParameters(),
                 new ScanJobClaimToken("node-a", "stale-fence"));
 
         ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2).applyResults(List.of(),
-                List.of(ScanJobStartResult.success(staleTarget, "ajax-unadopted")), Instant.now().plusSeconds(60));
+                List.of(ScanJobStartResult.success(staleTarget, "scan-unadopted")), Instant.now().plusSeconds(60));
 
-        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.AJAX_SPIDER, "ajax-unadopted", job.getId())),
+        assertEquals(List.of(new ScanJobStopRequest(type, "scan-unadopted", job.getId())),
                 outcome.stopRequests());
         ScanJob preserved = store.load(job.getId()).orElseThrow();
         assertEquals(ScanJobStatus.QUEUED, preserved.getStatus());
@@ -276,39 +278,64 @@ class ScanJobResultApplierTest {
         assertEquals(0, preserved.getAttempts());
     }
 
-    @Test
-    void ajaxOwnershipLookupFailurePreservesCleanupRequestsAndProcessesLaterStarts() {
+    @ParameterizedTest
+    @EnumSource(ScanJobType.class)
+    void ownershipLookupFailurePreservesCleanupRequestsAndProcessesLaterStarts(ScanJobType type) {
         IllegalStateException lookupFailure = new IllegalStateException("ownership lookup unavailable");
         InMemoryScanJobStore store = new InMemoryScanJobStore() {
             @Override
             public Optional<ScanJob> load(String jobId) {
-                if ("ajax-lookup-fails".equals(jobId)) {
+                if ("ownership-lookup-fails".equals(jobId)) {
                     throw lookupFailure;
                 }
                 return super.load(jobId);
             }
         };
         ScanJob earlier = queuedClaimedJob("active-earlier", ScanJobType.ACTIVE_SCAN, 3, "node-b");
-        ScanJob ajax = queuedClaimedJob("ajax-lookup-fails", ScanJobType.AJAX_SPIDER, 2, "node-b");
+        ScanJob abandoned = queuedClaimedJob("ownership-lookup-fails", type, 2, "node-b");
         ScanJob later = queuedClaimedJob("spider-later", ScanJobType.SPIDER_SCAN, 2, "node-a");
-        store.upsertAll(List.of(earlier, ajax, later));
+        store.upsertAll(List.of(earlier, abandoned, later));
         ScanJobClaimToken staleToken = new ScanJobClaimToken("node-a", "stale-fence");
 
         ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2).applyResults(List.of(), List.of(
                 ScanJobStartResult.success(new ScanJobStartTarget(earlier.getId(), earlier.getType(),
                         earlier.getParameters(), staleToken), "active-orphan"),
-                ScanJobStartResult.success(new ScanJobStartTarget(ajax.getId(), ajax.getType(),
-                        ajax.getParameters(), staleToken), "ajax-orphan"),
+                ScanJobStartResult.success(new ScanJobStartTarget(abandoned.getId(), abandoned.getType(),
+                        abandoned.getParameters(), staleToken), "scan-orphan"),
                 ScanJobStartResult.success(startTarget(later), "spider-started")), Instant.now().plusSeconds(60));
 
         assertEquals(lookupFailure, outcome.persistenceFailure());
         assertEquals(List.of(
-                new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-orphan"),
-                new ScanJobStopRequest(ScanJobType.AJAX_SPIDER, "ajax-orphan", ajax.getId())), outcome.stopRequests());
+                new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-orphan", earlier.getId()),
+                new ScanJobStopRequest(type, "scan-orphan", abandoned.getId())), outcome.stopRequests());
         ScanJob started = store.load(later.getId()).orElseThrow();
         assertEquals(ScanJobStatus.RUNNING, started.getStatus());
         assertEquals("spider-started", started.getZapScanId());
         assertEquals(1, started.getAttempts());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = "AJAX_SPIDER", mode = EnumSource.Mode.EXCLUDE)
+    void lateStartCleanupKeepsNewerRunningScanAndClaimUntouched(ScanJobType type) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = runningJob("job-with-newer-attempt", type, 3, "scan-newer");
+        Instant claimedAt = Instant.now();
+        job.claim("node-b", claimedAt, claimedAt.plusSeconds(60));
+        ScanJobClaimToken newerClaim = ScanJobClaimToken.from(job);
+        store.upsertAll(List.of(job));
+        ScanJobStartTarget lateTarget = new ScanJobStartTarget(job.getId(), type, job.getParameters(),
+                new ScanJobClaimToken("node-a", "old-fence"));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2).applyResults(List.of(),
+                List.of(ScanJobStartResult.success(lateTarget, "scan-old")), claimedAt.plusSeconds(60));
+
+        assertEquals(List.of(new ScanJobStopRequest(type, "scan-old", job.getId())), outcome.stopRequests());
+        ScanJob preserved = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, preserved.getStatus());
+        assertEquals("scan-newer", preserved.getZapScanId());
+        assertEquals(newerClaim, ScanJobClaimToken.from(preserved));
+        assertEquals(1, preserved.getAttempts());
+        assertFalse(preserved.isCancellationRequested());
     }
 
     @Test
@@ -332,7 +359,7 @@ class ScanJobResultApplierTest {
                 Instant.now().plusSeconds(30)
         );
 
-        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-orphan")), outcome.stopRequests());
+        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-orphan", job.getId())), outcome.stopRequests());
         assertNotNull(outcome.persistenceFailure());
         ScanJob unchangedJob = store.load("job-write-fails").orElseThrow();
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
@@ -368,7 +395,7 @@ class ScanJobResultApplierTest {
         );
 
         assertNotNull(outcome.persistenceFailure());
-        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.SPIDER_SCAN, "spider-orphan")), outcome.stopRequests());
+        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.SPIDER_SCAN, "spider-orphan", queuedJob.getId())), outcome.stopRequests());
         assertEquals(ScanJobStatus.QUEUED, store.load("job-start-after-poll-failure").orElseThrow().getStatus());
     }
 
@@ -471,7 +498,7 @@ class ScanJobResultApplierTest {
                 Instant.now().plusSeconds(30)
         );
 
-        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-stale")), outcome.stopRequests());
+        assertEquals(List.of(new ScanJobStopRequest(ScanJobType.ACTIVE_SCAN, "active-stale", job.getId())), outcome.stopRequests());
         ScanJob unchangedJob = store.load("job-stale").orElseThrow();
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
         assertEquals("node-a", unchangedJob.getClaimOwnerId());

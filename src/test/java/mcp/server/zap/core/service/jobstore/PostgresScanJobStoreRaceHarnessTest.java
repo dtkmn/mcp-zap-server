@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -26,7 +28,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -229,6 +234,50 @@ class PostgresScanJobStoreRaceHarnessTest {
         assertEquals(2, secondStore.tryWithAjaxLifecycleLock(List::size).orElseThrow());
     }
 
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = {"ACTIVE_SCAN", "SPIDER_SCAN"})
+    void cleanupBlocksSourceRetryAcrossWorkersWhileOtherJobsUseRemainingCapacity(ScanJobType type) {
+        ScanJob source = new ScanJob("source", type, Map.of(), BASE_TIME, 3);
+        ScanJob cleanup = new ScanJob("cleanup", type,
+                Map.of(ScanJob.CLEANUP_OF_JOB_ID, source.getId()), BASE_TIME, 1);
+        cleanup.markRunning("late-scan");
+        cleanup.requestCancellation(BASE_TIME, BASE_TIME.plusSeconds(30));
+        cleanup.deferCancellationAttempt(BASE_TIME.plusSeconds(5));
+        cleanup.recordCancellationFailure("Cancellation unconfirmed");
+        ScanJob queuedCleanup = new ScanJob("queued-cleanup", type,
+                Map.of(ScanJob.CLEANUP_OF_JOB_ID, "another-source"), BASE_TIME, 1);
+        ScanJob unrelated = new ScanJob("unrelated", type, Map.of(), BASE_TIME.plusSeconds(1), 3);
+        ScanJob overflow = new ScanJob("overflow", type, Map.of(), BASE_TIME.plusSeconds(2), 3);
+        ScanJob otherFamily = new ScanJob("other-family",
+                type.isActiveFamily() ? ScanJobType.SPIDER_SCAN : ScanJobType.ACTIVE_SCAN,
+                Map.of(), BASE_TIME, 3);
+        newStore().upsertAll(List.of(source, cleanup, queuedCleanup, unrelated, overflow, otherFamily));
+
+        ScanJob restored = newStore().load(cleanup.getId()).orElseThrow();
+        assertTrue(restored.isCleanupJob());
+        assertEquals(source.getId(), restored.getCleanupOfJobId());
+        assertTrue(restored.isCancellationRequested());
+        assertFalse(restored.isCancellationPending());
+        assertEquals(0, restored.getCancelAttemptCount());
+
+        Set<String> claimed = newStore()
+                .claimQueuedJobs("worker-1", BASE_TIME, BASE_TIME.plusSeconds(60), 2, 2)
+                .stream().map(ScanJob::getId).collect(Collectors.toSet());
+
+        assertEquals(Set.of(unrelated.getId(), otherFamily.getId()), claimed);
+        assertEquals(ScanJobStatus.QUEUED, newStore().load(source.getId()).orElseThrow().getStatus());
+        assertEquals(ScanJobStatus.QUEUED, newStore().load(queuedCleanup.getId()).orElseThrow().getStatus());
+        newStore().updateAndGet(jobs -> {
+            jobs.stream().filter(job -> cleanup.getId().equals(job.getId()))
+                    .findFirst().orElseThrow().markCancelled();
+            return jobs;
+        });
+
+        assertEquals(List.of(source.getId()), newStore()
+                .claimQueuedJobs("worker-2", BASE_TIME.plusSeconds(1), BASE_TIME.plusSeconds(60), 2, 2)
+                .stream().map(ScanJob::getId).toList());
+    }
+
     @Test
     void ajaxLifecycleActionIsNotRetriedAndLockIsReleasedAfterFailure() {
         AtomicInteger actionCalls = new AtomicInteger();
@@ -380,6 +429,80 @@ class PostgresScanJobStoreRaceHarnessTest {
         properties.setPassword(POSTGRES.getPassword());
         properties.setFailFast(true);
         return new PostgresScanJobStore(properties, new ObjectMapper());
+    }
+
+    @Test
+    void concurrentCleanupInsertionPreservesTheFirstCompletedCleanupAndDeadline() throws Exception {
+        ScanJob source = queuedJob("source-job", "http://example.com/late-start");
+        newStore().upsertAll(List.of(source));
+        CountDownLatch firstUpdateEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstUpdate = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<List<ScanJob>> firstUpdate = workers.submit(() -> newStore().updateAndGet(jobs -> {
+                ScanJob cleanup = new ScanJob("cleanup-job", ScanJobType.ACTIVE_SCAN,
+                        Map.of(ScanJob.CLEANUP_OF_JOB_ID, source.getId()), BASE_TIME, 0);
+                cleanup.markRunning("123");
+                cleanup.requestCancellation(BASE_TIME, BASE_TIME.plusSeconds(30));
+                cleanup.markCancelled();
+                jobs.add(cleanup);
+                firstUpdateEntered.countDown();
+                try {
+                    assertTrue(releaseFirstUpdate.await(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+                return jobs;
+            }));
+            assertTrue(firstUpdateEntered.await(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+            Future<List<ScanJob>> duplicateUpdate = workers.submit(() -> newStore().updateAndGet(jobs -> {
+                if (jobs.stream().noneMatch(job -> "cleanup-job".equals(job.getId()))) {
+                    ScanJob cleanup = new ScanJob("cleanup-job", ScanJobType.ACTIVE_SCAN,
+                            Map.of(ScanJob.CLEANUP_OF_JOB_ID, source.getId()), BASE_TIME.plusSeconds(1), 0);
+                    cleanup.markRunning("123");
+                    cleanup.requestCancellation(BASE_TIME.plusSeconds(1), BASE_TIME.plusSeconds(31));
+                    jobs.add(cleanup);
+                }
+                return jobs;
+            }));
+
+            // Confirm the second transaction is waiting in PostgreSQL, rather than relying
+            // on thread timing to ensure its old snapshot would miss the concurrent insert.
+            assertTrue(awaitScanJobLockWait());
+            releaseFirstUpdate.countDown();
+            firstUpdate.get(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            duplicateUpdate.get(CLAIM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            ScanJob persisted = newStore().load("cleanup-job").orElseThrow();
+            assertEquals(ScanJobStatus.CANCELLED, persisted.getStatus());
+            assertEquals(BASE_TIME, persisted.getCancelRequestedAt());
+            assertEquals(BASE_TIME.plusSeconds(30), persisted.getCancelDeadlineAt());
+            assertFalse(persisted.isCancellationPending());
+        } finally {
+            releaseFirstUpdate.countDown();
+            workers.shutdownNow();
+        }
+    }
+
+    private boolean awaitScanJobLockWait() throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(CLAIM_TIMEOUT_SECONDS);
+        try (Connection connection = DriverManager.getConnection(
+                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+             Statement statement = connection.createStatement()) {
+            while (System.nanoTime() < deadline) {
+                try (var result = statement.executeQuery("SELECT EXISTS (SELECT 1 FROM pg_stat_activity "
+                        + "WHERE datname = current_database() AND pid <> pg_backend_pid() "
+                        + "AND wait_event_type = 'Lock' AND query LIKE '%scan_jobs%')")) {
+                    result.next();
+                    if (result.getBoolean(1)) {
+                        return true;
+                    }
+                }
+                Thread.sleep(10);
+            }
+        }
+        return false;
     }
 
     private ScanJob queuedJob(String id, String targetUrl) {

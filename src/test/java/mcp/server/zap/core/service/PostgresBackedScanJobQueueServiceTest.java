@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -22,7 +24,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CyclicBarrier;
@@ -32,10 +36,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -460,6 +467,102 @@ class PostgresBackedScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
         assertEquals(claimAt, unchangedJob.getClaimHeartbeatAt());
         assertEquals(claimAt.plusSeconds(10), unchangedJob.getClaimExpiresAt());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = {
+            "ACTIVE_SCAN", "ACTIVE_SCAN_AS_USER", "SPIDER_SCAN", "SPIDER_SCAN_AS_USER"
+    })
+    void nativeCleanupResumesAfterWorkerRestartWithoutStoppingTheSourcesNewerScan(ScanJobType type) {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+        ScanJob source = queuedJob("source-job", type, "http://example.com/restarted-cleanup", "source-idem");
+        source.incrementAttempts();
+        source.markRunning("newer-scan");
+        source.claim("source-worker", now, now.plusSeconds(300));
+
+        Map<String, String> cleanupParameters = new HashMap<>(source.getParameters());
+        cleanupParameters.put(ScanJob.CLEANUP_OF_JOB_ID, source.getId());
+        ScanJob cleanup = new ScanJob("cleanup-job", type, cleanupParameters, now.minusSeconds(30),
+                1, source.getRequesterId(), null);
+        cleanup.markRunning("old-scan");
+        cleanup.requestCancellation(now.minusSeconds(20), now.plusSeconds(300));
+        newStore().upsertAll(List.of(source, cleanup));
+
+        if (type.isActiveFamily()) {
+            doThrow(new IllegalStateException("ZAP stop unavailable")).doNothing()
+                    .when(activeScanService).stopActiveScanJob("old-scan");
+        } else {
+            doThrow(new IllegalStateException("ZAP stop unavailable")).doNothing()
+                    .when(spiderScanService).stopSpiderScanJob("old-scan");
+        }
+
+        ScanJobQueueService firstWorker = newNativeCleanupService("first-cleanup-worker");
+        ScanJob failedCleanup;
+        try {
+            firstWorker.processQueueOnceForTesting();
+            failedCleanup = newStore().load(cleanup.getId()).orElseThrow();
+            assertTrue(failedCleanup.isCancellationPending());
+            assertEquals(1, failedCleanup.getCancelAttemptCount());
+            assertTrue(failedCleanup.getCancelNextAttemptAt().isAfter(Instant.now()));
+        } finally {
+            firstWorker.shutdownExecutor();
+        }
+
+        // Simulate the stopped worker's lease expiring without waiting for wall-clock time.
+        failedCleanup.claim("first-cleanup-worker", now.minusSeconds(30), now.minusSeconds(1));
+        newStore().upsertAll(List.of(failedCleanup));
+        ScanJobQueueService restoredWorker = newNativeCleanupService("restored-cleanup-worker");
+        try {
+            restoredWorker.processQueueOnceForTesting();
+            ScanJob restoredCleanup = newStore().load(cleanup.getId()).orElseThrow();
+            assertEquals(type, restoredCleanup.getType());
+            assertEquals("old-scan", restoredCleanup.getZapScanId());
+            assertEquals(source.getId(), restoredCleanup.getCleanupOfJobId());
+            assertEquals(source.getRequesterId(), restoredCleanup.getRequesterId());
+            assertNull(restoredCleanup.getIdempotencyKey());
+            assertEquals(failedCleanup.getCancelRequestedAt(), restoredCleanup.getCancelRequestedAt());
+            assertEquals(failedCleanup.getCancelDeadlineAt(), restoredCleanup.getCancelDeadlineAt());
+            assertEquals(failedCleanup.getCancelNextAttemptAt(), restoredCleanup.getCancelNextAttemptAt());
+            assertEquals(1, restoredCleanup.getCancelAttemptCount());
+            verifyNativeStops(type, 1);
+
+            restoredCleanup.deferCancellationAttempt(Instant.now().minusSeconds(1));
+            newStore().upsertAll(List.of(restoredCleanup));
+            restoredWorker.processQueueOnceForTesting();
+
+            ScanJob completedCleanup = newStore().load(cleanup.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.CANCELLED, completedCleanup.getStatus());
+            assertFalse(completedCleanup.isCancellationPending());
+            assertEquals(failedCleanup.getCancelDeadlineAt(), completedCleanup.getCancelDeadlineAt());
+            assertEquals(1, completedCleanup.getCancelAttemptCount());
+            ScanJob unaffectedSource = newStore().load(source.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.RUNNING, unaffectedSource.getStatus());
+            assertEquals("newer-scan", unaffectedSource.getZapScanId());
+            assertEquals("source-idem", unaffectedSource.getIdempotencyKey());
+            verifyNativeStops(type, 2);
+        } finally {
+            restoredWorker.shutdownExecutor();
+        }
+    }
+
+    private ScanJobQueueService newNativeCleanupService(String workerId) {
+        ScanJobQueueService.RetryPolicy retryPolicy = new ScanJobQueueService.RetryPolicy(3, 60_000, 60_000, 1);
+        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+                urlValidationService, scanLimitProperties, retryPolicy, retryPolicy, false, newStore(),
+                new TestQueueLeadershipCoordinator(workerId, new SharedLeadershipState(workerId)));
+    }
+
+    private void verifyNativeStops(ScanJobType type, int expectedAttempts) {
+        if (type.isActiveFamily()) {
+            verify(activeScanService, times(expectedAttempts)).stopActiveScanJob("old-scan");
+            verify(activeScanService, never()).stopActiveScanJob("newer-scan");
+            verify(spiderScanService, never()).stopSpiderScanJob(anyString());
+        } else {
+            verify(spiderScanService, times(expectedAttempts)).stopSpiderScanJob("old-scan");
+            verify(spiderScanService, never()).stopSpiderScanJob("newer-scan");
+            verify(activeScanService, never()).stopActiveScanJob(anyString());
+        }
+        verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
     }
 
     private PostgresScanJobStore newStore() {

@@ -18,6 +18,20 @@ class ScanJobResponseFormatterTest {
     private final ScanJobResponseFormatter formatter = new ScanJobResponseFormatter();
 
     @Test
+    void identifiesCleanupJobsAndTheirSourceInDetailsAndListing() {
+        Instant now = Instant.parse("2026-05-06T00:00:00Z");
+        ScanJob cleanup = new ScanJob("cleanup-1", ScanJobType.ACTIVE_SCAN,
+                Map.of(ScanJob.CLEANUP_OF_JOB_ID, "source-1"), now, 1);
+        cleanup.markRunning("123");
+        cleanup.requestCancellation(now, now.plusSeconds(30));
+
+        assertThat(formatter.formatJobDetail(cleanup, 0, now))
+                .contains("Cleanup for Job ID: source-1", "ZAP Scan ID: 123", "cancellation pending");
+        assertThat(formatter.formatJobList(List.of(cleanup), null, now))
+                .contains("cleanupForJob=source-1", "cleanup-1 | ACTIVE_SCAN | RUNNING (cancellation pending)");
+    }
+
+    @Test
     void formatsQueuedSubmissionWithoutQueueServiceState() {
         Instant now = Instant.parse("2026-05-06T00:00:00Z");
         ScanJob job = new ScanJob(

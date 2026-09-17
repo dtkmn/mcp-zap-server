@@ -12,10 +12,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 public class InMemoryScanJobStore implements ScanJobStore {
 
@@ -151,6 +153,10 @@ public class InMemoryScanJobStore implements ScanJobStore {
             int activeSlotsRemaining = Math.max(0, maxConcurrentActiveScans - countActiveCapacityInUse(now));
             int spiderSlotsRemaining = Math.max(0, maxConcurrentSpiderScans - countSpiderCapacityInUse(now));
             boolean ajaxBusy = hasAjaxCapacityInUse(now);
+            Set<String> awaitingCleanup = jobs.values().stream()
+                    .filter(job -> job.isCleanupJob() && !job.getStatus().isTerminal())
+                    .map(ScanJob::getCleanupOfJobId)
+                    .collect(Collectors.toSet());
 
             ArrayList<ScanJob> candidates = new ArrayList<>(jobs.values());
             candidates.sort(Comparator
@@ -160,7 +166,8 @@ public class InMemoryScanJobStore implements ScanJobStore {
 
             ArrayList<ScanJob> claimed = new ArrayList<>();
             for (ScanJob job : candidates) {
-                if (job.getStatus() != ScanJobStatus.QUEUED || job.isCancellationRequested()) {
+                if (job.getStatus() != ScanJobStatus.QUEUED || job.isCancellationRequested()
+                        || job.isCleanupJob() || awaitingCleanup.contains(job.getId())) {
                     continue;
                 }
                 if (job.getNextAttemptAt() != null && now.isBefore(job.getNextAttemptAt())) {

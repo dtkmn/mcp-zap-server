@@ -202,6 +202,7 @@ mcp:
       maxConcurrentSpiderScans: 5
       threadPerHost: 10
       hostPerScan: 5
+      # ZAP target timeout applied at startup (ZAP_CONNECTION_TIMEOUT).
       connectionTimeoutInSecs: 60
       spiderThreadCount: 5
       spiderMaxDepth: 10

@@ -15,14 +15,24 @@ import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
+import mcp.server.zap.core.service.queue.ScanJobStopRequest;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.core.io.ClassPathResource;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,6 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
@@ -1064,6 +1076,255 @@ public class ScanJobQueueServiceTest {
                 false, store, new TestQueueLeadershipCoordinator(workerId, new SharedLeadershipState(workerId)));
     }
 
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = "AJAX_SPIDER", mode = EnumSource.Mode.EXCLUDE)
+    void nativeLateCleanupPersistsOldScanAndRetriesWithoutChangingNewerAttempt(ScanJobType type) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob source = new ScanJob("source-newer", type,
+                Map.of("targetUrl", "http://example.com/native", "contextId", "context-1", "userId", "user-1"),
+                Instant.now().minusSeconds(20), 3, "requester-1", "request-key");
+        source.incrementAttempts();
+        source.markRunning("scan-newer");
+        store.upsertAll(List.of(source));
+        AtomicInteger stops = new AtomicInteger();
+        if (type.isActiveFamily()) {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(activeScanService).stopActiveScanJob("scan-old");
+        } else {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(spiderScanService).stopSpiderScanJob("scan-old");
+        }
+        ScanJobQueueService queue = newNativeCleanupService(store, false);
+        ScanJobStopRequest request = new ScanJobStopRequest(type, "scan-old", source.getId());
+        try {
+            queue.requestScanCleanup(request);
+
+            ScanJob cleanup = cleanupFor(store, source.getId());
+            assertEquals(type, cleanup.getType());
+            assertEquals("scan-old", cleanup.getZapScanId());
+            assertEquals(source.getRequesterId(), cleanup.getRequesterId());
+            assertEquals(source.getParameters().get("contextId"), cleanup.getParameters().get("contextId"));
+            assertNull(cleanup.getIdempotencyKey());
+            assertTrue(cleanup.isCancellationPending());
+            assertEquals(1, cleanup.getCancelAttemptCount());
+            assertEquals(0, cleanup.getAttempts());
+            Instant requestedAt = cleanup.getCancelRequestedAt();
+            Instant deadline = cleanup.getCancelDeadlineAt();
+            Instant retryAt = cleanup.getCancelNextAttemptAt();
+            ScanJobClaimToken newerClaim = ScanJobClaimToken.from(store.load(source.getId()).orElseThrow());
+
+            queue.requestScanCleanup(request);
+            assertEquals(1, stops.get(), "Duplicate delivery must respect the saved backoff");
+            assertEquals(2, store.list().size());
+            assertEquals(requestedAt, cleanup.getCancelRequestedAt());
+            assertEquals(deadline, cleanup.getCancelDeadlineAt());
+            assertEquals(retryAt, cleanup.getCancelNextAttemptAt());
+            ScanJob preserved = store.load(source.getId()).orElseThrow();
+            assertEquals("scan-newer", preserved.getZapScanId());
+            assertEquals(ScanJobStatus.RUNNING, preserved.getStatus());
+            assertEquals(newerClaim, ScanJobClaimToken.from(preserved));
+            assertFalse(preserved.isCancellationRequested());
+
+            cleanup.deferCancellationAttempt(Instant.now().minusSeconds(1));
+            queue.processQueueOnceForTesting();
+            assertEquals(2, stops.get());
+            assertEquals(ScanJobStatus.CANCELLED, store.load(cleanup.getId()).orElseThrow().getStatus());
+            assertEquals(ScanJobStatus.RUNNING, store.load(source.getId()).orElseThrow().getStatus());
+            assertEquals("scan-newer", store.load(source.getId()).orElseThrow().getZapScanId());
+            queue.requestScanCleanup(request);
+            assertEquals(2, stops.get(), "A resolved cleanup record must make duplicate delivery harmless");
+            verify(activeScanService, never()).stopActiveScanJob("scan-newer");
+            verify(spiderScanService, never()).stopSpiderScanJob("scan-newer");
+        } finally {
+            queue.shutdownExecutor();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ScanJobStatus.class, names = {"RUNNING", "SUCCEEDED", "CANCELLED"})
+    void lateCleanupForAlreadyAdoptedNativeScanDoesNotCancelIt(ScanJobStatus status) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob source = new ScanJob("already-adopted-source", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/adopted"), Instant.now(), 3);
+        source.incrementAttempts();
+        source.markRunning("active-adopted");
+        if (status == ScanJobStatus.SUCCEEDED) {
+            source.markSucceeded(100);
+        } else if (status == ScanJobStatus.CANCELLED) {
+            source.markCancelled();
+        }
+        store.upsertAll(List.of(source));
+        ScanJobQueueService queue = newNativeCleanupService(store, false);
+        try {
+            assertDoesNotThrow(() -> queue.requestScanCleanup(
+                    new ScanJobStopRequest(source.getType(), "active-adopted", source.getId())));
+
+            assertEquals(1, store.list().size(), "An adopted scan must not get a cleanup child");
+            ScanJob preserved = store.load(source.getId()).orElseThrow();
+            assertEquals(status, preserved.getStatus());
+            assertEquals("active-adopted", preserved.getZapScanId());
+            assertEquals(1, preserved.getAttempts());
+            assertNull(preserved.getCancelRequestedAt(), "Late cleanup must not request cancellation of an adopted scan");
+            verify(activeScanService, never()).stopActiveScanJob(anyString());
+            verify(spiderScanService, never()).stopSpiderScanJob(anyString());
+        } finally {
+            queue.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void expiredNativeCleanupRetainsCapacityAndRequiresExplicitCancellationToReopenWindow() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob source = new ScanJob("failed-native-source", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/source"), Instant.now().minusSeconds(120), 3);
+        source.incrementAttempts();
+        source.markFailed("Startup timed out");
+        store.upsertAll(List.of(source));
+        doThrow(new ZapApiException("Stop failed", null)).when(activeScanService).stopActiveScanJob("old-active");
+        ScanJobQueueService queue = newNativeCleanupService(store, false);
+        ScanJobStopRequest request = new ScanJobStopRequest(source.getType(), "old-active", source.getId());
+        try {
+            queue.requestScanCleanup(request);
+            ScanJob cleanup = cleanupFor(store, source.getId());
+            assertTrue(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(source.getId()))
+                    .getMessage().contains("unconfirmed cleanup"));
+            assertTrue(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(cleanup.getId()))
+                    .getMessage().contains("Cleanup records cannot launch"));
+            assertTrue(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(cleanup.getId()))
+                    .getMessage().contains("Cleanup records cannot launch"));
+
+            cleanup.recordCancellationFailure("Expired fixture");
+            Instant expiredAt = Instant.now().minusSeconds(1);
+            cleanup.requestCancellation(expiredAt.minusSeconds(30), expiredAt);
+            queue.processQueueOnceForTesting();
+            queue.requestScanCleanup(request);
+
+            ScanJob unconfirmed = store.load(cleanup.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.RUNNING, unconfirmed.getStatus());
+            assertTrue(unconfirmed.isCancellationRequested());
+            assertFalse(unconfirmed.isCancellationPending());
+            assertEquals(expiredAt, unconfirmed.getCancelDeadlineAt());
+            assertTrue(queue.getScanJobStatus(cleanup.getId()).contains("Unable to confirm cancellation"));
+            String waitingId = extractJobId(queue.queueActiveScan("http://example.com/waiting", "true", null, null));
+            assertEquals(ScanJobStatus.QUEUED, store.load(waitingId).orElseThrow().getStatus());
+            verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
+            verify(activeScanService, times(1)).stopActiveScanJob("old-active");
+
+            queue.cancelScanJob(cleanup.getId());
+            ScanJob retried = store.load(cleanup.getId()).orElseThrow();
+            assertTrue(retried.isCancellationPending());
+            assertTrue(retried.getCancelRequestedAt().isAfter(expiredAt));
+            assertEquals(Duration.ofSeconds(30), Duration.between(retried.getCancelRequestedAt(), retried.getCancelDeadlineAt()));
+            assertEquals(1, retried.getCancelAttemptCount());
+            verify(activeScanService, times(2)).stopActiveScanJob("old-active");
+        } finally {
+            queue.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void lateTraditionalSpiderStartWithFailedStopCreatesDurableCleanupAndRetries() throws Exception {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch releaseStart = new CountDownLatch(1);
+        AtomicReference<Thread> lateThread = new AtomicReference<>();
+        AtomicInteger starts = new AtomicInteger();
+        AtomicInteger stops = new AtomicInteger();
+        when(spiderScanService.startSpiderScanJob(anyString())).thenAnswer(invocation -> {
+            starts.incrementAndGet();
+            lateThread.set(Thread.currentThread());
+            entered.countDown();
+            boolean released = false;
+            while (!released) {
+                try {
+                    released = releaseStart.await(20, TimeUnit.SECONDS);
+                    assertTrue(released, "Test must release the delayed ZAP response");
+                } catch (InterruptedException ignored) {
+                    // The remote start has succeeded even though the dispatcher cancelled its wait.
+                }
+            }
+            return "spider-late-native";
+        });
+        doAnswer(invocation -> {
+            if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+            return null;
+        }).when(spiderScanService).stopSpiderScanJob("spider-late-native");
+        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1),
+                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1), true, store);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<String> submission = caller.submit(() -> queue.queueSpiderScan("http://example.com/late-native", null));
+            assertTrue(entered.await(3, TimeUnit.SECONDS));
+            String sourceId = extractJobId(submission.get(15, TimeUnit.SECONDS));
+            assertEquals(ScanJobStatus.FAILED, store.load(sourceId).orElseThrow().getStatus());
+            assertEquals(1L, releaseStart.getCount());
+
+            releaseStart.countDown();
+            assertTrue(lateThread.get().join(Duration.ofSeconds(5)));
+            ScanJob cleanup = cleanupFor(store, sourceId);
+            assertTrue(cleanup.isCancellationPending());
+            assertEquals("spider-late-native", cleanup.getZapScanId());
+            assertEquals(1, stops.get());
+            assertEquals(1, store.load(sourceId).orElseThrow().getAttempts());
+
+            cleanup.deferCancellationAttempt(Instant.now().minusSeconds(1));
+            queue.processQueueOnceForTesting();
+            assertEquals(ScanJobStatus.CANCELLED, store.load(cleanup.getId()).orElseThrow().getStatus());
+            assertEquals(2, stops.get());
+            assertEquals(1, starts.get(), "Cleanup must not relaunch the source scan");
+        } finally {
+            releaseStart.countDown();
+            queue.shutdownExecutor();
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void nativeCleanupPersistenceFailureOnlyStopsAbandonedScanId() {
+        AtomicInteger failWrites = new AtomicInteger();
+        InMemoryScanJobStore store = new InMemoryScanJobStore() {
+            @Override
+            public List<ScanJob> updateAndGet(UnaryOperator<List<ScanJob>> updater) {
+                if (failWrites.get() > 0) throw new IllegalStateException("Cleanup persistence failed");
+                return super.updateAndGet(updater);
+            }
+        };
+        ScanJob source = new ScanJob("persistence-failed-source", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/source"), Instant.now(), 3);
+        source.markRunning("active-newer");
+        store.upsertAll(List.of(source));
+        ScanJobQueueService queue = newNativeCleanupService(store, false);
+        try {
+            failWrites.set(1);
+            IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
+                    queue.requestScanCleanup(new ScanJobStopRequest(source.getType(), "active-abandoned", source.getId())));
+            assertEquals("Cleanup persistence failed", failure.getMessage());
+            verify(activeScanService).stopActiveScanJob("active-abandoned");
+            verify(activeScanService, never()).stopActiveScanJob("active-newer");
+            assertEquals("active-newer", store.load(source.getId()).orElseThrow().getZapScanId());
+            assertEquals(1, store.list().size());
+        } finally {
+            queue.shutdownExecutor();
+        }
+    }
+
+    private ScanJobQueueService newNativeCleanupService(InMemoryScanJobStore store, boolean virtualThreads) {
+        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1),
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), virtualThreads, store);
+    }
+
+    private ScanJob cleanupFor(InMemoryScanJobStore store, String sourceId) {
+        return store.list().stream().filter(job -> sourceId.equals(job.getCleanupOfJobId())).findFirst().orElseThrow();
+    }
+
     private ScanJob runningAjaxJob(String jobId, Instant createdAt) {
         ScanJob job = new ScanJob(jobId, ScanJobType.AJAX_SPIDER,
                 Map.of("targetUrl", "http://example.com/spa"), createdAt, 3);
@@ -1187,6 +1448,101 @@ public class ScanJobQueueServiceTest {
                     assertEquals(0, job.getAttempts());
                     assertTrue(job.getLastError().contains("timed out after 0 ms"));
                 });
+    }
+
+    @ParameterizedTest
+    @MethodSource("cancellationWindowSettings")
+    void configuredCancellationWindowAppliesToAjaxAndNativeCleanup(long expectedWaitMs, String[] properties) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob source = new ScanJob("configured-cleanup-source", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/source"), Instant.now(), 3);
+        source.markFailed("Startup timed out");
+        ScanJob ajax = runningAjaxJob("configured-ajax", Instant.now());
+        store.upsertAll(List.of(source, ajax));
+        doThrow(new ZapApiException("Stop failed", null)).when(activeScanService).stopActiveScanJob("old-configured");
+        doThrow(new ZapApiException("Stop failed", null)).when(ajaxSpiderService).stopAjaxSpiderJob();
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true);
+        new ApplicationContextRunner()
+                .withBean(ActiveScanService.class, () -> activeScanService)
+                .withBean(SpiderScanService.class, () -> spiderScanService)
+                .withBean(AjaxSpiderService.class, () -> ajaxSpiderService)
+                .withBean(UrlValidationService.class, () -> urlValidationService)
+                .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
+                .withBean(InMemoryScanJobStore.class, () -> store)
+                .withUserConfiguration(ScanJobQueueService.class)
+                .withInitializer(context -> {
+                    try {
+                        new YamlPropertySourceLoader()
+                                .load("application", new ClassPathResource("application.yml"))
+                                .forEach(propertySource -> context.getEnvironment().getPropertySources().addLast(propertySource));
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                })
+                .withPropertyValues(properties)
+                .withPropertyValues(
+                        "zap.scan.queue.virtual-threads.enabled=false",
+                        "zap.scan.queue.retry.active.initial-backoff-ms=60000",
+                        "zap.scan.queue.retry.active.max-backoff-ms=60000",
+                        "zap.scan.queue.retry.spider.initial-backoff-ms=60000",
+                        "zap.scan.queue.retry.spider.max-backoff-ms=60000")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    ScanJobQueueService configured = context.getBean(ScanJobQueueService.class);
+                    configured.requestScanCleanup(new ScanJobStopRequest(source.getType(), "old-configured", source.getId()));
+                    configured.cancelScanJob(ajax.getId());
+
+                    ScanJob cleanup = cleanupFor(store, source.getId());
+                    ScanJob cancelledAjax = store.load(ajax.getId()).orElseThrow();
+                    assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(cleanup.getCancelRequestedAt(), cleanup.getCancelDeadlineAt()));
+                    assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(cancelledAjax.getCancelRequestedAt(), cancelledAjax.getCancelDeadlineAt()));
+                    assertEquals(cleanup.getCancelDeadlineAt(), cleanup.getCancelNextAttemptAt());
+                    assertEquals(cancelledAjax.getCancelDeadlineAt(), cancelledAjax.getCancelNextAttemptAt());
+                    cleanup.recordCancellationFailure("Previous cleanup window ended");
+                    cancelledAjax.recordCancellationFailure("Previous cancellation window ended");
+
+                    configured.cancelScanJob(cleanup.getId());
+                    configured.cancelScanJob(ajax.getId());
+
+                    ScanJob retried = store.load(cleanup.getId()).orElseThrow();
+                    ScanJob retriedAjax = store.load(ajax.getId()).orElseThrow();
+                    assertTrue(retried.isCancellationPending());
+                    assertTrue(retriedAjax.isCancellationPending());
+                    assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(retried.getCancelRequestedAt(), retried.getCancelDeadlineAt()));
+                    assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(retriedAjax.getCancelRequestedAt(), retriedAjax.getCancelDeadlineAt()));
+                    verify(activeScanService, times(2)).stopActiveScanJob("old-configured");
+                    verify(ajaxSpiderService, times(2)).stopAjaxSpiderJob();
+                });
+    }
+
+    private static Stream<Arguments> cancellationWindowSettings() {
+        return Stream.of(
+                Arguments.of(30_000, new String[]{}),
+                Arguments.of(7000, new String[]{"zap.scan.queue.cancel-max-wait-ms=7000"}),
+                Arguments.of(7000, new String[]{"zap.scan.queue.ajax-cancel-max-wait-ms=7000"}),
+                Arguments.of(7000, new String[]{"ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS=7000"}),
+                Arguments.of(7000, new String[]{"ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS=7000"}),
+                Arguments.of(7000, new String[]{
+                        "ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS=7000", "ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS=17000",
+                        "zap.scan.queue.ajax-cancel-max-wait-ms=27000"}),
+                Arguments.of(7000, new String[]{
+                        "zap.scan.queue.cancel-max-wait-ms=7000", "ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS=17000",
+                        "ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS=27000", "zap.scan.queue.ajax-cancel-max-wait-ms=37000"})
+        );
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1})
+    void configuredCancellationWindowMustBePositive(long waitMs) {
+        new ApplicationContextRunner()
+                .withBean(ActiveScanService.class, () -> activeScanService)
+                .withBean(SpiderScanService.class, () -> spiderScanService)
+                .withBean(UrlValidationService.class, () -> urlValidationService)
+                .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
+                .withUserConfiguration(ScanJobQueueService.class)
+                .withPropertyValues("zap.scan.queue.cancel-max-wait-ms=" + waitMs)
+                .run(context -> assertThat(context.getStartupFailure())
+                        .hasRootCauseMessage("zap.scan.queue.cancel-max-wait-ms must be positive"));
     }
 
     @Test

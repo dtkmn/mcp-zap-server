@@ -188,22 +188,20 @@ public class ScanJobResultApplier {
                     && (persistenceFailure != null
                     || updatedJob == null
                     || !adoptedStart[0])) {
-                if (result.type() == ScanJobType.AJAX_SPIDER) {
-                    try {
-                        if (scanJobStore.load(result.jobId()).filter(job -> job.getStatus() == ScanJobStatus.RUNNING
-                                && result.scanId().equals(job.getZapScanId())).isPresent()) {
-                            // AJAX ownership was committed inside the start gate, even if this
-                            // dispatch claim expired or another worker has already taken over polling.
-                            continue;
-                        }
-                    } catch (RuntimeException e) {
-                        if (firstPersistenceFailure == null) {
-                            firstPersistenceFailure = e;
-                        }
-                        persistenceFailure = e;
-                        log.error("Failed to read accepted AJAX ownership for job {} on worker {}",
-                                result.jobId(), workerNodeId, e);
+                try {
+                    if (scanJobStore.load(result.jobId()).filter(job -> job.getStatus() == ScanJobStatus.RUNNING
+                            && result.scanId().equals(job.getZapScanId())).isPresent()) {
+                        // Persisted ownership can outlive the dispatch claim when another
+                        // worker has already taken over polling the same scan.
+                        continue;
                     }
+                } catch (RuntimeException e) {
+                    if (firstPersistenceFailure == null) {
+                        firstPersistenceFailure = e;
+                    }
+                    persistenceFailure = e;
+                    log.error("Failed to read accepted scan ownership for job {} on worker {}",
+                            result.jobId(), workerNodeId, e);
                 }
                 claimManager.recordLateResultCleanup(1);
                 if (updatedJob == null && persistenceFailure == null) {
@@ -222,9 +220,7 @@ public class ScanJobResultApplier {
                             workerNodeId
                     );
                 }
-                stopRequests.add(result.type() == ScanJobType.AJAX_SPIDER
-                        ? new ScanJobStopRequest(result.type(), result.scanId(), result.jobId())
-                        : new ScanJobStopRequest(result.type(), result.scanId()));
+                stopRequests.add(new ScanJobStopRequest(result.type(), result.scanId(), result.jobId()));
             }
         }
 

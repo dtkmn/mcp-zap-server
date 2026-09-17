@@ -12,6 +12,7 @@ import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.ScanJobAccessBoundary;
 import mcp.server.zap.core.service.queue.ScanJobApplyOutcome;
 import mcp.server.zap.core.service.queue.ScanJobClaimManager;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import mcp.server.zap.core.service.queue.ScanJobClaimMetrics;
 import mcp.server.zap.core.service.queue.ScanJobDispatchResult;
 import mcp.server.zap.core.service.queue.ScanJobDispatcher;
@@ -37,6 +38,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -48,6 +51,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -84,7 +88,7 @@ public class ScanJobQueueService {
 
     private long claimLeaseMs = DEFAULT_CLAIM_LEASE_MS;
     private Duration engineBusyMaxWait = Duration.ofMinutes(3);
-    private Duration ajaxCancelMaxWait = Duration.ofSeconds(30);
+    private Duration cancelMaxWait = Duration.ofSeconds(30);
     private ScanJobClaimManager claimManager;
     private ScanJobResultApplier resultApplier;
     private QueueStateMetrics queueStateMetrics = QueueStateMetrics.noop();
@@ -115,7 +119,7 @@ public class ScanJobQueueService {
                                @Value("${zap.scan.queue.retry.spider.max-backoff-ms:10000}") long spiderMaxBackoffMs,
                                @Value("${zap.scan.queue.retry.spider.multiplier:2.0}") double spiderBackoffMultiplier,
                                @Value("${zap.scan.queue.engine-busy-max-wait-ms:180000}") long engineBusyMaxWaitMs,
-                               @Value("${zap.scan.queue.ajax-cancel-max-wait-ms:30000}") long ajaxCancelMaxWaitMs) {
+                               @Value("${zap.scan.queue.cancel-max-wait-ms:${zap.scan.queue.ajax-cancel-max-wait-ms:30000}}") long cancelMaxWaitMs) {
         this(
                 activeScanService,
                 spiderScanService,
@@ -133,10 +137,10 @@ public class ScanJobQueueService {
             throw new IllegalArgumentException("zap.scan.queue.engine-busy-max-wait-ms must not be negative");
         }
         this.engineBusyMaxWait = Duration.ofMillis(engineBusyMaxWaitMs);
-        if (ajaxCancelMaxWaitMs <= 0) {
-            throw new IllegalArgumentException("zap.scan.queue.ajax-cancel-max-wait-ms must be positive");
+        if (cancelMaxWaitMs <= 0) {
+            throw new IllegalArgumentException("zap.scan.queue.cancel-max-wait-ms must be positive");
         }
-        this.ajaxCancelMaxWait = Duration.ofMillis(ajaxCancelMaxWaitMs);
+        this.cancelMaxWait = Duration.ofMillis(cancelMaxWaitMs);
         MeterRegistry meterRegistry = meterRegistryProvider.getIfAvailable();
         this.claimManager = new ScanJobClaimManager(
                 this.scanJobStore,
@@ -418,7 +422,7 @@ public class ScanJobQueueService {
                 ajaxSpiderService,
                 this::recordAcceptedAjaxStart
         );
-        this.dispatcher = ScanJobDispatcher.create(runtimeExecutor, virtualThreadsEnabled, this::requestAjaxCleanup);
+        this.dispatcher = ScanJobDispatcher.create(runtimeExecutor, virtualThreadsEnabled, this::requestScanCleanup);
         this.workerNodeId = sanitizeWorkerNodeId(this.queueLeadershipCoordinator.nodeId());
         this.claimManager = new ScanJobClaimManager(this.scanJobStore, this.workerNodeId, ScanJobClaimMetrics.noop());
         this.resultApplier = new ScanJobResultApplier(
@@ -503,7 +507,11 @@ public class ScanJobQueueService {
 
         ScanJob job = scanJobStore.load(normalizedJobId).orElse(null);
         job = requireVisibleJob(normalizedJobId, job);
-        return responseFormatter.formatJobDetail(job, job.getQueuePosition(), Instant.now());
+        String detail = responseFormatter.formatJobDetail(job, job.getQueuePosition(), Instant.now());
+        List<String> cleanupIds = filterVisibleJobs(scanJobStore.list()).stream()
+                .filter(candidate -> normalizedJobId.equals(candidate.getCleanupOfJobId()) && !candidate.getStatus().isTerminal())
+                .map(ScanJob::getId).toList();
+        return cleanupIds.isEmpty() ? detail : detail + "\nUnresolved cleanup jobs: " + String.join(", ", cleanupIds);
     }
 
     public String listScanJobs(
@@ -535,19 +543,19 @@ public class ScanJobQueueService {
         String normalizedJobId = requireText(jobId, "jobId");
         ScanJobStopRequest[] stopRequest = new ScanJobStopRequest[1];
         String[] response = new String[1];
-        boolean[] ajaxCancellation = new boolean[1];
+        boolean[] durableCancellation = new boolean[1];
 
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
             ScanJob job = currentState.jobs().get(normalizedJobId);
             job = requireVisibleJob(normalizedJobId, job);
 
             Instant now = Instant.now();
-            if (job.getType() == ScanJobType.AJAX_SPIDER
+            if ((job.getType() == ScanJobType.AJAX_SPIDER || job.isCleanupJob())
                     && (job.getStatus() == ScanJobStatus.RUNNING
                     || (job.getStatus() == ScanJobStatus.QUEUED
                     && (job.hasLiveClaim(now) || job.isCancellationRequested())))) {
-                job.requestCancellation(now, now.plus(ajaxCancelMaxWait));
-                ajaxCancellation[0] = true;
+                job.requestCancellation(now, now.plus(cancelMaxWait));
+                durableCancellation[0] = true;
                 return currentState;
             }
 
@@ -588,7 +596,7 @@ public class ScanJobQueueService {
         }
 
         processQueue();
-        if (ajaxCancellation[0]) {
+        if (durableCancellation[0]) {
             ScanJob job = requireVisibleJob(normalizedJobId, scanJobStore.load(normalizedJobId).orElse(null));
             return responseFormatter.formatJobDetail(job, job.getQueuePosition(), Instant.now());
         }
@@ -603,6 +611,7 @@ public class ScanJobQueueService {
             ScanJob job = currentState.jobs().get(normalizedJobId);
             job = requireVisibleJob(normalizedJobId, job);
 
+            requireNoOutstandingCleanup(job, currentState);
             if (job.getStatus() != ScanJobStatus.FAILED && job.getStatus() != ScanJobStatus.CANCELLED) {
                 throw new IllegalStateException("Only FAILED or CANCELLED jobs can be retried. Current status: " + job.getStatus());
             }
@@ -653,6 +662,7 @@ public class ScanJobQueueService {
         List<ScanJob> committedJobs = updateQueueState(currentState -> {
             ScanJob deadLetterJob = currentState.jobs().get(normalizedJobId);
             deadLetterJob = requireVisibleJob(normalizedJobId, deadLetterJob);
+            requireNoOutstandingCleanup(deadLetterJob, currentState);
             if (!isDeadLetterJob(deadLetterJob)) {
                 throw new IllegalStateException("Job " + normalizedJobId + " is not a dead-letter job. Current status="
                         + deadLetterJob.getStatus() + ", attempts=" + deadLetterJob.getAttempts()
@@ -695,6 +705,7 @@ public class ScanJobQueueService {
         restoreStateFromStore(false);
         Instant now = Instant.now();
         processAjaxCancellations(now);
+        processScanCleanups(Instant.now());
         now = Instant.now();
         expireEngineBusyWaits(now);
         Instant claimUntil = now.plusMillis(claimLeaseMs);
@@ -746,7 +757,7 @@ public class ScanJobQueueService {
             if (!stillClaimed) {
                 job.clearClaim();
                 if (!job.isCancellationRequested()) {
-                    job.requestCancellation(now, now.plus(ajaxCancelMaxWait));
+                    job.requestCancellation(now, now.plus(cancelMaxWait));
                 }
             }
             state.queuedJobIds().remove(job.getId());
@@ -760,6 +771,147 @@ public class ScanJobQueueService {
         applyCommittedStoredJobs(committed);
     }
 
+    void requestScanCleanup(ScanJobStopRequest request) {
+        if (request.type() == ScanJobType.AJAX_SPIDER) {
+            requestAjaxCleanup(request.jobId(), request.scanId());
+            return;
+        }
+        if (!hasText(request.jobId()) || !hasText(request.scanId())) {
+            throw new IllegalArgumentException("Scan cleanup requires its source job and ZAP scan ID");
+        }
+        Instant now = Instant.now();
+        String cleanupId = "cleanup-" + UUID.nameUUIDFromBytes(
+                (request.jobId() + '\0' + request.type().name() + '\0' + request.scanId()).getBytes(StandardCharsets.UTF_8));
+        try {
+            List<ScanJob> committed = updateQueueState(state -> {
+                ScanJob source = state.jobs().get(request.jobId());
+                if (source == null || source.getType() != request.type()) {
+                    throw new IllegalStateException("Missing source job for scan cleanup: " + request.jobId());
+                }
+                // Duplicate delivery must not reopen a completed or expired cleanup window.
+                if (state.jobs().containsKey(cleanupId)) {
+                    return state;
+                }
+                if (hasAdoptedNativeScan(source, request.scanId())) {
+                    // Another result handler already owns or finished this exact scan.
+                    return state;
+                }
+                Map<String, String> parameters = new HashMap<>(source.getParameters());
+                parameters.put(ScanJob.CLEANUP_OF_JOB_ID, source.getId());
+                ScanJob cleanup = new ScanJob(cleanupId, source.getType(), parameters, now, 0,
+                        source.getRequesterId(), null);
+                cleanup.markRunning(request.scanId());
+                cleanup.requestCancellation(now, now.plus(cancelMaxWait));
+                state.jobs().put(cleanupId, cleanup);
+                return state;
+            });
+            boolean saved = committed.stream().anyMatch(job -> cleanupId.equals(job.getId())
+                    || (request.jobId().equals(job.getId()) && hasAdoptedNativeScan(job, request.scanId())));
+            if (!saved) {
+                throw new IllegalStateException("Failed to persist scan cleanup: " + request.jobId());
+            }
+            applyCommittedStoredJobs(committed);
+        } catch (RuntimeException failure) {
+            // A native scan ID makes this best-effort fallback safe even if a newer scan exists.
+            stopAfterCleanupPersistenceFailure(request, failure);
+            throw failure;
+        }
+        processScanCleanups(Instant.now());
+    }
+
+    private void stopAfterCleanupPersistenceFailure(ScanJobStopRequest request, RuntimeException failure) {
+        try {
+            dispatcher.executeStopRequest(request);
+        } catch (RuntimeException stopFailure) {
+            if (stopFailure != failure) {
+                failure.addSuppressed(stopFailure);
+            }
+        }
+    }
+
+    private boolean hasAdoptedNativeScan(ScanJob job, String scanId) {
+        return scanId.equals(job.getZapScanId()) && (job.getStatus() == ScanJobStatus.RUNNING
+                || job.getStatus() == ScanJobStatus.SUCCEEDED || job.getStatus() == ScanJobStatus.CANCELLED);
+    }
+
+    private void requireNoOutstandingCleanup(ScanJob source, ScanJobQueueState state) {
+        if (source.isCleanupJob()) {
+            throw new IllegalStateException("Cleanup records cannot launch new scans; request cancellation again to retry cleanup");
+        }
+        boolean outstanding = state.jobs().values().stream().anyMatch(job ->
+                source.getId().equals(job.getCleanupOfJobId()) && !job.getStatus().isTerminal());
+        if (outstanding) {
+            throw new IllegalStateException("Scan job " + source.getId() + " has unconfirmed cleanup; resolve it before retrying");
+        }
+    }
+
+    private void processScanCleanups(Instant now) {
+        if (snapshotJobsForClaimObservation().stream().noneMatch(job ->
+                job.getType() != ScanJobType.AJAX_SPIDER && job.isCancellationPending())) {
+            return;
+        }
+        List<ScanJob> claimed = scanJobStore.claimRunningJobs(workerNodeId, now, now.plusMillis(claimLeaseMs));
+        for (ScanJob candidate : claimManager.copyJobs(claimed)) {
+            if (candidate.getType() == ScanJobType.AJAX_SPIDER || !candidate.isCancellationPending()) {
+                continue;
+            }
+            ScanJobClaimToken token = ScanJobClaimToken.from(candidate);
+            ScanJob[] reserved = new ScanJob[1];
+            Instant attemptAt = Instant.now();
+            Optional<ScanJob> committed;
+            try {
+                committed = scanJobStore.updateClaimedJob(candidate.getId(), token, attemptAt, job -> {
+                    reserved[0] = null;
+                    if (!sameCancellation(candidate, job) || !job.isCancellationPending()) {
+                        return job;
+                    }
+                    if (!attemptAt.isBefore(job.getCancelDeadlineAt())) {
+                        job.recordCancellationFailure(cancellationUnconfirmed());
+                        return job;
+                    }
+                    if (attemptAt.isBefore(job.getCancelNextAttemptAt())) {
+                        return job;
+                    }
+                    // Reserve this attempt before IO. Other workers can recover it after the lease,
+                    // while unrelated scan IDs need no shared AJAX lifecycle lock.
+                    job.deferCancellationAttempt(attemptAt.plusMillis(claimLeaseMs).truncatedTo(ChronoUnit.MICROS));
+                    reserved[0] = claimManager.copyJobs(List.of(job)).iterator().next();
+                    return job;
+                });
+            } catch (RuntimeException failure) {
+                Instant failedAt = Instant.now();
+                if (!failedAt.isBefore(candidate.getCancelNextAttemptAt()) && failedAt.isBefore(candidate.getCancelDeadlineAt())) {
+                    stopAfterCleanupPersistenceFailure(new ScanJobStopRequest(candidate.getType(), candidate.getZapScanId()), failure);
+                }
+                throw failure;
+            }
+            if (committed.isEmpty() || reserved[0] == null) {
+                continue;
+            }
+            ScanJob expected = reserved[0];
+            RuntimeException stopFailure = null;
+            try {
+                dispatcher.executeStopRequest(new ScanJobStopRequest(expected.getType(), expected.getZapScanId()));
+            } catch (RuntimeException e) {
+                stopFailure = e;
+            }
+            Instant finishedAt = Instant.now();
+            RuntimeException failure = stopFailure;
+            scanJobStore.updateClaimedJob(expected.getId(), token, finishedAt, job -> {
+                if (!sameCancellation(expected, job)
+                        || !Objects.equals(expected.getCancelNextAttemptAt(), job.getCancelNextAttemptAt())) {
+                    return job;
+                }
+                applyCancellationResult(job, failure, finishedAt);
+                if (failure != null) {
+                    job.clearClaim();
+                }
+                return job;
+            });
+        }
+        applyCommittedStoredJobs(scanJobStore.list());
+    }
+
     private void requestAjaxCleanup(String jobId, String scanId) {
         if (!hasText(jobId) || !hasText(scanId)) {
             throw new IllegalArgumentException("AJAX cleanup requires its job and scan ID");
@@ -770,7 +922,7 @@ public class ScanJobQueueService {
             if (job != null && job.getType() == ScanJobType.AJAX_SPIDER
                     && !job.getStatus().isTerminal() && scanId.equals(job.getZapScanId())
                     && !job.isCancellationRequested()) {
-                job.requestCancellation(now, now.plus(ajaxCancelMaxWait));
+                job.requestCancellation(now, now.plus(cancelMaxWait));
             }
             return state;
         });
@@ -819,21 +971,24 @@ public class ScanJobQueueService {
                 } catch (RuntimeException e) {
                     stopFailure = e;
                 }
-                if (stopFailure == null) {
-                    updateAjaxCancellation(expected, ScanJob::markCancelled);
-                } else {
-                    Instant failedAt = Instant.now();
-                    Instant retryAt = failedAt.plusMillis(spiderRetryPolicy.computeDelayMs(expected.getCancelAttemptCount() + 1));
-                    boolean expired = !failedAt.isBefore(expected.getCancelDeadlineAt());
-                    Instant next = expired ? null : (retryAt.isAfter(expected.getCancelDeadlineAt())
-                            ? expected.getCancelDeadlineAt() : retryAt);
-                    String reason = expired ? cancellationUnconfirmed()
-                            : "Cancellation pending; ZAP stop request failed: " + stopFailure.getMessage();
-                    updateAjaxCancellation(expected, job -> job.scheduleCancellationRetry(next, reason));
-                }
+                Instant finishedAt = Instant.now();
+                RuntimeException failure = stopFailure;
+                updateAjaxCancellation(expected, job -> applyCancellationResult(job, failure, finishedAt));
                 return true;
             });
         }
+    }
+
+    private void applyCancellationResult(ScanJob job, RuntimeException failure, Instant finishedAt) {
+        if (failure == null) {
+            job.markCancelled();
+            return;
+        }
+        Instant retryAt = finishedAt.plusMillis(policyFor(job.getType()).computeDelayMs(job.getCancelAttemptCount() + 1));
+        boolean expired = !finishedAt.isBefore(job.getCancelDeadlineAt());
+        Instant next = expired ? null : (retryAt.isAfter(job.getCancelDeadlineAt()) ? job.getCancelDeadlineAt() : retryAt);
+        job.scheduleCancellationRetry(next, expired ? cancellationUnconfirmed()
+                : "Cancellation pending; ZAP stop request failed: " + failure.getMessage());
     }
 
     private void updateAjaxCancellation(ScanJob expected, java.util.function.Consumer<ScanJob> update) {
@@ -1180,7 +1335,7 @@ public class ScanJobQueueService {
      * Return true when a job failed and exhausted attempts budget.
      */
     private boolean isDeadLetterJob(ScanJob job) {
-        return job.getStatus() == ScanJobStatus.FAILED && job.getAttempts() >= job.getMaxAttempts();
+        return !job.isCleanupJob() && job.getStatus() == ScanJobStatus.FAILED && job.getAttempts() >= job.getMaxAttempts();
     }
 
     private String sanitizeWorkerNodeId(String workerNodeId) {

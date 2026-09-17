@@ -30,7 +30,9 @@ All calls from this server to ZAP use configurable HTTP timeouts:
 
 Both values must be positive; startup rejects zero or negative values. The connection timeout limits connection establishment, and the read timeout limits inactivity while receiving a response. They are per-request limits, not a total scan duration or a strict overall call deadline. Configure them in `.env`/Docker Compose, deployment environment variables, or Helm's `mcp.zapClient.connectTimeoutMs` and `mcp.zapClient.readTimeoutMs` values.
 
-A timeout does not prove that ZAP rejected an action: ZAP may still process it or may have completed it before its response was lost. Existing queue retry and cancellation policies still apply; cancellation stays unconfirmed until a stop is accepted or later status observation confirms it. The separate `ZAP_CONNECTION_TIMEOUT` setting controls ZAP's connections to scan targets, not this server's connections to ZAP.
+A timeout does not prove that ZAP rejected an action: ZAP may still process it or may have completed it before its response was lost. Existing queue retry and cancellation policies still apply; cancellation stays unconfirmed until a stop is accepted or later status observation confirms it.
+
+`ZAP_CONNECTION_TIMEOUT` controls ZAP's connections to scan targets in seconds and is applied at startup through `zap.initialization.connectionTimeoutInSecs`. An existing `ZAP_INIT_CONNECTION_TIMEOUT` value takes precedence; when neither variable is set, the effective default remains 300 seconds. The example environment and Helm value `mcp.scan.limits.connectionTimeoutInSecs` specify 60 seconds. These values were previously ignored and now take effect. The unused application property `zap.scan.limits.connectionTimeoutInSecs` has been removed; deployments that set that property directly should use `zap.initialization.connectionTimeoutInSecs`.
 
 ## Waiting for a Busy Engine
 
@@ -44,11 +46,17 @@ Engine integrations identify explicit busy responses; the queue does not guess f
 
 Configure this environment variable alongside the existing retry controls in `.env`/Docker Compose or your deployment's environment settings. PostgreSQL deployments require migration V7, which adds the two busy-wait fields; standard Flyway startup and the Helm migration bundle include it.
 
+## Shared Cancellation and Cleanup Retry Window
+
+`ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS` (`zap.scan.queue.cancel-max-wait-ms`) sets one stop retry window for AJAX cancellation and abandoned active/traditional spider cleanup. It defaults to `30000` (30 seconds) and must be positive. Both paths use the scan family's existing backoff without consuming startup attempts.
+
+The former `ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS` environment variable and `zap.scan.queue.ajax-cancel-max-wait-ms` property remain fallback aliases for this shared setting. The new setting takes precedence. Configure it in `.env`/Docker Compose, deployment environment variables, or Helm's `mcp.env` list.
+
+The original deadline and retry schedule survive worker changes and PostgreSQL-backed restarts. Repeating cancellation while it is pending preserves the deadline. Once the window expires, automatic stop retries end and status reports that cancellation is unconfirmed and the scan may still be running. An explicit new cancellation request opens a new window. The job retains capacity until a stop succeeds or status observation confirms completion.
+
 ## AJAX Cancellation During Startup
 
 Cancelling an AJAX queue job records a durable cancellation request. If ZAP rejects the stop while its crawler initializes, the job shows `cancellation pending` and the queue retries using the spider family's backoff. Stop failures do not consume startup attempts, and a generic ZAP internal error is not interpreted as proof of initialization.
-
-`ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS` sets the stop retry window, default `30000` (30 seconds), and must be positive. The original deadline and retry schedule survive restarts and worker changes. Repeating cancellation while it is pending preserves that deadline. Once the window expires, automatic stop retries end and status reports that cancellation is unconfirmed and the crawl may still be running. An explicit new cancellation request opens a new window.
 
 The job retains its AJAX slot until stop is accepted or later status observation confirms the crawler is stopped. Cancelling a job whose start is already in flight also retains ownership. If startup never returns a scan ID, or persisted jobs disagree about who owns the crawler, the queue does not issue a global stop and cancellation remains unconfirmed. Ordinary queued jobs that have not started are cancelled immediately without calling ZAP. Active scans and the traditional spider keep their existing cancellation behavior.
 
@@ -57,6 +65,16 @@ Managed AJAX starts and cancellation attempts share a lifecycle lock, including 
 If an AJAX start succeeds after its queue dispatch times out, the queue records the accepted crawl before releasing the lifecycle lock and cleans it up through the same cancellation retry window. A failed cleanup keeps the crawl tracked and reserves its slot. Delayed cleanup callbacks must still match the job's current crawl and cannot stop a newer crawl after the original job has finished or been cancelled.
 
 The cancellation deadline bounds retry scheduling, separately from the connection and read timeouts above. An in-flight stop can outlast the cancellation retry window; its lifecycle lock is retained until the call returns, and a timed-out stop leaves cancellation unconfirmed. PostgreSQL deployments require migration V8, included in the application and Helm migration bundles.
+
+## Late Active Scan and Traditional Spider Cleanup
+
+When an active scan or traditional spider returns its ZAP scan ID after dispatch timed out or its start result can no longer be adopted, cleanup is persisted before attempting a stop. This includes authenticated scans. A separate cleanup record links to the original job and retains the abandoned scan ID, so a newer attempt's scan ID and claim are preserved. Job details and listings identify the source job with `Cleanup for Job ID` / `cleanupForJob`.
+
+Cleanup uses the shared cancellation window above; duplicate callbacks do not renew it. In-memory storage remains process-local.
+
+Each unresolved cleanup retains one slot in its scan family. Further launches or manual retries of the source job wait until its cleanup resolves; other jobs can use remaining capacity. An attempt already dispatched before the late response is discovered can still finish and is tracked independently. Cleanup always targets the original ZAP scan ID and does not take the AJAX lifecycle lock. Cleanup records cannot be retried or replayed as new scans.
+
+After the retry deadline, the cleanup remains visible as cancellation unconfirmed and continues to reserve capacity. Status polling can confirm the scan has finished. Use `zap_scan_job_cancel` with the cleanup record's job ID to explicitly open another stop retry window. If recording cleanup fails, the server attempts an immediate stop of that exact scan ID; recovery cannot be guaranteed when both storage and stopping fail. This path requires a returned scan ID and cannot recover an ID that ZAP never delivered.
 
 ## Retryable Errors
 
@@ -81,7 +99,7 @@ For attempt `n`:
 ## Runtime Overrides
 
 - `ZAP_SCAN_QUEUE_ENGINE_BUSY_MAX_WAIT_MS`
-- `ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS`
+- `ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS`
 - `ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_ATTEMPTS`
 - `ZAP_SCAN_QUEUE_RETRY_ACTIVE_INITIAL_BACKOFF_MS`
 - `ZAP_SCAN_QUEUE_RETRY_ACTIVE_MAX_BACKOFF_MS`

@@ -12,12 +12,11 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.TreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,14 +49,14 @@ public class FindingsService {
             return "✅ **Scan Complete**: No alerts found.";
         }
 
-        Map<String, Map<String, Integer>> riskGroups = new LinkedHashMap<>();
+        Map<String, Map<String, List<AlertSnapshot>>> riskGroups = new LinkedHashMap<>();
         Map<String, String> alertDescriptions = new LinkedHashMap<>();
 
         for (AlertSnapshot alert : alerts) {
             String risk = displayValue(alert.risk());
             String alertName = displayValue(alert.name());
             riskGroups.computeIfAbsent(risk, ignored -> new LinkedHashMap<>())
-                    .merge(alertName, 1, Integer::sum);
+                    .computeIfAbsent(alertName, ignored -> new ArrayList<>()).add(alert);
             alertDescriptions.putIfAbsent(alertName, summarizeDescription(alert.description()));
         }
 
@@ -116,7 +115,7 @@ public class FindingsService {
             AlertSnapshot sample = instances.getFirst();
             output.append("- Alert Name: ").append(key.alertName()).append('\n')
                     .append("  Plugin ID: ").append(displayValue(key.pluginId())).append('\n')
-                    .append("  Instances: ").append(instances.size()).append('\n')
+                    .append("  Instances: ").append(instanceCount(instances)).append('\n')
                     .append("  Risk: ").append(displayValue(key.risk())).append('\n')
                     .append("  Confidence: ").append(displayValue(key.confidence())).append('\n')
                     .append("  CWE ID: ").append(displayValue(sample.cweId())).append('\n')
@@ -179,8 +178,20 @@ public class FindingsService {
                     .append("  Attack: ").append(compact(alert.attack())).append('\n')
                     .append("  Evidence: ").append(compact(alert.evidence())).append('\n')
                     .append("  Message ID: ").append(displayValue(alert.messageId())).append('\n');
+            if (hasText(alert.nodeName())) {
+                output.append("  Node Name: ").append(alert.nodeName()).append('\n');
+            }
+            if (hasText(alert.method())) {
+                output.append("  Method: ").append(alert.method()).append('\n');
+            }
+            if (!alert.tags().isEmpty()) {
+                output.append("  Tags: ").append(new TreeMap<>(alert.tags())).append('\n');
+            }
         }
 
+        if (selectedAlerts.stream().anyMatch(this::isSystemic)) {
+            output.append("Systemic alerts are typically site-wide; recorded instances do not measure all affected endpoints.\n");
+        }
         if (filteredAlerts.size() > returnedCount) {
             output.append('\n')
                     .append("Results truncated. Increase 'limit' up to ")
@@ -193,7 +204,7 @@ public class FindingsService {
     public String exportFindingsSnapshot(
             String baseUrl
     ) {
-        FindingsSnapshot snapshot = buildSnapshot(baseUrl);
+        FindingsSnapshot snapshot = buildSnapshot(baseUrl, 2);
         try {
             return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(snapshot);
         } catch (JacksonException e) {
@@ -213,24 +224,19 @@ public class FindingsService {
 
         int boundedLimit = validateLimit(maxGroups == null ? 25 : maxGroups);
         FindingsSnapshot baseline = parseSnapshot(baselineSnapshot);
-        FindingsSnapshot current = buildSnapshot(baseUrl);
+        FindingsSnapshot current = buildSnapshot(baseUrl, baseline.version());
+        Map<String, FindingFingerprint> baselineFingerprints = uniqueFindings(baseline);
+        Map<String, FindingFingerprint> currentFingerprints = uniqueFindings(current);
 
-        Set<String> baselineFingerprints = new HashSet<>(baseline.fingerprints().stream()
-                .map(FindingFingerprint::fingerprint)
-                .toList());
-        Set<String> currentFingerprints = new HashSet<>(current.fingerprints().stream()
-                .map(FindingFingerprint::fingerprint)
-                .toList());
-
-        List<FindingFingerprint> newFindings = current.fingerprints().stream()
-                .filter(fingerprint -> !baselineFingerprints.contains(fingerprint.fingerprint()))
+        List<FindingFingerprint> newFindings = currentFingerprints.values().stream()
+                .filter(fingerprint -> !baselineFingerprints.containsKey(fingerprint.fingerprint()))
                 .sorted(Comparator.comparingInt((FindingFingerprint fingerprint) -> riskRank(fingerprint.risk()))
                         .reversed()
                         .thenComparing(FindingFingerprint::alertName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(FindingFingerprint::url, String.CASE_INSENSITIVE_ORDER))
                 .toList();
-        List<FindingFingerprint> resolvedFindings = baseline.fingerprints().stream()
-                .filter(fingerprint -> !currentFingerprints.contains(fingerprint.fingerprint()))
+        List<FindingFingerprint> resolvedFindings = baselineFingerprints.values().stream()
+                .filter(fingerprint -> !currentFingerprints.containsKey(fingerprint.fingerprint()))
                 .sorted(Comparator.comparingInt((FindingFingerprint fingerprint) -> riskRank(fingerprint.risk()))
                         .reversed()
                         .thenComparing(FindingFingerprint::alertName, String.CASE_INSENSITIVE_ORDER)
@@ -245,15 +251,18 @@ public class FindingsService {
                 .append("Target: ").append(hasText(baseUrl) ? baseUrl.trim() : "All targets").append('\n')
                 .append("Baseline Exported At: ").append(baseline.exportedAt()).append('\n')
                 .append("Current Exported At: ").append(current.exportedAt()).append('\n')
-                .append("Baseline Findings: ").append(baseline.fingerprints().size()).append('\n')
-                .append("Current Findings: ").append(current.fingerprints().size()).append('\n')
+                .append("Baseline Findings: ").append(baselineFingerprints.size()).append('\n')
+                .append("Current Findings: ").append(currentFingerprints.size()).append('\n')
                 .append("New Findings: ").append(newFindings.size()).append('\n')
                 .append("Resolved Findings: ").append(resolvedFindings.size()).append('\n')
                 .append("Unchanged Findings: ")
-                .append(currentFingerprints.stream().filter(baselineFingerprints::contains).count())
+                .append(currentFingerprints.keySet().stream().filter(baselineFingerprints::containsKey).count())
                 .append('\n')
                 .append('\n');
 
+        if (baseline.version() == 1) {
+            output.append("Legacy version 1 baseline: comparison uses URL-based identity. Export a new baseline to use ZAP node identity.\n\n");
+        }
         appendDiffGroups(output, "New finding groups", newGroups, boundedLimit);
         appendDiffGroups(output, "Resolved finding groups", resolvedGroups, boundedLimit);
 
@@ -313,19 +322,19 @@ public class FindingsService {
 
     private void appendFindingsSummarySection(StringBuilder output,
                                               String riskLevel,
-                                              Map<String, Map<String, Integer>> riskGroups,
+                                              Map<String, Map<String, List<AlertSnapshot>>> riskGroups,
                                               Map<String, String> alertDescriptions) {
-        Map<String, Integer> groupedAlerts = riskGroups.get(riskLevel);
+        Map<String, List<AlertSnapshot>> groupedAlerts = riskGroups.get(riskLevel);
         if (groupedAlerts == null || groupedAlerts.isEmpty()) {
             return;
         }
 
         output.append("## 🔴 ").append(riskLevel).append(" Risk\n");
-        groupedAlerts.forEach((alertName, count) -> output.append("* **")
+        groupedAlerts.forEach((alertName, instances) -> output.append("* **")
                 .append(alertName)
                 .append("** (")
-                .append(count)
-                .append(" instances)\n")
+                .append(instanceCount(instances))
+                .append(instances.stream().anyMatch(this::isSystemic) ? ")\n" : " instances)\n")
                 .append("  > ")
                 .append(alertDescriptions.get(alertName))
                 .append('\n'));
@@ -341,7 +350,7 @@ public class FindingsService {
                 .append("Target: ").append(hasText(baseUrl) ? baseUrl.trim() : "All targets").append('\n')
                 .append("Alert Name: ").append(key.alertName()).append('\n')
                 .append("Plugin ID: ").append(displayValue(key.pluginId())).append('\n')
-                .append("Instances: ").append(instances.size()).append('\n')
+                .append("Instances: ").append(instanceCount(instances)).append('\n')
                 .append("Risk: ").append(displayValue(key.risk())).append('\n')
                 .append("Confidence: ").append(displayValue(key.confidence())).append('\n')
                 .append("CWE ID: ").append(displayValue(sample.cweId())).append('\n')
@@ -410,16 +419,29 @@ public class FindingsService {
         return hasText(value) ? value.trim() : null;
     }
 
-    private FindingsSnapshot buildSnapshot(String baseUrl) {
+    private boolean isSystemic(AlertSnapshot alert) {
+        return alert.tags().containsKey("SYSTEMIC");
+    }
+
+    private String instanceCount(List<AlertSnapshot> instances) {
+        return instances.stream().anyMatch(this::isSystemic)
+                ? "Systemic; recorded alerts: " + instances.size() + "; typically site-wide"
+                : Integer.toString(instances.size());
+    }
+
+    private FindingsSnapshot buildSnapshot(String baseUrl, int version) {
         List<FindingFingerprint> fingerprints = loadAlerts(baseUrl).stream()
                 .map(alert -> new FindingFingerprint(
-                        fingerprintFor(alert),
+                        fingerprintFor(alert, version),
                         trimToNull(alert.pluginId()),
                         displayValue(alert.name()),
                         displayValue(alert.risk()),
                         displayValue(alert.confidence()),
                         displayValue(alert.url()),
-                        displayValue(alert.param())
+                        displayValue(alert.param()),
+                        trimToNull(alert.nodeName()),
+                        trimToNull(alert.method()),
+                        new TreeMap<>(alert.tags())
                 ))
                 .sorted(Comparator.comparingInt((FindingFingerprint fingerprint) -> riskRank(fingerprint.risk()))
                         .reversed()
@@ -429,7 +451,7 @@ public class FindingsService {
                 .toList();
 
         return new FindingsSnapshot(
-                1,
+                version,
                 hasText(baseUrl) ? baseUrl.trim() : null,
                 java.time.Instant.now().toString(),
                 fingerprints
@@ -439,11 +461,14 @@ public class FindingsService {
     private FindingsSnapshot parseSnapshot(String baselineSnapshot) {
         try {
             FindingsSnapshot snapshot = objectMapper.readValue(baselineSnapshot, FindingsSnapshot.class);
-            if (snapshot.version() != 1) {
+            if (snapshot.version() != 1 && snapshot.version() != 2) {
                 throw new IllegalArgumentException("Unsupported findings snapshot version: " + snapshot.version());
             }
             if (snapshot.fingerprints() == null) {
                 throw new IllegalArgumentException("Baseline snapshot is missing fingerprints");
+            }
+            if (snapshot.fingerprints().stream().anyMatch(f -> f == null || !hasText(f.fingerprint()))) {
+                throw new IllegalArgumentException("Baseline snapshot contains an invalid finding fingerprint");
             }
             return snapshot;
         } catch (JacksonException e) {
@@ -457,7 +482,8 @@ public class FindingsService {
             DiffGroupKey key = new DiffGroupKey(
                     fingerprint.pluginId(),
                     fingerprint.alertName(),
-                    fingerprint.risk()
+                    fingerprint.risk(),
+                    fingerprint.tags() != null && fingerprint.tags().containsKey("SYSTEMIC")
             );
             groups.put(key, groups.getOrDefault(key, 0L) + 1L);
         }
@@ -494,14 +520,33 @@ public class FindingsService {
                     .append(key.alertName())
                     .append(" | Risk: ").append(key.risk())
                     .append(" | Plugin ID: ").append(displayValue(key.pluginId()))
-                    .append(" | Count: ").append(entry.getValue())
+                    .append(key.systemic() ? " | Systemic; recorded findings: " : " | Count: ").append(entry.getValue())
                     .append('\n');
             index++;
         }
         output.append('\n');
     }
 
-    private String fingerprintFor(AlertSnapshot alert) {
+    private Map<String, FindingFingerprint> uniqueFindings(FindingsSnapshot snapshot) {
+        Map<String, FindingFingerprint> findings = new LinkedHashMap<>();
+        snapshot.fingerprints().forEach(finding -> findings.putIfAbsent(finding.fingerprint(), finding));
+        return findings;
+    }
+
+    private String fingerprintFor(AlertSnapshot alert, int version) {
+        if (version == 2) {
+            // nodeName is ZAP's opaque full endpoint identity; method is separate.
+            // Keep a distinct URL fallback and encode components without delimiter ambiguity.
+            return "v2:" + objectMapper.writeValueAsString(List.of(
+                    displayValue(trimToNull(alert.pluginId())),
+                    displayValue(alert.name()),
+                    displayValue(alert.risk()),
+                    displayValue(alert.confidence()),
+                    hasText(alert.nodeName()) ? "node" : "url",
+                    displayValue(hasText(alert.nodeName()) ? alert.nodeName() : alert.url()),
+                    displayValue(alert.method()),
+                    displayValue(alert.param())));
+        }
         return String.join("||",
                 displayValue(trimToNull(alert.pluginId())),
                 displayValue(alert.name()),
@@ -526,9 +571,12 @@ public class FindingsService {
                                       String risk,
                                       String confidence,
                                       String url,
-                                      String param) {
+                                      String param,
+                                      String nodeName,
+                                      String method,
+                                      Map<String, String> tags) {
     }
 
-    private record DiffGroupKey(String pluginId, String alertName, String risk) {
+    private record DiffGroupKey(String pluginId, String alertName, String risk, boolean systemic) {
     }
 }

@@ -230,10 +230,10 @@ public class FindingsServiceTest {
 
         var snapshot = new ObjectMapper().readTree(service.exportFindingsSnapshot("http://target"));
         var finding = snapshot.path("fingerprints").get(0);
-        assertEquals("http://target/product (id)", finding.path("nodeName").asText());
-        assertEquals("GET", finding.path("method").asText());
-        assertEquals("", finding.path("tags").path("SYSTEMIC").asText());
-        assertEquals("https://example.com/cwe", finding.path("tags").path("CWE-89").asText());
+        assertEquals("http://target/product (id)", finding.path("nodeName").asString());
+        assertEquals("GET", finding.path("method").asString());
+        assertEquals("", finding.path("tags").path("SYSTEMIC").asString());
+        assertEquals("https://example.com/cwe", finding.path("tags").path("CWE-89").asString());
         assertTrue(service.diffFindings("http://target", baseline, 10).contains("Unchanged Findings: 1"));
     }
 

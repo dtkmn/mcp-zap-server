@@ -4,11 +4,13 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.11.1` defaults to MCP image `v0.11.1`. Use the chart from the same release
+Chart `0.12.0` defaults to MCP image `v0.12.0`. Use the chart from the same release
 as your image, and confirm that the corresponding release workflow has published
 the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
-is the source for publication status. The unknown/disabled-tool response fix
-applies to `v0.11.1` and later, not `v0.11.0`.
+is the source for publication status. Upgrading from `v0.11.1` requires V7/V8
+migrations for PostgreSQL scan-job storage. Migration execution is disabled by
+default. See the [0.12.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.12.0.md)
+for migration, findings snapshot, and timeout changes.
 
 Set `zap.image.digest` to `sha256:` followed by 64 lowercase hexadecimal
 characters to use `repository@digest` instead of `zap.image.tag`. Leave it empty
@@ -260,7 +262,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=v0.11.1
+  --set mcp.image.tag=v0.12.0
 ```
 
 ## Uninstalling

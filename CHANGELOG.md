@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0]
+
+Version-specific changes are listed below. Publication dates and availability
+are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
+See the [upgrade notes](./docs/releases/RELEASE_NOTES_0.12.0.md) before deploying.
+
+### Fixed
+
+- Made queue cancellation durable and retryable for active scans, traditional spiders, and AJAX Spider. Late successful starts are tracked and stopped without discarding their ownership or targeting a newer scan.
+- Serialized managed AJAX lifecycle operations around ZAP's global crawler and retained occupied capacity while cancellation remains unconfirmed. Active scans and traditional spiders continue to use their native scan IDs and configured concurrency.
+- Stopped reporting an AJAX stopped state as proof of successful completion or meaningful percentage progress.
+- Preserved ZAP finding node names, HTTP methods, tags, and recorded examples, and used structural endpoint identity to reduce false new/resolved findings caused by changing URL values.
+- Prevented stack overflow when policy dry-run validates long host patterns, and allowed unexpected token-validation backend failures to return a sanitized HTTP `500` instead of an invalid-token response.
+- Applied the configured ZAP target connection timeout at startup, corrected the AJAX add-on installation hint to `spiderAjax`, and permitted ZAP's API hostname in the default Helm API access expression.
+
+### Added
+
+- Configurable ZAP API connection/read timeouts, bounded waiting after explicit engine-busy responses, and one shared cancellation/cleanup retry window.
+- PostgreSQL migrations V7 and V8 for persisted busy-wait and cancellation state. Migration execution remains opt-in.
+- Configurable ZAP image references in Compose and Docker tests, plus optional ZAP image digests in Helm.
+
+### Changed
+
+- Advanced findings exports and CI findings contracts to version 2 while retaining version 1 baseline support. External snapshot consumers may need updating.
+- Updated project descriptions and the engine display name to the current ZAP name, and clarified MCP client installation guidance.
+- Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.12.0` / `v0.12.0`.
+
 ## [0.11.1]
 
 Version-specific changes are listed below. Publication dates and availability

@@ -252,7 +252,7 @@ overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
 deployment's explicit URL-policy approval. The commands below target chart
-`0.11.1` and image `v0.11.1`; the profile contract was introduced in `v0.10.0`.
+`0.12.0` and image `v0.12.0`; the profile contract was introduced in `v0.10.0`.
 Before deploying, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 and verify that the release workflow has published the image to your registry.
 The unknown/disabled-tool response fix applies to `v0.11.1` and later.
@@ -269,9 +269,9 @@ Render before applying, then wait for the MCP rollout:
 (
 set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
-MCP_ZAP_IMAGE_TAG=v0.11.1
-[[ "$MCP_ZAP_IMAGE_TAG" == "v0.11.1" ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the v0.11.1 release image tag" >&2
+MCP_ZAP_IMAGE_TAG=v0.12.0
+[[ "$MCP_ZAP_IMAGE_TAG" == "v0.12.0" ]] || {
+  echo "MCP_ZAP_IMAGE_TAG must be the v0.12.0 release image tag" >&2
   exit 1
 }
 

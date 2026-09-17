@@ -12,6 +12,8 @@ import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -173,6 +175,34 @@ class PolicyDryRunServiceTest {
                 .contains("bundle.spec.rules[0].description must be a non-empty string");
         assertThat(decision(response)).containsEntry("result", "invalid");
         assertThat(response).containsEntry("trace", List.of());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "!"})
+    void dryRunValidatesLongHostPatternsWithoutStackOverflow(String suffix) throws Exception {
+        String host = "a.".repeat(10_000) + "a" + suffix;
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode bundle = objectMapper.readTree(
+                Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"))
+        );
+        ((ObjectNode) bundle.at("/spec/rules/0/match")).putArray("hosts").add(host);
+
+        Map<String, Object> response = service.dryRun(
+                objectMapper.writeValueAsString(bundle),
+                "zap_attack_start",
+                host,
+                "2026-06-02T01:00:00Z"
+        );
+
+        assertThat(validation(response)).containsEntry("valid", suffix.isEmpty());
+        if (suffix.isEmpty()) {
+            assertThat(decision(response)).containsEntry("matchedRuleId", "deny-production-attack-tools");
+        } else {
+            assertThat(decision(response)).containsEntry("result", "invalid");
+            assertThat(stringList(validation(response), "errors"))
+                    .anyMatch(error -> error.contains("target must be"))
+                    .anyMatch(error -> error.contains("invalid host pattern"));
+        }
     }
 
     @Test

@@ -87,6 +87,18 @@ class ScanJobDispatcherTest {
     }
 
     @Test
+    void ajaxDispatchPassesJobClaimForLaunchValidation() {
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claimToken());
+        when(runtimeExecutor.startScan(target)).thenThrow(new EngineBusyException("Claim no longer owns launch", null));
+
+        ScanJobDispatchResult result = dispatcher.dispatch(new ScanJobWorkPlan(List.of(), List.of(target)));
+
+        assertEquals(List.of(ScanJobStartResult.busy(target, "Claim no longer owns launch")), result.startResults());
+        verify(runtimeExecutor).startScan(target);
+    }
+
+    @Test
     void convertsRuntimeExceptionsIntoDispatchFailures() {
         Map<String, String> parameters = Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com");
         ScanJobClaimToken claimToken = claimToken();

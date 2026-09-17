@@ -87,6 +87,9 @@ public class ScanJobClaimManager {
         synchronized (this) {
             List<ScanJobPollTarget> pollTargets = new ArrayList<>();
             for (ScanJob job : runningJobs) {
+                if (job.isCancellationPending()) {
+                    continue;
+                }
                 if (!hasText(job.getZapScanId())) {
                     scanJobStore.updateClaimedJob(job.getId(), ScanJobClaimToken.from(job), now, claimedJob -> {
                         claimedJob.markFailed("Missing ZAP scan ID while job is RUNNING");
@@ -176,7 +179,11 @@ public class ScanJobClaimManager {
                 job.getClaimHeartbeatAt(),
                 job.getClaimExpiresAt(),
                 job.getBusyWaitStartedAt(),
-                job.getBusyWaitCount()
+                job.getBusyWaitCount(),
+                job.getCancelRequestedAt(),
+                job.getCancelDeadlineAt(),
+                job.getCancelNextAttemptAt(),
+                job.getCancelAttemptCount()
         );
     }
 

@@ -160,4 +160,18 @@ class ScanJobRuntimeExecutorTest {
         assertEquals(100, stoppedSignal);
         verify(ajaxSpiderService).stopAjaxSpiderJob();
     }
+
+    @Test
+    void queuedAjaxStartCarriesDurableOwnershipToService() {
+        AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService);
+        ScanJobClaimToken claim = new ScanJobClaimToken("worker", "fence");
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claim);
+        when(ajaxSpiderService.startAjaxSpiderJob("https://example.com", "ajax-job", claim)).thenReturn("ajax-1");
+
+        assertEquals("ajax-1", executor.startScan(target));
+
+        verify(ajaxSpiderService).startAjaxSpiderJob("https://example.com", "ajax-job", claim);
+    }
 }

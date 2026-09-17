@@ -3,13 +3,26 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderStatus;
+import mcp.server.zap.core.gateway.EngineBusyException;
+import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.model.ScanJobType;
+import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
+import mcp.server.zap.core.service.jobstore.ScanJobStore;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class AjaxSpiderServiceTest {
@@ -34,6 +47,157 @@ class AjaxSpiderServiceTest {
         assertThat(scanId).isEqualTo("ajax-spider:1");
         verify(urlValidationService).validateUrl("http://target");
         verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
+    }
+
+    @Test
+    void pendingCancellationBlocksDirectAndQueuedStarts() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("cancelling", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        job.requestCancellation(now, now.plusSeconds(60));
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
+                .isInstanceOf(EngineBusyException.class)
+                .hasMessageContaining("pending cancellation");
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void runningManagedCrawlBlocksDirectAndQueuedStarts() {
+        ScanJob job = ajaxJob("running", Instant.now());
+        job.markRunning("ajax-spider:running");
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
+                .isInstanceOf(EngineBusyException.class);
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target"))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void unavailableLifecycleLockRejectsStartWithoutCallingEngine() {
+        ScanJobStore store = mock(ScanJobStore.class);
+        when(store.tryWithAjaxLifecycleLock(any())).thenReturn(Optional.empty());
+        service.setScanJobStore(store);
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target"))
+                .isInstanceOf(EngineBusyException.class)
+                .hasMessageContaining("already in progress");
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void queuedWorkerMayStartItsClaimedJob() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("claimed", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        setStoredJobs(job);
+        when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenReturn("ajax-spider:1");
+
+        assertThat(service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
+                .isEqualTo("ajax-spider:1");
+        verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
+    }
+
+    @Test
+    void queuedStartRejectsStaleClaimEvenWhenSameWorkerReclaimsJob() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("reclaimed", now.minusSeconds(60));
+        job.claim("worker", now.minusSeconds(60), now.minusSeconds(1));
+        ScanJobClaimToken staleClaim = ScanJobClaimToken.from(job);
+        job.claim("worker", now, now.plusSeconds(60));
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), staleClaim))
+                .isInstanceOf(EngineBusyException.class)
+                .hasMessageContaining("rejected before execution");
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void queuedStartRejectsExpiredClaim() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("expired", now.minusSeconds(60));
+        job.claim("worker", now.minusSeconds(60), now.minusSeconds(1));
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void queuedStartRechecksCancellationFromLockedSnapshot() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("cancelled-before-lock", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        ScanJobClaimToken claim = ScanJobClaimToken.from(job);
+        ScanJobStore store = mock(ScanJobStore.class);
+        when(store.tryWithAjaxLifecycleLock(any())).thenAnswer(invocation -> {
+            job.requestCancellation(now, now.plusSeconds(30));
+            java.util.function.Function<List<ScanJob>, String> action = invocation.getArgument(0);
+            return Optional.of(action.apply(List.of(job)));
+        });
+        service.setScanJobStore(store);
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), claim))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void queuedStartDoesNotLaunchAfterJobWasRemovedOrCompleted() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("completed", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        ScanJobClaimToken claim = ScanJobClaimToken.from(job);
+        job.markCancelled();
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), claim))
+                .isInstanceOf(EngineBusyException.class);
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", "missing-job", claim))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void directStartCannotOvertakeClaimedQueuedJob() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("claimed", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        setStoredJobs(job);
+
+        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
+                .isInstanceOf(EngineBusyException.class);
+        verifyNoInteractions(ajaxSpiderExecution);
+    }
+
+    @Test
+    void completedCancellationDoesNotBlockLaterStart() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("cancelled", now);
+        job.requestCancellation(now, now.plusSeconds(60));
+        job.markCancelled();
+        setStoredJobs(job);
+        when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenReturn("ajax-spider:2");
+
+        assertThat(service.startAjaxSpider("http://target")).contains("started successfully");
+        verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
+    }
+
+    private ScanJob ajaxJob(String id, Instant now) {
+        return new ScanJob(id, ScanJobType.AJAX_SPIDER, Map.of("url", "http://target"), now, 2);
+    }
+
+    private void setStoredJobs(ScanJob... jobs) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        store.upsertAll(List.of(jobs));
+        service.setScanJobStore(store);
     }
 
     @Test

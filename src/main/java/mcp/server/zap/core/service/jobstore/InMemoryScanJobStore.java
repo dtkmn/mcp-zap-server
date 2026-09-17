@@ -11,8 +11,10 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 public class InMemoryScanJobStore implements ScanJobStore {
@@ -22,6 +24,59 @@ public class InMemoryScanJobStore implements ScanJobStore {
 
     private final ConcurrentHashMap<String, ScanJob> jobs = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
+    private final ReentrantLock ajaxLifecycleLock = new ReentrantLock();
+
+    @Override
+    public <T> Optional<T> tryWithAjaxLifecycleLock(Function<List<ScanJob>, T> action) {
+        Objects.requireNonNull(action, "AJAX lifecycle action must not be null");
+        if (!ajaxLifecycleLock.tryLock()) {
+            return Optional.empty();
+        }
+        try {
+            List<ScanJob> snapshot;
+            lock.lock();
+            try {
+                snapshot = list().stream().map(this::copyJob).toList();
+            } finally {
+                lock.unlock();
+            }
+            return Optional.of(Objects.requireNonNull(action.apply(snapshot),
+                    "AJAX lifecycle action must not return null"));
+        } finally {
+            ajaxLifecycleLock.unlock();
+        }
+    }
+
+    private ScanJob copyJob(ScanJob job) {
+        return ScanJob.restore(
+                job.getId(),
+                job.getType(),
+                job.getParameters(),
+                job.getCreatedAt(),
+                job.getMaxAttempts(),
+                job.getRequesterId(),
+                job.getIdempotencyKey(),
+                job.getStatus(),
+                job.getAttempts(),
+                job.getZapScanId(),
+                job.getLastError(),
+                job.getStartedAt(),
+                job.getCompletedAt(),
+                job.getNextAttemptAt(),
+                job.getLastKnownProgress(),
+                job.getQueuePosition(),
+                job.getClaimOwnerId(),
+                job.getClaimFenceId(),
+                job.getClaimHeartbeatAt(),
+                job.getClaimExpiresAt(),
+                job.getBusyWaitStartedAt(),
+                job.getBusyWaitCount(),
+                job.getCancelRequestedAt(),
+                job.getCancelDeadlineAt(),
+                job.getCancelNextAttemptAt(),
+                job.getCancelAttemptCount()
+        );
+    }
 
     @Override
     public ScanJob admitQueuedJob(ScanJob candidate) {
@@ -105,7 +160,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
 
             ArrayList<ScanJob> claimed = new ArrayList<>();
             for (ScanJob job : candidates) {
-                if (job.getStatus() != ScanJobStatus.QUEUED) {
+                if (job.getStatus() != ScanJobStatus.QUEUED || job.isCancellationRequested()) {
                     continue;
                 }
                 if (job.getNextAttemptAt() != null && now.isBefore(job.getNextAttemptAt())) {
@@ -254,7 +309,8 @@ public class InMemoryScanJobStore implements ScanJobStore {
     private boolean hasAjaxCapacityInUse(Instant now) {
         return jobs.values().stream()
                 .filter(job -> job.getType() == ScanJobType.AJAX_SPIDER)
-                .anyMatch(job -> job.getStatus() == ScanJobStatus.RUNNING
+                .anyMatch(job -> job.isCancellationRequested()
+                        || job.getStatus() == ScanJobStatus.RUNNING
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
     }
 

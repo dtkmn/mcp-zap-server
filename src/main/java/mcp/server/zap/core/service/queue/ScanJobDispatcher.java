@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service.queue;
 
 import mcp.server.zap.core.gateway.EngineBusyException;
+import mcp.server.zap.core.model.ScanJobType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -263,7 +264,9 @@ public class ScanJobDispatcher implements AutoCloseable {
 
     private ScanJobStartResult executeStartTarget(ScanJobStartTarget target, LateStartGuard lateStartGuard) {
         try {
-            String scanId = runtimeExecutor.startScan(target.type(), target.parameters());
+            String scanId = target.type() == ScanJobType.AJAX_SPIDER
+                    ? runtimeExecutor.startScan(target)
+                    : runtimeExecutor.startScan(target.type(), target.parameters());
             if (!lateStartGuard.complete(scanId)) {
                 return ScanJobStartResult.failure(target, "Startup failed: dispatch timed out; late scan cleanup requested");
             }

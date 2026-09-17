@@ -132,7 +132,8 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
     ) {
         String sql = "SELECT job_id, queue_position, requester_id, idempotency_key, "
                 + "claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, "
-                + "busy_wait_started_at, busy_wait_count "
+                + "busy_wait_started_at, busy_wait_count, cancel_requested_at, cancel_deadline_at, "
+                + "cancel_next_attempt_at, cancel_attempt_count "
                 + "FROM " + tableName + " LIMIT 0";
         try (Connection connection = openConnection(url, username, password);
              Statement statement = connection.createStatement()) {
@@ -144,7 +145,8 @@ public class PostgresSchemaReadinessValidator implements InitializingBean {
                             + "Apply Flyway migrations before starting MCP replicas. Expected table '"
                             + tableName + "' with columns 'queue_position', 'requester_id', 'idempotency_key', "
                             + "'claim_owner_id', 'claim_fence_id', 'claim_heartbeat_at', 'claim_expires_at', "
-                            + "'busy_wait_started_at', and 'busy_wait_count'.",
+                            + "'busy_wait_started_at', 'busy_wait_count', 'cancel_requested_at', 'cancel_deadline_at', "
+                            + "'cancel_next_attempt_at', and 'cancel_attempt_count'.",
                     e
             );
         }

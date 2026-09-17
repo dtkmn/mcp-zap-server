@@ -4,13 +4,21 @@ import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderStatus;
+import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
+import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
+import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Service for managing ZAP AJAX Spider Scans.
@@ -31,6 +39,7 @@ public class AjaxSpiderService {
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
     private ScanHistoryLedgerService scanHistoryLedgerService;
+    private ScanJobStore scanJobStore;
 
     /**
      * Build-time dependency injection constructor.
@@ -56,6 +65,11 @@ public class AjaxSpiderService {
         this.scanHistoryLedgerService = scanHistoryLedgerService;
     }
 
+    @Autowired(required = false)
+    void setScanJobStore(ScanJobStore scanJobStore) {
+        this.scanJobStore = scanJobStore;
+    }
+
     /**
      * Start an AJAX Spider scan against the given URL using a real browser.
      * This is more effective against JavaScript-heavy sites and WAF protection.
@@ -64,7 +78,7 @@ public class AjaxSpiderService {
      * @return Status message with scan information
      */
     public String startAjaxSpider(String targetUrl) {
-        String scanId = startAjaxSpiderJob(targetUrl);
+        String scanId = startAjaxSpider(targetUrl, null, null);
         trackAjaxSpiderStarted(scanId, resolveWorkspaceId());
         recordDirectScanStarted("ajax_spider", scanId, targetUrl);
         log.info("AJAX Spider direct scan id {}", scanId);
@@ -72,13 +86,54 @@ public class AjaxSpiderService {
     }
 
     /**
-     * Queue/worker-facing start method that launches AJAX Spider and returns a synthetic durable scan id.
+     * Launch without a queued ownership claim and return a synthetic scan id.
      */
     public String startAjaxSpiderJob(String targetUrl) {
+        return startAjaxSpider(targetUrl, null, null);
+    }
+
+    /** Launch a queued crawl only while its original durable claim still owns the job. */
+    public String startAjaxSpiderJob(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
+        if (jobId == null || jobId.isBlank() || claimToken == null) {
+            throw new IllegalArgumentException("A queued AJAX Spider start requires its job and claim");
+        }
+        if (scanJobStore == null) {
+            throw new IllegalStateException("A queued AJAX Spider start requires the scan job store");
+        }
+        return startAjaxSpider(targetUrl, jobId, claimToken);
+    }
+
+    private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
-        return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+        if (scanJobStore == null) {
+            return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+        }
+        // ZAP exposes one global AJAX crawler. Serialize starts with managed stop retries.
+        return scanJobStore.tryWithAjaxLifecycleLock(jobs -> {
+            Instant now = Instant.now();
+            if (jobId != null) {
+                ScanJob claimed = jobs.stream().filter(job -> jobId.equals(job.getId())).findFirst().orElse(null);
+                if (claimed == null || claimed.getType() != ScanJobType.AJAX_SPIDER
+                        || claimed.getStatus() != ScanJobStatus.QUEUED || claimed.isCancellationRequested()
+                        || !claimed.hasLiveClaim(now) || !claimToken.matches(claimed)) {
+                    throw new EngineBusyException("AJAX Spider start rejected before execution: "
+                            + "queued ownership changed or cancellation was requested", null);
+                }
+            }
+            boolean occupied = jobs.stream()
+                    .filter(job -> job.getType() == ScanJobType.AJAX_SPIDER)
+                    .filter(job -> !job.getStatus().isTerminal())
+                    .anyMatch(job -> job.isCancellationRequested()
+                            || job.getStatus() == ScanJobStatus.RUNNING
+                            || (!Objects.equals(jobId, job.getId())
+                            && job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
+            if (occupied) {
+                throw new EngineBusyException("AJAX Spider has an active job or pending cancellation", null);
+            }
+            return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+        }).orElseThrow(() -> new EngineBusyException("AJAX Spider lifecycle operation is already in progress", null));
     }
 
     /**

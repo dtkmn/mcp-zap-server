@@ -51,6 +51,14 @@ public class ScanJobRuntimeExecutor {
         };
     }
 
+    public String startScan(ScanJobStartTarget target) {
+        if (target.type() == ScanJobType.AJAX_SPIDER) {
+            return requireAjaxSpiderService().startAjaxSpiderJob(
+                    target.parameters().get(ScanJobParameterNames.TARGET_URL), target.jobId(), target.claimToken());
+        }
+        return startScan(target.type(), target.parameters());
+    }
+
     public int readProgress(ScanJobType type, String scanId) {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);

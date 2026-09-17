@@ -17,6 +17,8 @@ import java.util.Optional;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -519,6 +521,169 @@ class ScanJobResultApplierTest {
         assertNull(cancelledJob.getBusyWaitStartedAt());
         assertNull(cancelledJob.getNextAttemptAt());
         assertEquals(List.of(), outcome.stopRequests());
+    }
+
+    @Test
+    void pollDispatchedBeforeCancellationCannotCompletePendingCancellation() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = runningJob("ajax-pending-poll", ScanJobType.AJAX_SPIDER, 2, "ajax-spider:1");
+        ScanJobPollResult stalePoll = new ScanJobPollResult(job.getId(), ScanJobClaimToken.from(job), true, 100, null);
+        Instant now = Instant.now();
+        job.requestCancellation(now, now.plusSeconds(30));
+        job.scheduleCancellationRetry(now.plusSeconds(1), "Stop not yet accepted");
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2)
+                .applyResults(List.of(stalePoll), List.of(), now.plusSeconds(60));
+
+        ScanJob preserved = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, preserved.getStatus());
+        assertTrue(preserved.isCancellationPending());
+        assertEquals(now.plusSeconds(30), preserved.getCancelDeadlineAt());
+        assertEquals("Stop not yet accepted", preserved.getLastError());
+        assertEquals(0, preserved.getLastKnownProgress());
+        assertEquals("node-a", preserved.getClaimOwnerId());
+        assertTrue(outcome.stopRequests().isEmpty());
+    }
+
+    @Test
+    void successfulLaunchKeepsCancellationRequestedDuringStartup() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("ajax-cancel-start", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        ScanJobStartResult startResult = ScanJobStartResult.success(startTarget(job), "ajax-spider:1");
+        Instant now = Instant.now();
+        job.requestCancellation(now, now.plusSeconds(30));
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2)
+                .applyResults(List.of(), List.of(startResult), now.plusSeconds(60));
+
+        ScanJob started = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, started.getStatus());
+        assertEquals("ajax-spider:1", started.getZapScanId());
+        assertEquals(1, started.getAttempts());
+        assertTrue(started.isCancellationPending());
+        assertEquals(now, started.getCancelRequestedAt());
+        assertEquals(now.plusSeconds(30), started.getCancelDeadlineAt());
+        assertEquals(now, started.getCancelNextAttemptAt());
+        assertTrue(outcome.stopRequests().isEmpty(), "The durable cancellation request owns further stop attempts");
+    }
+
+    @Test
+    void duplicateStartResultDoesNotCleanUpAlreadyAdoptedScan() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = runningJob("ajax-already-adopted", ScanJobType.AJAX_SPIDER, 2, "ajax-spider:1");
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2).applyResults(List.of(),
+                List.of(ScanJobStartResult.success(startTarget(job), "ajax-spider:1")),
+                Instant.now().plusSeconds(60));
+
+        assertEquals(ScanJobStatus.RUNNING, store.load(job.getId()).orElseThrow().getStatus());
+        assertEquals(1, job.getAttempts());
+        assertTrue(outcome.stopRequests().isEmpty());
+    }
+
+    @Test
+    void cancellationAfterAdoptionDoesNotTriggerCleanupOfSuccessfulAjaxStart() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore() {
+            @Override
+            public Optional<ScanJob> updateClaimedJob(String jobId, ScanJobClaimToken claimToken,
+                                                       Instant now, UnaryOperator<ScanJob> updater) {
+                Optional<ScanJob> adopted = super.updateClaimedJob(jobId, claimToken, now, updater);
+                // A concurrent cancel can mutate the shared row before the caller receives it.
+                adopted.ifPresent(ScanJob::markCancelled);
+                return adopted;
+            }
+        };
+        ScanJob job = queuedClaimedJob("ajax-cancel-after-adoption", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2).applyResults(List.of(),
+                List.of(ScanJobStartResult.success(startTarget(job), "ajax-spider:1")),
+                Instant.now().plusSeconds(60));
+
+        assertEquals(ScanJobStatus.CANCELLED, store.load(job.getId()).orElseThrow().getStatus());
+        assertEquals(1, job.getAttempts());
+        assertNull(outcome.persistenceFailure());
+        assertTrue(outcome.stopRequests().isEmpty(), "An adopted and cancelled crawl must not stop a later crawl");
+    }
+
+    @Test
+    void explicitBusyLaunchConfirmsCancellationWithoutSendingGlobalStop() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("ajax-cancel-rejected", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        ScanJobStartResult rejected = ScanJobStartResult.busy(startTarget(job), "scan_in_progress");
+        Instant now = Instant.now();
+        job.requestCancellation(now, now.plusSeconds(30));
+        store.upsertAll(List.of(job));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2)
+                .applyResults(List.of(), List.of(rejected), now.plusSeconds(60));
+
+        ScanJob cancelled = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.CANCELLED, cancelled.getStatus());
+        assertFalse(cancelled.isCancellationRequested());
+        assertEquals(0, cancelled.getAttempts());
+        assertNull(cancelled.getClaimOwnerId());
+        assertNull(cancelled.getCancelNextAttemptAt());
+        assertTrue(outcome.stopRequests().isEmpty(), "A rejected launch must not stop somebody else's crawl");
+    }
+
+    @Test
+    void ambiguousLaunchFailurePreservesCancellationAndAjaxReservation() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = queuedClaimedJob("ajax-cancel-ambiguous", ScanJobType.AJAX_SPIDER, 2, "node-a");
+        ScanJobStartResult failed = ScanJobStartResult.failure(startTarget(job), "dispatch timed out");
+        Instant now = Instant.now();
+        job.requestCancellation(now, now.plusSeconds(30));
+        ScanJob next = new ScanJob("ajax-next", ScanJobType.AJAX_SPIDER, Map.of(), now, 2);
+        store.upsertAll(List.of(job, next));
+
+        ScanJobApplyOutcome outcome = resultApplier(store, "node-a", 3, 2)
+                .applyResults(List.of(), List.of(failed), now.plusSeconds(60));
+
+        ScanJob preserved = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.QUEUED, preserved.getStatus());
+        assertTrue(preserved.isCancellationPending());
+        assertEquals(now.plusSeconds(30), preserved.getCancelDeadlineAt());
+        assertEquals(1, preserved.getAttempts());
+        assertNull(preserved.getClaimOwnerId());
+        assertNull(preserved.getNextAttemptAt());
+        assertThat(preserved.getLastError()).contains("Cancellation pending", "dispatch timed out");
+        assertTrue(store.claimQueuedJobs("node-b", now.plusSeconds(1), now.plusSeconds(60), 1, 3).isEmpty());
+        assertTrue(outcome.stopRequests().isEmpty());
+    }
+
+    @Test
+    void unconfirmedCancellationSurvivesPollingErrorsUntilStoppedIsObserved() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob job = runningJob("ajax-unconfirmed", ScanJobType.AJAX_SPIDER, 2, "ajax-spider:1");
+        Instant now = Instant.now();
+        job.requestCancellation(now.minusSeconds(40), now.minusSeconds(10));
+        job.scheduleCancellationRetry(null, "Unable to confirm cancellation; scan may still be running");
+        store.upsertAll(List.of(job));
+        ScanJobResultApplier applier = resultApplier(store, "node-a", 3, 2);
+        ScanJobClaimToken token = ScanJobClaimToken.from(job);
+
+        applier.applyResults(List.of(new ScanJobPollResult(job.getId(), token, false, 0, "status unavailable")),
+                List.of(), now.plusSeconds(60));
+
+        ScanJob unconfirmed = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, unconfirmed.getStatus());
+        assertTrue(unconfirmed.isCancellationRequested());
+        assertFalse(unconfirmed.isCancellationPending());
+        assertEquals("Unable to confirm cancellation; scan may still be running", unconfirmed.getLastError());
+        assertEquals(1, unconfirmed.getCancelAttemptCount());
+
+        applier.applyResults(List.of(new ScanJobPollResult(job.getId(), token, true, 100, null)),
+                List.of(), now.plusSeconds(60));
+
+        ScanJob cancelled = store.load(job.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.CANCELLED, cancelled.getStatus());
+        assertFalse(cancelled.isCancellationRequested());
+        assertNull(cancelled.getLastError());
+        assertNull(cancelled.getClaimOwnerId());
     }
 
     private ScanJobStartTarget startTarget(ScanJob job) {

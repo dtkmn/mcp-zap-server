@@ -25,6 +25,10 @@ public class ScanJob {
     private Instant nextAttemptAt;
     private Instant busyWaitStartedAt;
     private int busyWaitCount;
+    private Instant cancelRequestedAt;
+    private Instant cancelDeadlineAt;
+    private Instant cancelNextAttemptAt;
+    private int cancelAttemptCount;
     private int lastKnownProgress;
     private int queuePosition;
     private String claimOwnerId;
@@ -190,6 +194,44 @@ public class ScanJob {
                 lastKnownProgress, queuePosition, claimOwnerId, claimFenceId, claimHeartbeatAt, claimExpiresAt);
         job.busyWaitStartedAt = busyWaitStartedAt;
         job.busyWaitCount = busyWaitCount;
+        return job;
+    }
+
+    /** Restore a job including durable cancellation intent and retry state. */
+    public static ScanJob restore(String id,
+                                  ScanJobType type,
+                                  Map<String, String> parameters,
+                                  Instant createdAt,
+                                  int maxAttempts,
+                                  String requesterId,
+                                  String idempotencyKey,
+                                  ScanJobStatus status,
+                                  int attempts,
+                                  String zapScanId,
+                                  String lastError,
+                                  Instant startedAt,
+                                  Instant completedAt,
+                                  Instant nextAttemptAt,
+                                  int lastKnownProgress,
+                                  int queuePosition,
+                                  String claimOwnerId,
+                                  String claimFenceId,
+                                  Instant claimHeartbeatAt,
+                                  Instant claimExpiresAt,
+                                  Instant busyWaitStartedAt,
+                                  int busyWaitCount,
+                                  Instant cancelRequestedAt,
+                                  Instant cancelDeadlineAt,
+                                  Instant cancelNextAttemptAt,
+                                  int cancelAttemptCount) {
+        ScanJob job = restore(id, type, parameters, createdAt, maxAttempts, requesterId, idempotencyKey,
+                status, attempts, zapScanId, lastError, startedAt, completedAt, nextAttemptAt,
+                lastKnownProgress, queuePosition, claimOwnerId, claimFenceId, claimHeartbeatAt, claimExpiresAt,
+                busyWaitStartedAt, busyWaitCount);
+        job.cancelRequestedAt = cancelRequestedAt;
+        job.cancelDeadlineAt = cancelDeadlineAt;
+        job.cancelNextAttemptAt = cancelNextAttemptAt;
+        job.cancelAttemptCount = cancelAttemptCount;
         return job;
     }
 
@@ -400,6 +442,53 @@ public class ScanJob {
         return busyWaitCount;
     }
 
+    public Instant getCancelRequestedAt() {
+        return cancelRequestedAt;
+    }
+
+    public Instant getCancelDeadlineAt() {
+        return cancelDeadlineAt;
+    }
+
+    public Instant getCancelNextAttemptAt() {
+        return cancelNextAttemptAt;
+    }
+
+    public int getCancelAttemptCount() {
+        return cancelAttemptCount;
+    }
+
+    public boolean isCancellationRequested() {
+        return cancelRequestedAt != null && !status.isTerminal();
+    }
+
+    public boolean isCancellationPending() {
+        return isCancellationRequested() && cancelNextAttemptAt != null;
+    }
+
+    /** Preserve an existing pending request; an explicit retry opens a new window after failure. */
+    public void requestCancellation(Instant now, Instant deadline) {
+        if (isCancellationPending()) {
+            return;
+        }
+        this.cancelRequestedAt = now;
+        this.cancelDeadlineAt = deadline;
+        this.cancelNextAttemptAt = now;
+        this.cancelAttemptCount = 0;
+    }
+
+    public void scheduleCancellationRetry(Instant retryAt, String reason) {
+        this.cancelAttemptCount += 1;
+        this.cancelNextAttemptAt = retryAt;
+        this.lastError = reason;
+    }
+
+    /** Stop automatic retries while retaining intent until cancellation can be confirmed. */
+    public void recordCancellationFailure(String reason) {
+        this.cancelNextAttemptAt = null;
+        this.lastError = reason;
+    }
+
     /**
      * Return claim owner node ID when a replica currently owns this job.
      */
@@ -495,6 +584,8 @@ public class ScanJob {
      */
     public void markCancelled() {
         this.status = ScanJobStatus.CANCELLED;
+        this.cancelNextAttemptAt = null;
+        this.lastError = null;
         this.completedAt = Instant.now();
         this.nextAttemptAt = null;
         this.queuePosition = 0;
@@ -515,6 +606,10 @@ public class ScanJob {
         this.queuePosition = 0;
         this.busyWaitStartedAt = null;
         this.busyWaitCount = 0;
+        this.cancelRequestedAt = null;
+        this.cancelDeadlineAt = null;
+        this.cancelNextAttemptAt = null;
+        this.cancelAttemptCount = 0;
         clearClaim();
     }
 

@@ -21,15 +21,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.regex.Pattern;
 
 @Slf4j
 public class PostgresScanJobStore implements ScanJobStore {
     private static final int MAX_TRANSACTION_RETRIES = 3;
+    private static final int AJAX_LIFECYCLE_LOCK_KEY = 0x4158414A;
     private static final String UNIQUE_VIOLATION_SQLSTATE = "23505";
     private static final String SERIALIZATION_FAILURE_SQLSTATE = "40001";
     private static final String DEADLOCK_SQLSTATE = "40P01";
@@ -51,6 +54,58 @@ public class PostgresScanJobStore implements ScanJobStore {
                 .disable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
                 .build();
         this.tableName = validateTableName(properties.getTableName());
+    }
+
+    @Override
+    public <T> Optional<T> tryWithAjaxLifecycleLock(Function<List<ScanJob>, T> action) {
+        Objects.requireNonNull(action, "AJAX lifecycle action must not be null");
+        // A dedicated session owns the advisory lock while HTTP runs; no row/table lock is held.
+        try (Connection connection = openConnection()) {
+            if (!tryAcquireAjaxLifecycleLock(connection)) {
+                return Optional.empty();
+            }
+            try {
+                List<ScanJob> snapshot;
+                try {
+                    snapshot = loadAll(connection, false);
+                } catch (Exception e) {
+                    throw new IllegalStateException("Postgres AJAX lifecycle snapshot failed", e);
+                }
+                return Optional.of(Objects.requireNonNull(action.apply(snapshot),
+                        "AJAX lifecycle action must not return null"));
+            } finally {
+                releaseAjaxLifecycleLock(connection);
+            }
+        } catch (SQLException e) {
+            // Never fall back to an unlocked action, even when ordinary store reads are fail-soft.
+            throw new IllegalStateException("Postgres AJAX lifecycle lock failed", e);
+        }
+    }
+
+    private boolean tryAcquireAjaxLifecycleLock(Connection connection) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT pg_try_advisory_lock(hashtext(?), ?)")) {
+            statement.setString(1, tableName.toLowerCase(Locale.ROOT));
+            statement.setInt(2, AJAX_LIFECYCLE_LOCK_KEY);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    throw new SQLException("Postgres AJAX lifecycle lock returned no result");
+                }
+                return result.getBoolean(1);
+            }
+        }
+    }
+
+    private void releaseAjaxLifecycleLock(Connection connection) {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT pg_advisory_unlock(hashtext(?), ?)")) {
+            statement.setString(1, tableName.toLowerCase(Locale.ROOT));
+            statement.setInt(2, AJAX_LIFECYCLE_LOCK_KEY);
+            statement.execute();
+        } catch (SQLException e) {
+            // Closing this dedicated session below also releases its advisory lock.
+            log.warn("Postgres AJAX lifecycle unlock failed; closing its session: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -439,8 +494,9 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "job_id, job_type, parameters_json, status, attempt_count, max_attempts, requester_id, idempotency_key, "
                 + "zap_scan_id, last_error, created_at, started_at, completed_at, next_attempt_at, last_known_progress, "
                 + "queue_position, claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, "
-                + "busy_wait_started_at, busy_wait_count, updated_at"
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "busy_wait_started_at, busy_wait_count, cancel_requested_at, cancel_deadline_at, "
+                + "cancel_next_attempt_at, cancel_attempt_count, updated_at"
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (job_id) DO UPDATE SET "
                 + "job_type = EXCLUDED.job_type, "
                 + "parameters_json = EXCLUDED.parameters_json, "
@@ -463,6 +519,10 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "claim_expires_at = EXCLUDED.claim_expires_at, "
                 + "busy_wait_started_at = EXCLUDED.busy_wait_started_at, "
                 + "busy_wait_count = EXCLUDED.busy_wait_count, "
+                + "cancel_requested_at = EXCLUDED.cancel_requested_at, "
+                + "cancel_deadline_at = EXCLUDED.cancel_deadline_at, "
+                + "cancel_next_attempt_at = EXCLUDED.cancel_next_attempt_at, "
+                + "cancel_attempt_count = EXCLUDED.cancel_attempt_count, "
                 + "updated_at = EXCLUDED.updated_at";
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -488,7 +548,11 @@ public class PostgresScanJobStore implements ScanJobStore {
             setTimestamp(statement, 20, job.getClaimExpiresAt());
             setTimestamp(statement, 21, job.getBusyWaitStartedAt());
             statement.setInt(22, job.getBusyWaitCount());
-            statement.setTimestamp(23, Timestamp.from(Instant.now()));
+            setTimestamp(statement, 23, job.getCancelRequestedAt());
+            setTimestamp(statement, 24, job.getCancelDeadlineAt());
+            setTimestamp(statement, 25, job.getCancelNextAttemptAt());
+            statement.setInt(26, job.getCancelAttemptCount());
+            statement.setTimestamp(27, Timestamp.from(Instant.now()));
             statement.executeUpdate();
         }
     }
@@ -585,6 +649,7 @@ public class PostgresScanJobStore implements ScanJobStore {
 
     private List<ScanJob> loadClaimableQueuedJobs(Connection connection, Instant now) throws Exception {
         String sql = "SELECT * FROM " + tableName + " WHERE status = ? "
+                + "AND cancel_requested_at IS NULL "
                 + "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
                 + "AND (claim_owner_id IS NULL OR claim_expires_at <= ?) "
                 + "ORDER BY CASE WHEN queue_position IS NULL OR queue_position <= 0 THEN 2147483647 ELSE queue_position END, "
@@ -627,7 +692,8 @@ public class PostgresScanJobStore implements ScanJobStore {
 
     private boolean hasAjaxCapacityInUse(Connection connection, Instant now) throws Exception {
         String sql = "SELECT 1 FROM " + tableName + " WHERE job_type = ? "
-                + "AND (status = ? OR (status = ? AND claim_owner_id IS NOT NULL AND claim_expires_at > ?)) LIMIT 1";
+                + "AND (status = ? OR (status = ? AND (cancel_requested_at IS NOT NULL "
+                + "OR (claim_owner_id IS NOT NULL AND claim_expires_at > ?)))) LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, ScanJobType.AJAX_SPIDER.name());
             statement.setString(2, ScanJobStatus.RUNNING.name());
@@ -687,7 +753,11 @@ public class PostgresScanJobStore implements ScanJobStore {
                 toInstant(resultSet.getTimestamp("claim_heartbeat_at")),
                 toInstant(resultSet.getTimestamp("claim_expires_at")),
                 toInstant(resultSet.getTimestamp("busy_wait_started_at")),
-                resultSet.getInt("busy_wait_count")
+                resultSet.getInt("busy_wait_count"),
+                toInstant(resultSet.getTimestamp("cancel_requested_at")),
+                toInstant(resultSet.getTimestamp("cancel_deadline_at")),
+                toInstant(resultSet.getTimestamp("cancel_next_attempt_at")),
+                resultSet.getInt("cancel_attempt_count")
         );
     }
 

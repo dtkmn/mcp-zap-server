@@ -4,6 +4,8 @@ import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Instant;
 import java.util.List;
@@ -170,6 +172,41 @@ class ScanJobResponseFormatterTest {
                 .contains("waitingSince=2026-05-06T00:00:00Z")
                 .contains("reason=Engine is finishing another scan")
                 .contains("retryAt=2026-05-06T00:00:10Z");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void showsCancellationStateAndDeadlineWithoutClaimingSuccess(boolean pending) {
+        Instant now = Instant.parse("2026-05-06T00:00:00Z");
+        ScanJob job = new ScanJob("ajax-cancelling", ScanJobType.AJAX_SPIDER, Map.of(), now.minusSeconds(5), 2);
+        job.markRunning("ajax-spider:1");
+        job.requestCancellation(now, now.plusSeconds(30));
+        String reason = pending ? "ZAP stop request failed" : "Unable to confirm cancellation; scan may still be running";
+        job.scheduleCancellationRetry(pending ? now.plusSeconds(1) : null, reason);
+        String status = pending ? "RUNNING (cancellation pending)"
+                : "RUNNING (cancellation unconfirmed; automatic stop retries ended)";
+
+        for (String output : List.of(formatter.formatSubmission(job, true, now),
+                formatter.formatJobDetail(job, 0, now))) {
+            assertThat(output).contains("Status: " + status,
+                    "Cancellation Requested: 2026-05-06T00:00:00Z",
+                    "Cancellation Retry Deadline: 2026-05-06T00:00:30Z")
+                    .doesNotContain("Status: CANCELLED", "Status: SUCCEEDED");
+            if (pending) {
+                assertThat(output).contains("Next Stop Attempt: 2026-05-06T00:00:01Z");
+            } else {
+                assertThat(output).doesNotContain("Next Stop Attempt:");
+            }
+        }
+        assertThat(formatter.formatJobDetail(job, 0, now)).contains("Last Error: " + reason);
+        String listing = formatter.formatJobList(List.of(job), null, now);
+        assertThat(listing).contains("ajax-cancelling | AJAX_SPIDER | " + status,
+                "cancellationDeadline=2026-05-06T00:00:30Z", "reason=" + reason);
+        if (pending) {
+            assertThat(listing).contains("nextStopAttempt=2026-05-06T00:00:01Z");
+        } else {
+            assertThat(listing).doesNotContain("nextStopAttempt=");
+        }
     }
 
     @Test

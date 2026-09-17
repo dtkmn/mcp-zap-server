@@ -21,10 +21,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -32,6 +34,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -64,8 +69,8 @@ class PostgresScanJobStoreRaceHarnessTest {
     }
 
     @Test
-    void readinessRequiresEngineBusyWaitMigration() throws Exception {
-        String schema = "before_busy_wait";
+    void readinessRequiresCancellationRetryMigration() throws Exception {
+        String schema = "before_cancellation_retry";
         String url = POSTGRES.getJdbcUrl() + (POSTGRES.getJdbcUrl().contains("?") ? "&" : "?")
                 + "currentSchema=" + schema;
         var migration = Flyway.configure()
@@ -74,7 +79,7 @@ class PostgresScanJobStoreRaceHarnessTest {
                 .schemas(schema)
                 .defaultSchema(schema);
         try {
-            migration.target("6").load().migrate();
+            migration.target("7").load().migrate();
             ScanJobStoreProperties properties = new ScanJobStoreProperties();
             properties.setBackend("postgres");
             properties.getPostgres().setUrl(url);
@@ -88,6 +93,10 @@ class PostgresScanJobStoreRaceHarnessTest {
             assertTrue(error.getMessage().contains("Apply Flyway migrations"));
             assertTrue(error.getMessage().contains("busy_wait_started_at"));
             assertTrue(error.getMessage().contains("busy_wait_count"));
+            assertTrue(error.getMessage().contains("cancel_requested_at"));
+            assertTrue(error.getMessage().contains("cancel_deadline_at"));
+            assertTrue(error.getMessage().contains("cancel_next_attempt_at"));
+            assertTrue(error.getMessage().contains("cancel_attempt_count"));
 
             migration.target("latest").load().migrate();
             assertDoesNotThrow(validator::afterPropertiesSet);
@@ -138,6 +147,120 @@ class PostgresScanJobStoreRaceHarnessTest {
         assertEquals(0, reclaimed.getAttempts());
         assertEquals(nextRetryAt, reclaimed.getNextAttemptAt());
         assertEquals("Engine is still busy", reclaimed.getLastError());
+    }
+
+    @Test
+    void cancellationStateSurvivesReloadAndKeepsAjaxSlotUntilConfirmed() {
+        ScanJob job = new ScanJob("job-cancelling", ScanJobType.AJAX_SPIDER,
+                Map.of("targetUrl", "http://example.com/cancelling"), BASE_TIME, 2);
+        Instant requestedAt = BASE_TIME.plusSeconds(1);
+        Instant deadline = requestedAt.plusSeconds(30);
+        Instant retryAt = requestedAt.plusSeconds(10);
+        job.claim("node-old", BASE_TIME, BASE_TIME.plusSeconds(5));
+        job.requestCancellation(requestedAt, deadline);
+        job.scheduleCancellationRetry(retryAt, "Stop not yet accepted");
+        job.requestCancellation(requestedAt.plusSeconds(2), deadline.plusSeconds(30));
+        newStore().admitQueuedJob(job);
+        ScanJob nextJob = new ScanJob("job-next-ajax", ScanJobType.AJAX_SPIDER,
+                Map.of("targetUrl", "http://example.com/next"), BASE_TIME.plusSeconds(2), 2);
+        newStore().admitQueuedJob(nextJob);
+
+        ScanJob restored = newStore().load(job.getId()).orElseThrow();
+        assertTrue(restored.isCancellationPending());
+        assertEquals(requestedAt, restored.getCancelRequestedAt());
+        assertEquals(deadline, restored.getCancelDeadlineAt());
+        assertEquals(retryAt, restored.getCancelNextAttemptAt());
+        assertEquals(1, restored.getCancelAttemptCount());
+        assertEquals("Stop not yet accepted", restored.getLastError());
+        assertEquals(0, restored.getAttempts());
+        assertTrue(newStore().claimQueuedJobs("node-b", retryAt, retryAt.plusSeconds(30), 1, 3).isEmpty(),
+                "Expired launch claims with cancellation intent must not be restarted or release the AJAX slot");
+
+        restored.markRunning("AJAX");
+        newStore().upsertAll(List.of(restored));
+        ScanJob claimed = newStore().claimRunningJobs("node-b", retryAt, retryAt.plusSeconds(30)).getFirst();
+        assertTrue(claimed.isCancellationPending(), "A late start must retain the cancellation request");
+        newStore().updateClaimedJob(job.getId(), ScanJobClaimToken.from(claimed), retryAt, current -> {
+            current.scheduleCancellationRetry(retryAt.plusSeconds(10), "Still starting");
+            return current;
+        }).orElseThrow();
+        ScanJob pending = newStore().load(job.getId()).orElseThrow();
+        assertEquals(2, pending.getCancelAttemptCount());
+        assertEquals(requestedAt, pending.getCancelRequestedAt());
+        assertEquals(deadline, pending.getCancelDeadlineAt());
+
+        pending.recordCancellationFailure("Unable to confirm cancellation");
+        newStore().upsertAll(List.of(pending));
+        ScanJob unconfirmed = newStore().load(job.getId()).orElseThrow();
+        assertTrue(unconfirmed.isCancellationRequested());
+        assertFalse(unconfirmed.isCancellationPending());
+        assertEquals(2, unconfirmed.getCancelAttemptCount());
+        assertNull(unconfirmed.getCancelNextAttemptAt());
+        assertTrue(newStore().claimQueuedJobs("node-c", deadline, deadline.plusSeconds(30), 1, 3).isEmpty());
+
+        unconfirmed.markCancelled();
+        newStore().upsertAll(List.of(unconfirmed));
+        ScanJob cancelled = newStore().load(job.getId()).orElseThrow();
+        assertFalse(cancelled.isCancellationRequested());
+        assertNull(cancelled.getLastError());
+        assertNull(cancelled.getCancelNextAttemptAt());
+        assertEquals(List.of(nextJob.getId()), newStore()
+                .claimQueuedJobs("node-c", deadline, deadline.plusSeconds(30), 1, 3)
+                .stream().map(ScanJob::getId).toList());
+    }
+
+    @Test
+    void ajaxLifecycleLockExcludesOtherWorkersWithoutBlockingQueueStateUpdates() {
+        PostgresScanJobStore firstStore = newStore();
+        PostgresScanJobStore secondStore = newStore();
+        firstStore.admitQueuedJob(queuedJob("job-before-lock", "http://example.com/before"));
+        AtomicInteger competingActions = new AtomicInteger();
+
+        assertEquals("first", firstStore.tryWithAjaxLifecycleLock(snapshot -> {
+            assertEquals(List.of("job-before-lock"), snapshot.stream().map(ScanJob::getId).toList());
+            assertTrue(secondStore.tryWithAjaxLifecycleLock(otherSnapshot -> {
+                competingActions.incrementAndGet();
+                return "competing";
+            }).isEmpty());
+            secondStore.admitQueuedJob(queuedJob("job-during-lock", "http://example.com/during"));
+            return "first";
+        }).orElseThrow());
+        assertEquals(0, competingActions.get());
+        assertEquals(2, secondStore.tryWithAjaxLifecycleLock(List::size).orElseThrow());
+    }
+
+    @Test
+    void ajaxLifecycleActionIsNotRetriedAndLockIsReleasedAfterFailure() {
+        AtomicInteger actionCalls = new AtomicInteger();
+        IllegalStateException expected = new IllegalStateException("Action failed",
+                new SQLException("Must not retry an engine side effect", "40001"));
+        IllegalStateException actual = assertThrows(IllegalStateException.class, () -> newStore()
+                .tryWithAjaxLifecycleLock(snapshot -> {
+                    actionCalls.incrementAndGet();
+                    throw expected;
+                }));
+
+        assertSame(expected, actual);
+        assertEquals(1, actionCalls.get());
+        assertEquals("recovered", newStore().tryWithAjaxLifecycleLock(snapshot -> "recovered").orElseThrow());
+    }
+
+    @Test
+    void ajaxLifecycleSnapshotFailureNeverCallsActionEvenWithFailSoftStore() {
+        ScanJobStoreProperties.Postgres properties = new ScanJobStoreProperties.Postgres();
+        properties.setUrl(POSTGRES.getJdbcUrl());
+        properties.setUsername(POSTGRES.getUsername());
+        properties.setPassword(POSTGRES.getPassword());
+        properties.setTableName("missing_ajax_scan_jobs");
+        properties.setFailFast(false);
+        PostgresScanJobStore store = new PostgresScanJobStore(properties, new ObjectMapper());
+        AtomicInteger actionCalls = new AtomicInteger();
+
+        assertThrows(IllegalStateException.class, () -> store.tryWithAjaxLifecycleLock(snapshot -> {
+            actionCalls.incrementAndGet();
+            return "unsafe";
+        }));
+        assertEquals(0, actionCalls.get());
     }
 
     @Test

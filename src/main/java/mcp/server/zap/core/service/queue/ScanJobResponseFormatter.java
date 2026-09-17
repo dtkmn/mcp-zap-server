@@ -27,6 +27,7 @@ public class ScanJobResponseFormatter {
         }
 
         appendEngineWaitDetail(sb, job);
+        appendCancellationDetail(sb, job);
 
         if (hasText(job.getZapScanId())) {
             sb.append('\n').append("ZAP Scan ID: ").append(job.getZapScanId());
@@ -81,6 +82,7 @@ public class ScanJobResponseFormatter {
             }
         }
         appendEngineWaitDetail(sb, job);
+        appendCancellationDetail(sb, job);
         if (isDeadLetterJob(job)) {
             sb.append('\n').append("Dead Letter: true");
         }
@@ -141,6 +143,15 @@ public class ScanJobResponseFormatter {
                 output.append(" | waitingSince=").append(job.getBusyWaitStartedAt())
                         .append(" | reason=").append(job.getLastError());
             }
+            if (job.isCancellationRequested()) {
+                output.append(" | cancellationDeadline=").append(job.getCancelDeadlineAt());
+                if (job.getCancelNextAttemptAt() != null) {
+                    output.append(" | nextStopAttempt=").append(job.getCancelNextAttemptAt());
+                }
+                if (hasText(job.getLastError())) {
+                    output.append(" | reason=").append(job.getLastError());
+                }
+            }
             appendClaimSummary(output, job, now);
             output.append('\n');
         }
@@ -179,6 +190,10 @@ public class ScanJobResponseFormatter {
     }
 
     private String formatStatus(ScanJob job) {
+        if (job.isCancellationRequested()) {
+            return job.getStatus().name() + (job.isCancellationPending()
+                    ? " (cancellation pending)" : " (cancellation unconfirmed; automatic stop retries ended)");
+        }
         if (isWaitingForEngine(job)) {
             return "QUEUED (waiting for engine)";
         }
@@ -195,7 +210,18 @@ public class ScanJobResponseFormatter {
     }
 
     private boolean isWaitingForEngine(ScanJob job) {
-        return job.getStatus() == ScanJobStatus.QUEUED && job.getBusyWaitStartedAt() != null;
+        return job.getStatus() == ScanJobStatus.QUEUED && job.getBusyWaitStartedAt() != null
+                && !job.isCancellationRequested();
+    }
+
+    private void appendCancellationDetail(StringBuilder output, ScanJob job) {
+        if (job.isCancellationRequested()) {
+            output.append('\n').append("Cancellation Requested: ").append(job.getCancelRequestedAt())
+                    .append('\n').append("Cancellation Retry Deadline: ").append(job.getCancelDeadlineAt());
+            if (job.getCancelNextAttemptAt() != null) {
+                output.append('\n').append("Next Stop Attempt: ").append(job.getCancelNextAttemptAt());
+            }
+        }
     }
 
     private void appendEngineWaitDetail(StringBuilder output, ScanJob job) {

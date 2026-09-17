@@ -46,5 +46,22 @@ class AjaxSpiderServiceTest {
                 .contains("AJAX Spider Status: running")
                 .contains("Pages/URLs discovered: 3")
                 .contains("Scan is in progress...");
+        assertThat(service.isAjaxSpiderRunning()).isTrue();
+    }
+
+    @Test
+    void stoppedCrawlDoesNotClaimSuccessfulCompletion() {
+        when(ajaxSpiderExecution.readAjaxSpiderStatus()).thenReturn(new AjaxSpiderStatus("stopped", "2", false));
+
+        service.stopAjaxSpider();
+        String result = service.getAjaxSpiderStatus();
+
+        assertThat(result)
+                .contains("AJAX Spider Status: stopped")
+                .contains("Pages/URLs discovered: 2")
+                .contains("ZAP does not distinguish completion from cancellation or failure")
+                .doesNotContain("Scan completed", "100%");
+        assertThat(service.isAjaxSpiderRunning()).isFalse();
+        verify(ajaxSpiderExecution).stopAjaxSpider();
     }
 }

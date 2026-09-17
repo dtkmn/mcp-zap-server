@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
@@ -463,7 +464,7 @@ public class ScanJobQueueServiceTest {
     @Test
     void queuedAjaxSpiderUsesSharedJobLifecycle() {
         when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(0, 100);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String response = service.queueAjaxSpiderScan("http://example.com/spa", "ajax-req-1");
         String jobId = extractJobId(response);
@@ -480,14 +481,14 @@ public class ScanJobQueueServiceTest {
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
         verify(ajaxSpiderService).startAjaxSpiderJob("http://example.com/spa");
-        verify(ajaxSpiderService, times(2)).getAjaxSpiderProgressPercent();
+        verify(ajaxSpiderService, times(2)).isAjaxSpiderRunning();
     }
 
     @Test
     void onlyOneAjaxSpiderJobStartsAtATimeEvenWhenSpiderCapacityAllowsMore() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(5);
         when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1", "ajax-spider:2");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(0, 100);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String firstJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-1", "ajax-1"));
         String secondJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-2", "ajax-2"));
@@ -503,6 +504,24 @@ public class ScanJobQueueServiceTest {
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondJobId).getStatus());
         verify(ajaxSpiderService, times(2)).startAjaxSpiderJob(anyString());
+    }
+
+    @Test
+    void cancelledAjaxSpiderRemainsCancelledWhenCrawlerStops() {
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true);
+        String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa", "ajax-cancel"));
+
+        service.cancelScanJob(jobId);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(false);
+        service.processQueueOnceForTesting();
+
+        assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
+        String status = service.getScanJobStatus(jobId);
+        assertTrue(status.contains("Status: CANCELLED"));
+        assertTrue(status.contains("Progress: unavailable"));
+        assertFalse(status.contains("100%"));
+        verify(ajaxSpiderService).stopAjaxSpiderJob();
     }
 
     @Test

@@ -145,17 +145,19 @@ class ScanJobRuntimeExecutorTest {
         );
 
         when(ajaxSpiderService.startAjaxSpiderJob("https://example.com")).thenReturn("ajax-1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(10);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String scanId = executor.startScan(
                 ScanJobType.AJAX_SPIDER,
                 Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com")
         );
-        int progress = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int runningSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int stoppedSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
         executor.stopScan(ScanJobType.AJAX_SPIDER, scanId);
 
         assertEquals("ajax-1", scanId);
-        assertEquals(10, progress);
+        assertEquals(0, runningSignal);
+        assertEquals(100, stoppedSignal);
         verify(ajaxSpiderService).stopAjaxSpiderJob();
     }
 }

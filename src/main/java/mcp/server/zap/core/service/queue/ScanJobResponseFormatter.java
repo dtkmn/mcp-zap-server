@@ -2,6 +2,7 @@ package mcp.server.zap.core.service.queue;
 
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,7 +15,7 @@ public class ScanJobResponseFormatter {
                 .append('\n')
                 .append("Job ID: ").append(job.getId()).append('\n')
                 .append("Type: ").append(job.getType()).append('\n')
-                .append("Status: ").append(job.getStatus()).append('\n')
+                .append("Status: ").append(formatStatus(job)).append('\n')
                 .append("Attempts: ").append(job.getAttempts()).append('/').append(job.getMaxAttempts());
 
         if (job.getStatus() == ScanJobStatus.QUEUED && job.getQueuePosition() > 0) {
@@ -48,9 +49,9 @@ public class ScanJobResponseFormatter {
                 .append('\n')
                 .append("Job ID: ").append(job.getId()).append('\n')
                 .append("Type: ").append(job.getType()).append('\n')
-                .append("Status: ").append(job.getStatus()).append('\n')
+                .append("Status: ").append(formatStatus(job)).append('\n')
                 .append("Attempts: ").append(job.getAttempts()).append('/').append(job.getMaxAttempts()).append('\n')
-                .append("Progress: ").append(job.getLastKnownProgress()).append('%').append('\n')
+                .append("Progress: ").append(formatProgress(job)).append('\n')
                 .append("Submitted: ").append(job.getCreatedAt());
 
         if (job.getStartedAt() != null) {
@@ -115,14 +116,13 @@ public class ScanJobResponseFormatter {
                     .append(" | ")
                     .append(job.getType())
                     .append(" | ")
-                    .append(job.getStatus())
+                    .append(formatStatus(job))
                     .append(" | attempts=")
                     .append(job.getAttempts())
                     .append('/')
                     .append(job.getMaxAttempts())
                     .append(" | progress=")
-                    .append(job.getLastKnownProgress())
-                    .append('%');
+                    .append(formatProgress(job));
             if (job.getQueuePosition() > 0) {
                 output.append(" | queuePosition=").append(job.getQueuePosition());
             }
@@ -167,6 +167,19 @@ public class ScanJobResponseFormatter {
             output.append('\n');
         }
         return output.toString().trim();
+    }
+
+    private String formatStatus(ScanJob job) {
+        if (job.getType() == ScanJobType.AJAX_SPIDER && job.getStatus() == ScanJobStatus.SUCCEEDED) {
+            return "SUCCEEDED (ZAP reports stopped; crawl outcome unknown)";
+        }
+        return job.getStatus().name();
+    }
+
+    private String formatProgress(ScanJob job) {
+        return job.getType() == ScanJobType.AJAX_SPIDER
+                ? "unavailable (ZAP does not report a percentage)"
+                : job.getLastKnownProgress() + "%";
     }
 
     private void appendClaimSummary(StringBuilder output, ScanJob job, Instant now) {

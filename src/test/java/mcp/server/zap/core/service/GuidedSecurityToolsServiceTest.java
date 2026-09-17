@@ -181,6 +181,41 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
+    void stoppedDirectBrowserCrawlDoesNotClaimSuccessOrKeepPolling() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(ajaxSpiderService.startAjaxSpider("https://spa.example.com"))
+                .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
+        when(ajaxSpiderService.getAjaxSpiderStatus())
+                .thenReturn("AJAX Spider Status: stopped\nPages/URLs discovered: 3");
+
+        String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "browser", null, null));
+        String statusResponse = service.getCrawlStatus(operationId);
+
+        assertThat(statusResponse)
+                .contains("AJAX Spider Status: stopped")
+                .contains("successful completion is unconfirmed")
+                .contains("zap_passive_scan_wait before reviewing available findings")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+    }
+
+    @Test
+    void succeededBrowserQueueJobDoesNotImplySuccessfulCrawl() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueAjaxSpiderScan("https://spa.example.com", null))
+                .thenReturn("Scan job accepted\nJob ID: browser-1\nType: AJAX_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("browser-1"))
+                .thenReturn("Scan job details\nJob ID: browser-1\nStatus: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+
+        String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "browser", null, null));
+        String statusResponse = service.getCrawlStatus(operationId);
+
+        assertThat(statusResponse)
+                .contains("successful completion is unconfirmed")
+                .contains("check crawl coverage before continuing security testing")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+    }
+
+    @Test
     void completedAttackStatusPointsToPassiveWaitAndFindings() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
         when(activeScanService.startActiveScan(eq("https://example.com"), eq("true"), eq((String) null)))

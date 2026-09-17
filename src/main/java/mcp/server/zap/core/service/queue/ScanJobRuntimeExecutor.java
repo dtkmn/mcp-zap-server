@@ -55,7 +55,9 @@ public class ScanJobRuntimeExecutor {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.getSpiderScanProgressPercent(scanId);
-            case AJAX_SPIDER -> requireAjaxSpiderService().getAjaxSpiderProgressPercent();
+            // AJAX has no percentage: these values only signal the queue lifecycle.
+            // A stopped crawler does not confirm a successful crawl.
+            case AJAX_SPIDER -> requireAjaxSpiderService().isAjaxSpiderRunning() ? 0 : 100;
         };
     }
 

@@ -98,7 +98,8 @@ public class AjaxSpiderService {
             "%s",
             ajaxStatus.status(),
             ajaxStatus.discoveredCount(),
-            isRunning ? "Scan is in progress..." : "Scan completed."
+            isRunning ? "Scan is in progress..."
+                    : "Scan is not running. ZAP does not distinguish completion from cancellation or failure."
         );
     }
 
@@ -126,8 +127,8 @@ public class AjaxSpiderService {
         return "AJAX Spider Results:\n" + ajaxSpiderExecution.loadAjaxSpiderResults();
     }
 
-    public int getAjaxSpiderProgressPercent() {
-        return ajaxSpiderExecution.readAjaxSpiderStatus().running() ? 0 : 100;
+    public boolean isAjaxSpiderRunning() {
+        return ajaxSpiderExecution.readAjaxSpiderStatus().running();
     }
 
     private String formatDirectStartMessage(String targetUrl) {

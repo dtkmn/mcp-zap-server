@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ScanJobResponseFormatterTest {
@@ -116,6 +117,36 @@ class ScanJobResponseFormatterTest {
                 Filter: QUEUED
                 - job-queued | ACTIVE_SCAN | QUEUED | attempts=0/3 | progress=0% | queuePosition=1 | claimOwner=worker-a | claimExpiresAt=2026-05-06T00:00:30Z | claimState=active
                 """, output);
+    }
+
+    @Test
+    void ajaxTerminalJobsDoNotExposeQueueLifecycleValuesAsCrawlPercentages() {
+        Instant now = Instant.parse("2026-05-06T00:00:00Z");
+        ScanJob succeededJob = new ScanJob("ajax-ended", ScanJobType.AJAX_SPIDER, Map.of(), now, 3);
+        succeededJob.markRunning("ajax-spider:1");
+        succeededJob.markSucceeded(100);
+        ScanJob cancelledJob = new ScanJob("ajax-cancelled", ScanJobType.AJAX_SPIDER, Map.of(), now, 3);
+        cancelledJob.markRunning("ajax-spider:2");
+        cancelledJob.updateProgress(100);
+        cancelledJob.markCancelled();
+
+        for (ScanJob job : List.of(succeededJob, cancelledJob)) {
+            assertThat(formatter.formatJobDetail(job, 0, now))
+                    .contains("Progress: unavailable (ZAP does not report a percentage)")
+                    .doesNotContain("100%");
+        }
+        assertThat(formatter.formatJobDetail(cancelledJob, 0, now))
+                .contains("Status: CANCELLED")
+                .doesNotContain("SUCCEEDED");
+        assertThat(formatter.formatJobDetail(succeededJob, 0, now))
+                .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+        assertThat(formatter.formatSubmission(succeededJob, true, now))
+                .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+        assertThat(formatter.formatJobList(List.of(succeededJob, cancelledJob), null, now))
+                .contains("ajax-ended | AJAX_SPIDER | SUCCEEDED (ZAP reports stopped; crawl outcome unknown)")
+                .contains("ajax-cancelled | AJAX_SPIDER | CANCELLED")
+                .contains("progress=unavailable (ZAP does not report a percentage)")
+                .doesNotContain("100%");
     }
 
     @Test

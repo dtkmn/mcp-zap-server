@@ -180,7 +180,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
         snapshot, source_contract = MODULE.canonicalize_snapshot(payload)
 
         self.assertEqual(source_contract, MODULE.LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
-        self.assertEqual(snapshot["contract_version"], MODULE.CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
+        self.assertEqual(snapshot["contract_version"], MODULE.LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
         self.assertEqual(snapshot["target_url"], "https://example.com/")
         self.assertEqual(snapshot["finding_count"], 1)
         self.assertEqual(snapshot["findings"][0]["risk"], "High")
@@ -216,6 +216,186 @@ class McpZapGateHelpersTest(unittest.TestCase):
         self.assertEqual(snapshot["finding_count"], 1)
         self.assertEqual(snapshot["findings"][0]["confidence"], "High")
         self.assertEqual(snapshot["findings"][0]["url"], "https://example.com/search?a=1&b=2")
+
+    @staticmethod
+    def node_finding(url="https://example.com/search?q=one", **overrides):
+        return {
+            "pluginId": "40012", "alertName": "Cross Site Scripting", "risk": "High",
+            "confidence": "Medium", "url": url, "param": "q", "method": "GET",
+            "nodeName": "https://example.com/search(q)", "tags": {}, **overrides,
+        }
+
+    @staticmethod
+    def node_snapshot(findings, version=2):
+        return MODULE.canonicalize_snapshot({
+            "version": version, "baseUrl": "https://example.com/", "fingerprints": findings,
+        })[0]
+
+    @staticmethod
+    def compare_snapshots(baseline, current):
+        return MODULE.build_diff_contract("https://example.com/", baseline, current, {
+            "requested": False, "used": False, "reason": None, "matched_rule_ids": [],
+            "suppressed_baseline_findings": 0, "suppressed_current_findings": 0,
+        })
+
+    def test_v2_same_node_survives_representative_url_and_tag_changes(self):
+        baseline = self.node_snapshot([self.node_finding()])
+        current = self.node_snapshot([self.node_finding(
+            "https://example.com/search?q=two", tags={"SYSTEMIC": "https://example.com/tag"},
+        )])
+
+        diff = self.compare_snapshots(baseline, current)
+
+        self.assertEqual(diff["counts"], {"new": 0, "resolved": 0, "unchanged": 1})
+        self.assertEqual(diff["identity_version"], 2)
+        self.assertIn("ZAP node identity", MODULE.render_diff_text(diff))
+
+    def test_v2_preserves_different_nodes_sites_methods_and_node_case(self):
+        findings = [
+            self.node_finding(),
+            self.node_finding(nodeName="https://example.com/other(q)"),
+            self.node_finding(nodeName="https://example.com/Search(q)"),
+            self.node_finding(method="POST"),
+            self.node_finding("https://other.example/search?q=one", nodeName="https://other.example/search(q)"),
+        ]
+        snapshot = self.node_snapshot(findings)
+
+        self.assertEqual(snapshot["finding_count"], 5)
+        self.assertEqual(self.compare_snapshots(self.node_snapshot([]), snapshot)["counts"]["new"], 5)
+
+    def test_v2_missing_node_uses_normalized_url_and_method(self):
+        baseline = self.node_snapshot([self.node_finding(nodeName=None)])
+        same_url = self.node_snapshot([self.node_finding(nodeName="  ")])
+        changed_url = self.node_snapshot([self.node_finding("https://example.com/search?q=two", nodeName=None)])
+        changed_method = self.node_snapshot([self.node_finding(nodeName=None, method="POST")])
+
+        self.assertEqual(self.compare_snapshots(baseline, same_url)["counts"]["unchanged"], 1)
+        for current in (changed_url, changed_method):
+            self.assertEqual(self.compare_snapshots(baseline, current)["counts"], {"new": 1, "resolved": 1, "unchanged": 0})
+
+    def test_v1_raw_and_saved_canonical_baselines_keep_url_identity_for_both_sides(self):
+        rows = [self.node_finding(), self.node_finding("https://example.com/search?q=two")]
+        legacy = self.node_snapshot(rows, version=1)
+        saved_legacy = MODULE.canonicalize_snapshot(json.loads(json.dumps(legacy)))[0]
+        current = self.node_snapshot([{**row, "method": "POST"} for row in rows])
+
+        self.assertEqual(current["finding_count"], 1)
+        self.assertEqual(current["recorded_example_count"], 2)
+        for baseline in (legacy, saved_legacy):
+            diff = self.compare_snapshots(baseline, current)
+            self.assertEqual(diff["identity_version"], 1)
+            self.assertEqual(diff["counts"], {"new": 0, "resolved": 0, "unchanged": 2})
+            self.assertEqual(diff["current"]["finding_count"], 2)
+            self.assertIn("legacy URL identity", MODULE.render_diff_text(diff))
+
+    def test_v1_comparison_does_not_use_new_node_identity(self):
+        baseline = self.node_snapshot([self.node_finding()], version=1)
+        current = self.node_snapshot([self.node_finding("https://example.com/search?q=two")])
+
+        self.assertEqual(self.compare_snapshots(baseline, current)["counts"], {"new": 1, "resolved": 1, "unchanged": 0})
+        self.assertEqual(self.compare_snapshots(current, baseline)["counts"], {"new": 1, "resolved": 1, "unchanged": 0})
+
+    def test_v2_keeps_old_suppression_hashes_and_exact_url_matching(self):
+        rows = [self.node_finding(), self.node_finding("https://example.com/search?q=two")]
+        # Fingerprint exported by the gate before node-aware comparisons existed.
+        legacy_hash = "sha256:878375727eb6267528810b63b99da6e415416971f08f691236fdbf3316ed1477"
+        self.assertEqual(self.node_snapshot(rows[:1], version=1)["findings"][0]["fingerprint"], legacy_hash)
+        current = self.node_snapshot(rows)
+
+        for match in ({"fingerprint": legacy_hash}, {"url": rows[0]["url"]}):
+            filtered, count, rule_ids = MODULE.apply_suppressions(current["findings"], {"rules": [
+                {"id": "known-example", "active": True, "match": match},
+            ]})
+            self.assertEqual(count, 1)
+            self.assertEqual(rule_ids, ["known-example"])
+            self.assertEqual([row["url"] for row in filtered], [rows[1]["url"]])
+            diff = self.compare_snapshots(self.node_snapshot([]), {**current, "findings": filtered})
+            diff["suppressions"]["suppressed_current_findings"] = count
+            self.assertEqual(diff["counts"]["new"], 1)
+            self.assertEqual(diff["current"]["finding_count"], 1)
+            self.assertEqual(diff["current"]["recorded_example_count"], 1)
+            self.assertIn("Suppressed Current Recorded Examples: 1", MODULE.render_diff_text(diff))
+
+    def test_v2_roundtrip_preserves_systemic_metadata_and_recorded_counts(self):
+        tags = {"SYSTEMIC": "https://www.zaproxy.org/alerttags/systemic/", "POLICY_DEV_STD": "https://example.com/policy"}
+        snapshot = self.node_snapshot([
+            self.node_finding(tags=tags), self.node_finding("https://example.com/search?q=two", tags=tags),
+        ])
+        restored, source = MODULE.canonicalize_snapshot(json.loads(json.dumps(snapshot)))
+
+        self.assertEqual(restored, snapshot)
+        self.assertEqual(source, MODULE.CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
+        self.assertEqual(snapshot["finding_count"], 1)
+        self.assertEqual(snapshot["recorded_example_count"], 2)
+        self.assertTrue(all(row["tags"] == tags for row in restored["findings"]))
+        summary = MODULE.render_findings_summary(snapshot)
+        self.assertIn("Unique Recorded Findings: 1", summary)
+        self.assertIn("Recorded Examples: 2", summary)
+        self.assertIn("SYSTEMIC: may affect the whole site", summary)
+        self.assertIn("not the total number of affected endpoints", summary)
+        diff = self.compare_snapshots(self.node_snapshot([]), snapshot)
+        self.assertTrue(diff["new_finding_groups"][0]["systemic"])
+        self.assertIn("SYSTEMIC: may affect the whole site", MODULE.render_diff_text(diff))
+        # Do not lose the systemic marker when a second recorded example lacks tags.
+        mixed_tags = self.node_snapshot([
+            self.node_finding(tags=tags), self.node_finding("https://example.com/search?q=two"),
+        ])
+        self.assertTrue(self.compare_snapshots(self.node_snapshot([]), mixed_tags)["new_finding_groups"][0]["systemic"])
+        lowercase_tag = self.node_snapshot([self.node_finding(tags={"systemic": tags["SYSTEMIC"]})])
+        self.assertNotIn("| SYSTEMIC:", MODULE.render_findings_summary(lowercase_tag))
+
+    def test_main_compares_v2_examples_with_saved_v1_baseline_and_suppressions(self):
+        rows = [self.node_finding(), self.node_finding("https://example.com/search?q=two")]
+        responses = {
+            "zap_spider_start": "Scan ID: spider-1",
+            "zap_spider_status": "Completed: yes",
+            "zap_active_scan_start": "Scan ID: active-1",
+            "zap_active_scan_status": "Completed: yes",
+            "zap_passive_scan_wait": "Completed: yes",
+            "zap_get_findings_summary": "Unused expert summary",
+            "zap_findings_snapshot": json.dumps({"version": 2, "baseUrl": "https://example.com/", "fingerprints": rows}),
+            "zap_generate_report": "/zap/wrk/report.html",
+        }
+
+        class FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def list_tools(self):
+                return list(responses)
+
+            def call_tool(self, name, _arguments):
+                return responses[name]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            baseline = root / "baseline.json"
+            baseline.write_text(json.dumps(self.node_snapshot(rows, version=1)), encoding="utf-8")
+            suppressions = root / "suppressions.json"
+            suppressions.write_text(json.dumps({
+                "contract_version": MODULE.CI_GATE_SUPPRESSIONS_CONTRACT_VERSION,
+                "suppressions": [{
+                    "id": "known-example",
+                    "fingerprint": "sha256:878375727eb6267528810b63b99da6e415416971f08f691236fdbf3316ed1477",
+                }],
+            }), encoding="utf-8")
+            output = root / "output"
+            with mock.patch.object(MODULE, "McpHttpClient", FakeClient), mock.patch("sys.stdout"):
+                result = MODULE.main([
+                    "--server-url", "http://example.com/mcp", "--api-key", "test-key",
+                    "--target-url", "https://example.com/", "--baseline-file", str(baseline),
+                    "--suppressions-file", str(suppressions), "--output-dir", str(output),
+                    "--run-active-scan", "false",
+                ])
+
+            self.assertEqual(result, 0)
+            snapshot = json.loads((output / "current-findings.json").read_text())
+            self.assertEqual(snapshot["recorded_example_count"], 2)
+            diff = json.loads((output / "findings-diff.json").read_text())
+            self.assertEqual(diff["identity_version"], 1)
+            self.assertEqual(diff["counts"], {"new": 0, "resolved": 0, "unchanged": 1})
+            self.assertEqual(diff["suppressions"]["suppressed_baseline_findings"], 1)
+            self.assertEqual(diff["suppressions"]["suppressed_current_findings"], 1)
 
     def test_load_suppressions_contract_tracks_active_and_expired_rules(self):
         with tempfile.TemporaryDirectory() as tmpdir:

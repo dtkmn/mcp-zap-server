@@ -10,6 +10,11 @@ the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-
 is the source for publication status. The unknown/disabled-tool response fix
 applies to `v0.11.1` and later, not `v0.11.0`.
 
+Set `zap.image.digest` to `sha256:` followed by 64 lowercase hexadecimal
+characters to use `repository@digest` instead of `zap.image.tag`. Leave it empty
+to use the tag. A digest pins the image; startup installation and persisted ZAP
+state can still change installed add-ons.
+
 ## Architecture
 
 This chart deploys two main components in **separate pods**:
@@ -133,9 +138,10 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `mcp.zapClient.apiKey` | ZAP API key override used by MCP when not using `mcp.zapClient.existingSecret` | `""` |
 | `zap.replicaCount` | Number of ZAP replicas | `1` |
 | `zap.image.tag` | ZAP image tag | `2.17.0` |
+| `zap.image.digest` | Optional `sha256:` image digest; overrides `zap.image.tag` | `""` |
 | `zap.config.apiKey` | ZAP API key | `""` |
 | `zap.config.existingSecret.name` | Existing Secret for the ZAP API key | `""` |
-| `zap.config.api.allowedAddrRegex` | ZAP API source allowlist regex | loopback + RFC1918 |
+| `zap.config.api.allowedAddrRegex` | ZAP API source and Host allowlist regex; custom values must allow both | loopback + RFC1918 + `zap` + chart ZAP service hostname |
 | `zap.config.addons` | ZAP addons installed at startup | `["spiderAjax", "graphql", "soap", "automation"]` |
 | `zap.persistence.enabled` | Enable persistent storage for ZAP | `true` |
 | `zap.persistence.size` | Size of ZAP persistent volume | `10Gi` |

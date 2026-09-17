@@ -36,9 +36,9 @@ spec:
       - name: zap
         securityContext:
           {{- toYaml .Values.securityContext | nindent 12 }}
-        image: "{{ .Values.zap.image.repository }}:{{ .Values.zap.image.tag }}"
+        image: {{ include "mcp-zap-server.zap.image" . | quote }}
         imagePullPolicy: {{ .Values.zap.image.pullPolicy }}
-        {{- $defaultAllowedAddrRegex := printf "^(localhost|127\\.0\\.0\\.1|::1|10\\..*|192\\.168\\..*|172\\.(1[6-9]|2[0-9]|3[0-1])\\..*|%s)$" (regexQuoteMeta (printf "%s-zap" (include "mcp-zap-server.fullname" .))) }}
+        {{- $defaultAllowedAddrRegex := printf "^(zap|localhost|127\\.0\\.0\\.1|::1|10\\..*|192\\.168\\..*|172\\.(1[6-9]|2[0-9]|3[0-1])\\..*|%s)$" (regexQuoteMeta (printf "%s-zap" (include "mcp-zap-server.fullname" .))) }}
         {{- $zapArgs := list "zap.sh" "-daemon" "-host" "0.0.0.0" "-port" (printf "%v" .Values.zap.service.targetPort) "-config" "api.key=${ZAP_API_KEY}" "-config" "api.disablekey=false" "-config" (printf "api.addrs.addr.name=%s" (default $defaultAllowedAddrRegex .Values.zap.config.api.allowedAddrRegex)) "-config" "api.addrs.addr.regex=true" }}
         {{- range .Values.zap.config.addons }}
         {{- $zapArgs = append $zapArgs "-addoninstall" }}

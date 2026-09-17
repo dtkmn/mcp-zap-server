@@ -17,8 +17,10 @@ team process: seed mode, artifact review, baseline acceptance, and enforcement.
 - Copyable workflow: `examples/github-actions/zap-security-gate.yml`
 - Validation workflow: `.github/workflows/zap-security-gate-juice-shop.yml`
 - Optional webhook callback action: `.github/actions/zap-webhook-callback`
-- Artifact contracts: `ci_gate_result/v1`, `ci_gate_findings_snapshot/v1`,
-  `ci_gate_findings_diff/v1`, and `ci_gate_artifact_manifest/v1`
+- Artifact contracts: `ci_gate_result/v1`, `ci_gate_findings_snapshot/v2`,
+  `ci_gate_findings_diff/v2`, and `ci_gate_artifact_manifest/v1`
+- Legacy snapshot v1 remains accepted and emitted for old server exports.
+  Mixed-version diffs use URL identity; see [CI Gate Contracts](../../scanning/CI_GATE_CONTRACTS.md).
 
 ## Preflight
 

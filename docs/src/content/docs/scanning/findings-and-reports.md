@@ -67,6 +67,14 @@ Choose raw instances when you need:
 - attack samples
 - message IDs
 
+Raw records retain ZAP's `nodeName`, HTTP `method`, and alert `tags` when
+available. `nodeName` identifies a full structural location, including its
+origin and path; it is not just the final path segment.
+
+The `SYSTEMIC` tag marks findings that are typically site-wide. Their counts
+describe recorded examples, not the total number of affected endpoints. ZAP
+may limit additional examples; the tag alone does not prove a limit was reached.
+
 ## Snapshot And Diff
 
 Expert-only tools:
@@ -79,6 +87,22 @@ Use them when:
 - you want a stable baseline after a known-good scan
 - you need before/after comparison for CI or release gates
 - you want to focus on net-new findings instead of total backlog size
+
+New server snapshots use version 2. Comparisons prefer the full `nodeName`
+plus HTTP method, falling back to the raw URL when `nodeName` is unavailable.
+Rule, risk, confidence, and parameter differences still distinguish findings.
+This avoids treating changing parameter values as new locations when ZAP maps
+them to the same structural node. Keep the same ZAP context and site-structure
+configuration when comparing scans. See [ZAP's alert de-duplication guidance](https://www.zaproxy.org/blog/2025-09-30-alert-de-duplication/).
+
+Snapshots preserve individual example records; diffs count unique finding
+identities. Several exported records can therefore count as one finding.
+
+Version 1 baselines remain supported: comparisons use the previous URL-based
+algorithm and show an explicit legacy-comparison notice. Export a new baseline
+after review to use version 2 identities. Update the bundled CI gate alongside
+the server; it handles both old and new server snapshots. Older external
+snapshot readers may need an update before consuming version 2 exports.
 
 ## Report Artifacts
 

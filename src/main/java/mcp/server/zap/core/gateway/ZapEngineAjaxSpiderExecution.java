@@ -82,7 +82,7 @@ public class ZapEngineAjaxSpiderExecution implements EngineAjaxSpiderExecution {
             log.error("AJAX Spider addon is not available in this ZAP installation: {}", e.getMessage());
             throw new ZapApiException(
                     "AJAX Spider addon is not available. Please ensure ZAP is started with the AJAX Spider addon enabled. "
-                            + "For Docker, use: zaproxy/zap-stable with -addoninstall ajaxSpider", e);
+                            + "For Docker, use: zaproxy/zap-stable with -addoninstall spiderAjax", e);
         }
     }
 

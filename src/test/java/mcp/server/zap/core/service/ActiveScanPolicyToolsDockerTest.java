@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ClientApi;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,7 +19,7 @@ class ActiveScanPolicyToolsDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withExposedPorts(8090)
                     .withCommand(
                             "zap.sh",

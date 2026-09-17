@@ -54,6 +54,8 @@ The job retains its AJAX slot until stop is accepted or later status observation
 
 Managed AJAX starts and cancellation attempts share a lifecycle lock, including across PostgreSQL workers, because ZAP's stop API is global. Direct AJAX starts are rejected while a queued crawl owns the engine. Use the same job store for all replicas controlling one ZAP instance, and do not start unrelated AJAX crawls through ZAP's API/UI while this server owns it: synthetic AJAX IDs cannot fence those external callers.
 
+If an AJAX start succeeds after its queue dispatch times out, the queue records the accepted crawl before releasing the lifecycle lock and cleans it up through the same cancellation retry window. A failed cleanup keeps the crawl tracked and reserves its slot. Delayed cleanup callbacks must still match the job's current crawl and cannot stop a newer crawl after the original job has finished or been cancelled.
+
 The cancellation deadline bounds retry scheduling, separately from the connection and read timeouts above. An in-flight stop can outlast the cancellation retry window; its lifecycle lock is retained until the call returns, and a timed-out stop leaves cancellation unconfirmed. PostgreSQL deployments require migration V8, included in the application and Helm migration bundles.
 
 ## Retryable Errors

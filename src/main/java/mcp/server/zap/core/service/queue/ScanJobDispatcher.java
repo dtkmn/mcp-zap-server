@@ -30,21 +30,37 @@ public class ScanJobDispatcher implements AutoCloseable {
     private final ScanJobRuntimeExecutor runtimeExecutor;
     private final ExecutorService ioExecutor;
     private final Duration targetTimeout;
+    private final BiConsumer<String, String> ajaxCleanup;
 
     public ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor) {
         this(runtimeExecutor, ioExecutor, DEFAULT_TARGET_TIMEOUT);
     }
 
     ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor, Duration targetTimeout) {
+        this(runtimeExecutor, ioExecutor, targetTimeout, (jobId, scanId) -> {
+            throw new IllegalStateException("AJAX cleanup requires durable job ownership");
+        });
+    }
+
+    ScanJobDispatcher(ScanJobRuntimeExecutor runtimeExecutor, ExecutorService ioExecutor, Duration targetTimeout,
+                      BiConsumer<String, String> ajaxCleanup) {
         this.runtimeExecutor = runtimeExecutor;
         this.ioExecutor = ioExecutor;
         this.targetTimeout = requirePositiveTimeout(targetTimeout);
+        this.ajaxCleanup = Objects.requireNonNull(ajaxCleanup, "ajaxCleanup must not be null");
     }
 
     public static ScanJobDispatcher create(ScanJobRuntimeExecutor runtimeExecutor, boolean virtualThreadsEnabled) {
+        return create(runtimeExecutor, virtualThreadsEnabled, (jobId, scanId) -> {
+            throw new IllegalStateException("AJAX cleanup requires durable job ownership");
+        });
+    }
+
+    public static ScanJobDispatcher create(ScanJobRuntimeExecutor runtimeExecutor, boolean virtualThreadsEnabled,
+                                           BiConsumer<String, String> ajaxCleanup) {
         if (virtualThreadsEnabled) {
             log.info("Scan queue IO dispatcher initialized with virtual threads");
-            return new ScanJobDispatcher(runtimeExecutor, Executors.newVirtualThreadPerTaskExecutor());
+            return new ScanJobDispatcher(runtimeExecutor, Executors.newVirtualThreadPerTaskExecutor(), DEFAULT_TARGET_TIMEOUT, ajaxCleanup);
         }
 
         ExecutorService executor = Executors.newCachedThreadPool(task -> {
@@ -54,7 +70,7 @@ public class ScanJobDispatcher implements AutoCloseable {
             return t;
         });
         log.info("Scan queue IO dispatcher initialized with cached platform thread pool");
-        return new ScanJobDispatcher(runtimeExecutor, executor);
+        return new ScanJobDispatcher(runtimeExecutor, executor, DEFAULT_TARGET_TIMEOUT, ajaxCleanup);
     }
 
     public ScanJobDispatchResult dispatch(ScanJobWorkPlan workPlan) {
@@ -85,7 +101,11 @@ public class ScanJobDispatcher implements AutoCloseable {
     public void executeStopRequests(List<ScanJobStopRequest> stopRequests) {
         for (ScanJobStopRequest stopRequest : stopRequests) {
             try {
-                executeStopRequest(stopRequest);
+                if (stopRequest.type() == ScanJobType.AJAX_SPIDER) {
+                    ajaxCleanup.accept(stopRequest.jobId(), stopRequest.scanId());
+                } else {
+                    executeStopRequest(stopRequest);
+                }
             } catch (Exception e) {
                 log.warn("Failed to stop scan {} for cancelled job cleanup: {}", stopRequest.scanId(), e.getMessage());
             }
@@ -283,6 +303,10 @@ public class ScanJobDispatcher implements AutoCloseable {
             return;
         }
         try {
+            if (target.type() == ScanJobType.AJAX_SPIDER) {
+                ajaxCleanup.accept(target.jobId(), scanId);
+                return;
+            }
             runtimeExecutor.stopScan(target.type(), scanId);
             log.warn(
                     "Stopped late scan start result for job {} after dispatch timeout",

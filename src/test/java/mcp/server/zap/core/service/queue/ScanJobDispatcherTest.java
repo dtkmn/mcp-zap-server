@@ -22,6 +22,8 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class ScanJobDispatcherTest {
@@ -215,6 +217,64 @@ class ScanJobDispatcherTest {
         assertEquals("Startup failed: dispatch timed out", startResult.error());
         assertTrue(stopCalled.await(1, TimeUnit.SECONDS));
         verify(runtimeExecutor).stopScan(ScanJobType.SPIDER_SCAN, "spider-late");
+    }
+
+    @Test
+    void timedOutAjaxStartHandsJobAndScanIdentityToDurableCleanup() throws Exception {
+        dispatcher.close();
+        CountDownLatch startEntered = new CountDownLatch(1);
+        CountDownLatch releaseStart = new CountDownLatch(1);
+        CountDownLatch cleanupCalled = new CountDownLatch(1);
+        AtomicReference<List<String>> cleanupIdentity = new AtomicReference<>();
+        dispatcher = new ScanJobDispatcher(runtimeExecutor, Executors.newSingleThreadExecutor(),
+                Duration.ofMillis(100), (jobId, scanId) -> {
+                    cleanupIdentity.set(List.of(jobId, scanId));
+                    cleanupCalled.countDown();
+                });
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-late-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claimToken());
+        when(runtimeExecutor.startScan(target)).thenAnswer(invocation -> {
+            startEntered.countDown();
+            boolean released = false;
+            while (!released) {
+                try {
+                    releaseStart.await();
+                    released = true;
+                } catch (InterruptedException ignored) {
+                    // The remote start can complete despite dispatch cancellation.
+                }
+            }
+            return "ajax-late";
+        });
+
+        try {
+            ScanJobDispatchResult result = dispatcher.dispatch(new ScanJobWorkPlan(List.of(), List.of(target)));
+
+            assertTrue(startEntered.await(1, TimeUnit.SECONDS));
+            assertEquals(List.of(ScanJobStartResult.failure(target, "Startup failed: dispatch timed out")),
+                    result.startResults());
+        } finally {
+            releaseStart.countDown();
+        }
+
+        assertTrue(cleanupCalled.await(1, TimeUnit.SECONDS));
+        assertEquals(List.of("ajax-late-job", "ajax-late"), cleanupIdentity.get());
+        verify(runtimeExecutor).startScan(target);
+        verifyNoMoreInteractions(runtimeExecutor);
+    }
+
+    @Test
+    void abandonedAjaxStartHandsJobAndScanIdentityToDurableCleanup() {
+        dispatcher.close();
+        AtomicReference<List<String>> cleanupIdentity = new AtomicReference<>();
+        dispatcher = new ScanJobDispatcher(runtimeExecutor, Executors.newSingleThreadExecutor(),
+                Duration.ofSeconds(1), (jobId, scanId) -> cleanupIdentity.set(List.of(jobId, scanId)));
+
+        dispatcher.executeStopRequests(List.of(
+                new ScanJobStopRequest(ScanJobType.AJAX_SPIDER, "ajax-abandoned", "ajax-abandoned-job")));
+
+        assertEquals(List.of("ajax-abandoned-job", "ajax-abandoned"), cleanupIdentity.get());
+        verifyNoInteractions(runtimeExecutor);
     }
 
     @Test

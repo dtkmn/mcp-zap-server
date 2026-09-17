@@ -16,11 +16,15 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -101,6 +105,71 @@ class AjaxSpiderServiceTest {
         assertThat(service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
                 .isEqualTo("ajax-spider:1");
         verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
+    }
+
+    @Test
+    void queuedStartRecordsAcceptanceBeforeReleasingLifecycleLock() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("accepted", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        AtomicBoolean lockHeld = new AtomicBoolean();
+        setLockedSnapshot(job, lockHeld);
+        when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenReturn("ajax-spider:accepted");
+        AtomicBoolean accepted = new AtomicBoolean();
+
+        String scanId = service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job), id -> {
+            assertThat(lockHeld).isTrue();
+            assertThat(id).isEqualTo("ajax-spider:accepted");
+            verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
+            accepted.set(true);
+        });
+
+        assertThat(scanId).isEqualTo("ajax-spider:accepted");
+        assertThat(accepted).isTrue();
+        assertThat(lockHeld).isFalse();
+        verify(ajaxSpiderExecution, never()).stopAjaxSpider();
+    }
+
+    @Test
+    void failedAcceptanceStopsUnderLifecycleLockAndPreservesBothFailures() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("acceptance-failed", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        AtomicBoolean lockHeld = new AtomicBoolean();
+        setLockedSnapshot(job, lockHeld);
+        when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenReturn("ajax-spider:accepted");
+        RuntimeException acceptanceFailure = new IllegalStateException("Unable to persist accepted start");
+        RuntimeException stopFailure = new IllegalStateException("ZAP is still initializing");
+        doAnswer(invocation -> {
+            assertThat(lockHeld).isTrue();
+            throw stopFailure;
+        }).when(ajaxSpiderExecution).stopAjaxSpider();
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob(
+                "http://target", job.getId(), ScanJobClaimToken.from(job), id -> { throw acceptanceFailure; }))
+                .isSameAs(acceptanceFailure);
+
+        assertThat(acceptanceFailure.getSuppressed()).containsExactly(stopFailure);
+        assertThat(lockHeld).isFalse();
+        verify(ajaxSpiderExecution).stopAjaxSpider();
+    }
+
+    @Test
+    void rejectedStartDoesNotRecordAcceptanceOrIssueGlobalStop() {
+        Instant now = Instant.now();
+        ScanJob job = ajaxJob("rejected", now);
+        job.claim("worker", now, now.plusSeconds(60));
+        setStoredJobs(job);
+        EngineBusyException rejection = new EngineBusyException("scan_in_progress", null);
+        when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenThrow(rejection);
+        AtomicBoolean accepted = new AtomicBoolean();
+
+        assertThatThrownBy(() -> service.startAjaxSpiderJob(
+                "http://target", job.getId(), ScanJobClaimToken.from(job), id -> accepted.set(true)))
+                .isSameAs(rejection);
+
+        assertThat(accepted).isFalse();
+        verify(ajaxSpiderExecution, never()).stopAjaxSpider();
     }
 
     @Test
@@ -197,6 +266,20 @@ class AjaxSpiderServiceTest {
     private void setStoredJobs(ScanJob... jobs) {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         store.upsertAll(List.of(jobs));
+        service.setScanJobStore(store);
+    }
+
+    private void setLockedSnapshot(ScanJob job, AtomicBoolean lockHeld) {
+        ScanJobStore store = mock(ScanJobStore.class);
+        when(store.tryWithAjaxLifecycleLock(any())).thenAnswer(invocation -> {
+            Function<List<ScanJob>, String> action = invocation.getArgument(0);
+            lockHeld.set(true);
+            try {
+                return Optional.of(action.apply(List.of(job)));
+            } finally {
+                lockHeld.set(false);
+            }
+        });
         service.setScanJobStore(store);
     }
 

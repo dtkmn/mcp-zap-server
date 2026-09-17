@@ -23,6 +23,7 @@ import mcp.server.zap.core.service.queue.ScanJobResponseFormatter;
 import mcp.server.zap.core.service.queue.ScanJobRetryPolicy;
 import mcp.server.zap.core.service.queue.ScanJobRuntimeExecutor;
 import mcp.server.zap.core.service.queue.ScanJobStopRequest;
+import mcp.server.zap.core.service.queue.ScanJobStartTarget;
 import mcp.server.zap.core.service.queue.ScanJobWorkPlan;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
@@ -414,9 +415,10 @@ public class ScanJobQueueService {
         ScanJobRuntimeExecutor runtimeExecutor = new ScanJobRuntimeExecutor(
                 activeScanService,
                 spiderScanService,
-                ajaxSpiderService
+                ajaxSpiderService,
+                this::recordAcceptedAjaxStart
         );
-        this.dispatcher = ScanJobDispatcher.create(runtimeExecutor, virtualThreadsEnabled);
+        this.dispatcher = ScanJobDispatcher.create(runtimeExecutor, virtualThreadsEnabled, this::requestAjaxCleanup);
         this.workerNodeId = sanitizeWorkerNodeId(this.queueLeadershipCoordinator.nodeId());
         this.claimManager = new ScanJobClaimManager(this.scanJobStore, this.workerNodeId, ScanJobClaimMetrics.noop());
         this.resultApplier = new ScanJobResultApplier(
@@ -721,6 +723,59 @@ public class ScanJobQueueService {
             throw applyOutcome.persistenceFailure();
         }
         applyCommittedStoredJobs(scanJobStore.list());
+    }
+
+    private void recordAcceptedAjaxStart(ScanJobStartTarget target, String scanId) {
+        // AjaxSpiderService still holds the lifecycle gate here. Publish ownership
+        // before a direct or queued start can get past that gate on any worker.
+        Instant now = Instant.now();
+        List<ScanJob> committed = updateQueueState(state -> {
+            ScanJob job = state.jobs().get(target.jobId());
+            if (job == null || job.getType() != ScanJobType.AJAX_SPIDER) {
+                throw new IllegalStateException("Accepted AJAX start has no durable job: " + target.jobId());
+            }
+            if (job.getStatus() == ScanJobStatus.RUNNING && scanId.equals(job.getZapScanId())) {
+                return state;
+            }
+            boolean stillClaimed = job.getStatus() == ScanJobStatus.QUEUED
+                    && target.claimToken().matches(job) && job.hasLiveClaim(now);
+            if (stillClaimed) {
+                job.incrementAttempts();
+            }
+            job.markRunning(scanId);
+            if (!stillClaimed) {
+                job.clearClaim();
+                if (!job.isCancellationRequested()) {
+                    job.requestCancellation(now, now.plus(ajaxCancelMaxWait));
+                }
+            }
+            state.queuedJobIds().remove(job.getId());
+            return state;
+        });
+        boolean saved = committed.stream().anyMatch(job -> target.jobId().equals(job.getId())
+                && scanId.equals(job.getZapScanId()));
+        if (!saved) {
+            throw new IllegalStateException("Failed to persist accepted AJAX start: " + target.jobId());
+        }
+        applyCommittedStoredJobs(committed);
+    }
+
+    private void requestAjaxCleanup(String jobId, String scanId) {
+        if (!hasText(jobId) || !hasText(scanId)) {
+            throw new IllegalArgumentException("AJAX cleanup requires its job and scan ID");
+        }
+        Instant now = Instant.now();
+        List<ScanJob> committed = updateQueueState(state -> {
+            ScanJob job = state.jobs().get(jobId);
+            if (job != null && job.getType() == ScanJobType.AJAX_SPIDER
+                    && !job.getStatus().isTerminal() && scanId.equals(job.getZapScanId())
+                    && !job.isCancellationRequested()) {
+                job.requestCancellation(now, now.plus(ajaxCancelMaxWait));
+            }
+            return state;
+        });
+        applyCommittedStoredJobs(committed);
+        processAjaxCancellations(Instant.now());
     }
 
     private void processAjaxCancellations(Instant now) {

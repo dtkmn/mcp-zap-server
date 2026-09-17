@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpServer;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.exception.ZapApiException;
+import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
@@ -13,6 +14,7 @@ import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
+import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +37,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -47,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -475,7 +481,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void queuedAjaxSpiderUsesSharedJobLifecycle() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1");
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String response = service.queueAjaxSpiderScan("http://example.com/spa", "ajax-req-1");
@@ -492,14 +498,14 @@ public class ScanJobQueueServiceTest {
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
-        verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/spa"), anyString(), any());
+        verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/spa"), anyString(), any(), any());
         verify(ajaxSpiderService, times(2)).isAjaxSpiderRunning();
     }
 
     @Test
     void onlyOneAjaxSpiderJobStartsAtATimeEvenWhenSpiderCapacityAllowsMore() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(5);
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:1", "ajax-spider:2");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1", "ajax-spider:2");
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String firstJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-1", "ajax-1"));
@@ -507,7 +513,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(firstJobId).getStatus());
         assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(secondJobId).getStatus());
-        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(firstJobId).getStatus());
@@ -515,12 +521,12 @@ public class ScanJobQueueServiceTest {
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondJobId).getStatus());
-        verify(ajaxSpiderService, times(2)).startAjaxSpiderJob(anyString(), anyString(), any());
+        verify(ajaxSpiderService, times(2)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
     }
 
     @Test
     void cancelledAjaxSpiderRemainsCancelledWhenCrawlerStops() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1");
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true);
         String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa", "ajax-cancel"));
 
@@ -540,7 +546,7 @@ public class ScanJobQueueServiceTest {
     void failedAjaxStopRemainsPendingUntilRetrySucceedsWithoutConsumingStartupAttempts() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:cancel");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:cancel");
         doThrow(new ZapApiException("Internal Error", null)).doNothing()
                 .when(ajaxSpiderService).stopAjaxSpiderJob();
         try {
@@ -564,9 +570,168 @@ public class ScanJobQueueServiceTest {
             assertFalse(cancelled.isCancellationPending());
             assertEquals(1, cancelled.getAttempts());
             verify(ajaxSpiderService, times(2)).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
         } finally {
             cancellingService.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void lateAjaxStartWithFailedCleanupRetainsOwnershipUntilRetryBeforeNextCrawl() throws Exception {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        EngineAjaxSpiderExecution engine = mock(EngineAjaxSpiderExecution.class);
+        AjaxSpiderService ajax = new AjaxSpiderService(engine, urlValidationService);
+        ajax.setScanJobStore(store);
+        CountDownLatch startEntered = new CountDownLatch(1);
+        CountDownLatch releaseLateStart = new CountDownLatch(1);
+        AtomicReference<Thread> lateStartThread = new AtomicReference<>();
+        AtomicReference<String> currentCrawl = new AtomicReference<>();
+        AtomicReference<String> lastStoppedCrawl = new AtomicReference<>();
+        AtomicInteger startCalls = new AtomicInteger();
+        AtomicInteger stopCalls = new AtomicInteger();
+
+        when(engine.startAjaxSpider(any())).thenAnswer(invocation -> {
+            String scanId = startCalls.incrementAndGet() == 1 ? "ajax-spider:late" : "ajax-spider:newer";
+            if (!currentCrawl.compareAndSet(null, scanId)) {
+                throw new EngineBusyException("Previous AJAX crawl is still running", null);
+            }
+            if ("ajax-spider:late".equals(scanId)) {
+                lateStartThread.set(Thread.currentThread());
+                startEntered.countDown();
+                try {
+                    assertTrue(releaseLateStart.await(20, TimeUnit.SECONDS));
+                } catch (InterruptedException ignored) {
+                    // ZAP already accepted the start; interrupting the caller cannot undo it.
+                    assertTrue(releaseLateStart.await(5, TimeUnit.SECONDS));
+                }
+            }
+            return scanId;
+        });
+        doAnswer(invocation -> {
+            if (stopCalls.incrementAndGet() == 1) {
+                throw new ZapApiException("ZAP rejected cleanup while initializing", null);
+            }
+            lastStoppedCrawl.set(currentCrawl.getAndSet(null));
+            return null;
+        }).when(engine).stopAjaxSpider();
+        when(engine.readAjaxSpiderStatus()).thenAnswer(invocation ->
+                new EngineAjaxSpiderExecution.AjaxSpiderStatus(
+                        currentCrawl.get() == null ? "stopped" : "running", "0", currentCrawl.get() != null));
+
+        // One startup attempt prevents a fresh launch retry from hiding lost cleanup ownership.
+        // Per-task virtual threads let the test join the complete late-result cleanup callback.
+        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajax,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<String> submission = caller.submit(() -> queue.queueAjaxSpiderScan("http://example.com/late", null));
+            assertTrue(startEntered.await(3, TimeUnit.SECONDS));
+            String jobId = extractJobId(submission.get(15, TimeUnit.SECONDS));
+            assertEquals(1L, releaseLateStart.getCount(), "The queue must return before ZAP's delayed start response");
+
+            releaseLateStart.countDown();
+            assertTrue(lateStartThread.get().join(Duration.ofSeconds(5)), "Late cleanup must finish before inspecting state");
+            assertEquals(1, stopCalls.get());
+            assertEquals("ajax-spider:late", currentCrawl.get());
+
+            ScanJob pending = store.load(jobId).orElseThrow();
+            assertFalse(pending.getStatus().isTerminal(),
+                    "A late AJAX crawl whose cleanup failed must remain tracked; actual status: " + pending.getStatus());
+            assertEquals("ajax-spider:late", pending.getZapScanId());
+            assertTrue(pending.isCancellationPending(), "Failed late cleanup must enter the cancellation retry path");
+            assertThrows(EngineBusyException.class, () -> ajax.startAjaxSpider("http://example.com/direct"));
+            assertEquals(1, startCalls.get(), "Pending cleanup must reserve AJAX ownership before contacting ZAP");
+
+            // Submitting another job dispatches the next cleanup retry before its launch.
+            String newerId = extractJobId(queue.queueAjaxSpiderScan("http://example.com/newer", null));
+            assertEquals(ScanJobStatus.CANCELLED, store.load(jobId).orElseThrow().getStatus());
+            assertEquals(ScanJobStatus.RUNNING, store.load(newerId).orElseThrow().getStatus());
+            assertEquals(2, stopCalls.get());
+            assertEquals(2, startCalls.get());
+            assertEquals("ajax-spider:late", lastStoppedCrawl.get(), "Cleanup must stop the original crawl");
+            assertEquals("ajax-spider:newer", currentCrawl.get());
+
+            queue.processQueueOnceForTesting();
+            assertEquals(2, stopCalls.get(), "Old cleanup must not issue another global stop after the newer crawl starts");
+            assertEquals("ajax-spider:newer", currentCrawl.get());
+            assertEquals(ScanJobStatus.RUNNING, store.load(newerId).orElseThrow().getStatus());
+        } finally {
+            releaseLateStart.countDown();
+            queue.shutdownExecutor();
+            caller.shutdownNow();
+        }
+    }
+
+    @Test
+    void delayedAjaxCleanupCannotStopNewerCrawlAfterOriginalCancellation() throws Exception {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        EngineAjaxSpiderExecution engine = mock(EngineAjaxSpiderExecution.class);
+        CountDownLatch accepted = new CountDownLatch(1);
+        CountDownLatch releaseReturn = new CountDownLatch(1);
+        AtomicReference<Thread> delayedThread = new AtomicReference<>();
+        AtomicReference<String> currentCrawl = new AtomicReference<>();
+        AtomicInteger starts = new AtomicInteger();
+        AtomicInteger stops = new AtomicInteger();
+        when(engine.startAjaxSpider(any())).thenAnswer(invocation -> {
+            String scanId = starts.incrementAndGet() == 1 ? "ajax-spider:original" : "ajax-spider:newer";
+            assertTrue(currentCrawl.compareAndSet(null, scanId));
+            return scanId;
+        });
+        doAnswer(invocation -> {
+            stops.incrementAndGet();
+            currentCrawl.set(null);
+            return null;
+        }).when(engine).stopAjaxSpider();
+        when(engine.readAjaxSpiderStatus()).thenAnswer(invocation ->
+                new EngineAjaxSpiderExecution.AjaxSpiderStatus("running", "0", currentCrawl.get() != null));
+        AjaxSpiderService ajax = new AjaxSpiderService(engine, urlValidationService) {
+            @Override
+            public String startAjaxSpiderJob(String url, String jobId, ScanJobClaimToken token, Consumer<String> onAccepted) {
+                String scanId = super.startAjaxSpiderJob(url, jobId, token, onAccepted);
+                if ("ajax-spider:original".equals(scanId)) {
+                    delayedThread.set(Thread.currentThread());
+                    accepted.countDown();
+                    try {
+                        assertTrue(releaseReturn.await(20, TimeUnit.SECONDS));
+                    } catch (InterruptedException ignored) {
+                        assertTrue(assertDoesNotThrow(() -> releaseReturn.await(5, TimeUnit.SECONDS)));
+                    }
+                }
+                return scanId;
+            }
+        };
+        ajax.setScanJobStore(store);
+        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajax,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store);
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        try {
+            Future<String> submission = caller.submit(() -> queue.queueAjaxSpiderScan("http://example.com/original", null));
+            assertTrue(accepted.await(3, TimeUnit.SECONDS));
+            String originalId = extractJobId(submission.get(15, TimeUnit.SECONDS));
+            assertEquals("ajax-spider:original", store.load(originalId).orElseThrow().getZapScanId());
+
+            queue.cancelScanJob(originalId);
+            String newerId = extractJobId(queue.queueAjaxSpiderScan("http://example.com/newer", null));
+            assertEquals(ScanJobStatus.CANCELLED, store.load(originalId).orElseThrow().getStatus());
+            assertEquals(ScanJobStatus.RUNNING, store.load(newerId).orElseThrow().getStatus());
+            assertEquals(1, stops.get());
+
+            releaseReturn.countDown();
+            assertTrue(delayedThread.get().join(Duration.ofSeconds(5)));
+            queue.processQueueOnceForTesting();
+
+            assertEquals(1, stops.get(), "A stale cleanup callback must not send a global stop for a terminal job");
+            assertEquals("ajax-spider:newer", currentCrawl.get());
+            assertEquals(ScanJobStatus.RUNNING, store.load(newerId).orElseThrow().getStatus());
+            assertEquals(1, store.load(originalId).orElseThrow().getAttempts());
+        } finally {
+            releaseReturn.countDown();
+            queue.shutdownExecutor();
+            caller.shutdownNow();
         }
     }
 
@@ -633,7 +798,7 @@ public class ScanJobQueueServiceTest {
     void ajaxCancellationUsesBackoffAndRepeatedRequestsPreserveOriginalDeadline() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 10_000, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:backoff");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:backoff");
         doThrow(new ZapApiException("Stop request failed", null)).when(ajaxSpiderService).stopAjaxSpiderJob();
         try {
             String jobId = extractJobId(cancellingService.queueAjaxSpiderScan("http://example.com/spa", null));
@@ -685,7 +850,7 @@ public class ScanJobQueueServiceTest {
             assertEquals(now.plusSeconds(60), cancelled.getCancelDeadlineAt());
             assertEquals(1, cancelled.getAttempts());
             verify(ajaxSpiderService).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
         } finally {
             restored.shutdownExecutor();
         }
@@ -714,7 +879,7 @@ public class ScanJobQueueServiceTest {
             assertEquals(1, unconfirmed.getAttempts());
             assertEquals(ScanJobStatus.QUEUED, store.load(next.getId()).orElseThrow().getStatus());
             verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
 
             doThrow(new ZapApiException("Stop request failed again", null))
                     .when(ajaxSpiderService).stopAjaxSpiderJob();
@@ -737,7 +902,7 @@ public class ScanJobQueueServiceTest {
     void statusResultDispatchedBeforeCancellationCannotCompletePendingAjaxJob() throws Exception {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 60_000, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:stale-status");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:stale-status");
         CountDownLatch pollEntered = new CountDownLatch(1);
         CountDownLatch releasePoll = new CountDownLatch(1);
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenAnswer(invocation -> {
@@ -775,7 +940,7 @@ public class ScanJobQueueServiceTest {
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
         CountDownLatch startEntered = new CountDownLatch(1);
         CountDownLatch releaseStart = new CountDownLatch(1);
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenAnswer(invocation -> {
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
             startEntered.countDown();
             assertTrue(releaseStart.await(5, TimeUnit.SECONDS));
             return "ajax-spider:delayed-start";
@@ -813,7 +978,7 @@ public class ScanJobQueueServiceTest {
 
             assertEquals(ScanJobStatus.CANCELLED, store.load(jobId).orElseThrow().getStatus());
             verify(ajaxSpiderService, times(1)).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
         } finally {
             releaseStart.countDown();
             executor.shutdownNow();
@@ -825,7 +990,7 @@ public class ScanJobQueueServiceTest {
     void newerAjaxJobStartsOnlyAfterPendingStopIsAccepted() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-spider:first", "ajax-spider:next");
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:first", "ajax-spider:next");
         doThrow(new ZapApiException("First stop failed", null))
                 .doThrow(new ZapApiException("Second stop failed", null)).doNothing()
                 .when(ajaxSpiderService).stopAjaxSpiderJob();
@@ -837,16 +1002,16 @@ public class ScanJobQueueServiceTest {
             assertEquals(ScanJobStatus.RUNNING, store.load(firstId).orElseThrow().getStatus());
             assertTrue(store.load(firstId).orElseThrow().isCancellationPending());
             assertEquals(ScanJobStatus.QUEUED, store.load(nextId).orElseThrow().getStatus());
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
 
             cancellingService.processQueueOnceForTesting();
 
             assertEquals(ScanJobStatus.CANCELLED, store.load(firstId).orElseThrow().getStatus());
             assertEquals(ScanJobStatus.RUNNING, store.load(nextId).orElseThrow().getStatus());
             var ordered = inOrder(ajaxSpiderService);
-            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/first"), anyString(), any());
+            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/first"), anyString(), any(), any());
             ordered.verify(ajaxSpiderService, times(3)).stopAjaxSpiderJob();
-            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/next"), anyString(), any());
+            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/next"), anyString(), any(), any());
         } finally {
             cancellingService.shutdownExecutor();
         }
@@ -937,7 +1102,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void waitingJobCanBeCancelledBeforeEngineStarts() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any()))
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any()))
                 .thenThrow(new EngineBusyException("Engine is busy", null));
         String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com", null));
 
@@ -946,7 +1111,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
         assertEquals(0, service.getJobForTesting(jobId).getAttempts());
-        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
         verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
     }
 
@@ -967,10 +1132,10 @@ public class ScanJobQueueServiceTest {
             assertEquals(ScanJobStatus.FAILED, expired.getStatus());
             assertEquals(0, expired.getAttempts());
             assertTrue(expired.getLastError().contains("Engine busy wait timed out after 180000 ms"));
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
 
             when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
-            when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any())).thenReturn("ajax-after-manual-retry");
+            when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-after-manual-retry");
             restored.retryScanJob("busy-expired");
 
             assertEquals(ScanJobStatus.RUNNING, store.load("busy-expired").orElseThrow().getStatus());
@@ -996,7 +1161,7 @@ public class ScanJobQueueServiceTest {
             restored.processQueueOnceForTesting();
             assertEquals(ScanJobStatus.QUEUED, store.load("busy-in-flight").orElseThrow().getStatus());
             assertEquals("another-worker", store.load("busy-in-flight").orElseThrow().getClaimOwnerId());
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
         } finally {
             restored.shutdownExecutor();
         }
@@ -1004,7 +1169,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void configuredZeroEngineBusyWaitFailsImmediatelyWithoutConsumingAttempts() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any()))
+        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any()))
                 .thenThrow(new EngineBusyException("Engine is busy", null));
         new ApplicationContextRunner()
                 .withBean(ActiveScanService.class, () -> activeScanService)

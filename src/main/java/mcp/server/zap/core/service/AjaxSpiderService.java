@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Service for managing ZAP AJAX Spider Scans.
@@ -94,16 +95,27 @@ public class AjaxSpiderService {
 
     /** Launch a queued crawl only while its original durable claim still owns the job. */
     public String startAjaxSpiderJob(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
+        return startAjaxSpiderJob(targetUrl, jobId, claimToken, scanId -> { });
+    }
+
+    /** Record accepted queued starts before another managed AJAX lifecycle operation can begin. */
+    public String startAjaxSpiderJob(String targetUrl, String jobId, ScanJobClaimToken claimToken,
+                                    Consumer<String> onAccepted) {
         if (jobId == null || jobId.isBlank() || claimToken == null) {
             throw new IllegalArgumentException("A queued AJAX Spider start requires its job and claim");
         }
         if (scanJobStore == null) {
             throw new IllegalStateException("A queued AJAX Spider start requires the scan job store");
         }
-        return startAjaxSpider(targetUrl, jobId, claimToken);
+        return startAjaxSpider(targetUrl, jobId, claimToken, Objects.requireNonNull(onAccepted));
     }
 
     private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
+        return startAjaxSpider(targetUrl, jobId, claimToken, scanId -> { });
+    }
+
+    private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken,
+                                   Consumer<String> onAccepted) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
@@ -132,7 +144,22 @@ public class AjaxSpiderService {
             if (occupied) {
                 throw new EngineBusyException("AJAX Spider has an active job or pending cancellation", null);
             }
-            return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+            String scanId = ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+            try {
+                onAccepted.accept(scanId);
+            } catch (RuntimeException | Error failure) {
+                // The crawl started, but its owner could not record acceptance. Stop while the
+                // lifecycle lock still guarantees that this cannot target a newer managed crawl.
+                try {
+                    ajaxSpiderExecution.stopAjaxSpider();
+                } catch (RuntimeException | Error stopFailure) {
+                    if (stopFailure != failure) {
+                        failure.addSuppressed(stopFailure);
+                    }
+                }
+                throw failure;
+            }
+            return scanId;
         }).orElseThrow(() -> new EngineBusyException("AJAX Spider lifecycle operation is already in progress", null));
     }
 

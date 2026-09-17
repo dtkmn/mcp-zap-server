@@ -1918,9 +1918,72 @@ public class ScanJobQueueServiceTest {
         String cancelMessage = service.cancelScanJob(jobId);
         ScanJob job = service.getJobForTesting(jobId);
 
-        assertTrue(cancelMessage.contains("RUNNING"));
+        assertTrue(cancelMessage.contains("Status: CANCELLED"));
         assertEquals(ScanJobStatus.CANCELLED, job.getStatus());
         verify(activeScanService).stopActiveScanJob("A-stop");
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = "AJAX_SPIDER", mode = EnumSource.Mode.EXCLUDE)
+    void nativeCancellationPersistsIntentAndRetriesOnlyTheRequestedScan(ScanJobType type) {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob running = new ScanJob("cancel-native", type,
+                Map.of("targetUrl", "http://example.com/native"), Instant.now(), 3);
+        running.incrementAttempts();
+        running.markRunning("scan-cancel");
+        ScanJob other = new ScanJob("other-native", type,
+                Map.of("targetUrl", "http://example.com/other"), Instant.now(), 3);
+        other.markRunning("scan-other");
+        store.upsertAll(List.of(running, other));
+        AtomicInteger stops = new AtomicInteger();
+        if (type.isActiveFamily()) {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(activeScanService).stopActiveScanJob("scan-cancel");
+        } else {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(spiderScanService).stopSpiderScanJob("scan-cancel");
+        }
+        ScanJobQueueService queue = newNativeCleanupService(store, false);
+        try {
+            String response = assertDoesNotThrow(() -> queue.cancelScanJob(running.getId()));
+            ScanJob pending = store.load(running.getId()).orElseThrow();
+            assertTrue(response.contains("cancellation pending"));
+            assertEquals(ScanJobStatus.RUNNING, pending.getStatus());
+            assertTrue(pending.isCancellationPending());
+            assertFalse(pending.isCleanupJob());
+            assertEquals(1, pending.getCancelAttemptCount());
+            Instant requestedAt = pending.getCancelRequestedAt();
+            Instant deadline = pending.getCancelDeadlineAt();
+            Instant retryAt = pending.getCancelNextAttemptAt();
+            assertTrue(retryAt.isAfter(requestedAt));
+
+            queue.cancelScanJob(running.getId());
+            ScanJob unchanged = store.load(running.getId()).orElseThrow();
+            assertEquals(requestedAt, unchanged.getCancelRequestedAt());
+            assertEquals(deadline, unchanged.getCancelDeadlineAt());
+            assertEquals(retryAt, unchanged.getCancelNextAttemptAt());
+            assertEquals(1, stops.get(), "Repeated cancellation must preserve the saved backoff");
+            assertEquals(2, store.list().size(), "Ordinary cancellation must not create a cleanup job");
+
+            unchanged.deferCancellationAttempt(Instant.now().minusSeconds(1));
+            queue.processQueueOnceForTesting();
+            ScanJob cancelled = store.load(running.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.CANCELLED, cancelled.getStatus());
+            assertFalse(cancelled.isCancellationPending());
+            assertEquals("scan-cancel", cancelled.getZapScanId());
+            assertEquals(1, cancelled.getAttempts());
+            assertEquals(2, stops.get());
+            assertEquals(ScanJobStatus.RUNNING, store.load(other.getId()).orElseThrow().getStatus());
+            verify(activeScanService, never()).stopActiveScanJob("scan-other");
+            verify(spiderScanService, never()).stopSpiderScanJob("scan-other");
+            verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
+        } finally {
+            queue.shutdownExecutor();
+        }
     }
 
     @Test

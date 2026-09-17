@@ -48,17 +48,19 @@ Configure this environment variable alongside the existing retry controls in `.e
 
 ## Shared Cancellation and Cleanup Retry Window
 
-`ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS` (`zap.scan.queue.cancel-max-wait-ms`) sets one stop retry window for AJAX cancellation and abandoned active/traditional spider cleanup. It defaults to `30000` (30 seconds) and must be positive. Both paths use the scan family's existing backoff without consuming startup attempts.
+`ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS` (`zap.scan.queue.cancel-max-wait-ms`) sets one stop retry window for cancellation of running queue jobs, AJAX cancellation during startup, and abandoned active/traditional spider cleanup. It defaults to `30000` (30 seconds) and must be positive. All paths use the scan family's existing backoff without consuming startup attempts.
 
 The former `ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS` environment variable and `zap.scan.queue.ajax-cancel-max-wait-ms` property remain fallback aliases for this shared setting. The new setting takes precedence. Configure it in `.env`/Docker Compose, deployment environment variables, or Helm's `mcp.env` list.
 
 The original deadline and retry schedule survive worker changes and PostgreSQL-backed restarts. Repeating cancellation while it is pending preserves the deadline. Once the window expires, automatic stop retries end and status reports that cancellation is unconfirmed and the scan may still be running. An explicit new cancellation request opens a new window. The job retains capacity until a stop succeeds or status observation confirms completion.
 
+Cancelling a running active scan or traditional spider, including authenticated scans, saves cancellation on the existing job before attempting to stop its ZAP scan ID. A failed stop remains pending and retries within this window; it does not create a cleanup record. Other scans can continue using the remaining capacity.
+
 ## AJAX Cancellation During Startup
 
 Cancelling an AJAX queue job records a durable cancellation request. If ZAP rejects the stop while its crawler initializes, the job shows `cancellation pending` and the queue retries using the spider family's backoff. Stop failures do not consume startup attempts, and a generic ZAP internal error is not interpreted as proof of initialization.
 
-The job retains its AJAX slot until stop is accepted or later status observation confirms the crawler is stopped. Cancelling a job whose start is already in flight also retains ownership. If startup never returns a scan ID, or persisted jobs disagree about who owns the crawler, the queue does not issue a global stop and cancellation remains unconfirmed. Ordinary queued jobs that have not started are cancelled immediately without calling ZAP. Active scans and the traditional spider keep their existing cancellation behavior.
+The job retains its AJAX slot until stop is accepted or later status observation confirms the crawler is stopped. Cancelling a job whose start is already in flight also retains ownership. If startup never returns a scan ID, or persisted jobs disagree about who owns the crawler, the queue does not issue a global stop and cancellation remains unconfirmed. Ordinary queued jobs that have not started are cancelled immediately without calling ZAP.
 
 Managed AJAX starts and cancellation attempts share a lifecycle lock, including across PostgreSQL workers, because ZAP's stop API is global. Direct AJAX starts are rejected while a queued crawl owns the engine. Use the same job store for all replicas controlling one ZAP instance, and do not start unrelated AJAX crawls through ZAP's API/UI while this server owns it: synthetic AJAX IDs cannot fence those external callers.
 

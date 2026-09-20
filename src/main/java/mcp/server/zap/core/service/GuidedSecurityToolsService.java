@@ -77,13 +77,13 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=browser for SPAs, login-heavy flows, or JavaScript-driven apps, and strategy=auto when you want the service to pick the default crawl engine. When authSessionId is supplied, guided crawl currently supports prepared form-login sessions on the HTTP spider path only."
+            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, strategy=browser for the existing AJAX Spider, or strategy=auto for the default crawl engine. Client Spider requires the Client Side Integration add-on and headless Firefox. When authSessionId is supplied, guided crawl currently supports prepared form-login sessions on the HTTP spider path only."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
-            @ToolParam(required = false, description = "Optional crawl strategy. Use auto to prefer the default guided engine, http for traditional pages and simple link discovery, or browser for SPAs, authenticated flows, and JavaScript-heavy navigation.") String strategy,
+            @ToolParam(required = false, description = "Optional crawl strategy: auto for the default engine, http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for AJAX Spider.") String strategy,
             @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
-            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided crawl currently accepts form-login sessions only and rejects browser strategy when auth is supplied.") String authSessionId
+            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided crawl currently accepts form-login sessions on the HTTP spider only; browser and client strategies reject authSessionId.") String authSessionId
     ) {
         return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
     }

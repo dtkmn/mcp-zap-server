@@ -12,13 +12,16 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
     private final ActiveScanService activeScanService;
     private final SpiderScanService spiderScanService;
     private final AjaxSpiderService ajaxSpiderService;
+    private final ClientSpiderService clientSpiderService;
 
     public ExpertDirectScanMcpToolsService(ActiveScanService activeScanService,
                                            SpiderScanService spiderScanService,
-                                           AjaxSpiderService ajaxSpiderService) {
+                                           AjaxSpiderService ajaxSpiderService,
+                                           ClientSpiderService clientSpiderService) {
         this.activeScanService = activeScanService;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
+        this.clientSpiderService = clientSpiderService;
     }
 
     @Tool(
@@ -144,6 +147,28 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP spider scan ID returned by zap_spider_start or zap_spider_as_user") String scanId
     ) {
         return spiderScanService.stopSpiderScan(scanId);
+    }
+
+    @Tool(name = "zap_client_spider_start", description = "Start a direct Client Spider crawl for a JavaScript-driven app. Requires ZAP's Client Side Integration add-on and a headless Firefox browser. Prepared authentication sessions are not supported by this tool.")
+    public String startClientSpider(
+            @ToolParam(description = "Target URL to crawl") String targetUrl,
+            @ToolParam(required = false, description = "Maximum crawl depth; 0 means unlimited. Omit to use the server's spider depth setting.") Integer maxDepth
+    ) {
+        return clientSpiderService.startClientSpider(targetUrl, maxDepth);
+    }
+
+    @Tool(name = "zap_client_spider_status", description = "Get Client Spider progress by ZAP scan ID. A stopped crawl does not prove successful coverage; wait for passive scanning before reviewing findings.")
+    public String getClientSpiderStatus(
+            @ToolParam(description = "ZAP scan ID returned by zap_client_spider_start") String scanId
+    ) {
+        return clientSpiderService.getClientSpiderStatus(scanId);
+    }
+
+    @Tool(name = "zap_client_spider_stop", description = "Stop a direct Client Spider crawl by its ZAP scan ID.")
+    public String stopClientSpider(
+            @ToolParam(description = "ZAP scan ID returned by zap_client_spider_start") String scanId
+    ) {
+        return clientSpiderService.stopClientSpider(scanId);
     }
 
     @Tool(

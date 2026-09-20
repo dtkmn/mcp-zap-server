@@ -127,6 +127,54 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     }
 
     @Override
+    public String startClientSpiderScan(ClientSpiderScanRequest request) {
+        try {
+            // Use one browser per crawl so ZAP's default cannot multiply the shared concurrency limit.
+            ApiResponse response = zap.clientSpider.scan(
+                    "firefox-headless", request.targetUrl(), null, null, null,
+                    String.valueOf(request.maxDepth()), null, "1", null);
+            String scanId = responseValue(response, "clientSpider.scan()");
+            if (!hasText(scanId)) {
+                throw new ZapApiException("Client Spider returned a blank scan ID",
+                        new IllegalStateException("Blank ZAP scan ID"));
+            }
+            log.info("Client Spider scan started with ID: {} for URL: {}", scanId, request.targetUrl());
+            return scanId.trim();
+        } catch (ClientApiException e) {
+            if ("scan_in_progress".equals(e.getCode())) {
+                throw new EngineBusyException("ZAP is busy with another Client Spider scan", e);
+            }
+            if ("no_implementor".equals(e.getCode())) {
+                throw new ZapApiException("Client Spider is unavailable. Install ZAP's Client Side Integration "
+                        + "add-on with -addoninstall client and restart ZAP.", e);
+            }
+            log.error("Error launching Client Spider for URL {}: {}", request.targetUrl(), e.getMessage(), e);
+            throw new ZapApiException("Error launching Client Spider for URL "
+                    + request.targetUrl() + ": " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public int readClientSpiderProgressPercent(String scanId) {
+        try {
+            return parseProgressPercent(zap.clientSpider.status(scanId), "clientSpider.status()", scanId);
+        } catch (ClientApiException e) {
+            log.error("Error retrieving Client Spider status for ID {}: {}", scanId, e.getMessage(), e);
+            throw new ZapApiException("Error retrieving Client Spider status for ID " + scanId, e);
+        }
+    }
+
+    @Override
+    public void stopClientSpiderScan(String scanId) {
+        try {
+            zap.clientSpider.stop(scanId);
+        } catch (ClientApiException e) {
+            log.error("Error stopping Client Spider scan {}: {}", scanId, e.getMessage(), e);
+            throw new ZapApiException("Error stopping Client Spider scan " + scanId, e);
+        }
+    }
+
+    @Override
     public String startActiveScan(ActiveScanRequest request) {
         try {
             configureActiveScan(request.maxDurationMinutes(), request.hostPerScan(), request.threadPerHost());

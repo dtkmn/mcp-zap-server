@@ -7,6 +7,7 @@ public final class ScanJobParameterNames {
     public static final String CONTEXT_ID = "contextId";
     public static final String USER_ID = "userId";
     public static final String MAX_CHILDREN = "maxChildren";
+    public static final String MAX_DEPTH = "maxDepth";
     public static final String SUBTREE_ONLY = "subtreeOnly";
     public static final String REPLAY_OF_JOB_ID = "replayOfJobId";
     public static final String IDEMPOTENCY_KEY = "idempotencyKey";

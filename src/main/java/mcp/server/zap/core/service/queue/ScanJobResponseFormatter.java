@@ -204,7 +204,8 @@ public class ScanJobResponseFormatter {
         if (isWaitingForEngine(job)) {
             return "QUEUED (waiting for engine)";
         }
-        if (job.getType() == ScanJobType.AJAX_SPIDER && job.getStatus() == ScanJobStatus.SUCCEEDED) {
+        if ((job.getType() == ScanJobType.AJAX_SPIDER || job.getType() == ScanJobType.CLIENT_SPIDER)
+                && job.getStatus() == ScanJobStatus.SUCCEEDED) {
             return "SUCCEEDED (ZAP reports stopped; crawl outcome unknown)";
         }
         return job.getStatus().name();

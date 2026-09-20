@@ -3,6 +3,7 @@ package mcp.server.zap.core.service.queue;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AjaxSpiderService;
+import mcp.server.zap.core.service.ClientSpiderService;
 import mcp.server.zap.core.service.SpiderScanService;
 
 import java.util.Map;
@@ -12,21 +13,24 @@ public class ScanJobRuntimeExecutor {
     private final ActiveScanService activeScanService;
     private final SpiderScanService spiderScanService;
     private final AjaxSpiderService ajaxSpiderService;
+    private final ClientSpiderService clientSpiderService;
     private final BiConsumer<ScanJobStartTarget, String> onAjaxStartAccepted;
 
     public ScanJobRuntimeExecutor(ActiveScanService activeScanService,
                                   SpiderScanService spiderScanService,
                                   AjaxSpiderService ajaxSpiderService) {
-        this(activeScanService, spiderScanService, ajaxSpiderService, null);
+        this(activeScanService, spiderScanService, ajaxSpiderService, null, null);
     }
 
     public ScanJobRuntimeExecutor(ActiveScanService activeScanService,
                                   SpiderScanService spiderScanService,
                                   AjaxSpiderService ajaxSpiderService,
+                                  ClientSpiderService clientSpiderService,
                                   BiConsumer<ScanJobStartTarget, String> onAjaxStartAccepted) {
         this.activeScanService = activeScanService;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
+        this.clientSpiderService = clientSpiderService;
         this.onAjaxStartAccepted = onAjaxStartAccepted;
     }
 
@@ -58,6 +62,11 @@ public class ScanJobRuntimeExecutor {
             case AJAX_SPIDER -> requireAjaxSpiderService().startAjaxSpiderJob(
                     parameters.get(ScanJobParameterNames.TARGET_URL)
             );
+            case CLIENT_SPIDER -> requireClientSpiderService().startClientSpiderJob(
+                    parameters.get(ScanJobParameterNames.TARGET_URL),
+                    parameters.containsKey(ScanJobParameterNames.MAX_DEPTH)
+                            ? Integer.valueOf(parameters.get(ScanJobParameterNames.MAX_DEPTH)) : null
+            );
         };
     }
 
@@ -78,6 +87,7 @@ public class ScanJobRuntimeExecutor {
         return switch (type) {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.getActiveScanProgressPercent(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.getSpiderScanProgressPercent(scanId);
+            case CLIENT_SPIDER -> requireClientSpiderService().getClientSpiderProgressPercent(scanId);
             // AJAX has no percentage: these values only signal the queue lifecycle.
             // A stopped crawler does not confirm a successful crawl.
             case AJAX_SPIDER -> requireAjaxSpiderService().isAjaxSpiderRunning() ? 0 : 100;
@@ -89,6 +99,7 @@ public class ScanJobRuntimeExecutor {
             case ACTIVE_SCAN, ACTIVE_SCAN_AS_USER -> activeScanService.stopActiveScanJob(scanId);
             case SPIDER_SCAN, SPIDER_SCAN_AS_USER -> spiderScanService.stopSpiderScanJob(scanId);
             case AJAX_SPIDER -> requireAjaxSpiderService().stopAjaxSpiderJob();
+            case CLIENT_SPIDER -> requireClientSpiderService().stopClientSpiderJob(scanId);
         }
     }
 
@@ -97,6 +108,13 @@ public class ScanJobRuntimeExecutor {
             throw new IllegalStateException("AJAX Spider service is not available in this runtime");
         }
         return ajaxSpiderService;
+    }
+
+    private ClientSpiderService requireClientSpiderService() {
+        if (clientSpiderService == null) {
+            throw new IllegalStateException("Client Spider service is not available in this runtime");
+        }
+        return clientSpiderService;
     }
 
     private String normalizeBlankToNull(String value) {

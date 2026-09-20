@@ -17,6 +17,8 @@ services:
       - api.addrs.addr.regex=true
       - -addoninstall
       - spiderAjax
+      - -addoninstall
+      - client
     ports:
       - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:8090:8090"
     environment:

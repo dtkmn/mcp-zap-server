@@ -114,13 +114,29 @@ class ScanHistoryLedgerServiceTest {
                 assertThat(service.listHistory("scan_job", "succeeded", null, 10))
                         .contains("Crawl Outcome: unknown (ZAP reports stopped)");
                 assertThat(handoff).contains("crawl outcome unknown (ZAP reports stopped)")
-                        .contains("AJAX crawl completion is unconfirmed")
+                        .contains("Browser crawl completion is unconfirmed")
                         .contains("Readiness: CAVEAT");
             } else {
                 assertThat(detail).contains("Status: cancelled");
                 assertThat(handoff).contains("Cancelled");
             }
         }
+    }
+
+    @Test
+    void clientHistoryPreservesNativeProgressWithoutClaimingSuccessfulCoverage() {
+        ScanJob job = new ScanJob("client-job", ScanJobType.CLIENT_SPIDER,
+                Map.of("targetUrl", "https://spa.example.com/client"), Instant.now(), 3, "client-a", null);
+        job.markRunning("7");
+        job.markSucceeded(100);
+        scanJobStore.upsertAll(List.of(job));
+        service.recordReportArtifact("/zap/wrk/client.html", "traditional-html-plus",
+                job.getParameters().get("targetUrl"), Map.of());
+
+        assertThat(service.getHistoryEntry("job:client-job"))
+                .contains("Backend Reference: 7", "lastKnownProgress: 100", "crawlOutcome: unknown (ZAP reports stopped)");
+        assertThat(service.exportCustomerHandoff("client-check", "/client", 10))
+                .contains("crawl outcome unknown (ZAP reports stopped)", "Browser crawl completion is unconfirmed", "Readiness: CAVEAT");
     }
 
     @Test

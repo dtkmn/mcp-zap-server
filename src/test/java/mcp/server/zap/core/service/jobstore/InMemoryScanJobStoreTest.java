@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class InMemoryScanJobStoreTest {
 
     @ParameterizedTest
-    @EnumSource(value = ScanJobType.class, names = {"ACTIVE_SCAN", "SPIDER_SCAN"})
+    @EnumSource(value = ScanJobType.class, names = {"ACTIVE_SCAN", "SPIDER_SCAN", "CLIENT_SPIDER"})
     void cleanupBlocksSourceRetryAndUsesCapacityWithoutBlockingOtherScanFamilies(ScanJobType type) {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         Instant now = Instant.parse("2026-05-06T00:00:00Z");

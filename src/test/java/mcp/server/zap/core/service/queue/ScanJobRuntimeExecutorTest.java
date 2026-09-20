@@ -3,6 +3,7 @@ package mcp.server.zap.core.service.queue;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AjaxSpiderService;
+import mcp.server.zap.core.service.ClientSpiderService;
 import mcp.server.zap.core.service.SpiderScanService;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +20,24 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ScanJobRuntimeExecutorTest {
+
+    @Test
+    void routesClientSpiderLifecycleUsingItsNativeScanId() {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", 4)).thenReturn("client-17");
+        when(clientSpiderService.getClientSpiderProgressPercent("client-17")).thenReturn(62);
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com", ScanJobParameterNames.MAX_DEPTH, "4"));
+        assertEquals("client-17", scanId);
+        assertEquals(62, executor.readProgress(ScanJobType.CLIENT_SPIDER, scanId));
+        executor.stopScan(ScanJobType.CLIENT_SPIDER, scanId);
+
+        verify(clientSpiderService).stopClientSpiderJob("client-17");
+        executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"));
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", null);
+    }
 
     @Test
     void routesActiveScanLifecycleAndNormalizesBlankPolicy() {
@@ -184,7 +203,7 @@ class ScanJobRuntimeExecutorTest {
         AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
         AtomicReference<ScanJobStartTarget> acceptedTarget = new AtomicReference<>();
         AtomicReference<String> acceptedScanId = new AtomicReference<>();
-        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService, (target, scanId) -> {
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService, null, (target, scanId) -> {
             acceptedTarget.set(target);
             acceptedScanId.set(scanId);
         });

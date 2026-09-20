@@ -59,6 +59,7 @@ class PostgresBackedScanJobQueueServiceTest {
     private ActiveScanService activeScanService;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;
+    private ClientSpiderService clientSpiderService;
     private UrlValidationService urlValidationService;
     private ScanLimitProperties scanLimitProperties;
 
@@ -76,6 +77,7 @@ class PostgresBackedScanJobQueueServiceTest {
         activeScanService = mock(ActiveScanService.class);
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
+        clientSpiderService = mock(ClientSpiderService.class);
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
 
@@ -471,7 +473,7 @@ class PostgresBackedScanJobQueueServiceTest {
 
     @ParameterizedTest
     @EnumSource(value = ScanJobType.class, names = {
-            "ACTIVE_SCAN", "ACTIVE_SCAN_AS_USER", "SPIDER_SCAN", "SPIDER_SCAN_AS_USER"
+            "ACTIVE_SCAN", "ACTIVE_SCAN_AS_USER", "SPIDER_SCAN", "SPIDER_SCAN_AS_USER", "CLIENT_SPIDER"
     })
     void nativeCleanupResumesAfterWorkerRestartWithoutStoppingTheSourcesNewerScan(ScanJobType type) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
@@ -491,6 +493,9 @@ class PostgresBackedScanJobQueueServiceTest {
         if (type.isActiveFamily()) {
             doThrow(new IllegalStateException("ZAP stop unavailable")).doNothing()
                     .when(activeScanService).stopActiveScanJob("old-scan");
+        } else if (type == ScanJobType.CLIENT_SPIDER) {
+            doThrow(new IllegalStateException("ZAP stop unavailable")).doNothing()
+                    .when(clientSpiderService).stopClientSpiderJob("old-scan");
         } else {
             doThrow(new IllegalStateException("ZAP stop unavailable")).doNothing()
                     .when(spiderScanService).stopSpiderScanJob("old-scan");
@@ -547,7 +552,7 @@ class PostgresBackedScanJobQueueServiceTest {
 
     private ScanJobQueueService newNativeCleanupService(String workerId) {
         ScanJobQueueService.RetryPolicy retryPolicy = new ScanJobQueueService.RetryPolicy(3, 60_000, 60_000, 1);
-        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties, retryPolicy, retryPolicy, false, newStore(),
                 new TestQueueLeadershipCoordinator(workerId, new SharedLeadershipState(workerId)));
     }
@@ -556,6 +561,11 @@ class PostgresBackedScanJobQueueServiceTest {
         if (type.isActiveFamily()) {
             verify(activeScanService, times(expectedAttempts)).stopActiveScanJob("old-scan");
             verify(activeScanService, never()).stopActiveScanJob("newer-scan");
+            verify(spiderScanService, never()).stopSpiderScanJob(anyString());
+        } else if (type == ScanJobType.CLIENT_SPIDER) {
+            verify(clientSpiderService, times(expectedAttempts)).stopClientSpiderJob("old-scan");
+            verify(clientSpiderService, never()).stopClientSpiderJob("newer-scan");
+            verify(activeScanService, never()).stopActiveScanJob(anyString());
             verify(spiderScanService, never()).stopSpiderScanJob(anyString());
         } else {
             verify(spiderScanService, times(expectedAttempts)).stopSpiderScanJob("old-scan");

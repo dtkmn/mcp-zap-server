@@ -29,6 +29,7 @@ class GuidedSecurityToolsServiceTest {
     private GuidedExecutionModeResolver executionModeResolver;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;
+    private ClientSpiderService clientSpiderService;
     private ActiveScanService activeScanService;
     private ScanJobQueueService scanJobQueueService;
     private GuidedAuthSessionService guidedAuthSessionService;
@@ -45,6 +46,7 @@ class GuidedSecurityToolsServiceTest {
         executionModeResolver = mock(GuidedExecutionModeResolver.class);
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
+        clientSpiderService = mock(ClientSpiderService.class);
         activeScanService = mock(ActiveScanService.class);
         scanJobQueueService = mock(ScanJobQueueService.class);
         guidedAuthSessionService = mock(GuidedAuthSessionService.class);
@@ -57,6 +59,7 @@ class GuidedSecurityToolsServiceTest {
                 executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
+                clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
                 guidedAuthSessionService,
@@ -126,6 +129,63 @@ class GuidedSecurityToolsServiceTest {
             .contains("Guided crawl started.")
             .contains("Strategy: browser")
             .contains("Auto strategy fell back");
+    }
+
+    @Test
+    void clientCrawlUsesItsNativeIdForDirectStatusAndStop() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
+                .thenReturn("Client Spider started.\nScan ID: 7");
+        when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 35%");
+        when(clientSpiderService.stopClientSpider("7")).thenReturn("Client Spider stop requested.");
+
+        String response = service.startCrawl("https://spa.example.com", "client", null, null);
+        String operationId = extractOperationId(response);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: direct");
+        assertThat(service.getCrawlStatus(operationId)).contains("Progress: 35%");
+        assertThat(service.stopCrawl(operationId)).contains("Client Spider stop requested.");
+        verify(clientSpiderService).getClientSpiderStatus("7");
+        verify(clientSpiderService).stopClientSpider("7");
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void clientCrawlUsesQueueJobForStatusAndCancellation() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, "crawl-key"))
+                .thenReturn("Scan job accepted\nJob ID: client-job\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-job")).thenReturn("Status: RUNNING");
+        when(scanJobQueueService.cancelScanJob("client-job")).thenReturn("Status: CANCELLED");
+
+        String response = service.startCrawl("https://spa.example.com", "client", "crawl-key", null);
+        String operationId = extractOperationId(response);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: queue");
+        assertThat(service.getCrawlStatus(operationId)).contains("Status: RUNNING");
+        assertThat(service.stopCrawl(operationId)).contains("Status: CANCELLED");
+        verify(scanJobQueueService).cancelScanJob("client-job");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
+    }
+
+    @Test
+    void stoppedClientCrawlsDoNotClaimSuccessfulCoverageInEitherExecutionMode() {
+        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
+                .thenReturn("Client Spider started.\nScan ID: 7");
+        when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 100%");
+        when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, null))
+                .thenReturn("Job ID: client-job");
+        when(scanJobQueueService.getScanJobStatus("client-job"))
+                .thenReturn("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+
+        for (GuidedExecutionModeResolver.ExecutionMode mode : GuidedExecutionModeResolver.ExecutionMode.values()) {
+            when(executionModeResolver.resolveDefaultMode()).thenReturn(mode);
+            String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "client", null, null));
+
+            assertThat(service.getCrawlStatus(operationId))
+                    .contains("successful completion is unconfirmed", "zap_passive_scan_wait")
+                    .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+        }
     }
 
     @Test
@@ -419,6 +479,17 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
+    void clientCrawlRejectsPreparedAuthenticationBeforeStartingAnyScan() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedFormSession("auth-client", "https://app.example.com", "1", "7"));
+
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("strategy=client is not supported with authSessionId");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
     void startAttackRejectsNonFormAuthSessionForGuidedExecution() {
         PreparedAuthSession session = new PreparedAuthSession(
                 "auth-header",
@@ -537,6 +608,7 @@ class GuidedSecurityToolsServiceTest {
                 executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
+                clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
                 guidedAuthSessionService,

@@ -25,12 +25,26 @@ Guided crawl strategy:
 
 - `strategy=http` for the traditional spider
 - `strategy=browser` for AJAX Spider behavior
+- `strategy=client` for Client Spider browser crawling
 - `strategy=auto` to let the server decide
 
 Important nuance:
 
 - guided queue mode currently defaults `strategy=auto` to the HTTP spider
 - pass `strategy=browser` if you need queued AJAX Spider explicitly
+- pass `strategy=client` to use Client Spider explicitly in either execution mode
+
+Client Spider is useful for JavaScript-heavy applications. It runs one headless Firefox browser per crawl and returns a ZAP scan ID, so status and stop operations address that specific crawl. Queued Client Spider jobs share the existing spider concurrency limit, retry settings, and cancellation handling. `strategy=browser` continues to use AJAX Spider.
+
+The Client Spider start API has no maximum crawl duration parameter, so `ZAP_MAX_SPIDER_SCAN_DURATION` does not limit Client Spider crawls. The existing API request, queue startup/wait, and cancellation timeouts still apply; the server does not currently enforce a total Client Spider crawl duration. Use the crawl stop tool when you need to end it.
+
+Client Spider requires ZAP's Client Side Integration (`client`) add-on, Selenium, Firefox, and a compatible WebDriver. The supplied Compose and Helm configurations install `client`, and the default ZAP image includes the browser and WebDriver. If you connect to your own ZAP deployment, provide those prerequisites there. Authenticated guided Client Spider crawling with `authSessionId` is not supported yet; use `strategy=http` for prepared authentication sessions.
+
+The expert Client Spider start and queue tools accept an optional `maxDepth` (0 means unlimited); omission uses `ZAP_SPIDER_MAX_DEPTH`. They use the existing `zap:scan:spider:run` permission, with `zap:scan:read` and `zap:scan:stop` for lifecycle access.
+
+Upgrade all workers sharing a queue before submitting Client Spider jobs; older workers do not recognize the new job type.
+
+After the crawl finishes, use `zap_passive_scan_wait` before reading findings. A Client Spider scan ID identifies the crawl; it does not make the shared ZAP findings store exclusive to that crawl.
 
 ## Direct Mode
 
@@ -49,6 +63,9 @@ Direct tools:
 - `zap_ajax_spider`
 - `zap_ajax_spider_status`
 - `zap_ajax_spider_stop`
+- `zap_client_spider_start`
+- `zap_client_spider_status`
+- `zap_client_spider_stop`
 
 Use direct mode when:
 
@@ -71,6 +88,7 @@ Queue-managed tools:
 - `zap_queue_spider_scan`
 - `zap_queue_spider_scan_as_user`
 - `zap_queue_ajax_spider`
+- `zap_queue_client_spider_scan`
 - `zap_queue_active_scan`
 - `zap_queue_active_scan_as_user`
 - `zap_scan_job_status`

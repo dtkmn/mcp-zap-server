@@ -62,11 +62,7 @@ public class ScanJobRuntimeExecutor {
             case AJAX_SPIDER -> requireAjaxSpiderService().startAjaxSpiderJob(
                     parameters.get(ScanJobParameterNames.TARGET_URL)
             );
-            case CLIENT_SPIDER -> requireClientSpiderService().startClientSpiderJob(
-                    parameters.get(ScanJobParameterNames.TARGET_URL),
-                    parameters.containsKey(ScanJobParameterNames.MAX_DEPTH)
-                            ? Integer.valueOf(parameters.get(ScanJobParameterNames.MAX_DEPTH)) : null
-            );
+            case CLIENT_SPIDER -> startClientSpider(parameters);
         };
     }
 
@@ -115,6 +111,18 @@ public class ScanJobRuntimeExecutor {
             throw new IllegalStateException("Client Spider service is not available in this runtime");
         }
         return clientSpiderService;
+    }
+
+    private String startClientSpider(Map<String, String> parameters) {
+        String targetUrl = parameters.get(ScanJobParameterNames.TARGET_URL);
+        Integer maxDepth = parameters.containsKey(ScanJobParameterNames.MAX_DEPTH)
+                ? Integer.valueOf(parameters.get(ScanJobParameterNames.MAX_DEPTH)) : null;
+        String contextName = normalizeBlankToNull(parameters.get(ScanJobParameterNames.CONTEXT_NAME));
+        String userName = normalizeBlankToNull(parameters.get(ScanJobParameterNames.USER_NAME));
+        if (contextName != null || userName != null) {
+            return requireClientSpiderService().startClientSpiderJob(targetUrl, maxDepth, contextName, userName);
+        }
+        return requireClientSpiderService().startClientSpiderJob(targetUrl, maxDepth);
     }
 
     private String normalizeBlankToNull(String value) {

@@ -134,9 +134,22 @@ class ScanHistoryLedgerServiceTest {
                 job.getParameters().get("targetUrl"), Map.of());
 
         assertThat(service.getHistoryEntry("job:client-job"))
-                .contains("Backend Reference: 7", "lastKnownProgress: 100", "crawlOutcome: unknown (ZAP reports stopped)");
+                .contains("Backend Reference: 7", "lastKnownProgress: 100", "crawlOutcome: unknown (ZAP reports stopped)")
+                .doesNotContain("authenticated: true");
         assertThat(service.exportCustomerHandoff("client-check", "/client", 10))
                 .contains("crawl outcome unknown (ZAP reports stopped)", "Browser crawl completion is unconfirmed", "Readiness: CAVEAT");
+    }
+
+    @Test
+    void clientHistoryMarksCrawlsWithAConfiguredUserAsAuthenticated() {
+        ScanJob job = new ScanJob("client-auth-job", ScanJobType.CLIENT_SPIDER,
+                Map.of("targetUrl", "https://spa.example.com/client", "contextName", "Application", "userName", "alice"),
+                Instant.now(), 3, "client-a", null);
+        job.markRunning("8");
+        scanJobStore.upsertAll(List.of(job));
+
+        assertThat(service.getHistoryEntry("job:client-auth-job"))
+                .contains("Backend Reference: 8", "authenticated: true");
     }
 
     @Test

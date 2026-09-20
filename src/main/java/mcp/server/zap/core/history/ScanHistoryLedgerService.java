@@ -1009,7 +1009,8 @@ public class ScanHistoryLedgerService {
         if (job.getLastError() != null && !job.getLastError().isBlank()) {
             metadata.put("lastError", truncate(job.getLastError(), 300));
         }
-        if (job.getType().name().endsWith("_AS_USER")) {
+        if (job.getType().name().endsWith("_AS_USER")
+                || (job.getType() == ScanJobType.CLIENT_SPIDER && hasText(job.getParameters().get("userName")))) {
             metadata.put("authenticated", "true");
         }
         String operation = job.getType().name().toLowerCase(Locale.ROOT);

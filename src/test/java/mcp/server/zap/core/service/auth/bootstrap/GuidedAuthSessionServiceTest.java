@@ -24,6 +24,8 @@ import mcp.server.zap.core.service.UrlValidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 class GuidedAuthSessionServiceTest {
@@ -41,6 +43,7 @@ class GuidedAuthSessionServiceTest {
         urlValidationService = mock(UrlValidationService.class);
         service = serviceWith(
                 formProfile("shop-form", "https://shop.example.com", "file:" + formPasswordFile()),
+                browserProfile("shop-browser", "https://shop.example.com", "file:" + formPasswordFile()),
                 headerProfile("orders-api-key", "https://api.example.com", "file:" + apiTokenFile())
         );
     }
@@ -77,6 +80,41 @@ class GuidedAuthSessionServiceTest {
     }
 
     @Test
+    void prepareAndValidateBrowserSessionUsesEncodedLoginPageAndKeepsSecretsOutOfResponses() throws Exception {
+        Files.writeString(formPasswordFile(), "browser-password&secret", StandardCharsets.UTF_8);
+        String loginUrl = "https://shop.example.com/login?next=/account&browserId=unexpected";
+        AuthBootstrapProperties.Profile profile = browserProfile(
+                "shop-browser", "https://shop.example.com", "file:" + formPasswordFile());
+        profile.setLoginUrl(loginUrl);
+        service = serviceWith(profile);
+        stubFormUser("shop-browser-auth", "2", "8");
+        when(contextUserService.testUserAuthentication("2", "8", "https://shop.example.com/account"))
+                .thenReturn(Map.of("likelyAuthenticated", true));
+
+        String prepareResponse = service.prepareSession("shop-browser", "https://shop.example.com/account");
+
+        assertThat(prepareResponse).contains("Auth Kind: browser", "Provider: zap-form-login",
+                "Context Name: shop-browser-auth", "Context ID: 2", "User ID: 8")
+                .doesNotContain("browser-password&secret", "browser-password%26secret", "scan-password.txt");
+        verify(contextUserService).configureContextAuthentication("2", "browserBasedAuthentication",
+                "loginPageUrl=" + urlEncode(loginUrl) + "&browserId=firefox-headless",
+                ".*Logout.*", ".*Sign in.*");
+        verify(contextUserService).upsertUser("2", "zap-scan-user",
+                "username=zap-scan-user&password=browser-password%26secret", true);
+        verify(urlValidationService).validateUrl("https://shop.example.com/account");
+        verify(urlValidationService).validateUrl(loginUrl);
+        PreparedAuthSession session = service.getPreparedSession(extractSessionId(prepareResponse));
+        assertThat(session.authKind()).isEqualTo(AuthBootstrapKind.BROWSER);
+        assertThat(session.engineBound()).isTrue();
+
+        String validateResponse = service.validateSession(session.sessionId());
+
+        assertThat(validateResponse).contains("Auth Kind: browser", "Valid: true", "Outcome: authenticated")
+                .doesNotContain("browser-password&secret", "browser-password%26secret", "scan-password.txt");
+        verify(contextUserService).testUserAuthentication("2", "8", "https://shop.example.com/account");
+    }
+
+    @Test
     void prepareHeaderSessionKeepsExistingGatewayOnlyBehavior() throws Exception {
         Files.writeString(apiTokenFile(), "api-token-value", StandardCharsets.UTF_8);
 
@@ -99,9 +137,10 @@ class GuidedAuthSessionServiceTest {
         );
     }
 
-    @Test
-    void formCredentialCannotBeReboundToCallerSelectedOrigin() throws Exception {
-        assertThatThrownBy(() -> service.prepareSession("shop-form", "https://attacker.example"))
+    @ParameterizedTest
+    @ValueSource(strings = {"shop-form", "shop-browser"})
+    void loginCredentialCannotBeReboundToCallerSelectedOrigin(String profileId) {
+        assertThatThrownBy(() -> service.prepareSession(profileId, "https://attacker.example"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("targetUrl origin is not authorized for auth profile");
 
@@ -268,18 +307,39 @@ class GuidedAuthSessionServiceTest {
         verifyNoInteractions(contextUserService);
     }
 
-    @Test
-    void failedFormValidationReturnsFailureWithoutSecretLeakage() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"shop-form", "shop-browser"})
+    void failedLoginValidationReturnsFailureWithoutSecretLeakage(String profileId) throws Exception {
         Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
-        stubFormUser("shop-form-auth", "1", "7");
-        when(contextUserService.testUserAuthentication("1", "7"))
-                .thenReturn(Map.of("likelyAuthenticated", false));
+        stubFormUser(profileId + "-auth", "1", "7");
+        if (profileId.equals("shop-browser")) {
+            when(contextUserService.testUserAuthentication("1", "7", "https://shop.example.com"))
+                    .thenReturn(Map.of("likelyAuthenticated", false));
+        } else {
+            when(contextUserService.testUserAuthentication("1", "7"))
+                    .thenReturn(Map.of("likelyAuthenticated", false));
+        }
 
-        String prepared = service.prepareSession("shop-form", "https://shop.example.com");
+        String prepared = service.prepareSession(profileId, "https://shop.example.com");
         String response = service.validateSession(extractSessionId(prepared));
 
         assertThat(response).contains("Valid: false", "Outcome: authentication_failed");
         assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
+    }
+
+    @Test
+    void indeterminateBrowserValidationDoesNotClaimSuccessOrFailure() throws Exception {
+        Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
+        stubFormUser("shop-browser-auth", "1", "7");
+        when(contextUserService.testUserAuthentication("1", "7", "https://shop.example.com"))
+                .thenReturn(Map.of());
+
+        String prepared = service.prepareSession("shop-browser", "https://shop.example.com");
+        String response = service.validateSession(extractSessionId(prepared));
+
+        assertThat(response).contains("Valid: false", "Outcome: authentication_unconfirmed",
+                        "Authentication could not be confirmed", "Verify protected-page access")
+                .doesNotContain("authentication_failed", "example-password-value", "scan-password.txt");
     }
 
     @Test
@@ -382,6 +442,14 @@ class GuidedAuthSessionServiceTest {
         profile.setKind("api-key");
         profile.setAllowedOrigin(allowedOrigin);
         profile.setCredentialReference(credentialReference);
+        return profile;
+    }
+
+    private AuthBootstrapProperties.Profile browserProfile(String id, String allowedOrigin, String credentialReference) {
+        AuthBootstrapProperties.Profile profile = formProfile(id, allowedOrigin, credentialReference);
+        profile.setKind("browser");
+        profile.setUsernameField(null);
+        profile.setPasswordField(null);
         return profile;
     }
 

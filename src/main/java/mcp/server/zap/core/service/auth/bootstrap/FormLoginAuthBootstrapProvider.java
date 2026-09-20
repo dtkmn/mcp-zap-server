@@ -13,7 +13,8 @@ import mcp.server.zap.core.service.UrlValidationService;
 import org.springframework.stereotype.Component;
 
 /**
- * Guided provider for simple form-login bootstrapping backed by existing ZAP context/user APIs.
+ * Guided provider for HTTP and browser form-login bootstrapping using ZAP context/user APIs.
+ * Keeps the stable provider ID for existing prepared sessions.
  */
 @Component
 public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
@@ -42,7 +43,7 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
 
     @Override
     public boolean supports(AuthBootstrapRequest request) {
-        return request.authKind() == AuthBootstrapKind.FORM;
+        return request.authKind() == AuthBootstrapKind.FORM || request.authKind() == AuthBootstrapKind.BROWSER;
     }
 
     @Override
@@ -56,10 +57,21 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
 
         String contextName = profileId + CONTEXT_NAME_SUFFIX;
         String zapUserName = hasText(request.zapUserName()) ? request.zapUserName().trim() : DEFAULT_USER_NAME;
-        String usernameField = hasText(request.usernameField()) ? request.usernameField().trim() : DEFAULT_USERNAME_FIELD;
-        String passwordField = hasText(request.passwordField()) ? request.passwordField().trim() : DEFAULT_PASSWORD_FIELD;
-        validateFormFieldName(usernameField, "usernameField");
-        validateFormFieldName(passwordField, "passwordField");
+        boolean browserAuthentication = request.authKind() == AuthBootstrapKind.BROWSER;
+        String authMethodConfigParams;
+        if (browserAuthentication) {
+            if (hasText(request.usernameField()) || hasText(request.passwordField())) {
+                throw new IllegalArgumentException("usernameField and passwordField are only supported by form auth profiles; browser authentication discovers login fields");
+            }
+            authMethodConfigParams = configParam("loginPageUrl", loginUrl)
+                    + "&" + configParam("browserId", "firefox-headless");
+        } else {
+            String usernameField = hasText(request.usernameField()) ? request.usernameField().trim() : DEFAULT_USERNAME_FIELD;
+            String passwordField = hasText(request.passwordField()) ? request.passwordField().trim() : DEFAULT_PASSWORD_FIELD;
+            validateFormFieldName(usernameField, "usernameField");
+            validateFormFieldName(passwordField, "passwordField");
+            authMethodConfigParams = buildAuthMethodConfigParams(loginUrl, usernameField, passwordField);
+        }
         String resolvedSecret = credentialReferenceResolver.resolveSecret(request.credentialReference());
 
         List<String> includeRegexes = List.of(buildScopeRegex(request.allowedOrigin()));
@@ -67,10 +79,9 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
         Map<String, Object> contextSummary = contextUserService.upsertContext(contextName, includeRegexes, excludeRegexes, true);
         String contextId = stringValue(contextSummary.get("contextId"));
 
-        String authMethodConfigParams = buildAuthMethodConfigParams(loginUrl, usernameField, passwordField);
         contextUserService.configureContextAuthentication(
                 contextId,
-                "formBasedAuthentication",
+                browserAuthentication ? "browserBasedAuthentication" : "formBasedAuthentication",
                 authMethodConfigParams,
                 loggedInIndicatorRegex,
                 trimToNull(request.loggedOutIndicatorRegex())
@@ -101,7 +112,9 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
         );
 
         List<String> warnings = new ArrayList<>();
-        warnings.add("Run zap_auth_session_validate before authenticated crawl or attack flows.");
+        warnings.add(browserAuthentication
+                ? "Run zap_auth_session_validate, then use zap_crawl_start with strategy=client. Browser sessions are not supported by guided active scans."
+                : "Run zap_auth_session_validate before authenticated crawl or attack flows.");
 
         return new AuthSessionPrepareResult(session, warnings);
     }
@@ -109,17 +122,27 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
     @Override
     public AuthSessionValidationResult validate(PreparedAuthSession session) {
         requireSessionOrigin(session);
-        Map<String, Object> result = contextUserService.testUserAuthentication(session.contextId(), session.userId());
+        Map<String, Object> result = session.authKind() == AuthBootstrapKind.BROWSER
+                ? contextUserService.testUserAuthentication(session.contextId(), session.userId(), session.target().baseUrl())
+                : contextUserService.testUserAuthentication(session.contextId(), session.userId());
         boolean valid = Boolean.TRUE.equals(result.get("likelyAuthenticated"));
+        boolean browserUnconfirmed = session.authKind() == AuthBootstrapKind.BROWSER
+                && result.get("likelyAuthenticated") == null;
+        String outcome = valid ? "authenticated" : "authentication_failed";
+        if (browserUnconfirmed) {
+            outcome = "authentication_unconfirmed";
+        }
         List<String> diagnostics = new ArrayList<>();
         diagnostics.add("likelyAuthenticated=" + result.get("likelyAuthenticated"));
         diagnostics.add("contextId=" + session.contextId());
         diagnostics.add("userId=" + session.userId());
-        diagnostics.add("Fix the operator-managed auth profile and re-run zap_auth_session_prepare if indicators or credentials are wrong.");
+        diagnostics.add(browserUnconfirmed
+                ? "Authentication could not be confirmed from ZAP's verification response. Valid: false means unconfirmed, not a confirmed login failure. Verify protected-page access and authenticated content during the Client Spider crawl before relying on its coverage."
+                : "Fix the operator-managed auth profile and re-run zap_auth_session_prepare if indicators or credentials are wrong.");
         return new AuthSessionValidationResult(
                 session,
                 valid,
-                valid ? "authenticated" : "authentication_failed",
+                outcome,
                 diagnostics
         );
     }

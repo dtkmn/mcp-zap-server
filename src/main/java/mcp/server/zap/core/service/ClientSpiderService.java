@@ -45,14 +45,19 @@ public class ClientSpiderService {
     }
 
     public String startClientSpider(String targetUrl, Integer maxDepth) {
-        String scanId = startClientSpiderJob(targetUrl, maxDepth);
+        return startClientSpider(targetUrl, maxDepth, null, null);
+    }
+
+    public String startClientSpider(String targetUrl, Integer maxDepth, String contextName, String userName) {
+        String scanId = startClientSpiderJob(targetUrl, maxDepth, contextName, userName);
         if (operationRegistry != null) {
             String workspaceId = clientWorkspaceResolver == null ? "default-workspace"
                     : clientWorkspaceResolver.resolveCurrentWorkspaceId();
             operationRegistry.registerDirectScan("client-spider:" + scanId, workspaceId);
         }
         if (scanHistoryLedgerService != null) {
-            scanHistoryLedgerService.recordDirectScanStarted("client_spider", scanId, targetUrl, Map.of());
+            scanHistoryLedgerService.recordDirectScanStarted("client_spider", scanId, targetUrl,
+                    contextName != null && !contextName.isBlank() ? Map.of("authenticated", "true") : Map.of());
         }
         return String.format(
                 "Direct Client Spider scan started.%n"
@@ -64,12 +69,27 @@ public class ClientSpiderService {
     }
 
     public String startClientSpiderJob(String targetUrl, Integer maxDepth) {
+        return startClientSpiderJob(targetUrl, maxDepth, null, null);
+    }
+
+    public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName) {
+        String normalizedContextName = normalizeOptionalName(contextName);
+        String normalizedUserName = normalizeOptionalName(userName);
+        if ((normalizedContextName == null) != (normalizedUserName == null)) {
+            throw new IllegalArgumentException("contextName and userName must both be provided for an authenticated Client Spider crawl");
+        }
         urlValidationService.validateUrl(targetUrl);
         int effectiveMaxDepth = maxDepth == null ? scanLimitProperties.getSpiderMaxDepth() : maxDepth;
         if (effectiveMaxDepth < 0) {
             throw new IllegalArgumentException("maxDepth must be zero (unlimited) or greater");
         }
-        return engineScanExecution.startClientSpiderScan(new ClientSpiderScanRequest(targetUrl, effectiveMaxDepth));
+        int maxDurationMinutes = scanLimitProperties.getMaxSpiderScanDurationInMins();
+        if (maxDurationMinutes < 0) {
+            throw new IllegalArgumentException("maxSpiderScanDurationInMins must be zero (unlimited) or greater");
+        }
+        return engineScanExecution.startClientSpiderScan(
+                new ClientSpiderScanRequest(targetUrl, effectiveMaxDepth, maxDurationMinutes,
+                        normalizedContextName, normalizedUserName));
     }
 
     public String getClientSpiderStatus(String scanId) {
@@ -110,6 +130,10 @@ public class ClientSpiderService {
 
     public void stopClientSpiderJob(String scanId) {
         engineScanExecution.stopClientSpiderScan(requireScanId(scanId));
+    }
+
+    private String normalizeOptionalName(String name) {
+        return name == null || name.isBlank() ? null : name.trim();
     }
 
     private String requireScanId(String scanId) {

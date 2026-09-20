@@ -149,12 +149,14 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
         return spiderScanService.stopSpiderScan(scanId);
     }
 
-    @Tool(name = "zap_client_spider_start", description = "Start a direct Client Spider crawl for a JavaScript-driven app. Requires ZAP's Client Side Integration add-on and a headless Firefox browser. Prepared authentication sessions are not supported by this tool.")
+    @Tool(name = "zap_client_spider_start", description = "Start a direct Client Spider crawl for a JavaScript-driven app. Requires ZAP's Client Side Integration add-on and a headless Firefox browser. For authenticated crawling, supply both an existing ZAP context name and user name, with browser-based authentication configured in that context. Prepared HTTP form-login sessions do not authenticate the browser.")
     public String startClientSpider(
             @ToolParam(description = "Target URL to crawl") String targetUrl,
-            @ToolParam(required = false, description = "Maximum crawl depth; 0 means unlimited. Omit to use the server's spider depth setting.") Integer maxDepth
+            @ToolParam(required = false, description = "Maximum crawl depth; 0 means unlimited. Omit to use the server's spider depth setting.") Integer maxDepth,
+            @ToolParam(required = false, description = "Existing ZAP context name, not its numeric ID. Supply together with userName for authenticated crawling.") String contextName,
+            @ToolParam(required = false, description = "Existing ZAP user name within the context, not its numeric ID or login credentials. Supply together with contextName.") String userName
     ) {
-        return clientSpiderService.startClientSpider(targetUrl, maxDepth);
+        return clientSpiderService.startClientSpider(targetUrl, maxDepth, contextName, userName);
     }
 
     @Tool(name = "zap_client_spider_status", description = "Get Client Spider progress by ZAP scan ID. A stopped crawl does not prove successful coverage; wait for passive scanning before reviewing findings.")

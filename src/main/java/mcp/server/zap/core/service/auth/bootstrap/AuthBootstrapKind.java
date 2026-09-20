@@ -7,6 +7,7 @@ import java.util.Locale;
  */
 public enum AuthBootstrapKind {
     FORM("form"),
+    BROWSER("browser"),
     BEARER("bearer"),
     API_KEY("api-key");
 
@@ -27,9 +28,10 @@ public enum AuthBootstrapKind {
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
             case "form" -> FORM;
+            case "browser" -> BROWSER;
             case "bearer" -> BEARER;
             case "api-key", "api_key" -> API_KEY;
-            default -> throw new IllegalArgumentException("authKind must be one of: form, bearer, api-key");
+            default -> throw new IllegalArgumentException("authKind must be one of: form, browser, bearer, api-key");
         };
     }
 }

@@ -57,7 +57,16 @@ public interface EngineScanExecution {
     ) {
     }
 
-    record ClientSpiderScanRequest(String targetUrl, int maxDepth) {
+    record ClientSpiderScanRequest(
+            String targetUrl,
+            int maxDepth,
+            int maxDurationMinutes,
+            String contextName,
+            String userName
+    ) {
+        public ClientSpiderScanRequest(String targetUrl, int maxDepth, int maxDurationMinutes) {
+            this(targetUrl, maxDepth, maxDurationMinutes, null, null);
+        }
     }
 
     record ActiveScanRequest(

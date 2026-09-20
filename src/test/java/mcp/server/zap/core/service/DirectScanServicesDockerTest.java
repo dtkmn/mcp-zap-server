@@ -1,10 +1,21 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.configuration.AuthBootstrapProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
+import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.TimeoutZapClientApi;
+import mcp.server.zap.core.gateway.ZapEngineAdapter;
+import mcp.server.zap.core.gateway.ZapEngineContextAccess;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
+import mcp.server.zap.core.service.auth.bootstrap.AuthProfileResolver;
+import mcp.server.zap.core.service.auth.bootstrap.CredentialReferenceResolver;
+import mcp.server.zap.core.service.auth.bootstrap.FormLoginAuthBootstrapProvider;
+import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.InMemoryPreparedAuthSessionRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -12,19 +23,30 @@ import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.utility.MountableFile;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @Tag("docker")
 @Testcontainers
@@ -46,14 +68,37 @@ class DirectScanServicesDockerTest {
                             """), "/usr/share/nginx/html/client-crawl.html")
                     .withCopyToContainer(Transferable.of("Discovered through JavaScript"),
                             "/usr/share/nginx/html/client-discovered")
+                    .withCopyToContainer(Transferable.of("""
+                            <!doctype html>
+                            <html><body><script>
+                            const next = new URL(location.href);
+                            const step = Number(next.searchParams.get('step') || 0) + 1;
+                            next.searchParams.set('step', step);
+                            const link = document.createElement('a');
+                            link.href = next.href;
+                            link.textContent = 'Continue to page ' + step;
+                            document.body.appendChild(link);
+                            </script></body></html>
+                            """), "/usr/share/nginx/html/client-duration.html")
                     .withExposedPorts(80)
+                    .waitingFor(Wait.forHttp("/"));
+
+    @Container
+    static final GenericContainer<?> AUTH_TARGET =
+            new GenericContainer<>(DockerImageName.parse("python:3.13-alpine"))
+                    .withNetwork(NETWORK)
+                    .withNetworkAliases("client-auth-target")
+                    .withCopyToContainer(MountableFile.forClasspathResource("client-spider/form-login.py"),
+                            "/form-login.py")
+                    .withCommand("python", "/form-login.py")
+                    .withExposedPorts(8080)
                     .waitingFor(Wait.forHttp("/"));
 
     @Container
     static final GenericContainer<?> ZAP =
             new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
-                    .dependsOn(TARGET)
+                    .dependsOn(TARGET, AUTH_TARGET)
                     .withExposedPorts(8090)
                     .withSharedMemorySize(512 * 1024 * 1024L)
                     .withCommand(
@@ -131,6 +176,141 @@ class DirectScanServicesDockerTest {
         } finally {
             clientSpiderService.stopClientSpiderJob(stoppedScanId);
             clientSpiderService.stopClientSpiderJob(continuingScanId);
+        }
+    }
+
+    @Test
+    void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(@TempDir Path temporaryDirectory)
+            throws Exception {
+        String targetOrigin = "http://client-auth-target:8080";
+        String localOrigin = "http://" + AUTH_TARGET.getHost() + ":" + AUTH_TARGET.getMappedPort(8080);
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/protected")).GET().build(),
+                    HttpResponse.BodyHandlers.discarding()).statusCode(),
+                    "The crawl entry point must require a login");
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/protected/client-discovered"))
+                            .GET().build(), HttpResponse.BodyHandlers.discarding()).statusCode(),
+                    "The JavaScript resource must also require a login");
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/login"))
+                            .POST(HttpRequest.BodyPublishers.ofString("username=scan-user&password=wrong"))
+                            .header("Content-Type", "application/x-www-form-urlencoded").build(),
+                    HttpResponse.BodyHandlers.discarding()).statusCode(),
+                    "The fixture must reject incorrect credentials");
+        }
+
+        Path passwordFile = Files.writeString(temporaryDirectory.resolve("password"), "fixture-password");
+        AuthBootstrapProperties.Profile profile = new AuthBootstrapProperties.Profile();
+        profile.setId("client-browser-auth");
+        profile.setKind("browser");
+        profile.setAllowedOrigin(targetOrigin);
+        profile.setCredentialReference("file:" + passwordFile);
+        profile.setLoginUrl(targetOrigin + "/login");
+        profile.setUsername("scan-user");
+        profile.setZapUserName("client-browser-user");
+        profile.setLoggedInIndicatorRegex("Signed in as scan-user");
+        profile.setLoggedOutIndicatorRegex("Login required");
+        AuthBootstrapProperties authProperties = new AuthBootstrapProperties();
+        authProperties.setProfiles(List.of(profile));
+        // Browser authentication is synchronous; deployments can select this existing API read timeout.
+        ClientApi browserAuthApi = new TimeoutZapClientApi(ZAP.getHost(), ZAP.getMappedPort(8090), null, 5000, 60000);
+        FormLoginAuthBootstrapProvider authProvider = new FormLoginAuthBootstrapProvider(
+                new ContextUserService(new ZapEngineContextAccess(browserAuthApi)),
+                new CredentialReferenceResolver(), mock(UrlValidationService.class));
+        GuidedAuthSessionService authSessions = new GuidedAuthSessionService(
+                List.of(authProvider), new InMemoryPreparedAuthSessionRegistry(), new AuthProfileResolver(authProperties));
+        String prepared = authSessions.prepareSession(profile.getId(), targetOrigin + "/protected");
+        String sessionId = prepared.lines().filter(line -> line.startsWith("Session ID: "))
+                .map(line -> line.substring("Session ID: ".length())).findFirst().orElseThrow();
+        String validated = authSessions.validateSession(sessionId);
+        assertTrue(validated.contains("Valid: true"), validated);
+        assertTrue(validated.contains("Outcome: authenticated"), validated);
+
+        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
+        when(executionMode.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(executionMode,
+                mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
+                mock(ActiveScanService.class), mock(ScanJobQueueService.class), authSessions,
+                new ZapEngineAdapter(), new GatewayRecordFactory());
+        String started = guidedScans.startCrawl(targetOrigin + "/protected", "client", null, sessionId);
+        String operationId = started.lines().filter(line -> line.startsWith("Operation ID: "))
+                .map(line -> line.substring("Operation ID: ".length())).findFirst().orElseThrow();
+        String scanId = extractScanId(started);
+
+        try {
+            assertTrue(started.contains("Authenticated Session: " + sessionId));
+            assertTrue(guidedScans.getCrawlStatus(operationId).contains("Strategy: client"));
+            await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
+                ApiResponseList messages = (ApiResponseList) clientApi.core.messages(
+                        targetOrigin + "/protected/client-discovered", "0", "100");
+                assertTrue(messages.getItems().stream().map(ApiResponseSet.class::cast).anyMatch(message ->
+                                message.getStringValue("requestHeader").contains("Cookie: session=")
+                                        && message.getStringValue("responseHeader").contains(" 200 ")
+                                        && message.getStringValue("responseBody")
+                                                .contains("authenticated JavaScript resource")),
+                        "Client Spider must discover and fetch the protected resource with its browser user's session");
+            });
+        } finally {
+            guidedScans.stopCrawl(operationId);
+            await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
+                    .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanId) == 100);
+        }
+
+        String unexpectedPrepared = authSessions.prepareSession(profile.getId(), targetOrigin + "/unexpected-response");
+        String unexpectedSessionId = unexpectedPrepared.lines().filter(line -> line.startsWith("Session ID: "))
+                .map(line -> line.substring("Session ID: ".length())).findFirst().orElseThrow();
+        String unexpectedValidation = authSessions.validateSession(unexpectedSessionId);
+        assertTrue(unexpectedValidation.contains("Valid: false"), unexpectedValidation);
+        assertTrue(unexpectedValidation.contains("Outcome: authentication_unconfirmed"), unexpectedValidation);
+
+        var unexpectedSession = authSessions.getPreparedSession(unexpectedSessionId);
+        ApiResponseSet unexpectedPoll = (ApiResponseSet) browserAuthApi.users.pollAsUser(
+                unexpectedSession.contextId(), unexpectedSession.userId());
+        assertEquals("true", unexpectedPoll.getStringValue("pollSuccessful"),
+                "ZAP's native verdict alone accepts a response without either configured indicator");
+        assertTrue(unexpectedPoll.getStringValue("responseHeader").contains(" 500 "));
+        assertTrue(unexpectedPoll.getStringValue("responseBody").contains("Temporarily unavailable"));
+    }
+
+    @Test
+    void clientSpiderDurationExpiresWithoutChangingAnotherScansLimit() throws Exception {
+        String previousPageLoadTime = ((ApiResponseElement) clientApi.callApi(
+                "clientSpider", "view", "optionPageLoadTimeInSecs", Map.of())).getValue();
+        String durationStatistic = "stats.client.spider.event.max.time";
+        String limitedScanId = null;
+        String unlimitedScanId = null;
+        try {
+            clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "2"));
+            clientApi.stats.clearStats(durationStatistic);
+
+            limitedScanId = extractScanId(clientSpiderService.startClientSpider(
+                    "http://direct-scan-target/client-duration.html?crawl=limited", 0));
+
+            ScanLimitProperties unlimitedProperties = new ScanLimitProperties();
+            unlimitedProperties.setMaxSpiderScanDurationInMins(0);
+            ClientSpiderService unlimitedService = new ClientSpiderService(
+                    new ZapEngineScanExecution(clientApi), mock(UrlValidationService.class), unlimitedProperties);
+            unlimitedScanId = unlimitedService.startClientSpiderJob(
+                    "http://direct-scan-target/client-duration.html?crawl=unlimited", 0);
+
+            String scanToExpire = limitedScanId;
+            await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
+                    .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanToExpire) == 100);
+
+            ApiResponseSet statistics = (ApiResponseSet) clientApi.stats.stats(durationStatistic);
+            String expirations = statistics.getStringValue(durationStatistic);
+            assertTrue(expirations != null && Long.parseLong(expirations) > 0,
+                    "The limited crawl must finish because ZAP enforced its duration, not because the fixture ended");
+            assertTrue(unlimitedService.getClientSpiderProgressPercent(unlimitedScanId) < 100,
+                    "A subsequent unlimited crawl must stay running without removing the first scan's saved limit");
+        } finally {
+            if (limitedScanId != null) {
+                clientSpiderService.stopClientSpiderJob(limitedScanId);
+            }
+            if (unlimitedScanId != null) {
+                clientSpiderService.stopClientSpiderJob(unlimitedScanId);
+            }
+            clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs",
+                    Map.of("Integer", previousPageLoadTime));
         }
     }
 

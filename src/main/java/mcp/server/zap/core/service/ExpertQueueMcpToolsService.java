@@ -67,14 +67,16 @@ public class ExpertQueueMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_queue_client_spider_scan",
-            description = "Queue a Client Spider browser crawl with scan-ID lifecycle tracking, shared spider concurrency guardrails, and optional idempotent admission"
+            description = "Queue a Client Spider browser crawl with scan-ID lifecycle tracking, shared spider concurrency guardrails, and optional idempotent admission. For authenticated crawling, supply a ZAP context and user with browser-based authentication configured; prepared HTTP form-login sessions do not authenticate the browser."
     )
     public String queueClientSpiderScan(
             @ToolParam(description = "Target URL to crawl with Client Spider") String targetUrl,
             @ToolParam(required = false, description = "Maximum crawl depth (optional; 0 means unlimited)") Integer maxDepth,
+            @ToolParam(required = false, description = "Existing ZAP context name, not its numeric ID; provide together with userName") String contextName,
+            @ToolParam(required = false, description = "Existing ZAP user name within the context, not its numeric ID or login credentials; provide together with contextName") String userName,
             @ToolParam(required = false, description = "Optional client-generated idempotency key for safe retry/deduplication") String idempotencyKey
     ) {
-        return scanJobQueueService.queueClientSpiderScan(targetUrl, maxDepth, idempotencyKey);
+        return scanJobQueueService.queueClientSpiderScan(targetUrl, maxDepth, contextName, userName, idempotencyKey);
     }
 
     @Tool(

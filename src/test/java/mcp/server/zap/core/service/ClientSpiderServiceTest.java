@@ -10,6 +10,8 @@ import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -17,6 +19,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +30,7 @@ class ClientSpiderServiceTest {
     private OperationRegistry operations;
     private ScanHistoryLedgerService history;
     private ClientSpiderService service;
+    private ScanLimitProperties scanLimits;
 
     @BeforeEach
     void setup() {
@@ -36,7 +40,8 @@ class ClientSpiderServiceTest {
         history = mock(ScanHistoryLedgerService.class);
         ClientWorkspaceResolver workspaces = mock(ClientWorkspaceResolver.class);
         when(workspaces.resolveCurrentWorkspaceId()).thenReturn("workspace-a");
-        service = new ClientSpiderService(engine, urlValidation, new ScanLimitProperties());
+        scanLimits = new ScanLimitProperties();
+        service = new ClientSpiderService(engine, urlValidation, scanLimits);
         service.setOperationRegistry(operations);
         service.setClientWorkspaceResolver(workspaces);
         service.setScanHistoryLedgerService(history);
@@ -44,7 +49,7 @@ class ClientSpiderServiceTest {
 
     @Test
     void directStartUsesSharedDepthDefaultAndRegistersItsOwnOperationNamespace() {
-        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 10))).thenReturn("7");
+        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 10, 15))).thenReturn("7");
 
         assertThat(service.startClientSpider("http://example.com", null)).contains("Scan ID: 7");
 
@@ -55,11 +60,88 @@ class ClientSpiderServiceTest {
 
     @Test
     void queuedStartUsesRequestedDepthWithoutRegisteringADirectOperation() {
-        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 0))).thenReturn("8");
+        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 0, 15))).thenReturn("8");
 
         assertThat(service.startClientSpiderJob("http://example.com", 0)).isEqualTo("8");
 
         verifyNoInteractions(operations, history);
+    }
+
+    @Test
+    void authenticatedDirectStartUsesNormalizedNamesAndRecordsAuthenticationWithoutCredentials() {
+        ClientSpiderScanRequest request = new ClientSpiderScanRequest(
+                "http://example.com", 10, 15, "member-context", "member-user");
+        when(engine.startClientSpiderScan(request)).thenReturn("9");
+
+        assertThat(service.startClientSpider("http://example.com", null, " member-context ", " member-user "))
+                .contains("Scan ID: 9");
+
+        verify(engine).startClientSpiderScan(request);
+        verify(operations).registerDirectScan("client-spider:9", "workspace-a");
+        verify(history).recordDirectScanStarted("client_spider", "9", "http://example.com",
+                Map.of("authenticated", "true"));
+    }
+
+    @Test
+    void authenticatedQueuedStartPassesNamesAndSharedLimitsWithoutRegisteringADirectOperation() {
+        scanLimits.setMaxSpiderScanDurationInMins(2);
+        ClientSpiderScanRequest request = new ClientSpiderScanRequest(
+                "http://example.com", 3, 2, "member-context", "member-user");
+        when(engine.startClientSpiderScan(request)).thenReturn("10");
+
+        assertThat(service.startClientSpiderJob("http://example.com", 3, "member-context", "member-user"))
+                .isEqualTo("10");
+
+        verify(engine).startClientSpiderScan(request);
+        verifyNoInteractions(operations, history);
+    }
+
+    @Test
+    void blankAuthenticationNamesPreserveAnonymousCrawls() {
+        ClientSpiderScanRequest request = new ClientSpiderScanRequest("http://example.com", 10, 15);
+        when(engine.startClientSpiderScan(request)).thenReturn("11");
+
+        assertThat(service.startClientSpider("http://example.com", null, " ", " "))
+                .contains("Scan ID: 11");
+
+        verify(engine).startClientSpiderScan(request);
+        verify(history).recordDirectScanStarted("client_spider", "11", "http://example.com", Map.of());
+    }
+
+    @Test
+    void rejectsIncompleteAuthenticationNamesBeforeLaunchingOrRecordingAScan() {
+        assertThatThrownBy(() -> service.startClientSpider("http://example.com", null, "context", null))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, null, "user"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, "context", " "))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
+        assertThatThrownBy(() -> service.startClientSpider("http://example.com", null, " ", "user"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
+
+        verifyNoInteractions(engine, operations, history);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2})
+    void directAndQueuedStartsUseTheExistingSpiderDurationSetting(int minutes) {
+        scanLimits.setMaxSpiderScanDurationInMins(minutes);
+        ClientSpiderScanRequest request = new ClientSpiderScanRequest("http://example.com", 10, minutes);
+        when(engine.startClientSpiderScan(request)).thenReturn("7", "8");
+
+        assertThat(service.startClientSpider("http://example.com", null)).contains("Scan ID: 7");
+        assertThat(service.startClientSpiderJob("http://example.com", null)).isEqualTo("8");
+
+        verify(engine, times(2)).startClientSpiderScan(request);
+    }
+
+    @Test
+    void rejectsNegativeDurationBeforeStartingACrawl() {
+        scanLimits.setMaxSpiderScanDurationInMins(-1);
+
+        assertThatThrownBy(() -> service.startClientSpider("http://example.com", null))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("maxSpiderScanDurationInMins");
+        verifyNoInteractions(engine, operations, history);
     }
 
     @Test

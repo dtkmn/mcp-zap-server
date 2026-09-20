@@ -40,6 +40,22 @@ class ScanJobRuntimeExecutorTest {
     }
 
     @Test
+    void routesAuthenticatedClientSpiderUsingStoredContextAndUserNames() {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", null, "Application", "alice"))
+                .thenReturn("client-user-17");
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com",
+                ScanJobParameterNames.CONTEXT_NAME, "Application",
+                ScanJobParameterNames.USER_NAME, "alice"));
+
+        assertEquals("client-user-17", scanId);
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", null, "Application", "alice");
+    }
+
+    @Test
     void routesActiveScanLifecycleAndNormalizesBlankPolicy() {
         ActiveScanService activeScanService = mock(ActiveScanService.class);
         SpiderScanService spiderScanService = mock(SpiderScanService.class);

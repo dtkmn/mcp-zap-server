@@ -167,6 +167,41 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
+    void authenticatedClientSpiderNamesAreStoredAndIncludedInIdempotency() {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 4, "Application", "alice"))
+                .thenReturn("client-user-1");
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 4, " Application ", " alice ", "client-auth"));
+        ScanJob job = service.getJobForTesting(jobId);
+
+        assertEquals(ScanJobType.CLIENT_SPIDER, job.getType());
+        assertEquals("client-user-1", job.getZapScanId());
+        assertEquals(Map.of("targetUrl", "http://example.com/client", "maxDepth", "4",
+                "contextName", "Application", "userName", "alice"), job.getParameters());
+        assertEquals(jobId, extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Application", "alice", "client-auth")));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Application", "bob", "client-auth"));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Other application", "alice", "client-auth"));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "client-auth"));
+        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 4, "Application", "alice");
+    }
+
+    @Test
+    void partialClientSpiderAuthenticationIsRejectedBeforeAdmission() {
+        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
+                "http://example.com", null, "Application", null, null));
+        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
+                "http://example.com", null, " ", "alice", null));
+        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
+                "http://example.com", null, "Application", " ", null));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+    }
+
+    @Test
     void queueActiveScanStartsImmediatelyWhenCapacityAvailable() {
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-101");
 

@@ -7,15 +7,21 @@ import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.gateway.ZapEngineContextAccess;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
+import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.auth.bootstrap.AuthProfileResolver;
 import mcp.server.zap.core.service.auth.bootstrap.CredentialReferenceResolver;
 import mcp.server.zap.core.service.auth.bootstrap.FormLoginAuthBootstrapProvider;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.InMemoryPreparedAuthSessionRegistry;
+import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
+import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -179,10 +185,14 @@ class DirectScanServicesDockerTest {
         }
     }
 
-    @Test
-    void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(@TempDir Path temporaryDirectory)
+    @ParameterizedTest
+    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
+            GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
         String targetOrigin = "http://client-auth-target:8080";
+        String crawlQuery = "?crawl=" + mode.name();
+        String targetUrl = targetOrigin + "/protected" + crawlQuery;
         String localOrigin = "http://" + AUTH_TARGET.getHost() + ":" + AUTH_TARGET.getMappedPort(8080);
         try (HttpClient http = HttpClient.newHttpClient()) {
             assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/protected")).GET().build(),
@@ -200,13 +210,13 @@ class DirectScanServicesDockerTest {
 
         Path passwordFile = Files.writeString(temporaryDirectory.resolve("password"), "fixture-password");
         AuthBootstrapProperties.Profile profile = new AuthBootstrapProperties.Profile();
-        profile.setId("client-browser-auth");
+        profile.setId("client-browser-auth-" + mode.name());
         profile.setKind("browser");
         profile.setAllowedOrigin(targetOrigin);
         profile.setCredentialReference("file:" + passwordFile);
         profile.setLoginUrl(targetOrigin + "/login");
         profile.setUsername("scan-user");
-        profile.setZapUserName("client-browser-user");
+        profile.setZapUserName("client-browser-user-" + mode.name());
         profile.setLoggedInIndicatorRegex("Signed in as scan-user");
         profile.setLoggedOutIndicatorRegex("Login required");
         AuthBootstrapProperties authProperties = new AuthBootstrapProperties();
@@ -218,7 +228,7 @@ class DirectScanServicesDockerTest {
                 new CredentialReferenceResolver(), mock(UrlValidationService.class));
         GuidedAuthSessionService authSessions = new GuidedAuthSessionService(
                 List.of(authProvider), new InMemoryPreparedAuthSessionRegistry(), new AuthProfileResolver(authProperties));
-        String prepared = authSessions.prepareSession(profile.getId(), targetOrigin + "/protected");
+        String prepared = authSessions.prepareSession(profile.getId(), targetUrl);
         String sessionId = prepared.lines().filter(line -> line.startsWith("Session ID: "))
                 .map(line -> line.substring("Session ID: ".length())).findFirst().orElseThrow();
         String validated = authSessions.validateSession(sessionId);
@@ -226,33 +236,64 @@ class DirectScanServicesDockerTest {
         assertTrue(validated.contains("Outcome: authenticated"), validated);
 
         GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
-        when(executionMode.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(executionMode.resolveDefaultMode()).thenReturn(mode);
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
+        ScanJobQueueService queue = new ScanJobQueueService(
+                activeScanService, spiderScanService, mock(AjaxSpiderService.class), clientSpiderService,
+                mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
+                false, store, new SingleNodeQueueLeadershipCoordinator());
         GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(executionMode,
                 mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
-                mock(ActiveScanService.class), mock(ScanJobQueueService.class), authSessions,
+                mock(ActiveScanService.class), queue, authSessions,
                 new ZapEngineAdapter(), new GatewayRecordFactory());
-        String started = guidedScans.startCrawl(targetOrigin + "/protected", "client", null, sessionId);
-        String operationId = started.lines().filter(line -> line.startsWith("Operation ID: "))
-                .map(line -> line.substring("Operation ID: ".length())).findFirst().orElseThrow();
-        String scanId = extractScanId(started);
-
         try {
-            assertTrue(started.contains("Authenticated Session: " + sessionId));
-            assertTrue(guidedScans.getCrawlStatus(operationId).contains("Strategy: client"));
-            await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
-                ApiResponseList messages = (ApiResponseList) clientApi.core.messages(
-                        targetOrigin + "/protected/client-discovered", "0", "100");
-                assertTrue(messages.getItems().stream().map(ApiResponseSet.class::cast).anyMatch(message ->
-                                message.getStringValue("requestHeader").contains("Cookie: session=")
-                                        && message.getStringValue("responseHeader").contains(" 200 ")
-                                        && message.getStringValue("responseBody")
-                                                .contains("authenticated JavaScript resource")),
-                        "Client Spider must discover and fetch the protected resource with its browser user's session");
-            });
+            String started = guidedScans.startCrawl(targetUrl, "client", null, sessionId);
+            String operationId = started.lines().filter(line -> line.startsWith("Operation ID: "))
+                    .map(line -> line.substring("Operation ID: ".length())).findFirst().orElseThrow();
+            String jobId = mode == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+                    ? store.list().getFirst().getId() : null;
+            try {
+                assertTrue(started.contains("Authenticated Session: " + sessionId));
+                String status = guidedScans.getCrawlStatus(operationId);
+                assertTrue(status.contains("Strategy: client"));
+                if (jobId != null) {
+                    var job = store.load(jobId).orElseThrow();
+                    assertEquals(ScanJobType.CLIENT_SPIDER, job.getType());
+                    assertEquals(ScanJobStatus.RUNNING, job.getStatus());
+                    assertEquals(profile.getId() + "-auth", job.getParameters().get("contextName"));
+                    assertEquals(profile.getZapUserName(), job.getParameters().get("userName"));
+                    assertTrue(status.contains("Job ID: " + jobId));
+                    assertTrue(status.contains("ZAP Scan ID: " + job.getZapScanId()));
+                }
+                await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
+                    ApiResponseList messages = (ApiResponseList) clientApi.core.messages(
+                            targetOrigin + "/protected/client-discovered" + crawlQuery, "0", "100");
+                    assertTrue(messages.getItems().stream().map(ApiResponseSet.class::cast).anyMatch(message ->
+                                    message.getStringValue("requestHeader").contains("/protected/client-discovered" + crawlQuery)
+                                            && message.getStringValue("requestHeader").contains("Cookie: session=")
+                                            && message.getStringValue("responseHeader").contains(" 200 ")
+                                            && message.getStringValue("responseBody")
+                                                    .contains("authenticated JavaScript resource")),
+                            "Client Spider must fetch this crawl's protected JavaScript resource with its browser user's session");
+                });
+                String scanId = jobId == null ? extractScanId(started) : store.load(jobId).orElseThrow().getZapScanId();
+                assertTrue(clientSpiderService.getClientSpiderProgressPercent(scanId) < 100,
+                        "The crawl must still be running so the stop request exercises active cancellation");
+            } finally {
+                guidedScans.stopCrawl(operationId);
+                await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
+                    String status = guidedScans.getCrawlStatus(operationId);
+                    String scanId = jobId == null ? extractScanId(started) : store.load(jobId).orElseThrow().getZapScanId();
+                    assertEquals(100, clientSpiderService.getClientSpiderProgressPercent(scanId));
+                    if (jobId != null) {
+                        assertEquals(ScanJobStatus.CANCELLED, store.load(jobId).orElseThrow().getStatus());
+                        assertTrue(status.contains("Status: CANCELLED"));
+                    }
+                });
+            }
         } finally {
-            guidedScans.stopCrawl(operationId);
-            await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500))
-                    .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanId) == 100);
+            queue.shutdownExecutor();
         }
 
         String unexpectedPrepared = authSessions.prepareSession(profile.getId(), targetOrigin + "/unexpected-response");

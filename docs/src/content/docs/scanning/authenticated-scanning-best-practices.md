@@ -27,7 +27,7 @@ The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
 OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
-Browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
+Unreleased browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
 
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
@@ -73,6 +73,8 @@ Wildcard references and inline secrets are not supported. Use one profile per ap
 The ZAP context name is derived from the unique profile ID with an `-auth` suffix. Its scope is the profile's immutable `allowed-origin`, so preparing the same profile for another path cannot rewrite the live scope behind an earlier session or queued job. Different profiles still receive different contexts.
 
 ## Browser Authentication for Client Spider
+
+> **Unreleased:** Client Spider and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
 
 Add a separate browser profile to the same deployment configuration:
 
@@ -494,7 +496,7 @@ If validation fails, stop. Do not continue and pretend the scan is authenticated
 }
 ```
 
-Guided authenticated crawl accepts prepared form-login sessions with `strategy=http` or `auto`, and prepared browser sessions with `strategy=client`. Browser/AJAX crawl with `authSessionId` is not supported. A browser session cannot currently be used for guided active scanning.
+Guided authenticated crawl accepts prepared form-login sessions with `strategy=http` or `auto`, and prepared browser sessions with `strategy=client`. AJAX crawl (`strategy=browser`) with `authSessionId` is not supported. A browser session cannot currently be used for guided active scanning.
 
 ### 4. Attack as the Prepared Session
 
@@ -590,7 +592,7 @@ If `zap_auth_test_user` cannot prove the user is authenticated, the scan is not 
 - `Auth profile ... is invalid`: fix the operator configuration before retrying.
 - `likelyAuthenticated` is not `true`: indicators, field names, credentials, target behavior, or ZAP diagnostics are wrong or indeterminate.
 - Header session validates but crawl is still unauthenticated: bearer/API-key header injection is not in the guided engine path yet.
-- Browser strategy rejects auth: authenticated browser/AJAX guided crawl is not supported yet.
+- Crawl strategy `browser` rejects auth: this selects AJAX Spider, which does not support guided `authSessionId`. For Client Spider, use `strategy=client` with a `kind: browser` profile as described above.
 
 If you are debugging an incident, use the
 [Auth Bootstrap Failure Runbook](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md).

@@ -5,6 +5,8 @@ description: "Choose between guided, direct, queue-managed, and Automation Frame
 ---
 MCP ZAP Server supports multiple scan execution paths. If you do not understand which one you are using, you will misread the behavior around durability, retries, and failover.
 
+> **Unreleased:** Client Spider (`strategy=client`, `zap_client_spider_*`, and `zap_queue_client_spider_scan`) and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
+
 ## Guided Mode
 
 The default `guided` surface exposes:

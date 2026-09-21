@@ -87,7 +87,7 @@ Use `guided` when:
 `expert` includes everything in `guided` and adds the raw tool families:
 
 - inventory: `zap_hosts`, `zap_sites`, `zap_urls`
-- direct scans: `zap_spider_*`, `zap_active_scan_*`, `zap_ajax_spider*`
+- direct scans: `zap_spider_*`, `zap_active_scan_*`, `zap_ajax_spider*`, `zap_client_spider_*` (Client Spider is unreleased and unavailable in `v0.12.0`)
 - queue lifecycle: `zap_queue_*`, `zap_scan_job_*`
 - API imports: `zap_import_*`
 - findings and reports: `zap_alert_*`, `zap_findings_snapshot`, `zap_findings_diff`, `zap_view_templates`, `zap_generate_report`, `zap_report_read`

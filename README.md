@@ -67,6 +67,7 @@ Connect your MCP client:
 
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
 - Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
+- [Codex setup](./docs/src/content/docs/getting-started/mcp-client-authentication.md#codex)
 - Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
 - [Client compatibility and setup](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 

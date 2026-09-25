@@ -61,6 +61,13 @@ tool call.
 
 ## 4. Connect A Client
 
+### Codex
+
+Use the [Codex setup instructions](../mcp-client-authentication/#codex) to add
+`http://localhost:7456/mcp` to `~/.codex/config.toml` with the `X-API-Key`
+header. The guide covers CLI environment variables and a desktop app fallback.
+Then return here to confirm tool discovery and run the first scan.
+
 ### Cursor
 
 - Start from the repo's

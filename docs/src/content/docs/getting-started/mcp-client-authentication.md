@@ -30,12 +30,13 @@ If you are starting from a fresh clone, use [Self-Serve First Run](../self-serve
 
 ## Client Compatibility
 
-Start with Cursor for the documented local API-key setup. The statuses below
+Local API-key setup is documented below for Codex and Cursor. The statuses
 describe this repository's onboarding coverage, not every capability a client
 may support.
 
 | Client / connection | Status | Scope |
 | --- | --- | --- |
+| Local Codex app or CLI with `X-API-Key` | Documented setup, end-to-end unverified here | Uses `~/.codex/config.toml` and Codex's documented Streamable HTTP header support. Verify discovery and the first scan below. |
 | Local Cursor with `X-API-Key` | Previously validated setup | Previously documented local API-key setup at `~/.cursor/mcp.json`; client version and test date were not recorded. |
 | Other streamable HTTP clients with custom headers | Expected to work, conditional | Must reach `/mcp`, send the configured auth header, and manage MCP sessions. Use the client's own configuration format and verify tool calls. |
 | Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
@@ -45,6 +46,71 @@ may support.
 For a compatibility report, include the client version, operating system,
 connection mode, and whether both tool discovery and the first scan below
 succeeded. Remove credentials before sharing configuration or logs.
+
+## Codex
+
+First complete [Self-Serve First Run](../self-serve-first-run/), including
+`./bin/self-serve-doctor.sh`, with the server in API-key mode. This recipe uses
+a local Codex app or CLI on the same machine as the Docker stack. For a Codex
+host on another machine, replace `localhost` with an address reachable from
+that host.
+
+Codex supports Streamable HTTP and custom headers. Its
+[official MCP guide](https://learn.chatgpt.com/docs/extend/mcp#streamable-http-servers)
+documents the shared configuration and authentication options.
+
+Merge this entry into `~/.codex/config.toml`, preserving existing settings and
+server entries. If `mcp-zap-server` already exists, update that entry instead
+of adding a duplicate:
+
+```toml
+[mcp_servers.mcp-zap-server]
+url = "http://localhost:7456/mcp"
+env_http_headers = { "X-API-Key" = "MCP_API_KEY" }
+```
+
+`MCP_API_KEY` here is the environment variable name. Its value must match the
+key in the server's `.env`; Codex does not automatically load that file.
+The key authenticates Codex to MCP ZAP Server, not ZAP to the target website.
+
+For the CLI, enter the key at a hidden prompt in the same terminal before
+starting Codex (Bash or Zsh on macOS/Linux):
+
+```bash
+printf 'MCP API key: ' >&2
+IFS= read -r -s MCP_API_KEY
+printf '\n' >&2
+export MCP_API_KEY
+codex
+```
+
+For the desktop app, the variable must be available when the app starts.
+Exporting it in a terminal inside an already-running app does not update the
+app's environment. If the app does not inherit the variable, remove
+`env_http_headers` from the server entry above and use this line in the same
+table instead:
+
+```toml
+http_headers = { "X-API-Key" = "REPLACE_WITH_YOUR_MCP_API_KEY" }
+```
+
+Replace the placeholder only in your private user configuration, then restart
+the app. Do not commit a file containing the key or paste it into a prompt.
+This API-key setup does not use `codex mcp login`, which starts an OAuth flow.
+
+After restarting the client, ask in a local task:
+
+```text
+List the available ZAP tools from mcp-zap-server.
+```
+
+Expected result: tools such as `zap_crawl_start`, `zap_crawl_status`,
+`zap_findings_summary`, and `zap_report_generate` are available without an
+authentication error. Then run the [first scan below](#first-scan-and-expected-result).
+If you receive `401`, check the key and whether the Codex process received
+the environment variable. If the connection is refused, check the stack and
+the `/mcp` address. This configuration follows Codex's documented support;
+a complete Codex-to-ZAP scan has not yet been validated for this repository.
 
 ## Cursor
 

@@ -15,6 +15,12 @@ public interface EngineScanExecution {
 
     void stopSpiderScan(String scanId);
 
+    String startClientSpiderScan(ClientSpiderScanRequest request);
+
+    int readClientSpiderProgressPercent(String scanId);
+
+    void stopClientSpiderScan(String scanId);
+
     String startActiveScan(ActiveScanRequest request);
 
     String startActiveScanAsUser(AuthenticatedActiveScanRequest request);
@@ -49,6 +55,18 @@ public interface EngineScanExecution {
             int threadCount,
             int maxDurationMinutes
     ) {
+    }
+
+    record ClientSpiderScanRequest(
+            String targetUrl,
+            int maxDepth,
+            int maxDurationMinutes,
+            String contextName,
+            String userName
+    ) {
+        public ClientSpiderScanRequest(String targetUrl, int maxDepth, int maxDurationMinutes) {
+            this(targetUrl, maxDepth, maxDurationMinutes, null, null);
+        }
     }
 
     record ActiveScanRequest(

@@ -52,7 +52,9 @@ public class GuidedAuthSessionService {
         if (hasText(session.headerName())) {
             output.append("Header Name: ").append(session.headerName()).append('\n');
         }
-        output.append("Next Step: call zap_auth_session_validate with this session ID before running authenticated crawl or attack flows.");
+        output.append(session.authKind() == AuthBootstrapKind.BROWSER
+                ? "Next Step: call zap_auth_session_validate with this session ID, then zap_crawl_start with strategy=client and authSessionId."
+                : "Next Step: call zap_auth_session_validate with this session ID before running authenticated crawl or attack flows.");
 
         appendWarnings(output, result.warnings());
         return output.toString();

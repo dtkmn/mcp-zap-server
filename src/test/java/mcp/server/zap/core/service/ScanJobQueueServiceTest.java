@@ -78,6 +78,7 @@ public class ScanJobQueueServiceTest {
     private ActiveScanService activeScanService;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;
+    private ClientSpiderService clientSpiderService;
     private UrlValidationService urlValidationService;
     private ScanLimitProperties scanLimitProperties;
     private ScanJobQueueService service;
@@ -87,6 +88,7 @@ public class ScanJobQueueServiceTest {
         activeScanService = mock(ActiveScanService.class);
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
+        clientSpiderService = mock(ClientSpiderService.class);
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
 
@@ -94,13 +96,11 @@ public class ScanJobQueueServiceTest {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
 
         service = new ScanJobQueueService(
-                activeScanService,
-                spiderScanService,
-                ajaxSpiderService,
-                urlValidationService,
-                scanLimitProperties,
-                3,
-                false
+                activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                false, new InMemoryScanJobStore(), new SingleNodeQueueLeadershipCoordinator()
         );
     }
 
@@ -123,6 +123,238 @@ public class ScanJobQueueServiceTest {
                 spiderPolicy,
                 false
         );
+    }
+
+    @Test
+    void clientSpiderJobsUseNativeIdsAndShareTraditionalSpiderCapacity() {
+        when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(2);
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 4))
+                .thenReturn("client-1", "client-2");
+        when(spiderScanService.startSpiderScanJob("http://example.com/http")).thenReturn("spider-1");
+
+        String firstId = extractJobId(service.queueClientSpiderScan("http://example.com/client", 4, "client-first"));
+        assertEquals(firstId, extractJobId(service.queueClientSpiderScan("http://example.com/client", 4, "client-first")));
+        String secondId = extractJobId(service.queueClientSpiderScan("http://example.com/client", 4, "client-second"));
+        String spiderId = extractJobId(service.queueSpiderScan("http://example.com/http", null));
+
+        assertEquals(ScanJobType.CLIENT_SPIDER, service.getJobForTesting(firstId).getType());
+        assertEquals("client-1", service.getJobForTesting(firstId).getZapScanId());
+        assertEquals("client-2", service.getJobForTesting(secondId).getZapScanId());
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondId).getStatus());
+        assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(spiderId).getStatus());
+        verify(spiderScanService, never()).startSpiderScanJob(anyString());
+
+        when(clientSpiderService.getClientSpiderProgressPercent("client-1")).thenReturn(100);
+        service.processQueueOnceForTesting();
+
+        assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(firstId).getStatus());
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondId).getStatus());
+        assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(spiderId).getStatus());
+
+        service.processQueueOnceForTesting();
+
+        assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(spiderId).getStatus());
+        verify(clientSpiderService, times(2)).startClientSpiderJob("http://example.com/client", 4);
+        verify(spiderScanService).startSpiderScanJob("http://example.com/http");
+        verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void invalidClientSpiderDepthIsRejectedBeforeAdmission() {
+        assertThrows(IllegalArgumentException.class,
+                () -> service.queueClientSpiderScan("http://example.com", -1, null));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+    }
+
+    @Test
+    void authenticatedClientSpiderNamesAreStoredAndIncludedInIdempotency() {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 4, "Application", "alice"))
+                .thenReturn("client-user-1");
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 4, " Application ", " alice ", "client-auth"));
+        ScanJob job = service.getJobForTesting(jobId);
+
+        assertEquals(ScanJobType.CLIENT_SPIDER, job.getType());
+        assertEquals("client-user-1", job.getZapScanId());
+        assertEquals(Map.of("targetUrl", "http://example.com/client", "maxDepth", "4",
+                "contextName", "Application", "userName", "alice"), job.getParameters());
+        assertEquals(jobId, extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Application", "alice", "client-auth")));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Application", "bob", "client-auth"));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "Other application", "alice", "client-auth"));
+        assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
+                "http://example.com/client", 4, "client-auth"));
+        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 4, "Application", "alice");
+    }
+
+    @ParameterizedTest
+    @MethodSource("partialClientSpiderAuthenticationNames")
+    void partialClientSpiderAuthenticationIsRejectedBeforeAdmission(String contextName, String userName) {
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
+                "http://example.com", null, contextName, userName, null));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+    }
+
+    static Stream<Arguments> partialClientSpiderAuthenticationNames() {
+        return Stream.of(
+                Arguments.of("Application", null),
+                Arguments.of("Application", ""),
+                Arguments.of("Application", " "),
+                Arguments.of(null, "alice"),
+                Arguments.of("", "alice"),
+                Arguments.of(" ", "alice")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("anonymousClientSpiderAuthenticationNames")
+    void absentClientSpiderAuthenticationUsesAnonymousCrawl(String contextName, String userName) {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0))
+                .thenReturn("client-anonymous");
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 0, contextName, userName, null));
+        ScanJob job = service.getJobForTesting(jobId);
+
+        assertEquals(ScanJobStatus.RUNNING, job.getStatus());
+        assertEquals("client-anonymous", job.getZapScanId());
+        assertEquals(Map.of("targetUrl", "http://example.com/client", "maxDepth", "0"), job.getParameters());
+        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 0);
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+    }
+
+    static Stream<Arguments> anonymousClientSpiderAuthenticationNames() {
+        return Stream.of(
+                Arguments.of(null, null),
+                Arguments.of(null, " "),
+                Arguments.of(" ", null),
+                Arguments.of(" ", " ")
+        );
+    }
+
+    @Test
+    void authenticatedClientSpiderStartupRetryKeepsAuthenticationAndNativeLifecycle() {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0, "Application", "alice"))
+                .thenThrow(new ZapApiException("Browser temporarily unavailable", null))
+                .thenReturn("client-retry");
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 0, "Application", "alice", "client-auth-retry"));
+        ScanJob waiting = service.getJobForTesting(jobId);
+        assertEquals(ScanJobStatus.QUEUED, waiting.getStatus());
+        assertEquals(1, waiting.getAttempts());
+        assertNull(waiting.getZapScanId());
+        assertThat(waiting.getLastError()).contains("Browser temporarily unavailable");
+
+        service.processQueueOnceForTesting();
+
+        ScanJob running = service.getJobForTesting(jobId);
+        assertEquals(ScanJobStatus.RUNNING, running.getStatus());
+        assertEquals("client-retry", running.getZapScanId());
+        assertEquals(2, running.getAttempts());
+        service.cancelScanJob(jobId);
+        assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
+        verify(clientSpiderService, times(2)).startClientSpiderJob(
+                "http://example.com/client", 0, "Application", "alice");
+        verify(clientSpiderService).stopClientSpiderJob("client-retry");
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void authenticatedClientSpiderStartupFailureExhaustsRetryBudgetWithoutAnonymousFallback() {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", null, "Application", "alice"))
+                .thenThrow(new ZapApiException("Browser authentication failed", null));
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", null, "Application", "alice", "client-auth-failure"));
+        service.processQueueOnceForTesting();
+        service.processQueueOnceForTesting();
+        service.processQueueOnceForTesting();
+
+        ScanJob failed = service.getJobForTesting(jobId);
+        assertEquals(ScanJobStatus.FAILED, failed.getStatus());
+        assertEquals(3, failed.getAttempts());
+        assertNull(failed.getZapScanId());
+        assertThat(service.getScanJobStatus(jobId))
+                .contains("Status: FAILED", "Browser authentication failed", "Dead Letter: true");
+        assertThat(service.listDeadLetterJobs()).contains(jobId);
+        verify(clientSpiderService, times(3)).startClientSpiderJob(
+                "http://example.com/client", null, "Application", "alice");
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        verify(spiderScanService, never()).startSpiderScanJob(anyString());
+        verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString());
+    }
+
+    @Test
+    void clientSpiderTransientStatusFailurePreservesRunningScanWithoutLaunchingDuplicate() {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", null))
+                .thenReturn("client-poll");
+        when(clientSpiderService.getClientSpiderProgressPercent("client-poll"))
+                .thenThrow(new ZapApiException("Client status temporarily unavailable", null))
+                .thenReturn(45, 100);
+
+        String jobId = extractJobId(service.queueClientSpiderScan("http://example.com/client", null, null));
+        service.processQueueOnceForTesting();
+
+        ScanJob recovering = service.getJobForTesting(jobId);
+        assertEquals(ScanJobStatus.RUNNING, recovering.getStatus());
+        assertEquals("client-poll", recovering.getZapScanId());
+        assertEquals(1, recovering.getAttempts());
+        assertThat(recovering.getLastError()).contains("Client status temporarily unavailable");
+
+        service.processQueueOnceForTesting();
+        assertEquals(45, service.getJobForTesting(jobId).getLastKnownProgress());
+        service.processQueueOnceForTesting();
+
+        assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
+        assertThat(service.getScanJobStatus(jobId)).contains("ZAP reports stopped; crawl outcome unknown");
+        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", null);
+        verify(clientSpiderService, never()).stopClientSpiderJob(anyString());
+    }
+
+    @Test
+    void authenticatedClientSpiderQueuedRestartRetainsParametersAndIdempotency() {
+        when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(0);
+        InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
+        ScanJobQueueService writer = new ScanJobQueueService(
+                activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator());
+        String jobId = extractJobId(writer.queueClientSpiderScan(
+                "http://example.com/client", 0, "Application", "alice", "client-auth-restart"));
+        writer.shutdownExecutor();
+
+        ScanJobQueueService restored = new ScanJobQueueService(
+                activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator());
+        try {
+            assertEquals(jobId, extractJobId(restored.queueClientSpiderScan(
+                    "http://example.com/client", 0, "Application", "alice", "client-auth-restart")));
+            assertEquals(ScanJobStatus.QUEUED, restored.getJobForTesting(jobId).getStatus());
+            when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
+            when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0, "Application", "alice"))
+                    .thenReturn("client-restored");
+
+            restored.processQueueOnceForTesting();
+
+            assertEquals(ScanJobStatus.RUNNING, restored.getJobForTesting(jobId).getStatus());
+            assertEquals("client-restored", restored.getJobForTesting(jobId).getZapScanId());
+            assertEquals(1, sharedJobStore.list().size());
+            verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 0, "Application", "alice");
+            verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        } finally {
+            restored.shutdownExecutor();
+        }
     }
 
     @Test
@@ -1092,6 +1324,11 @@ public class ScanJobQueueServiceTest {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
                 return null;
             }).when(activeScanService).stopActiveScanJob("scan-old");
+        } else if (type == ScanJobType.CLIENT_SPIDER) {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(clientSpiderService).stopClientSpiderJob("scan-old");
         } else {
             doAnswer(invocation -> {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
@@ -1139,6 +1376,7 @@ public class ScanJobQueueServiceTest {
             assertEquals(2, stops.get(), "A resolved cleanup record must make duplicate delivery harmless");
             verify(activeScanService, never()).stopActiveScanJob("scan-newer");
             verify(spiderScanService, never()).stopSpiderScanJob("scan-newer");
+            verify(clientSpiderService, never()).stopClientSpiderJob("scan-newer");
         } finally {
             queue.shutdownExecutor();
         }
@@ -1226,15 +1464,19 @@ public class ScanJobQueueServiceTest {
         }
     }
 
-    @Test
-    void lateTraditionalSpiderStartWithFailedStopCreatesDurableCleanupAndRetries() throws Exception {
+    @ParameterizedTest
+    @EnumSource(value = ScanJobType.class, names = {"SPIDER_SCAN", "CLIENT_SPIDER"})
+    void lateNativeSpiderStartWithFailedStopCreatesDurableCleanupAndRetries(ScanJobType type) throws Exception {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch releaseStart = new CountDownLatch(1);
         AtomicReference<Thread> lateThread = new AtomicReference<>();
         AtomicInteger starts = new AtomicInteger();
         AtomicInteger stops = new AtomicInteger();
-        when(spiderScanService.startSpiderScanJob(anyString())).thenAnswer(invocation -> {
+        var startCall = when(type == ScanJobType.CLIENT_SPIDER
+                ? clientSpiderService.startClientSpiderJob(anyString(), any())
+                : spiderScanService.startSpiderScanJob(anyString()));
+        startCall.thenAnswer(invocation -> {
             starts.incrementAndGet();
             lateThread.set(Thread.currentThread());
             entered.countDown();
@@ -1249,17 +1491,25 @@ public class ScanJobQueueServiceTest {
             }
             return "spider-late-native";
         });
-        doAnswer(invocation -> {
+        var stopCall = doAnswer(invocation -> {
             if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
             return null;
-        }).when(spiderScanService).stopSpiderScanJob("spider-late-native");
+        });
+        if (type == ScanJobType.CLIENT_SPIDER) {
+            stopCall.when(clientSpiderService).stopClientSpiderJob("spider-late-native");
+        } else {
+            stopCall.when(spiderScanService).stopSpiderScanJob("spider-late-native");
+        }
         ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
-                urlValidationService, scanLimitProperties,
+                clientSpiderService, urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1),
-                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1), true, store);
+                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1), true, store,
+                new SingleNodeQueueLeadershipCoordinator());
         ExecutorService caller = Executors.newSingleThreadExecutor();
         try {
-            Future<String> submission = caller.submit(() -> queue.queueSpiderScan("http://example.com/late-native", null));
+            Future<String> submission = caller.submit(() -> type == ScanJobType.CLIENT_SPIDER
+                    ? queue.queueClientSpiderScan("http://example.com/late-native", null, null)
+                    : queue.queueSpiderScan("http://example.com/late-native", null));
             assertTrue(entered.await(3, TimeUnit.SECONDS));
             String sourceId = extractJobId(submission.get(15, TimeUnit.SECONDS));
             assertEquals(ScanJobStatus.FAILED, store.load(sourceId).orElseThrow().getStatus());
@@ -1315,10 +1565,11 @@ public class ScanJobQueueServiceTest {
     }
 
     private ScanJobQueueService newNativeCleanupService(InMemoryScanJobStore store, boolean virtualThreads) {
-        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1),
-                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), virtualThreads, store);
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), virtualThreads, store,
+                new SingleNodeQueueLeadershipCoordinator());
     }
 
     private ScanJob cleanupFor(InMemoryScanJobStore store, String sourceId) {
@@ -1941,6 +2192,11 @@ public class ScanJobQueueServiceTest {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
                 return null;
             }).when(activeScanService).stopActiveScanJob("scan-cancel");
+        } else if (type == ScanJobType.CLIENT_SPIDER) {
+            doAnswer(invocation -> {
+                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                return null;
+            }).when(clientSpiderService).stopClientSpiderJob("scan-cancel");
         } else {
             doAnswer(invocation -> {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
@@ -1980,6 +2236,7 @@ public class ScanJobQueueServiceTest {
             assertEquals(ScanJobStatus.RUNNING, store.load(other.getId()).orElseThrow().getStatus());
             verify(activeScanService, never()).stopActiveScanJob("scan-other");
             verify(spiderScanService, never()).stopSpiderScanJob("scan-other");
+            verify(clientSpiderService, never()).stopClientSpiderJob("scan-other");
             verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
         } finally {
             queue.shutdownExecutor();

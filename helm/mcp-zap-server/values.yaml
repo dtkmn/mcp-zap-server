@@ -46,6 +46,7 @@ zap:
       allowedAddrRegex: ""
     addons:
       - spiderAjax
+      - client
       - graphql
       - soap
       - automation

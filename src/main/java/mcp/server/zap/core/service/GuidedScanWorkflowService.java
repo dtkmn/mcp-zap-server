@@ -31,18 +31,20 @@ public class GuidedScanWorkflowService {
     private static final String STRATEGY_ACTIVE = "active";
     private static final String STRATEGY_AUTO = "auto";
     private static final String STRATEGY_BROWSER = "browser";
+    private static final String STRATEGY_CLIENT = "client";
     private static final String STRATEGY_HTTP = "http";
     private static final String JOB_ID_PREFIX = "Job ID: ";
     private static final String SCAN_ID_PREFIX = "Scan ID: ";
     private static final String AUTO_BROWSER_FALLBACK_NOTE =
             "Auto strategy fell back from the HTTP spider to the browser-backed crawler because the direct spider failed.";
     private static final String AUTO_QUEUE_HTTP_NOTE =
-            "Auto strategy in queued mode currently selects the HTTP spider by default. Pass strategy=browser to force the browser-backed crawler.";
+            "Auto strategy in queued mode currently selects the HTTP spider by default. Pass strategy=client for Client Spider or strategy=browser for AJAX Spider.";
     private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
 
     private final GuidedExecutionModeResolver executionModeResolver;
     private final SpiderScanService spiderScanService;
     private final AjaxSpiderService ajaxSpiderService;
+    private final ClientSpiderService clientSpiderService;
     private final ActiveScanService activeScanService;
     private final ScanJobQueueService scanJobQueueService;
     private final GuidedAuthSessionService guidedAuthSessionService;
@@ -56,6 +58,7 @@ public class GuidedScanWorkflowService {
     public GuidedScanWorkflowService(GuidedExecutionModeResolver executionModeResolver,
                                      SpiderScanService spiderScanService,
                                      AjaxSpiderService ajaxSpiderService,
+                                     ClientSpiderService clientSpiderService,
                                      ActiveScanService activeScanService,
                                      ScanJobQueueService scanJobQueueService,
                                      GuidedAuthSessionService guidedAuthSessionService,
@@ -64,6 +67,7 @@ public class GuidedScanWorkflowService {
         this.executionModeResolver = executionModeResolver;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
+        this.clientSpiderService = clientSpiderService;
         this.activeScanService = activeScanService;
         this.scanJobQueueService = scanJobQueueService;
         this.guidedAuthSessionService = guidedAuthSessionService;
@@ -79,12 +83,14 @@ public class GuidedScanWorkflowService {
     public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "guided crawl");
-        PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
+        String normalizedStrategy = normalizeCrawlStrategy(strategy);
+        PreparedAuthSession preparedAuthSession = resolvePreparedSession(authSessionId, normalizedTargetUrl,
+                STRATEGY_CLIENT.equals(normalizedStrategy) ? AuthBootstrapKind.BROWSER : AuthBootstrapKind.FORM);
         return formatStartedOperation(
                 normalizedTargetUrl,
                 startCrawlOperation(
                         normalizedTargetUrl,
-                        normalizeCrawlStrategy(strategy),
+                        normalizedStrategy,
                         trimToNull(idempotencyKey),
                         preparedAuthSession
                 )
@@ -102,7 +108,8 @@ public class GuidedScanWorkflowService {
     public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "guided attack");
-        PreparedAuthSession preparedAuthSession = resolvePreparedFormSession(authSessionId, normalizedTargetUrl);
+        PreparedAuthSession preparedAuthSession = resolvePreparedSession(
+                authSessionId, normalizedTargetUrl, AuthBootstrapKind.FORM);
         return formatStartedOperation(
                 normalizedTargetUrl,
                 startAttackOperation(normalizedTargetUrl, recurse, policy, trimToNull(idempotencyKey), preparedAuthSession)
@@ -123,15 +130,19 @@ public class GuidedScanWorkflowService {
                                                  PreparedAuthSession preparedAuthSession) {
         if (preparedAuthSession != null && STRATEGY_BROWSER.equals(requestedStrategy)) {
             throw new IllegalArgumentException(
-                    "Authenticated guided crawl currently supports the HTTP spider only. strategy=browser is not supported with authSessionId."
+                    "strategy=browser (AJAX Spider) does not support authSessionId."
             );
         }
 
         GuidedExecutionModeResolver.ExecutionMode executionMode = executionModeResolver.resolveDefaultMode();
         if (executionMode == GuidedExecutionModeResolver.ExecutionMode.QUEUE) {
-            String effectiveStrategy = STRATEGY_BROWSER.equals(requestedStrategy) ? STRATEGY_BROWSER : STRATEGY_HTTP;
+            String effectiveStrategy = STRATEGY_AUTO.equals(requestedStrategy) ? STRATEGY_HTTP : requestedStrategy;
             String delegateResponse;
-            if (preparedAuthSession != null) {
+            if (preparedAuthSession != null && STRATEGY_CLIENT.equals(effectiveStrategy)) {
+                delegateResponse = scanJobQueueService.queueClientSpiderScan(
+                        targetUrl, null, preparedAuthSession.contextName(), preparedAuthSession.zapUserName(), idempotencyKey
+                );
+            } else if (preparedAuthSession != null) {
                 delegateResponse = scanJobQueueService.queueSpiderScanAsUser(
                         preparedAuthSession.contextId(),
                         preparedAuthSession.userId(),
@@ -143,13 +154,13 @@ public class GuidedScanWorkflowService {
                 );
                 effectiveStrategy = STRATEGY_HTTP;
             } else {
-                delegateResponse = STRATEGY_BROWSER.equals(effectiveStrategy)
-                    ? scanJobQueueService.queueAjaxSpiderScan(targetUrl, idempotencyKey)
-                    : scanJobQueueService.queueSpiderScan(targetUrl, idempotencyKey);
+                delegateResponse = switch (effectiveStrategy) {
+                    case STRATEGY_CLIENT -> scanJobQueueService.queueClientSpiderScan(targetUrl, null, idempotencyKey);
+                    case STRATEGY_BROWSER -> scanJobQueueService.queueAjaxSpiderScan(targetUrl, idempotencyKey);
+                    default -> scanJobQueueService.queueSpiderScan(targetUrl, idempotencyKey);
+                };
             }
-            String note = preparedAuthSession != null
-                    ? "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing."
-                    : (STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null);
+            String note = queuedCrawlNote(requestedStrategy, effectiveStrategy, preparedAuthSession);
             return startedOperation(
                     OperationKind.CRAWL,
                     GuidedExecutionModeResolver.ExecutionMode.QUEUE,
@@ -161,6 +172,9 @@ public class GuidedScanWorkflowService {
             );
         }
 
+        if (STRATEGY_CLIENT.equals(requestedStrategy)) {
+            return directClientCrawl(targetUrl, preparedAuthSession);
+        }
         if (preparedAuthSession != null) {
             return directAuthenticatedHttpCrawl(targetUrl, preparedAuthSession);
         }
@@ -177,6 +191,18 @@ public class GuidedScanWorkflowService {
             }
             return directBrowserCrawl(targetUrl, AUTO_BROWSER_FALLBACK_NOTE);
         }
+    }
+
+    private String queuedCrawlNote(String requestedStrategy,
+                                   String effectiveStrategy,
+                                   PreparedAuthSession preparedAuthSession) {
+        if (preparedAuthSession == null) {
+            return STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null;
+        }
+        if (STRATEGY_CLIENT.equals(effectiveStrategy)) {
+            return "Authenticated guided crawl applied the prepared browser session via ZAP context/user routing.";
+        }
+        return "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.";
     }
 
     private StartedOperation startAttackOperation(String targetUrl,
@@ -257,6 +283,24 @@ public class GuidedScanWorkflowService {
         );
     }
 
+    private StartedOperation directClientCrawl(String targetUrl, PreparedAuthSession preparedAuthSession) {
+        String delegateResponse = preparedAuthSession == null
+                ? clientSpiderService.startClientSpider(targetUrl, null)
+                : clientSpiderService.startClientSpider(
+                        targetUrl, null, preparedAuthSession.contextName(), preparedAuthSession.zapUserName());
+        return startedOperation(
+                OperationKind.CRAWL,
+                GuidedExecutionModeResolver.ExecutionMode.DIRECT,
+                STRATEGY_CLIENT,
+                extractValueByPrefix(delegateResponse, SCAN_ID_PREFIX),
+                delegateResponse,
+                preparedAuthSession != null
+                        ? "Authenticated guided crawl applied the prepared browser session via ZAP context/user routing."
+                        : null,
+                preparedAuthSession
+        );
+    }
+
     private StartedOperation directAuthenticatedHttpCrawl(String targetUrl, PreparedAuthSession preparedAuthSession) {
         String delegateResponse = spiderScanService.startSpiderScanAsUser(
                 preparedAuthSession.contextId(),
@@ -308,9 +352,11 @@ public class GuidedScanWorkflowService {
         return switch (operation.kind()) {
             case CRAWL -> switch (operation.executionMode()) {
                 case QUEUE -> scanJobQueueService.getScanJobStatus(operation.backendId());
-                case DIRECT -> STRATEGY_BROWSER.equals(operation.strategy())
-                        ? ajaxSpiderService.getAjaxSpiderStatus()
-                        : spiderScanService.getSpiderScanStatus(operation.backendId());
+                case DIRECT -> switch (operation.strategy()) {
+                    case STRATEGY_CLIENT -> clientSpiderService.getClientSpiderStatus(operation.backendId());
+                    case STRATEGY_BROWSER -> ajaxSpiderService.getAjaxSpiderStatus();
+                    default -> spiderScanService.getSpiderScanStatus(operation.backendId());
+                };
             };
             case ATTACK -> operation.executionMode() == GuidedExecutionModeResolver.ExecutionMode.QUEUE
                     ? scanJobQueueService.getScanJobStatus(operation.backendId())
@@ -322,9 +368,11 @@ public class GuidedScanWorkflowService {
         return switch (operation.kind()) {
             case CRAWL -> switch (operation.executionMode()) {
                 case QUEUE -> scanJobQueueService.cancelScanJob(operation.backendId());
-                case DIRECT -> STRATEGY_BROWSER.equals(operation.strategy())
-                        ? ajaxSpiderService.stopAjaxSpider()
-                        : spiderScanService.stopSpiderScan(operation.backendId());
+                case DIRECT -> switch (operation.strategy()) {
+                    case STRATEGY_CLIENT -> clientSpiderService.stopClientSpider(operation.backendId());
+                    case STRATEGY_BROWSER -> ajaxSpiderService.stopAjaxSpider();
+                    default -> spiderScanService.stopSpiderScan(operation.backendId());
+                };
             };
             case ATTACK -> operation.executionMode() == GuidedExecutionModeResolver.ExecutionMode.QUEUE
                     ? scanJobQueueService.cancelScanJob(operation.backendId())
@@ -348,7 +396,7 @@ public class GuidedScanWorkflowService {
         if (hasText(started.note())) {
             output.append("Note: ").append(started.note().trim()).append('\n');
         }
-        output.append(nextActionsForStartedOperation(started.operation(), operationId))
+        output.append(nextActionsForStartedOperation(started, operationId))
                 .append('\n')
                 .append(sanitizeDelegateResponse(started.delegateResponse()));
         return output.toString();
@@ -380,14 +428,19 @@ public class GuidedScanWorkflowService {
                 .toString();
     }
 
-    private String nextActionsForStartedOperation(GuidedOperation operation, String operationId) {
+    private String nextActionsForStartedOperation(StartedOperation started, String operationId) {
+        GuidedOperation operation = started.operation();
         String statusTool = statusToolFor(operation.kind());
         String stopTool = stopToolFor(operation.kind());
         StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER)
                 .append('\n')
                 .append("- Poll: call ").append(statusTool).append(" with this operation ID: ").append(operationId).append('\n')
                 .append("- Stop if needed: call ").append(stopTool).append(" with the same operation ID.").append('\n');
-        if (operation.kind() == OperationKind.CRAWL) {
+        if (started.preparedAuthSession() != null
+                && started.preparedAuthSession().authKind() == AuthBootstrapKind.BROWSER) {
+            output.append("- When crawl stops: call zap_passive_scan_wait, then review findings and crawl coverage.\n")
+                    .append("- This browser session supports Client Spider only. Authenticated active testing currently requires a prepared form-login session.");
+        } else if (operation.kind() == OperationKind.CRAWL) {
             output.append("- When crawl is complete: call zap_attack_start if active testing is approved, or zap_passive_scan_wait before findings/report if crawl-only evidence is enough.");
         } else {
             output.append("- When attack is complete: call zap_passive_scan_wait before zap_findings_summary or zap_report_generate.");
@@ -411,8 +464,8 @@ public class GuidedScanWorkflowService {
     private String nextActionsForStatus(GuidedOperation operation, String operationId, String delegateResponse) {
         OperationState state = inferOperationState(delegateResponse);
         if (state == OperationState.SUCCEEDED && operation.kind() == OperationKind.CRAWL
-                && STRATEGY_BROWSER.equals(operation.strategy())) {
-            // Queue success only confirms that the AJAX crawler stopped.
+                && (STRATEGY_BROWSER.equals(operation.strategy()) || STRATEGY_CLIENT.equals(operation.strategy()))) {
+            // Browser crawler APIs confirm termination, not successful coverage.
             state = OperationState.STOPPED;
         }
         String statusTool = statusToolFor(operation.kind());
@@ -539,8 +592,8 @@ public class GuidedScanWorkflowService {
         }
         String normalized = strategy.trim().toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case STRATEGY_AUTO, STRATEGY_HTTP, STRATEGY_BROWSER -> normalized;
-            default -> throw new IllegalArgumentException("strategy must be one of: auto, http, browser");
+            case STRATEGY_AUTO, STRATEGY_HTTP, STRATEGY_BROWSER, STRATEGY_CLIENT -> normalized;
+            default -> throw new IllegalArgumentException("strategy must be one of: auto, http, browser, client");
         };
     }
 
@@ -707,19 +760,28 @@ public class GuidedScanWorkflowService {
         }
     }
 
-    private PreparedAuthSession resolvePreparedFormSession(String authSessionId, String targetUrl) {
+    private PreparedAuthSession resolvePreparedSession(String authSessionId, String targetUrl,
+                                                      AuthBootstrapKind requiredKind) {
         if (!hasText(authSessionId)) {
             return null;
         }
         PreparedAuthSession session = guidedAuthSessionService.getPreparedSession(authSessionId);
-        if (session.authKind() != AuthBootstrapKind.FORM) {
+        if (session.authKind() != requiredKind) {
+            if (requiredKind == AuthBootstrapKind.BROWSER) {
+                throw new IllegalArgumentException(
+                        "strategy=client requires a prepared browser authentication session. Use a profile with kind=browser."
+                );
+            }
+            if (session.authKind() == AuthBootstrapKind.BROWSER) {
+                throw new IllegalArgumentException("Prepared browser authentication sessions currently require strategy=client.");
+            }
             throw new IllegalArgumentException(
-                    "Authenticated guided scan execution currently supports form-login sessions only. Re-prepare a form session or omit authSessionId."
+                    "This operation currently supports form-login sessions only. Re-prepare a form session or omit authSessionId."
             );
         }
         if (!session.engineBound() || !hasText(session.contextId()) || !hasText(session.userId())) {
             throw new IllegalArgumentException(
-                    "Prepared auth session is not bound to a reusable ZAP context/user. Re-run zap_auth_session_prepare for a form-login flow."
+                    "Prepared auth session is not bound to a reusable ZAP context/user. Re-run zap_auth_session_prepare."
             );
         }
         if (session.authorizedOrigin() == null) {
@@ -731,6 +793,12 @@ public class GuidedScanWorkflowService {
                 || !session.authorizedOrigin().matches(targetUrl)) {
             throw new IllegalArgumentException(
                     "authSessionId is not authorized for the requested targetUrl origin. Reuse the session only on its auth profile origin."
+            );
+        }
+        if (requiredKind == AuthBootstrapKind.BROWSER
+                && (!hasText(session.contextName()) || !hasText(session.zapUserName()))) {
+            throw new IllegalArgumentException(
+                    "Prepared browser session is missing ZAP context/user names. Re-run zap_auth_session_prepare."
             );
         }
         return session;

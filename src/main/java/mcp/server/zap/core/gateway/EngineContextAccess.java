@@ -17,7 +17,11 @@ public interface EngineContextAccess {
 
     AuthenticationConfigResult configureContextAuthentication(AuthenticationConfigRequest request);
 
+    void configureAutoDetectSessionManagement(String contextId);
+
     AuthenticationDiagnostics testUserAuthentication(String contextId, String userId);
+
+    AuthenticationDiagnostics testUserAuthentication(String contextId, String userId, String verificationUrl);
 
     record ContextMutation(
             String contextName,

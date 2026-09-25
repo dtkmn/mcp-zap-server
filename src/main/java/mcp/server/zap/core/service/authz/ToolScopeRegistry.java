@@ -62,6 +62,9 @@ public class ToolScopeRegistry {
         register(rules, "zap_spider_as_user", McpToolSurface.EXPERT, List.of(DIRECT_SCAN_CAPABILITY), "zap:scan:spider:run");
         register(rules, "zap_spider_status", McpToolSurface.EXPERT, "zap:scan:read");
         register(rules, "zap_spider_stop", McpToolSurface.EXPERT, "zap:scan:stop");
+        register(rules, "zap_client_spider_start", McpToolSurface.EXPERT, List.of(DIRECT_SCAN_CAPABILITY), "zap:scan:spider:run");
+        register(rules, "zap_client_spider_status", McpToolSurface.EXPERT, "zap:scan:read");
+        register(rules, "zap_client_spider_stop", McpToolSurface.EXPERT, "zap:scan:stop");
         register(rules, "zap_ajax_spider", McpToolSurface.EXPERT, List.of(DIRECT_SCAN_CAPABILITY), "zap:scan:ajax:run");
         register(rules, "zap_ajax_spider_status", McpToolSurface.EXPERT, "zap:scan:read");
         register(rules, "zap_ajax_spider_results", McpToolSurface.EXPERT, "zap:scan:read");
@@ -74,6 +77,7 @@ public class ToolScopeRegistry {
         register(rules, "zap_queue_active_scan_as_user", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:active:run");
         register(rules, "zap_queue_spider_scan", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:spider:run");
         register(rules, "zap_queue_spider_scan_as_user", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:spider:run");
+        register(rules, "zap_queue_client_spider_scan", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:spider:run");
         register(rules, "zap_queue_ajax_spider", McpToolSurface.EXPERT, List.of(QUEUE_ADMISSION_CAPABILITY), "zap:scan:ajax:run");
         register(rules, "zap_scan_job_status", McpToolSurface.EXPERT, "zap:scan:read");
         register(rules, "zap_scan_job_list", McpToolSurface.EXPERT, "zap:scan:read");

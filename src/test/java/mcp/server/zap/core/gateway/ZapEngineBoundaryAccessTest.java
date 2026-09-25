@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
+import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigRequest;
 import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationDiagnostics;
 import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutation;
 import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutationResult;
@@ -15,6 +16,8 @@ import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.gateway.EngineRuntimeAccess.NetworkDefaults;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
@@ -31,13 +34,16 @@ import org.zaproxy.clientapi.gen.Network;
 import org.zaproxy.clientapi.gen.Openapi;
 import org.zaproxy.clientapi.gen.Pscan;
 import org.zaproxy.clientapi.gen.Reports;
+import org.zaproxy.clientapi.gen.SessionManagement;
 import org.zaproxy.clientapi.gen.Soap;
 import org.zaproxy.clientapi.gen.Users;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ZapEngineBoundaryAccessTest {
@@ -50,6 +56,7 @@ class ZapEngineBoundaryAccessTest {
     private Context context;
     private Users users;
     private Authentication authentication;
+    private SessionManagement sessionManagement;
     private Pscan pscan;
     private AjaxSpider ajaxSpider;
     private Automation automation;
@@ -76,6 +83,7 @@ class ZapEngineBoundaryAccessTest {
         context = mock(Context.class);
         users = mock(Users.class);
         authentication = mock(Authentication.class);
+        sessionManagement = mock(SessionManagement.class);
         pscan = mock(Pscan.class);
         ajaxSpider = mock(AjaxSpider.class);
         automation = mock(Automation.class);
@@ -89,6 +97,7 @@ class ZapEngineBoundaryAccessTest {
         clientApi.context = context;
         clientApi.users = users;
         clientApi.authentication = authentication;
+        clientApi.sessionManagement = sessionManagement;
         clientApi.pscan = pscan;
         clientApi.ajaxSpider = ajaxSpider;
         clientApi.automation = automation;
@@ -217,6 +226,38 @@ class ZapEngineBoundaryAccessTest {
     }
 
     @Test
+    void contextAdapterConfiguresAutoDetectSessionManagement() throws Exception {
+        contextAccess.configureAutoDetectSessionManagement("1");
+
+        verify(sessionManagement).setSessionManagementMethod("1", "autoDetectSessionManagement", "");
+        verifyNoInteractions(authentication, users);
+    }
+
+    @Test
+    void contextAdapterPropagatesAutoDetectSessionManagementFailure() throws Exception {
+        ClientApiException failure = new ClientApiException("Session management method unavailable");
+        when(sessionManagement.setSessionManagementMethod("1", "autoDetectSessionManagement", ""))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> contextAccess.configureAutoDetectSessionManagement("1"))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessage("Failed to configure session management for context 1")
+                .hasCause(failure);
+        verifyNoInteractions(authentication, users);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"formBasedAuthentication", "browserBasedAuthentication"})
+    void expertAuthenticationConfigurationPreservesExistingSessionManagement(String authenticationMethod) throws Exception {
+        var result = contextAccess.configureContextAuthentication(new AuthenticationConfigRequest(
+                "1", authenticationMethod, "config=value", "Logout", "Sign in"));
+
+        assertThat(result.authMethodName()).isEqualTo(authenticationMethod);
+        verify(authentication).setAuthenticationMethod("1", authenticationMethod, "config=value");
+        verifyNoInteractions(sessionManagement);
+    }
+
+    @Test
     void contextAdapterParsesAuthenticationDiagnostics() throws Exception {
         when(users.authenticateAsUser("1", "7")).thenReturn(set("auth", Map.of(
                 "authSuccessful", element("authSuccessful", "true")
@@ -230,6 +271,122 @@ class ZapEngineBoundaryAccessTest {
         assertThat(diagnostics.likelyAuthenticated()).isTrue();
         assertThat(diagnostics.authResponse()).contains("authSuccessful");
         assertThat(diagnostics.authState()).contains("lastPollResult");
+        verifyNoInteractions(context);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void contextAdapterVerifiesProtectedUrlWithFreshNativeUserPoll(boolean authenticated) throws Exception {
+        stubVerificationContext();
+        when(authentication.getLoggedInIndicator("1"))
+                .thenReturn(element("logged_in_regex", "Private account data"));
+        when(users.authenticateAsUser("1", "7")).thenReturn(element("Result", "OK"));
+        when(users.pollAsUser("1", "7")).thenReturn(set("poll", Map.of(
+                "pollSuccessful", element("pollSuccessful", Boolean.toString(authenticated)),
+                "requestHeader", element("requestHeader", "Cookie: session=private-session"),
+                "responseBody", element("responseBody", "Private account data")
+        )));
+        when(users.getAuthenticationState("1", "7")).thenReturn(set("state", Map.of(
+                "lastPollResult", element("lastPollResult", Boolean.toString(!authenticated))
+        )));
+
+        AuthenticationDiagnostics diagnostics = contextAccess.testUserAuthentication(
+                "1", "7", "https://shop.example.com/account");
+
+        assertThat(diagnostics.likelyAuthenticated()).isEqualTo(authenticated);
+        assertThat(diagnostics.authResponse()).isEqualTo("verifiedAuthenticated=" + authenticated)
+                .doesNotContain("private-session", "Private account data");
+        var ordered = inOrder(context, users);
+        ordered.verify(context).setContextCheckingStrategy("shop-browser-auth", "POLL_URL",
+                "https://shop.example.com/account", "", "", "60", "REQUESTS");
+        ordered.verify(users).authenticateAsUser("1", "7");
+        ordered.verify(users).pollAsUser("1", "7");
+        ordered.verify(users).getAuthenticationState("1", "7");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing", "malformed", "acknowledgement"})
+    void contextAdapterDoesNotInferPollSuccessFromOtherFieldsOrStaleState(String responseKind) throws Exception {
+        stubVerificationContext();
+        when(users.authenticateAsUser("1", "7")).thenReturn(set("auth", Map.of(
+                "authSuccessful", element("authSuccessful", "true")
+        )));
+        ApiResponse pollResponse = switch (responseKind) {
+            case "missing" -> set("poll", Map.of("success", element("success", "true")));
+            case "malformed" -> set("poll", Map.of("pollSuccessful", element("pollSuccessful", "OK")));
+            default -> element("Result", "OK");
+        };
+        when(users.pollAsUser("1", "7")).thenReturn(pollResponse);
+        when(users.getAuthenticationState("1", "7")).thenReturn(set("state", Map.of(
+                "lastPollResult", element("lastPollResult", "true")
+        )));
+
+        AuthenticationDiagnostics diagnostics = contextAccess.testUserAuthentication(
+                "1", "7", "https://shop.example.com/account");
+
+        assertThat(diagnostics.likelyAuthenticated()).isNull();
+        assertThat(diagnostics.authResponse()).isEqualTo("verifiedAuthenticated=null");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"error-response", "missing-response", "missing-indicator"})
+    void contextAdapterRequiresPositiveLoginEvidenceDespiteSuccessfulNativePoll(String scenario) throws Exception {
+        stubVerificationContext();
+        when(users.authenticateAsUser("1", "7")).thenReturn(element("Result", "OK"));
+        Map<String, ApiResponse> fields = new LinkedHashMap<>();
+        fields.put("pollSuccessful", element("pollSuccessful", "true"));
+        // Matching request content must never count as proof from the protected page's response.
+        fields.put("requestHeader", element("requestHeader", "X-Auth: Signed in as scan-user"));
+        fields.put("requestBody", element("requestBody", "Signed in as scan-user"));
+        if (!scenario.equals("missing-response")) {
+            fields.put("responseHeader", element("responseHeader", "HTTP/1.1 500 Internal Server Error"));
+            fields.put("responseBody", element("responseBody", "An unexpected error occurred"));
+        }
+        when(users.pollAsUser("1", "7")).thenReturn(set("poll", fields));
+        when(users.getAuthenticationState("1", "7"))
+                .thenReturn(set("state", Map.of("lastPollResult", element("lastPollResult", "true"))));
+        when(authentication.getLoggedInIndicator("1"))
+                .thenReturn(element("logged_in_regex", scenario.equals("missing-indicator") ? "" : "Signed in as scan-user"));
+
+        AuthenticationDiagnostics diagnostics = contextAccess.testUserAuthentication(
+                "1", "7", "https://shop.example.com/account");
+
+        assertThat(diagnostics.likelyAuthenticated()).isNull();
+        assertThat(diagnostics.authResponse()).isEqualTo("verifiedAuthenticated=null");
+    }
+
+    @Test
+    void contextAdapterRecognizesConfiguredLoginIndicatorInResponseHeaders() throws Exception {
+        stubVerificationContext();
+        when(users.authenticateAsUser("1", "7")).thenReturn(element("Result", "OK"));
+        when(users.pollAsUser("1", "7")).thenReturn(set("poll", Map.of(
+                "pollSuccessful", element("pollSuccessful", "true"),
+                "responseHeader", element("responseHeader", "HTTP/1.1 200 OK\r\nX-User: scan-user\r\n"))));
+        when(users.getAuthenticationState("1", "7")).thenReturn(set("state", Map.of()));
+        when(authentication.getLoggedInIndicator("1"))
+                .thenReturn(element("logged_in_regex", "(?im)^x-user: scan-user$"));
+
+        AuthenticationDiagnostics diagnostics = contextAccess.testUserAuthentication(
+                "1", "7", "https://shop.example.com/account");
+
+        assertThat(diagnostics.likelyAuthenticated()).isTrue();
+    }
+
+    @Test
+    void contextAdapterRejectsVerificationWhenContextIdCannotBeResolved() throws Exception {
+        when(context.contextList()).thenReturn(new ApiResponseList("contextList"));
+
+        assertThatThrownBy(() -> contextAccess.testUserAuthentication("1", "7", "https://shop.example.com/account"))
+                .isInstanceOf(ZapApiException.class).hasCauseInstanceOf(ClientApiException.class);
+
+        verifyNoInteractions(users);
+    }
+
+    private void stubVerificationContext() throws Exception {
+        when(context.contextList()).thenReturn(new ApiResponseList("contextList", List.of(
+                element("context", "other-context"), element("context", "shop-browser-auth"))));
+        when(context.context("other-context")).thenReturn(set("context", Map.of("id", element("id", "2"))));
+        when(context.context("shop-browser-auth")).thenReturn(set("context", Map.of("id", element("id", "1"))));
     }
 
     @Test

@@ -8,10 +8,13 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
+import mcp.server.zap.core.gateway.EngineScanExecution.ClientSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
 import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
@@ -19,32 +22,39 @@ import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.Ascan;
+import org.zaproxy.clientapi.gen.ClientSpider;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Spider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ZapEngineScanExecutionTest {
 
+    private ClientApi clientApi;
     private Core core;
     private Spider spider;
     private Ascan ascan;
+    private ClientSpider clientSpider;
     private ZapEngineScanExecution execution;
 
     @BeforeEach
     void setup() {
-        ClientApi clientApi = new ClientApi("localhost", 0);
+        clientApi = mock(ClientApi.class);
         core = mock(Core.class);
         spider = mock(Spider.class);
         ascan = mock(Ascan.class);
+        clientSpider = mock(ClientSpider.class);
         clientApi.core = core;
         clientApi.spider = spider;
         clientApi.ascan = ascan;
+        clientApi.clientSpider = clientSpider;
         execution = new ZapEngineScanExecution(clientApi);
     }
 
@@ -90,6 +100,86 @@ class ZapEngineScanExecutionTest {
     }
 
     @Test
+    void startsAndControlsClientSpiderByNativeScanId() throws Exception {
+        when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null)).thenReturn(new ApiResponseElement("scan", "55"));
+        when(clientSpider.status("55")).thenReturn(new ApiResponseElement("status", "42"));
+
+        String scanId = execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15));
+
+        assertThat(scanId).isEqualTo("55");
+        assertThat(execution.readClientSpiderProgressPercent(scanId)).isEqualTo(42);
+        execution.stopClientSpiderScan(scanId);
+        verify(clientSpider).stop("55");
+    }
+
+    @Test
+    void startsAuthenticatedClientSpiderWithContextAndUserNames() throws Exception {
+        when(clientSpider.scan("firefox-headless", "http://example.com", "member-context", "member-user", null,
+                "7", null, "1", null)).thenReturn(new ApiResponseElement("scan", "56"));
+
+        String scanId = execution.startClientSpiderScan(new ClientSpiderScanRequest(
+                "http://example.com", 7, 15, "member-context", "member-user"));
+
+        assertThat(scanId).isEqualTo("56");
+        var ordered = inOrder(clientApi, clientSpider);
+        ordered.verify(clientApi).callApi("clientSpider", "action", "setOptionMaxDuration",
+                Map.of("Integer", "15"));
+        ordered.verify(clientSpider).scan("firefox-headless", "http://example.com", "member-context", "member-user", null,
+                "7", null, "1", null);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 15})
+    void configuresNativeClientSpiderDurationBeforeLaunching(int minutes) throws Exception {
+        when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null)).thenReturn(new ApiResponseElement("scan", "55"));
+
+        execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, minutes));
+
+        var ordered = inOrder(clientApi, clientSpider);
+        ordered.verify(clientApi).callApi("clientSpider", "action", "setOptionMaxDuration",
+                Map.of("Integer", Integer.toString(minutes)));
+        ordered.verify(clientSpider).scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null);
+    }
+
+    @Test
+    void unsupportedDurationOptionPreventsAnUnboundedClientCrawl() throws Exception {
+        ClientApiException failure = new ClientApiException("Bad Action", "bad_action", null);
+        when(clientApi.callApi("clientSpider", "action", "setOptionMaxDuration", Map.of("Integer", "15")))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
+                .isExactlyInstanceOf(ZapApiException.class)
+                .hasMessageContaining("0.27.0 or newer")
+                .hasCause(failure);
+        verifyNoInteractions(clientSpider);
+    }
+
+    @Test
+    void reportsMissingClientAddonFromTheSpecificApiError() throws Exception {
+        ClientApiException failure = new ClientApiException("No Implementor", "no_implementor", null);
+        when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null)).thenThrow(failure);
+
+        assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
+                .isExactlyInstanceOf(ZapApiException.class)
+                .hasMessageContaining("-addoninstall client")
+                .hasCause(failure);
+    }
+
+    @Test
+    void rejectsBlankClientSpiderScanIds() throws Exception {
+        when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null)).thenReturn(new ApiResponseElement("scan", " "));
+
+        assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessageContaining("blank scan ID");
+    }
+
+    @Test
     void mapsExplicitBusyRejectionsForEveryScanLaunch() throws Exception {
         assertScanLaunchFailures(new ClientApiException("Scan In Progress", "scan_in_progress", null),
                 EngineBusyException.class);
@@ -111,12 +201,17 @@ class ZapEngineScanExecutionTest {
         ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
         when(spider.setOptionThreadCount(3)).thenThrow(failure);
         when(ascan.enableAllScanners(null)).thenThrow(failure);
+        when(clientApi.callApi("clientSpider", "action", "setOptionMaxDuration", Map.of("Integer", "15")))
+                .thenThrow(failure);
 
         assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
         assertThatThrownBy(() -> execution.startActiveScan(
                 new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10)))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        verifyNoInteractions(clientSpider);
     }
 
     @Test
@@ -126,6 +221,8 @@ class ZapEngineScanExecutionTest {
         when(spider.stop("1")).thenThrow(failure);
         when(ascan.status("1")).thenThrow(failure);
         when(ascan.stop("1")).thenThrow(failure);
+        when(clientSpider.status("1")).thenThrow(failure);
+        when(clientSpider.stop("1")).thenThrow(failure);
 
         assertThatThrownBy(() -> execution.readSpiderProgressPercent("1"))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
@@ -134,6 +231,10 @@ class ZapEngineScanExecutionTest {
         assertThatThrownBy(() -> execution.readActiveScanProgressPercent("1"))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
         assertThatThrownBy(() -> execution.stopActiveScan("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.readClientSpiderProgressPercent("1"))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.stopClientSpiderScan("1"))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
     }
 
@@ -155,6 +256,17 @@ class ZapEngineScanExecutionTest {
         assertThatThrownBy(() -> execution.readActiveScanProgressPercent("active-1"))
                 .isInstanceOf(ZapApiException.class)
                 .hasMessageContaining("ascan.status()")
+                .hasMessageNotContaining("running")
+                .hasCauseInstanceOf(NumberFormatException.class);
+    }
+
+    @Test
+    void rejectsNonNumericClientSpiderProgressValues() throws Exception {
+        when(clientSpider.status("1")).thenReturn(new ApiResponseElement("status", "running"));
+
+        assertThatThrownBy(() -> execution.readClientSpiderProgressPercent("1"))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessageContaining("clientSpider.status()")
                 .hasMessageNotContaining("running")
                 .hasCauseInstanceOf(NumberFormatException.class);
     }
@@ -197,6 +309,8 @@ class ZapEngineScanExecutionTest {
         when(ascan.scan("http://example.com", "true", "false", "Default Policy", null, null)).thenThrow(failure);
         when(ascan.scanAsUser("http://example.com", "1", "2", "true", "Default Policy", null, null))
                 .thenThrow(failure);
+        when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
+                "7", null, "1", null)).thenThrow(failure);
 
         assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
                 .isExactlyInstanceOf(expected).hasCause(failure);
@@ -208,6 +322,8 @@ class ZapEngineScanExecutionTest {
                 .isExactlyInstanceOf(expected).hasCause(failure);
         assertThatThrownBy(() -> execution.startActiveScanAsUser(
                 new AuthenticatedActiveScanRequest("1", "2", "http://example.com", "true", "Default Policy", 30, 5, 10)))
+                .isExactlyInstanceOf(expected).hasCause(failure);
+        assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
                 .isExactlyInstanceOf(expected).hasCause(failure);
     }
 

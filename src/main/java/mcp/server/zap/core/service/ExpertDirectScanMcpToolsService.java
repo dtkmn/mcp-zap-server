@@ -12,13 +12,16 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
     private final ActiveScanService activeScanService;
     private final SpiderScanService spiderScanService;
     private final AjaxSpiderService ajaxSpiderService;
+    private final ClientSpiderService clientSpiderService;
 
     public ExpertDirectScanMcpToolsService(ActiveScanService activeScanService,
                                            SpiderScanService spiderScanService,
-                                           AjaxSpiderService ajaxSpiderService) {
+                                           AjaxSpiderService ajaxSpiderService,
+                                           ClientSpiderService clientSpiderService) {
         this.activeScanService = activeScanService;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
+        this.clientSpiderService = clientSpiderService;
     }
 
     @Tool(
@@ -144,6 +147,30 @@ public class ExpertDirectScanMcpToolsService implements ExpertToolGroup {
             @ToolParam(description = "ZAP spider scan ID returned by zap_spider_start or zap_spider_as_user") String scanId
     ) {
         return spiderScanService.stopSpiderScan(scanId);
+    }
+
+    @Tool(name = "zap_client_spider_start", description = "Start a direct Client Spider crawl for a JavaScript-driven app. Requires ZAP's Client Side Integration add-on and a headless Firefox browser. For authenticated crawling, supply both an existing ZAP context name and user name, with browser-based authentication configured in that context. Prepared HTTP form-login sessions do not authenticate the browser.")
+    public String startClientSpider(
+            @ToolParam(description = "Target URL to crawl") String targetUrl,
+            @ToolParam(required = false, description = "Maximum crawl depth; 0 means unlimited. Omit to use the server's spider depth setting.") Integer maxDepth,
+            @ToolParam(required = false, description = "Existing ZAP context name, not its numeric ID. Supply together with userName for authenticated crawling.") String contextName,
+            @ToolParam(required = false, description = "Existing ZAP user name within the context, not its numeric ID or login credentials. Supply together with contextName.") String userName
+    ) {
+        return clientSpiderService.startClientSpider(targetUrl, maxDepth, contextName, userName);
+    }
+
+    @Tool(name = "zap_client_spider_status", description = "Get Client Spider progress by ZAP scan ID. A stopped crawl does not prove successful coverage; wait for passive scanning before reviewing findings.")
+    public String getClientSpiderStatus(
+            @ToolParam(description = "ZAP scan ID returned by zap_client_spider_start") String scanId
+    ) {
+        return clientSpiderService.getClientSpiderStatus(scanId);
+    }
+
+    @Tool(name = "zap_client_spider_stop", description = "Stop a direct Client Spider crawl by its ZAP scan ID.")
+    public String stopClientSpider(
+            @ToolParam(description = "ZAP scan ID returned by zap_client_spider_start") String scanId
+    ) {
+        return clientSpiderService.stopClientSpider(scanId);
     }
 
     @Tool(

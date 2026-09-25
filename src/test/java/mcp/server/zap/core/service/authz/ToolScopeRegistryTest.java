@@ -29,11 +29,21 @@ class ToolScopeRegistryTest {
         assertThat(registry.hasCapability("zap_crawl_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)).isTrue();
         assertThat(registry.hasCapability("zap_attack_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)).isTrue();
         assertThat(registry.hasCapability("zap_active_scan_start", ToolScopeRegistry.DIRECT_SCAN_CAPABILITY)).isTrue();
+        assertThat(registry.hasCapability("zap_client_spider_start", ToolScopeRegistry.DIRECT_SCAN_CAPABILITY)).isTrue();
+        assertThat(registry.hasCapability("zap_queue_client_spider_scan", ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)).isTrue();
         assertThat(registry.hasCapability("zap_queue_active_scan", ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)).isTrue();
         assertThat(registry.hasCapability("zap_scan_job_retry", ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)).isTrue();
         assertThat(registry.hasCapability("zap_automation_plan_run", ToolScopeRegistry.AUTOMATION_EXECUTION_CAPABILITY)).isTrue();
 
         assertThat(registry.hasCapability("zap_report_read", ToolScopeRegistry.DIRECT_SCAN_CAPABILITY)).isFalse();
         assertThat(registry.hasCapability("zap_unknown_tool", ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)).isFalse();
+    }
+
+    @Test
+    void clientSpiderUsesExistingSpiderReadAndStopScopes() {
+        assertThat(registry.getRequiredScopes("zap_client_spider_start")).containsExactly("zap:scan:spider:run");
+        assertThat(registry.getRequiredScopes("zap_queue_client_spider_scan")).containsExactly("zap:scan:spider:run");
+        assertThat(registry.getRequiredScopes("zap_client_spider_status")).containsExactly("zap:scan:read");
+        assertThat(registry.getRequiredScopes("zap_client_spider_stop")).containsExactly("zap:scan:stop");
     }
 }

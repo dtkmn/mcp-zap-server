@@ -17,6 +17,8 @@ services:
       - -addoninstall
       - spiderAjax
       - -addoninstall
+      - client
+      - -addoninstall
       - graphql
       - -addoninstall
       - soap

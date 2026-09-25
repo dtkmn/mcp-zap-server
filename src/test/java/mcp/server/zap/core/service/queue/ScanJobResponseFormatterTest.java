@@ -166,6 +166,21 @@ class ScanJobResponseFormatterTest {
     }
 
     @Test
+    void clientSpiderCompletionReportsItsProgressWithoutClaimingCrawlSuccess() {
+        Instant now = Instant.parse("2026-05-06T00:00:00Z");
+        ScanJob job = new ScanJob("client-ended", ScanJobType.CLIENT_SPIDER, Map.of(), now, 3);
+        job.markRunning("client-1");
+        job.markSucceeded(100);
+
+        assertThat(formatter.formatJobDetail(job, 0, now))
+                .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)", "Progress: 100%");
+        assertThat(formatter.formatSubmission(job, true, now))
+                .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+        assertThat(formatter.formatJobList(List.of(job), null, now))
+                .contains("client-ended | CLIENT_SPIDER | SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+    }
+
+    @Test
     void explainsEngineWaitingWithoutPresentingItAsAStartupFailure() {
         Instant now = Instant.parse("2026-05-06T00:00:00Z");
         ScanJob job = new ScanJob("job-busy", ScanJobType.AJAX_SPIDER, Map.of(), now.minusSeconds(30), 2);

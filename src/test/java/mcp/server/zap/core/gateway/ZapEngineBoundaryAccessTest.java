@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
+import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigRequest;
 import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationDiagnostics;
 import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutation;
 import mcp.server.zap.core.gateway.EngineContextAccess.ContextMutationResult;
@@ -33,6 +34,7 @@ import org.zaproxy.clientapi.gen.Network;
 import org.zaproxy.clientapi.gen.Openapi;
 import org.zaproxy.clientapi.gen.Pscan;
 import org.zaproxy.clientapi.gen.Reports;
+import org.zaproxy.clientapi.gen.SessionManagement;
 import org.zaproxy.clientapi.gen.Soap;
 import org.zaproxy.clientapi.gen.Users;
 
@@ -54,6 +56,7 @@ class ZapEngineBoundaryAccessTest {
     private Context context;
     private Users users;
     private Authentication authentication;
+    private SessionManagement sessionManagement;
     private Pscan pscan;
     private AjaxSpider ajaxSpider;
     private Automation automation;
@@ -80,6 +83,7 @@ class ZapEngineBoundaryAccessTest {
         context = mock(Context.class);
         users = mock(Users.class);
         authentication = mock(Authentication.class);
+        sessionManagement = mock(SessionManagement.class);
         pscan = mock(Pscan.class);
         ajaxSpider = mock(AjaxSpider.class);
         automation = mock(Automation.class);
@@ -93,6 +97,7 @@ class ZapEngineBoundaryAccessTest {
         clientApi.context = context;
         clientApi.users = users;
         clientApi.authentication = authentication;
+        clientApi.sessionManagement = sessionManagement;
         clientApi.pscan = pscan;
         clientApi.ajaxSpider = ajaxSpider;
         clientApi.automation = automation;
@@ -218,6 +223,38 @@ class ZapEngineBoundaryAccessTest {
         assertThat(result.enabled()).isTrue();
         verify(users).setAuthenticationCredentials("5", "77", "username=scan-user&password=s3cr3t");
         verify(users).setUserEnabled("5", "77", "true");
+    }
+
+    @Test
+    void contextAdapterConfiguresAutoDetectSessionManagement() throws Exception {
+        contextAccess.configureAutoDetectSessionManagement("1");
+
+        verify(sessionManagement).setSessionManagementMethod("1", "autoDetectSessionManagement", "");
+        verifyNoInteractions(authentication, users);
+    }
+
+    @Test
+    void contextAdapterPropagatesAutoDetectSessionManagementFailure() throws Exception {
+        ClientApiException failure = new ClientApiException("Session management method unavailable");
+        when(sessionManagement.setSessionManagementMethod("1", "autoDetectSessionManagement", ""))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> contextAccess.configureAutoDetectSessionManagement("1"))
+                .isInstanceOf(ZapApiException.class)
+                .hasMessage("Failed to configure session management for context 1")
+                .hasCause(failure);
+        verifyNoInteractions(authentication, users);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"formBasedAuthentication", "browserBasedAuthentication"})
+    void expertAuthenticationConfigurationPreservesExistingSessionManagement(String authenticationMethod) throws Exception {
+        var result = contextAccess.configureContextAuthentication(new AuthenticationConfigRequest(
+                "1", authenticationMethod, "config=value", "Logout", "Sign in"));
+
+        assertThat(result.authMethodName()).isEqualTo(authenticationMethod);
+        verify(authentication).setAuthenticationMethod("1", authenticationMethod, "config=value");
+        verifyNoInteractions(sessionManagement);
     }
 
     @Test

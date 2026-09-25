@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ContextUserServiceTest {
@@ -163,6 +164,23 @@ class ContextUserServiceTest {
         assertEquals(Boolean.TRUE, result.get("loggedInIndicatorSet"));
         assertEquals(Boolean.TRUE, result.get("loggedOutIndicatorSet"));
         verify(contextAccess).configureContextAuthentication(request);
+    }
+
+    @Test
+    void configureAutoDetectSessionManagementNormalizesContextId() {
+        service.configureAutoDetectSessionManagement(" 1 ");
+
+        verify(contextAccess).configureAutoDetectSessionManagement("1");
+    }
+
+    @Test
+    void configureAutoDetectSessionManagementRejectsMissingContextId() {
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.configureAutoDetectSessionManagement(null));
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.configureAutoDetectSessionManagement(" "));
+
+        verifyNoInteractions(contextAccess);
     }
 
     @Test

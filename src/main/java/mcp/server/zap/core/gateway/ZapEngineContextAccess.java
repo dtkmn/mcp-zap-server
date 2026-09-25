@@ -175,6 +175,16 @@ public class ZapEngineContextAccess implements EngineContextAccess {
     }
 
     @Override
+    public void configureAutoDetectSessionManagement(String contextId) {
+        try {
+            zap.sessionManagement.setSessionManagementMethod(contextId, "autoDetectSessionManagement", "");
+        } catch (ClientApiException e) {
+            log.error("Failed to configure session management for context {}: {}", contextId, e.getMessage(), e);
+            throw new ZapApiException("Failed to configure session management for context " + contextId, e);
+        }
+    }
+
+    @Override
     public AuthenticationDiagnostics testUserAuthentication(String contextId, String userId) {
         return testUserAuthentication(contextId, userId, null);
     }

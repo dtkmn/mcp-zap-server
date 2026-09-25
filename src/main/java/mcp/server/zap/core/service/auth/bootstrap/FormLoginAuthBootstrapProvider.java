@@ -86,6 +86,10 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
                 loggedInIndicatorRegex,
                 trimToNull(request.loggedOutIndicatorRegex())
         );
+        if (browserAuthentication) {
+            // Browser logins may store header tokens instead of cookies; let ZAP discover and replay either.
+            contextUserService.configureAutoDetectSessionManagement(contextId);
+        }
 
         String authCredentialsConfigParams = "username="
                 + urlEncode(username)

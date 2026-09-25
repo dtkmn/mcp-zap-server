@@ -190,33 +190,55 @@ class DirectScanServicesDockerTest {
     void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
             GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
+        assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, false);
+    }
+
+    @ParameterizedTest
+    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    void guidedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
+            GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
+            throws Exception {
+        assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, true);
+    }
+
+    private void assertPreparedBrowserSessionCrawl(GuidedExecutionModeResolver.ExecutionMode mode,
+                                                   Path temporaryDirectory, boolean bearerSession) throws Exception {
         String targetOrigin = "http://client-auth-target:8080";
+        String authFlavor = bearerSession ? "bearer" : "cookie";
         String crawlQuery = "?crawl=" + mode.name();
-        String targetUrl = targetOrigin + "/protected" + crawlQuery;
+        String crawlPath = bearerSession ? "/bearer/app" : "/protected";
+        String verificationPath = bearerSession ? "/bearer/user" : "/protected";
+        String discoveredPath = bearerSession ? "/bearer/client-discovered" : "/protected/client-discovered";
+        String loginPath = bearerSession ? "/bearer/login" : "/login";
+        String expectedAuthHeader = bearerSession ? "Authorization: Bearer " : "Cookie: session=";
+        String targetUrl = targetOrigin + crawlPath + crawlQuery;
+        String verificationUrl = bearerSession ? targetOrigin + verificationPath : targetUrl;
         String localOrigin = "http://" + AUTH_TARGET.getHost() + ":" + AUTH_TARGET.getMappedPort(8080);
         try (HttpClient http = HttpClient.newHttpClient()) {
-            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/protected")).GET().build(),
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + verificationPath)).GET().build(),
                     HttpResponse.BodyHandlers.discarding()).statusCode(),
-                    "The crawl entry point must require a login");
-            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/protected/client-discovered"))
+                    "The verification endpoint must require a login");
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + discoveredPath))
                             .GET().build(), HttpResponse.BodyHandlers.discarding()).statusCode(),
                     "The JavaScript resource must also require a login");
-            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + "/login"))
-                            .POST(HttpRequest.BodyPublishers.ofString("username=scan-user&password=wrong"))
-                            .header("Content-Type", "application/x-www-form-urlencoded").build(),
+            assertEquals(403, http.send(HttpRequest.newBuilder(URI.create(localOrigin + loginPath))
+                            .POST(HttpRequest.BodyPublishers.ofString(bearerSession
+                                    ? "{\"username\":\"scan-user\",\"password\":\"wrong\"}"
+                                    : "username=scan-user&password=wrong"))
+                            .header("Content-Type", bearerSession ? "application/json" : "application/x-www-form-urlencoded").build(),
                     HttpResponse.BodyHandlers.discarding()).statusCode(),
                     "The fixture must reject incorrect credentials");
         }
 
         Path passwordFile = Files.writeString(temporaryDirectory.resolve("password"), "fixture-password");
         AuthBootstrapProperties.Profile profile = new AuthBootstrapProperties.Profile();
-        profile.setId("client-browser-auth-" + mode.name());
+        profile.setId("client-browser-auth-" + authFlavor + "-" + mode.name());
         profile.setKind("browser");
         profile.setAllowedOrigin(targetOrigin);
         profile.setCredentialReference("file:" + passwordFile);
-        profile.setLoginUrl(targetOrigin + "/login");
+        profile.setLoginUrl(targetOrigin + loginPath);
         profile.setUsername("scan-user");
-        profile.setZapUserName("client-browser-user-" + mode.name());
+        profile.setZapUserName("client-browser-user-" + authFlavor + "-" + mode.name());
         profile.setLoggedInIndicatorRegex("Signed in as scan-user");
         profile.setLoggedOutIndicatorRegex("Login required");
         AuthBootstrapProperties authProperties = new AuthBootstrapProperties();
@@ -228,12 +250,20 @@ class DirectScanServicesDockerTest {
                 new CredentialReferenceResolver(), mock(UrlValidationService.class));
         GuidedAuthSessionService authSessions = new GuidedAuthSessionService(
                 List.of(authProvider), new InMemoryPreparedAuthSessionRegistry(), new AuthProfileResolver(authProperties));
-        String prepared = authSessions.prepareSession(profile.getId(), targetUrl);
+        String prepared = authSessions.prepareSession(profile.getId(), verificationUrl);
         String sessionId = prepared.lines().filter(line -> line.startsWith("Session ID: "))
                 .map(line -> line.substring("Session ID: ".length())).findFirst().orElseThrow();
         String validated = authSessions.validateSession(sessionId);
         assertTrue(validated.contains("Valid: true"), validated);
         assertTrue(validated.contains("Outcome: authenticated"), validated);
+        if (bearerSession) {
+            var session = authSessions.getPreparedSession(sessionId);
+            ApiResponseSet nativePoll = (ApiResponseSet) browserAuthApi.users.pollAsUser(session.contextId(), session.userId());
+            assertEquals("true", nativePoll.getStringValue("pollSuccessful"),
+                    "ZAP must replay the browser's bearer token when verifying authentication outside the browser");
+            assertTrue(nativePoll.getStringValue("responseHeader").contains(" 200 "));
+            assertTrue(nativePoll.getStringValue("responseBody").contains("Signed in as scan-user"));
+        }
 
         GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
         when(executionMode.resolveDefaultMode()).thenReturn(mode);
@@ -268,10 +298,10 @@ class DirectScanServicesDockerTest {
                 }
                 await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
                     ApiResponseList messages = (ApiResponseList) clientApi.core.messages(
-                            targetOrigin + "/protected/client-discovered" + crawlQuery, "0", "100");
+                            targetOrigin + discoveredPath + crawlQuery, "0", "100");
                     assertTrue(messages.getItems().stream().map(ApiResponseSet.class::cast).anyMatch(message ->
-                                    message.getStringValue("requestHeader").contains("/protected/client-discovered" + crawlQuery)
-                                            && message.getStringValue("requestHeader").contains("Cookie: session=")
+                                    message.getStringValue("requestHeader").contains(discoveredPath + crawlQuery)
+                                            && message.getStringValue("requestHeader").contains(expectedAuthHeader)
                                             && message.getStringValue("responseHeader").contains(" 200 ")
                                             && message.getStringValue("responseBody")
                                                     .contains("authenticated JavaScript resource")),
@@ -294,6 +324,10 @@ class DirectScanServicesDockerTest {
             }
         } finally {
             queue.shutdownExecutor();
+        }
+
+        if (bearerSession) {
+            return;
         }
 
         String unexpectedPrepared = authSessions.prepareSession(profile.getId(), targetOrigin + "/unexpected-response");

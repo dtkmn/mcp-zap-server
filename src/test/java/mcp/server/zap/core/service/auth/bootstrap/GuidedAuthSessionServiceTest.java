@@ -3,9 +3,14 @@ package mcp.server.zap.core.service.auth.bootstrap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -19,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import mcp.server.zap.core.configuration.AuthBootstrapProperties;
+import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.service.ContextUserService;
 import mcp.server.zap.core.service.UrlValidationService;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +83,7 @@ class GuidedAuthSessionServiceTest {
                 "Outcome: authenticated"
         ).doesNotContain("example-password-value", "scan-password.txt");
         verify(contextUserService).testUserAuthentication("1", "7");
+        verify(contextUserService, never()).configureAutoDetectSessionManagement(anyString());
     }
 
     @Test
@@ -96,10 +103,12 @@ class GuidedAuthSessionServiceTest {
         assertThat(prepareResponse).contains("Auth Kind: browser", "Provider: zap-form-login",
                 "Context Name: shop-browser-auth", "Context ID: 2", "User ID: 8")
                 .doesNotContain("browser-password&secret", "browser-password%26secret", "scan-password.txt");
-        verify(contextUserService).configureContextAuthentication("2", "browserBasedAuthentication",
+        var ordered = inOrder(contextUserService);
+        ordered.verify(contextUserService).configureContextAuthentication("2", "browserBasedAuthentication",
                 "loginPageUrl=" + urlEncode(loginUrl) + "&browserId=firefox-headless",
                 ".*Logout.*", ".*Sign in.*");
-        verify(contextUserService).upsertUser("2", "zap-scan-user",
+        ordered.verify(contextUserService).configureAutoDetectSessionManagement("2");
+        ordered.verify(contextUserService).upsertUser("2", "zap-scan-user",
                 "username=zap-scan-user&password=browser-password%26secret", true);
         verify(urlValidationService).validateUrl("https://shop.example.com/account");
         verify(urlValidationService).validateUrl(loginUrl);
@@ -112,6 +121,27 @@ class GuidedAuthSessionServiceTest {
         assertThat(validateResponse).contains("Auth Kind: browser", "Valid: true", "Outcome: authenticated")
                 .doesNotContain("browser-password&secret", "browser-password%26secret", "scan-password.txt");
         verify(contextUserService).testUserAuthentication("2", "8", "https://shop.example.com/account");
+    }
+
+    @Test
+    void browserSessionPreparationFailsBeforeUserAndSessionCreationWhenAutoDetectIsUnavailable() throws Exception {
+        Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
+        AuthBootstrapProperties.Profile profile = browserProfile(
+                "shop-browser", "https://shop.example.com", "file:" + formPasswordFile());
+        PreparedAuthSessionRegistry registry = mock(PreparedAuthSessionRegistry.class);
+        service = new GuidedAuthSessionService(
+                List.of(new FormLoginAuthBootstrapProvider(
+                        contextUserService, new CredentialReferenceResolver(), urlValidationService)),
+                registry, new AuthProfileResolver(propertiesWith(profile)));
+        stubFormUser("shop-browser-auth", "1", "7");
+        ZapApiException failure = new ZapApiException("Session management unavailable", null);
+        doThrow(failure).when(contextUserService).configureAutoDetectSessionManagement("1");
+
+        assertThatThrownBy(() -> service.prepareSession("shop-browser", "https://shop.example.com/account"))
+                .isSameAs(failure);
+
+        verify(contextUserService, never()).upsertUser(anyString(), anyString(), anyString(), any());
+        verifyNoInteractions(registry);
     }
 
     @Test

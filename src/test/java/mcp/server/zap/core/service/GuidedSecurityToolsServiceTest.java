@@ -524,11 +524,41 @@ class GuidedSecurityToolsServiceTest {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key"))
                 .thenReturn("Scan job accepted\nJob ID: client-auth-job\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-auth-job"))
+                .thenReturn("Status: RUNNING", "Status: CANCELLED");
+        when(scanJobQueueService.cancelScanJob("client-auth-job")).thenReturn("Status: CANCELLED");
 
         String response = service.startCrawl("https://app.example.com", "client", "crawl-key", "auth-client");
+        String operationId = extractOperationId(response);
 
         assertThat(response).contains("Strategy: client", "Execution Mode: queue", "Authenticated Session: auth-client");
+        assertThat(service.getCrawlStatus(operationId)).contains("Status: RUNNING");
+        assertThat(service.stopCrawl(operationId)).contains("Status: CANCELLED");
+        assertThat(service.getCrawlStatus(operationId))
+                .contains("Status: CANCELLED", "Review the status/error above before trusting this scan as evidence")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
         verify(scanJobQueueService).queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key");
+        verify(scanJobQueueService).cancelScanJob("client-auth-job");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
+    }
+
+    @Test
+    void authenticatedQueuedClientFailureRemainsVisibleWithoutAnonymousFallback() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
+                .thenReturn("Scan job accepted\nJob ID: client-auth-failed\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-auth-failed"))
+                .thenReturn("Status: FAILED\nLast Error: Browser authentication failed\nDead Letter: true");
+
+        String operationId = extractOperationId(service.startCrawl("https://app.example.com", "client", null, "auth-client"));
+
+        assertThat(service.getCrawlStatus(operationId))
+                .contains("Status: FAILED", "Browser authentication failed", "Retry only after fixing")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+        verify(scanJobQueueService, org.mockito.Mockito.never())
+                .queueClientSpiderScan("https://app.example.com", null, null);
         verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
     }
 

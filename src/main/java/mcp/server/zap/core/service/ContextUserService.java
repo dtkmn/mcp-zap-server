@@ -130,6 +130,10 @@ public class ContextUserService {
         return response;
     }
 
+    public void configureAutoDetectSessionManagement(String contextId) {
+        engineContextAccess.configureAutoDetectSessionManagement(requireText(contextId, "contextId"));
+    }
+
     public Map<String, Object> testUserAuthentication(
             String contextId,
             String userId

@@ -129,15 +129,16 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
         Map<String, Object> result = session.authKind() == AuthBootstrapKind.BROWSER
                 ? contextUserService.testUserAuthentication(session.contextId(), session.userId(), session.target().baseUrl())
                 : contextUserService.testUserAuthentication(session.contextId(), session.userId());
-        boolean valid = Boolean.TRUE.equals(result.get("likelyAuthenticated"));
+        Object likelyAuthenticated = result.get("likelyAuthenticated");
+        boolean valid = Boolean.TRUE.equals(likelyAuthenticated);
         boolean browserUnconfirmed = session.authKind() == AuthBootstrapKind.BROWSER
-                && result.get("likelyAuthenticated") == null;
+                && likelyAuthenticated == null;
         String outcome = valid ? "authenticated" : "authentication_failed";
         if (browserUnconfirmed) {
             outcome = "authentication_unconfirmed";
         }
         List<String> diagnostics = new ArrayList<>();
-        diagnostics.add("likelyAuthenticated=" + result.get("likelyAuthenticated"));
+        diagnostics.add("likelyAuthenticated=" + likelyAuthenticated);
         diagnostics.add("contextId=" + session.contextId());
         diagnostics.add("userId=" + session.userId());
         diagnostics.add(browserUnconfirmed

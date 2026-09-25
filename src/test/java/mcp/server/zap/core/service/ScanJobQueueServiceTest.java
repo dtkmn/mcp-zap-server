@@ -190,15 +190,50 @@ public class ScanJobQueueServiceTest {
         verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 4, "Application", "alice");
     }
 
-    @Test
-    void partialClientSpiderAuthenticationIsRejectedBeforeAdmission() {
-        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
-                "http://example.com", null, "Application", null, null));
-        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
-                "http://example.com", null, " ", "alice", null));
-        assertThrows(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
-                "http://example.com", null, "Application", " ", null));
+    @ParameterizedTest
+    @MethodSource("partialClientSpiderAuthenticationNames")
+    void partialClientSpiderAuthenticationIsRejectedBeforeAdmission(String contextName, String userName) {
+        assertThrowsExactly(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
+                "http://example.com", null, contextName, userName, null));
         verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+    }
+
+    static Stream<Arguments> partialClientSpiderAuthenticationNames() {
+        return Stream.of(
+                Arguments.of("Application", null),
+                Arguments.of("Application", ""),
+                Arguments.of("Application", " "),
+                Arguments.of(null, "alice"),
+                Arguments.of("", "alice"),
+                Arguments.of(" ", "alice")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("anonymousClientSpiderAuthenticationNames")
+    void absentClientSpiderAuthenticationUsesAnonymousCrawl(String contextName, String userName) {
+        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0))
+                .thenReturn("client-anonymous");
+
+        String jobId = extractJobId(service.queueClientSpiderScan(
+                "http://example.com/client", 0, contextName, userName, null));
+        ScanJob job = service.getJobForTesting(jobId);
+
+        assertEquals(ScanJobStatus.RUNNING, job.getStatus());
+        assertEquals("client-anonymous", job.getZapScanId());
+        assertEquals(Map.of("targetUrl", "http://example.com/client", "maxDepth", "0"), job.getParameters());
+        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 0);
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+    }
+
+    static Stream<Arguments> anonymousClientSpiderAuthenticationNames() {
+        return Stream.of(
+                Arguments.of(null, null),
+                Arguments.of(null, " "),
+                Arguments.of(" ", null),
+                Arguments.of(" ", " ")
+        );
     }
 
     @Test
@@ -1438,9 +1473,9 @@ public class ScanJobQueueServiceTest {
         AtomicReference<Thread> lateThread = new AtomicReference<>();
         AtomicInteger starts = new AtomicInteger();
         AtomicInteger stops = new AtomicInteger();
-        var startCall = type == ScanJobType.CLIENT_SPIDER
-                ? when(clientSpiderService.startClientSpiderJob(anyString(), any()))
-                : when(spiderScanService.startSpiderScanJob(anyString()));
+        var startCall = when(type == ScanJobType.CLIENT_SPIDER
+                ? clientSpiderService.startClientSpiderJob(anyString(), any())
+                : spiderScanService.startSpiderScanJob(anyString()));
         startCall.thenAnswer(invocation -> {
             starts.incrementAndGet();
             lateThread.set(Thread.currentThread());

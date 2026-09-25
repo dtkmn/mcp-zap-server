@@ -511,16 +511,18 @@ public class ScanJobQueueService {
         if (maxDepth != null && maxDepth < 0) {
             throw new IllegalArgumentException("Client Spider maxDepth must not be negative");
         }
-        if (hasText(contextName) != hasText(userName)) {
+        String normalizedContextName = normalizeBlankToNull(contextName);
+        String normalizedUserName = normalizeBlankToNull(userName);
+        if ((normalizedContextName == null) != (normalizedUserName == null)) {
             throw new IllegalArgumentException("Client Spider contextName and userName must be supplied together");
         }
         Map<String, String> parameters = targetParameters(targetUrl);
         if (maxDepth != null) {
             parameters.put(ScanJobParameterNames.MAX_DEPTH, maxDepth.toString());
         }
-        if (hasText(contextName)) {
-            parameters.put(ScanJobParameterNames.CONTEXT_NAME, contextName.trim());
-            parameters.put(ScanJobParameterNames.USER_NAME, userName.trim());
+        if (normalizedContextName != null && normalizedUserName != null) {
+            parameters.put(ScanJobParameterNames.CONTEXT_NAME, normalizedContextName);
+            parameters.put(ScanJobParameterNames.USER_NAME, normalizedUserName);
         }
         return submitQueuedScan(ScanJobType.CLIENT_SPIDER, parameters, idempotencyKey);
     }

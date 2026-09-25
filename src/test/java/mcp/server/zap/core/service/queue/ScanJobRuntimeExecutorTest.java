@@ -6,20 +6,59 @@ import mcp.server.zap.core.service.AjaxSpiderService;
 import mcp.server.zap.core.service.ClientSpiderService;
 import mcp.server.zap.core.service.SpiderScanService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ScanJobRuntimeExecutorTest {
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " ", "not-a-number", "1.5", "2147483648"})
+    void rejectsMalformedStoredClientSpiderDepthBeforeStartingCrawl(String storedDepth) {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put(ScanJobParameterNames.TARGET_URL, "https://example.com");
+        parameters.put(ScanJobParameterNames.MAX_DEPTH, storedDepth);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> executor.startScan(ScanJobType.CLIENT_SPIDER, parameters));
+
+        assertEquals("Stored Client Spider maxDepth must be a valid integer", exception.getMessage());
+        assertInstanceOf(NumberFormatException.class, exception.getCause());
+        verifyNoInteractions(clientSpiderService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 4, Integer.MAX_VALUE})
+    void preservesValidStoredClientSpiderDepth(int storedDepth) {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", storedDepth)).thenReturn("client-depth");
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com",
+                ScanJobParameterNames.MAX_DEPTH, Integer.toString(storedDepth)));
+
+        assertEquals("client-depth", scanId);
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", storedDepth);
+    }
 
     @Test
     void routesClientSpiderLifecycleUsingItsNativeScanId() {

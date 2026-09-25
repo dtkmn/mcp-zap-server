@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 /** Direct and queued browser crawls with ZAP's scan-specific Client Spider API. */
 @Service
 public class ClientSpiderService {
+    private static final String OPERATION_ID_PREFIX = "client-spider:";
 
     private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
@@ -53,7 +54,7 @@ public class ClientSpiderService {
         if (operationRegistry != null) {
             String workspaceId = clientWorkspaceResolver == null ? "default-workspace"
                     : clientWorkspaceResolver.resolveCurrentWorkspaceId();
-            operationRegistry.registerDirectScan("client-spider:" + scanId, workspaceId);
+            operationRegistry.registerDirectScan(OPERATION_ID_PREFIX + scanId, workspaceId);
         }
         if (scanHistoryLedgerService != null) {
             scanHistoryLedgerService.recordDirectScanStarted("client_spider", scanId, targetUrl,
@@ -98,9 +99,9 @@ public class ClientSpiderService {
         boolean finished = progress >= 100;
         if (operationRegistry != null) {
             if (finished) {
-                operationRegistry.releaseDirectScan("client-spider:" + normalizedScanId);
+                operationRegistry.releaseDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
             } else {
-                operationRegistry.touchDirectScan("client-spider:" + normalizedScanId);
+                operationRegistry.touchDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
             }
         }
         return String.format(
@@ -123,7 +124,7 @@ public class ClientSpiderService {
         String normalizedScanId = requireScanId(scanId);
         stopClientSpiderJob(normalizedScanId);
         if (operationRegistry != null) {
-            operationRegistry.releaseDirectScan("client-spider:" + normalizedScanId);
+            operationRegistry.releaseDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
         }
         return "Direct Client Spider stop requested.\nScan ID: " + normalizedScanId;
     }

@@ -160,11 +160,7 @@ public class GuidedScanWorkflowService {
                     default -> scanJobQueueService.queueSpiderScan(targetUrl, idempotencyKey);
                 };
             }
-            String note = preparedAuthSession == null
-                    ? (STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null)
-                    : STRATEGY_CLIENT.equals(effectiveStrategy)
-                            ? "Authenticated guided crawl applied the prepared browser session via ZAP context/user routing."
-                            : "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.";
+            String note = queuedCrawlNote(requestedStrategy, effectiveStrategy, preparedAuthSession);
             return startedOperation(
                     OperationKind.CRAWL,
                     GuidedExecutionModeResolver.ExecutionMode.QUEUE,
@@ -195,6 +191,18 @@ public class GuidedScanWorkflowService {
             }
             return directBrowserCrawl(targetUrl, AUTO_BROWSER_FALLBACK_NOTE);
         }
+    }
+
+    private String queuedCrawlNote(String requestedStrategy,
+                                   String effectiveStrategy,
+                                   PreparedAuthSession preparedAuthSession) {
+        if (preparedAuthSession == null) {
+            return STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null;
+        }
+        if (STRATEGY_CLIENT.equals(effectiveStrategy)) {
+            return "Authenticated guided crawl applied the prepared browser session via ZAP context/user routing.";
+        }
+        return "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.";
     }
 
     private StartedOperation startAttackOperation(String targetUrl,

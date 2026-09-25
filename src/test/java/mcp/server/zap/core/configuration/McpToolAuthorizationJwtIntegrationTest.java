@@ -1,11 +1,20 @@
 package mcp.server.zap.core.configuration;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import mcp.gateway.core.tool.McpToolRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
@@ -44,6 +53,12 @@ class McpToolAuthorizationJwtIntegrationTest {
 
     @LocalServerPort
     private int port;
+
+    @Autowired
+    private McpToolRegistry mcpActiveToolRegistry;
+
+    @Autowired
+    private ToolCallbackProvider toolCallbackProvider;
 
     @BeforeAll
     static void createReportFile() throws Exception {
@@ -134,6 +149,7 @@ class McpToolAuthorizationJwtIntegrationTest {
     @Test
     void toolCallReturns403WhenJwtLacksToolScope() throws Exception {
         String token = issueAccessToken("lister-api-key");
+        String sessionId = initializeSession(token);
         String request = OBJECT_MAPPER.writeValueAsString(Map.of(
                 "jsonrpc", "2.0",
                 "method", "tools/call",
@@ -147,15 +163,91 @@ class McpToolAuthorizationJwtIntegrationTest {
         client().post()
                 .uri("/mcp")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("Mcp-Session-Id", sessionId)
+                .header("MCP-Protocol-Version", "2025-03-26")
                 .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
                 .expectStatus().isForbidden()
+                .expectHeader().value(HttpHeaders.WWW_AUTHENTICATE, value -> assertThat(value)
+                        .contains("Bearer", "error=\"insufficient_scope\"", "scope=\"zap:report:read\""))
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("insufficient_scope")
                 .jsonPath("$.tool").isEqualTo("zap_report_read")
                 .jsonPath("$.requiredScopes[0]").isEqualTo("zap:report:read");
+    }
+
+    @ParameterizedTest(name = "unknown tool preserves JSON-RPC request ID {0}")
+    @MethodSource("unknownToolRequestIds")
+    void unknownToolReturnsProtocolErrorWithoutPermissionOrCatalogDetails(Object requestId) throws Exception {
+        String token = issueAccessToken("lister-api-key");
+        String sessionId = initializeSession(token);
+        String request = OBJECT_MAPPER.writeValueAsString(Map.of(
+                "jsonrpc", "2.0",
+                "method", "tools/call",
+                "id", requestId,
+                "params", Map.of(
+                        "name", "__unknown_tool_for_authz_regression__",
+                        "arguments", Map.of()
+                )
+        ));
+        JsonNode expectedResponse = OBJECT_MAPPER.valueToTree(Map.of(
+                "jsonrpc", "2.0",
+                "id", requestId,
+                "error", Map.of("code", -32602, "message", "Unknown tool")
+        ));
+
+        client().post()
+                .uri("/mcp")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("Mcp-Session-Id", sessionId)
+                .header("MCP-Protocol-Version", "2025-03-26")
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(request)
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                .expectHeader().doesNotExist(HttpHeaders.WWW_AUTHENTICATE)
+                .expectBody(String.class)
+                .value(body -> {
+                    // Exact envelope equality also rejects scope, mapping, and tool-catalog disclosures.
+                    assertThat(OBJECT_MAPPER.readTree(body)).isEqualTo(expectedResponse);
+                });
+    }
+
+    private static Object[] unknownToolRequestIds() {
+        return new Object[]{"unknown-tool-request", 9_007_199_254_740_993L};
+    }
+
+    @Test
+    void expertDiscoveryMatchesTheExactActiveRegistryAndToolProvider() throws Exception {
+        String token = issueAccessToken("lister-api-key");
+        String sessionId = initializeSession(token);
+        EntityExchangeResult<String> result = client().post()
+                .uri("/mcp")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("Mcp-Session-Id", sessionId)
+                .header("MCP-Protocol-Version", "2025-03-26")
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"tools/list\"}")
+                .exchange().expectStatus().isOk().expectBody(String.class).returnResult();
+
+        String body = result.getResponseBody();
+        assertThat(body).isNotBlank();
+        String json = body.lines().filter(line -> line.startsWith("data:"))
+                .map(line -> line.substring(5).stripLeading()).findFirst().orElse(body);
+        List<String> advertisedNames = new ArrayList<>();
+        for (JsonNode tool : OBJECT_MAPPER.readTree(json).path("result").path("tools")) {
+            advertisedNames.add(tool.path("name").asString());
+        }
+        assertThat(advertisedNames).contains("zap_passive_scan_status", "zap_spider_status")
+                .containsExactlyInAnyOrderElementsOf(mcpActiveToolRegistry.names());
+        assertThat(mcpActiveToolRegistry.names()).containsExactlyInAnyOrderElementsOf(
+                Arrays.stream(toolCallbackProvider.getToolCallbacks())
+                        .map(callback -> callback.getToolDefinition().name()).toList());
     }
 
     @Test

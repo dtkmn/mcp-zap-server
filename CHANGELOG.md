@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Client Spider crawling through guided `strategy=client` and expert tools in direct and queued modes. Native ZAP scan IDs identify each crawl for status and cancellation; crawls reuse the existing spider duration setting and queue concurrency, retry, and cancellation handling. See [execution modes and prerequisites](./docs/src/content/docs/scanning/scan-execution-modes.md).
+- Added operator-managed `kind: browser` authentication profiles for Client Spider, using existing credential references in both execution modes. Validation requires a positive ZAP verdict and the configured logged-in indicator in a fresh response before reporting success. See [browser authentication setup](./docs/src/content/docs/scanning/authenticated-scanning-best-practices.md#browser-authentication-for-client-spider), including the required ZAP API timeout setting.
+
+### Fixed
+
+- Enabled automatic session detection for guided browser authentication profiles so verification can replay cookies or header tokens, including bearer tokens used by Juice Shop. Browser login could previously succeed while verification failed because the token was missing from the verification request.
+
+## [0.12.0]
+
+Version-specific changes are listed below. Publication dates and availability
+are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
+See the [upgrade notes](./docs/releases/RELEASE_NOTES_0.12.0.md) before deploying.
+
+### Fixed
+
+- Made queue cancellation durable and retryable for active scans, traditional spiders, and AJAX Spider. Late successful starts are tracked and stopped without discarding their ownership or targeting a newer scan.
+- Serialized managed AJAX lifecycle operations around ZAP's global crawler and retained occupied capacity while cancellation remains unconfirmed. Active scans and traditional spiders continue to use their native scan IDs and configured concurrency.
+- Stopped reporting an AJAX stopped state as proof of successful completion or meaningful percentage progress.
+- Preserved ZAP finding node names, HTTP methods, tags, and recorded examples, and used structural endpoint identity to reduce false new/resolved findings caused by changing URL values.
+- Prevented stack overflow when policy dry-run validates long host patterns, and allowed unexpected token-validation backend failures to return a sanitized HTTP `500` instead of an invalid-token response.
+- Applied the configured ZAP target connection timeout at startup, corrected the AJAX add-on installation hint to `spiderAjax`, and permitted ZAP's API hostname in the default Helm API access expression.
+
+### Added
+
+- Configurable ZAP API connection/read timeouts, bounded waiting after explicit engine-busy responses, and one shared cancellation/cleanup retry window.
+- PostgreSQL migrations V7 and V8 for persisted busy-wait and cancellation state. Migration execution remains opt-in.
+- Configurable ZAP image references in Compose and Docker tests, plus optional ZAP image digests in Helm.
+
+### Changed
+
+- Advanced findings exports and CI findings contracts to version 2 while retaining version 1 baseline support. External snapshot consumers may need updating.
+- Updated project descriptions and the engine display name to the current ZAP name, and clarified MCP client installation guidance.
+- Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.12.0` / `v0.12.0`.
+
+## [0.11.1]
+
+Version-specific changes are listed below. Publication dates and availability
+are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
+
+### Fixed
+
+- Fixed [#227](https://github.com/dtkmn/mcp-zap-server/issues/227): unknown tools and tools disabled by the selected surface now return the same HTTP `200` JSON-RPC `-32602` (`Unknown tool`) response, without an authentication challenge or disclosure of required scopes. Authentication still runs first; enabled tools with insufficient scope still return HTTP `403` when authorization is enforced.
+- Derived the adapter's active tool registry from the callbacks actually registered by ZAP, reusing existing tool descriptors. Availability checks remain active in authorization `off`/`warn` and security `none` modes; a wildcard scope does not enable disabled tools.
+- Prevented id-less `tools/call` messages from executing: they receive HTTP `202` with no body. Invalid tool-call IDs receive HTTP `400` with JSON-RPC `-32600`.
+
+### Changed
+
+- Upgraded `mcp-gateway-core` and `mcp-gateway-spring-webflux` from ZAP `v0.11.0`'s `0.8.0` to `0.10.0`, and adopted the adapter's named builder configuration.
+- Updated Spring Boot to `4.1.1`, Spring AI to `2.0.1`, Gradle to `9.7.1`, documentation dependencies, pinned GitHub Actions, and the distroless runtime image digest.
+- Updated Netty to `4.2.17.Final` and the documentation build's Undici dependency to `8.10.2` for upstream security fixes. The health probe now requires Go `1.26.6` or later and selects Go `1.27.1` by default, matching the container builder.
+- Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.11.1` / `v0.11.1`.
+
+### Added
+
+- Regression coverage for unavailable-tool responses, authentication and permission boundaries, guided/expert discovery consistency, request IDs, and startup registry validation.
+
+### Removed
+
+- Removed custom extension API POM/JAR structure checks and their mandatory build hook. The standalone extension build is optional; API packaging and local Maven publication remain available.
+- Removed descriptor object-identity assertions and Java-parameter reflection checks from tests, retaining tool capability checks and testing guided-auth inputs through the generated MCP schema.
+
 ## [0.11.0] - 2026-07-27
 
 ### Changed

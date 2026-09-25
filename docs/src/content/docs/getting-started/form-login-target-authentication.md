@@ -30,18 +30,21 @@ build a second login engine from scratch.
 | Target authentication | Prepare and validate | Guided crawl and attack use it |
 | --- | --- | --- |
 | Traditional HTML username/password form | Yes | Yes, with the HTTP spider and active scan |
+| Browser username/password login (`kind: browser`, unreleased) | Yes, in a source build containing the feature | Client Spider only, with `strategy: client` |
 | Target bearer token | Credential reference only | No automatic header injection yet |
 | Target API key | Credential reference only | No automatic header injection yet |
-| OAuth, SSO, MFA, CAPTCHA, or browser-only login | No | No |
+| Custom login steps/scripts, OAuth, SSO, MFA, or CAPTCHA | No guided configuration | No guided support |
 
 The guided form provider is for a classic URL-encoded form with predictable
 username and password fields. Dynamic CSRF tokens, multi-step flows, JSON login
-APIs, and JavaScript-heavy single-page applications may require a future
-browser/client-script provider or ZAP's expert controls. ZAP itself recommends
+APIs, and JavaScript-heavy single-page applications may need browser authentication.
+For Client Spider, use a separate [browser profile](../../scanning/authenticated-scanning-best-practices/#browser-authentication-for-client-spider).
+Custom login steps and scripts still require ZAP's expert controls. ZAP itself recommends
 [browser-based or client-script authentication for modern flows](https://www.zaproxy.org/blog/2025-07-03-authentication-improvements/).
 
-The profile workflow is available in `v0.10.0` and later. `v0.9.1` and earlier
-do not contain this contract.
+The form-login profile workflow is available in `v0.10.0` and later. `v0.9.1`
+and earlier do not contain this contract. Client Spider and browser profiles
+are **unreleased** and are not included in `v0.12.0`.
 
 ## Before You Start
 
@@ -352,7 +355,7 @@ Your MCP API key or JWT setup does not change either way.
 | `Auth profile credential could not be resolved` | The secret is missing or unreadable inside the container | Run the non-secret readability check and verify the absolute host path |
 | Target origin is not authorized | Scheme, host, or port differs | Make `allowed-origin`, `login-url`, and Cursor's target URL use the same exact origin |
 | `authentication_failed` | Credentials, form fields, indicators, or the auth flow are wrong | Verify the test account and inspect the actual form `name` attributes and response text |
-| Browser strategy rejects auth | Guided authenticated crawl supports HTTP spider only | Use `strategy: http`; do not use AJAX/browser strategy with `authSessionId` |
+| Browser strategy rejects auth | Crawl strategy `browser` means AJAX Spider | Use `strategy: http` with a form profile, or `strategy: client` with a browser profile |
 | Session becomes unknown after restart | Prepared sessions are held in memory | Prepare and validate a new session |
 | Header profile validates but the crawl is anonymous | Target bearer/API-key injection is not implemented | Do not use header profiles as authenticated scan evidence |
 

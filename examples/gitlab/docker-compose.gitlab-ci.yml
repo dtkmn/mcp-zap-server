@@ -15,7 +15,9 @@ services:
       - -config
       - api.addrs.addr.regex=true
       - -addoninstall
-      - ajaxSpider
+      - spiderAjax
+      - -addoninstall
+      - client
       - -addoninstall
       - graphql
       - -addoninstall

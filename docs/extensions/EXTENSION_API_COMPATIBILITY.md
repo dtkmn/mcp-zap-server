@@ -29,13 +29,14 @@ artifact set from the OSS-safe source tree.
 The release rules for moving beyond local staging live in
 [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md).
 
-## Publication Proof
+## Optional Local Publication
 
-Every normal build now verifies the extension API can be published to a local
-Maven-style staging repository:
+Normal builds package the extension API JAR but do not stage or verify its
+Maven publication. To stage the API locally when needed, run the generated
+Gradle publication task:
 
 ```bash
-./gradlew verifyExtensionApiPublication
+./gradlew publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository
 ```
 
 The staged artifacts are written under:
@@ -44,16 +45,16 @@ The staged artifacts are written under:
 build/extension-api-public-preview-publication/io/github/dtkmn/mcp-zap-extension-api/<version>/
 ```
 
-This is a release gate, not an external publication. It proves the public JAR
-and POM are shaped correctly before we wire a remote Maven repository into the
-release workflow.
+To stage the API and compile the standalone sample against it in one optional
+build, run:
 
-The verification requires:
+```bash
+./gradlew standalonePolicyMetadataExtensionJar
+```
 
-- the API JAR is present
-- the generated POM is present
-- the generated POM does not publish runtime dependencies or dependency
-  management
+These tasks build and stage local artifacts; they do not perform custom POM/JAR
+shape verification or publish to a remote repository. Public publishing still
+requires the separate release policy checklist.
 
 ## Current Scope
 

@@ -16,7 +16,7 @@ public class ZapEngineAdapter implements EngineAdapter {
 
     @Override
     public String displayName() {
-        return "OWASP ZAP";
+        return "ZAP";
     }
 
     @Override

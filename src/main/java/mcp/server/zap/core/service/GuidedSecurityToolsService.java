@@ -42,14 +42,24 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_target_import",
-            description = "Import an API definition into ZAP using one guided entrypoint for OpenAPI, GraphQL, or SOAP."
+            description = """
+                    Import an OpenAPI/Swagger definition, GraphQL schema, or SOAP WSDL to prepare API endpoints for testing.
+                    Use when you have an API definition; use zap_crawl_start to discover ordinary web pages.
+                    Requires a reachable, configured ZAP instance with the matching OpenAPI, GraphQL, or SOAP add-on.
+                    Import changes the current ZAP session and may send requests to the definition source and API targets;
+                    use only authorized targets. It does not start an active scan: after reviewing import messages,
+                    call zap_attack_start with the API target URL when active testing is needed.
+                    Returns plain text containing definition type, source kind, source, and ZAP import messages or job IDs
+                    when provided, not findings or a structured JSON result. Review warnings before proceeding.
+                    Invalid inputs, blocked URLs, and ZAP API failures raise errors.
+                    """
     )
     public String importTargetDefinition(
-            @ToolParam(description = "Definition type: openapi, graphql, or soap") String definitionType,
-            @ToolParam(description = "Source kind: url or file") String sourceKind,
-            @ToolParam(description = "Definition source URL or file path") String source,
-            @ToolParam(required = false, description = "Optional GraphQL endpoint URL when definitionType is graphql") String endpointUrl,
-            @ToolParam(required = false, description = "Optional host override when definitionType is openapi") String hostOverride
+            @ToolParam(description = "Required definition format: openapi (OpenAPI/Swagger), graphql (GraphQL schema), or soap (WSDL). Case-insensitive.") String definitionType,
+            @ToolParam(description = "Required source mode: url for a definition ZAP downloads, or file for a definition on ZAP's filesystem. Case-insensitive.") String sourceKind,
+            @ToolParam(description = "Required HTTP(S) definition URL reachable by ZAP and allowed by server URL policy, or a file path readable inside the ZAP host/container (for example /zap/wrk/openapi.yaml). File contents are not accepted here.") String source,
+            @ToolParam(required = false, description = "Required for graphql: HTTP(S) API endpoint to test, for example https://api.example.com/graphql; must be reachable by ZAP and allowed by server URL policy. Ignored for openapi and soap.") String endpointUrl,
+            @ToolParam(required = false, description = "Optional OpenAPI target URL override, for example https://api.example.com/v1. Supports partial scheme, authority, or path; omit or leave blank for default target resolution. Ignored for graphql and soap.") String hostOverride
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);
@@ -67,13 +77,13 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=browser for SPAs, login-heavy flows, or JavaScript-driven apps, and strategy=auto when you want the service to pick the default crawl engine. When authSessionId is supplied, guided crawl currently supports prepared form-login sessions on the HTTP spider path only."
+            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, strategy=browser for the existing AJAX Spider, or strategy=auto for the default crawl engine. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
-            @ToolParam(required = false, description = "Optional crawl strategy. Use auto to prefer the default guided engine, http for traditional pages and simple link discovery, or browser for SPAs, authenticated flows, and JavaScript-heavy navigation.") String strategy,
+            @ToolParam(required = false, description = "Optional crawl strategy: auto for the default engine, http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for AJAX Spider.") String strategy,
             @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
-            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided crawl currently accepts form-login sessions only and rejects browser strategy when auth is supplied.") String authSessionId
+            @ToolParam(required = false, description = "Optional session ID from zap_auth_session_prepare. Use a kind=browser profile with strategy=client, or a kind=form profile with http/auto. The browser strategy means AJAX Spider and rejects authSessionId.") String authSessionId
     ) {
         return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
     }

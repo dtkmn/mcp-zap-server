@@ -9,6 +9,7 @@ import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
@@ -78,6 +79,77 @@ class ScanHistoryLedgerServiceTest {
                 .contains("Entry ID: job:job-1")
                 .contains("Backend Reference: zap-active-1")
                 .contains("lastKnownProgress: 45");
+    }
+
+    @Test
+    void ajaxHistoryDoesNotPresentQueueLifecycleAsCrawlProgress() {
+        for (ScanJobStatus status : List.of(ScanJobStatus.SUCCEEDED, ScanJobStatus.CANCELLED)) {
+            ScanJob job = new ScanJob(
+                    "ajax-" + status,
+                    ScanJobType.AJAX_SPIDER,
+                    Map.of("targetUrl", "https://spa.example.com/" + status),
+                    Instant.now(),
+                    3,
+                    "client-a",
+                    null
+            );
+            job.markRunning("ajax-spider:1");
+            if (status == ScanJobStatus.SUCCEEDED) {
+                job.markSucceeded(100);
+            } else {
+                job.updateProgress(100);
+                job.markCancelled();
+            }
+            scanJobStore.upsertAll(List.of(job));
+            service.recordReportArtifact("/zap/wrk/ajax.html", "traditional-html-plus",
+                    job.getParameters().get("targetUrl"), Map.of());
+
+            String detail = service.getHistoryEntry("job:" + job.getId());
+            String handoff = service.exportCustomerHandoff("ajax-check", "/" + status, 10);
+
+            assertThat(detail).contains("progress: unavailable").doesNotContain("lastKnownProgress");
+            assertThat(handoff).contains("progress unavailable").doesNotContain("100%");
+            if (status == ScanJobStatus.SUCCEEDED) {
+                assertThat(detail).contains("crawlOutcome: unknown (ZAP reports stopped)");
+                assertThat(service.listHistory("scan_job", "succeeded", null, 10))
+                        .contains("Crawl Outcome: unknown (ZAP reports stopped)");
+                assertThat(handoff).contains("crawl outcome unknown (ZAP reports stopped)")
+                        .contains("Browser crawl completion is unconfirmed")
+                        .contains("Readiness: CAVEAT");
+            } else {
+                assertThat(detail).contains("Status: cancelled");
+                assertThat(handoff).contains("Cancelled");
+            }
+        }
+    }
+
+    @Test
+    void clientHistoryPreservesNativeProgressWithoutClaimingSuccessfulCoverage() {
+        ScanJob job = new ScanJob("client-job", ScanJobType.CLIENT_SPIDER,
+                Map.of("targetUrl", "https://spa.example.com/client"), Instant.now(), 3, "client-a", null);
+        job.markRunning("7");
+        job.markSucceeded(100);
+        scanJobStore.upsertAll(List.of(job));
+        service.recordReportArtifact("/zap/wrk/client.html", "traditional-html-plus",
+                job.getParameters().get("targetUrl"), Map.of());
+
+        assertThat(service.getHistoryEntry("job:client-job"))
+                .contains("Backend Reference: 7", "lastKnownProgress: 100", "crawlOutcome: unknown (ZAP reports stopped)")
+                .doesNotContain("authenticated: true");
+        assertThat(service.exportCustomerHandoff("client-check", "/client", 10))
+                .contains("crawl outcome unknown (ZAP reports stopped)", "Browser crawl completion is unconfirmed", "Readiness: CAVEAT");
+    }
+
+    @Test
+    void clientHistoryMarksCrawlsWithAConfiguredUserAsAuthenticated() {
+        ScanJob job = new ScanJob("client-auth-job", ScanJobType.CLIENT_SPIDER,
+                Map.of("targetUrl", "https://spa.example.com/client", "contextName", "Application", "userName", "alice"),
+                Instant.now(), 3, "client-a", null);
+        job.markRunning("8");
+        scanJobStore.upsertAll(List.of(job));
+
+        assertThat(service.getHistoryEntry("job:client-auth-job"))
+                .contains("Backend Reference: 8", "authenticated: true");
     }
 
     @Test

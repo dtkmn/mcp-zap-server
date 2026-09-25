@@ -49,6 +49,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Render the ZAP image with an optional immutable digest.
+*/}}
+{{- define "mcp-zap-server.zap.image" -}}
+{{- $digest := default "" .Values.zap.image.digest | toString -}}
+{{- if $digest -}}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $digest) -}}
+{{- fail "zap.image.digest must be sha256: followed by exactly 64 lowercase hexadecimal characters" -}}
+{{- end -}}
+{{- printf "%s@%s" .Values.zap.image.repository $digest -}}
+{{- else -}}
+{{- printf "%s:%s" .Values.zap.image.repository .Values.zap.image.tag -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 ZAP labels
 */}}
 {{- define "mcp-zap-server.zap.labels" -}}

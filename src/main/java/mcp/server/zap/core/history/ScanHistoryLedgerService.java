@@ -20,6 +20,8 @@ import mcp.server.zap.core.gateway.ArtifactRecord;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
@@ -220,6 +222,9 @@ public class ScanHistoryLedgerService {
                     .append("   Operation: ").append(entry.operationKind()).append('\n')
                     .append("   Status: ").append(entry.status()).append('\n')
                     .append("   Target: ").append(targetLabel(entry.target())).append('\n');
+            if (isUnconfirmedBrowserCrawl(entry)) {
+                output.append("   Crawl Outcome: unknown (ZAP reports stopped)\n");
+            }
             if (hasText(entry.backendReference())) {
                 output.append("   Backend Reference: ").append(entry.backendReference()).append('\n');
             }
@@ -633,6 +638,9 @@ public class ScanHistoryLedgerService {
         if (failedOrCancelledJobs > 0) {
             notes.add(failedOrCancelledJobs + " queued scan job(s) ended failed or cancelled; do not present this as clean evidence without explanation.");
         }
+        if (entries.stream().anyMatch(this::isUnconfirmedBrowserCrawl)) {
+            notes.add("Browser crawl completion is unconfirmed: ZAP reports stopped without an outcome; review crawl coverage.");
+        }
         if (entries.size() >= limit) {
             notes.add("The handoff reached the export limit; narrow the target filter or increase the limit before final packaging.");
         }
@@ -761,8 +769,13 @@ public class ScanHistoryLedgerService {
                     .append(" for ").append(target)
                     .append(" - ").append(formatStatus(entry.status()));
             String progress = entry.metadata().get("lastKnownProgress");
-            if (hasText(progress)) {
+            if ("ajax_spider".equals(entry.operationKind())) {
+                output.append(", progress unavailable");
+            } else if (hasText(progress)) {
                 output.append(", progress ").append(progress).append('%');
+            }
+            if (isUnconfirmedBrowserCrawl(entry)) {
+                output.append(", crawl outcome unknown (ZAP reports stopped)");
             }
             if ("true".equalsIgnoreCase(entry.metadata().get("authenticated"))) {
                 output.append(", authenticated");
@@ -783,6 +796,12 @@ public class ScanHistoryLedgerService {
                 .append(" for ").append(target)
                 .append(" - ").append(formatStatus(entry.status()))
                 .append(", recorded ").append(entry.recordedAt()).append('\n');
+    }
+
+    private boolean isUnconfirmedBrowserCrawl(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equals(entry.evidenceType())
+                && ("ajax_spider".equals(entry.operationKind()) || "client_spider".equals(entry.operationKind()))
+                && "succeeded".equals(entry.status());
     }
 
     private String formatOperation(String value) {
@@ -972,7 +991,15 @@ public class ScanHistoryLedgerService {
         Map<String, String> metadata = new LinkedHashMap<>();
         metadata.put("attempts", Integer.toString(job.getAttempts()));
         metadata.put("maxAttempts", Integer.toString(job.getMaxAttempts()));
-        metadata.put("lastKnownProgress", Integer.toString(job.getLastKnownProgress()));
+        if (job.getType() == ScanJobType.AJAX_SPIDER) {
+            metadata.put("progress", "unavailable");
+        } else {
+            metadata.put("lastKnownProgress", Integer.toString(job.getLastKnownProgress()));
+        }
+        if ((job.getType() == ScanJobType.AJAX_SPIDER || job.getType() == ScanJobType.CLIENT_SPIDER)
+                && job.getStatus() == ScanJobStatus.SUCCEEDED) {
+            metadata.put("crawlOutcome", "unknown (ZAP reports stopped)");
+        }
         if (job.getQueuePosition() > 0) {
             metadata.put("queuePosition", Integer.toString(job.getQueuePosition()));
         }
@@ -982,7 +1009,8 @@ public class ScanHistoryLedgerService {
         if (job.getLastError() != null && !job.getLastError().isBlank()) {
             metadata.put("lastError", truncate(job.getLastError(), 300));
         }
-        if (job.getType().name().endsWith("_AS_USER")) {
+        if (job.getType().name().endsWith("_AS_USER")
+                || (job.getType() == ScanJobType.CLIENT_SPIDER && hasText(job.getParameters().get("userName")))) {
             metadata.put("authenticated", "true");
         }
         String operation = job.getType().name().toLowerCase(Locale.ROOT);

@@ -7,9 +7,17 @@ import java.util.Collection;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.UnaryOperator;
 
 public interface ScanJobStore {
+
+    /**
+     * Serialize AJAX start/stop side effects across workers sharing this store.
+     * Returns empty if another lifecycle action owns the lock. The callback receives
+     * a strict current snapshot without holding row or queue-state locks and runs at most once.
+     */
+    <T> Optional<T> tryWithAjaxLifecycleLock(Function<List<ScanJob>, T> action);
 
     ScanJob admitQueuedJob(ScanJob candidate);
 

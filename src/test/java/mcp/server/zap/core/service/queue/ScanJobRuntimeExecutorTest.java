@@ -3,18 +3,96 @@ package mcp.server.zap.core.service.queue;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AjaxSpiderService;
+import mcp.server.zap.core.service.ClientSpiderService;
 import mcp.server.zap.core.service.SpiderScanService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class ScanJobRuntimeExecutorTest {
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"", " ", "not-a-number", "1.5", "2147483648"})
+    void rejectsMalformedStoredClientSpiderDepthBeforeStartingCrawl(String storedDepth) {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put(ScanJobParameterNames.TARGET_URL, "https://example.com");
+        parameters.put(ScanJobParameterNames.MAX_DEPTH, storedDepth);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> executor.startScan(ScanJobType.CLIENT_SPIDER, parameters));
+
+        assertEquals("Stored Client Spider maxDepth must be a valid integer", exception.getMessage());
+        assertInstanceOf(NumberFormatException.class, exception.getCause());
+        verifyNoInteractions(clientSpiderService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 4, Integer.MAX_VALUE})
+    void preservesValidStoredClientSpiderDepth(int storedDepth) {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", storedDepth)).thenReturn("client-depth");
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com",
+                ScanJobParameterNames.MAX_DEPTH, Integer.toString(storedDepth)));
+
+        assertEquals("client-depth", scanId);
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", storedDepth);
+    }
+
+    @Test
+    void routesClientSpiderLifecycleUsingItsNativeScanId() {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", 4)).thenReturn("client-17");
+        when(clientSpiderService.getClientSpiderProgressPercent("client-17")).thenReturn(62);
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com", ScanJobParameterNames.MAX_DEPTH, "4"));
+        assertEquals("client-17", scanId);
+        assertEquals(62, executor.readProgress(ScanJobType.CLIENT_SPIDER, scanId));
+        executor.stopScan(ScanJobType.CLIENT_SPIDER, scanId);
+
+        verify(clientSpiderService).stopClientSpiderJob("client-17");
+        executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"));
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", null);
+    }
+
+    @Test
+    void routesAuthenticatedClientSpiderUsingStoredContextAndUserNames() {
+        ClientSpiderService clientSpiderService = mock(ClientSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, null, clientSpiderService, null);
+        when(clientSpiderService.startClientSpiderJob("https://example.com", null, "Application", "alice"))
+                .thenReturn("client-user-17");
+
+        String scanId = executor.startScan(ScanJobType.CLIENT_SPIDER, Map.of(
+                ScanJobParameterNames.TARGET_URL, "https://example.com",
+                ScanJobParameterNames.CONTEXT_NAME, "Application",
+                ScanJobParameterNames.USER_NAME, "alice"));
+
+        assertEquals("client-user-17", scanId);
+        verify(clientSpiderService).startClientSpiderJob("https://example.com", null, "Application", "alice");
+    }
 
     @Test
     void routesActiveScanLifecycleAndNormalizesBlankPolicy() {
@@ -145,17 +223,58 @@ class ScanJobRuntimeExecutorTest {
         );
 
         when(ajaxSpiderService.startAjaxSpiderJob("https://example.com")).thenReturn("ajax-1");
-        when(ajaxSpiderService.getAjaxSpiderProgressPercent()).thenReturn(10);
+        when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String scanId = executor.startScan(
                 ScanJobType.AJAX_SPIDER,
                 Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com")
         );
-        int progress = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int runningSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
+        int stoppedSignal = executor.readProgress(ScanJobType.AJAX_SPIDER, scanId);
         executor.stopScan(ScanJobType.AJAX_SPIDER, scanId);
 
         assertEquals("ajax-1", scanId);
-        assertEquals(10, progress);
+        assertEquals(0, runningSignal);
+        assertEquals(100, stoppedSignal);
         verify(ajaxSpiderService).stopAjaxSpiderJob();
+    }
+
+    @Test
+    void queuedAjaxStartCarriesDurableOwnershipToService() {
+        AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService);
+        ScanJobClaimToken claim = new ScanJobClaimToken("worker", "fence");
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claim);
+        when(ajaxSpiderService.startAjaxSpiderJob("https://example.com", "ajax-job", claim)).thenReturn("ajax-1");
+
+        assertEquals("ajax-1", executor.startScan(target));
+
+        verify(ajaxSpiderService).startAjaxSpiderJob("https://example.com", "ajax-job", claim);
+    }
+
+    @Test
+    void queuedAjaxAcceptanceForwardsOriginalTargetAndScanId() {
+        AjaxSpiderService ajaxSpiderService = mock(AjaxSpiderService.class);
+        AtomicReference<ScanJobStartTarget> acceptedTarget = new AtomicReference<>();
+        AtomicReference<String> acceptedScanId = new AtomicReference<>();
+        ScanJobRuntimeExecutor executor = new ScanJobRuntimeExecutor(null, null, ajaxSpiderService, null, (target, scanId) -> {
+            acceptedTarget.set(target);
+            acceptedScanId.set(scanId);
+        });
+        ScanJobClaimToken claim = new ScanJobClaimToken("worker", "fence");
+        ScanJobStartTarget target = new ScanJobStartTarget("ajax-job", ScanJobType.AJAX_SPIDER,
+                Map.of(ScanJobParameterNames.TARGET_URL, "https://example.com"), claim);
+        when(ajaxSpiderService.startAjaxSpiderJob(eq("https://example.com"), eq("ajax-job"), eq(claim), any()))
+                .thenAnswer(invocation -> {
+                    Consumer<String> onAccepted = invocation.getArgument(3);
+                    onAccepted.accept("ajax-1");
+                    return "ajax-1";
+                });
+
+        assertEquals("ajax-1", executor.startScan(target));
+
+        assertEquals(target, acceptedTarget.get());
+        assertEquals("ajax-1", acceptedScanId.get());
     }
 }

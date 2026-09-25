@@ -1,13 +1,28 @@
 # MCP ZAP Server Helm Chart
 
-This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for OWASP ZAP) on Kubernetes.
+This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZAP) on Kubernetes.
+
+## Chart And Image Versions
+
+Chart `0.12.0` defaults to MCP image `v0.12.0`. Use the chart from the same release
+as your image, and confirm that the corresponding release workflow has published
+the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+is the source for publication status. Upgrading from `v0.11.1` requires V7/V8
+migrations for PostgreSQL scan-job storage. Migration execution is disabled by
+default. See the [0.12.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.12.0.md)
+for migration, findings snapshot, and timeout changes.
+
+Set `zap.image.digest` to `sha256:` followed by 64 lowercase hexadecimal
+characters to use `repository@digest` instead of `zap.image.tag`. Leave it empty
+to use the tag. A digest pins the image; startup installation and persisted ZAP
+state can still change installed add-ons.
 
 ## Architecture
 
 This chart deploys two main components in **separate pods**:
 
 1. **ZAP Proxy Pod** (1 replica, stateful)
-   - OWASP ZAP security scanner
+   - ZAP security scanner
    - Handles all security scanning operations
    - Persistent storage for scan data
    - Resource-intensive (2-4GB RAM)
@@ -120,14 +135,17 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |
 | `mcp.image.tag` | MCP image tag | chart `appVersion` |
 | `mcp.zapClient.url` | ZAP API hostname/service | chart-managed service (`<release>-mcp-zap-server-zap`) |
+| `mcp.zapClient.connectTimeoutMs` | MCP to ZAP API connection timeout in milliseconds; must be positive | `5000` |
+| `mcp.zapClient.readTimeoutMs` | ZAP API response read inactivity timeout in milliseconds; must be positive | `10000` |
 | `mcp.security.existingSecret.name` | Existing Secret for MCP API key / JWT secret | `""` |
 | `mcp.zapClient.existingSecret.name` | Existing Secret for the ZAP API key used by MCP | `""` |
 | `mcp.zapClient.apiKey` | ZAP API key override used by MCP when not using `mcp.zapClient.existingSecret` | `""` |
 | `zap.replicaCount` | Number of ZAP replicas | `1` |
 | `zap.image.tag` | ZAP image tag | `2.17.0` |
+| `zap.image.digest` | Optional `sha256:` image digest; overrides `zap.image.tag` | `""` |
 | `zap.config.apiKey` | ZAP API key | `""` |
 | `zap.config.existingSecret.name` | Existing Secret for the ZAP API key | `""` |
-| `zap.config.api.allowedAddrRegex` | ZAP API source allowlist regex | loopback + RFC1918 |
+| `zap.config.api.allowedAddrRegex` | ZAP API source and Host allowlist regex; custom values must allow both | loopback + RFC1918 + `zap` + chart ZAP service hostname |
 | `zap.config.addons` | ZAP addons installed at startup | `["spiderAjax", "graphql", "soap", "automation"]` |
 | `zap.persistence.enabled` | Enable persistent storage for ZAP | `true` |
 | `zap.persistence.size` | Size of ZAP persistent volume | `10Gi` |
@@ -244,7 +262,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.image.tag=v0.11.0
+  --set mcp.image.tag=v0.12.0
 ```
 
 ## Uninstalling

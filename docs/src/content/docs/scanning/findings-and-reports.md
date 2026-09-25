@@ -12,16 +12,18 @@ Guided findings and report tools:
 - `zap_findings_summary`
 - `zap_findings_details`
 - `zap_report_generate`
+- `zap_report_read`
 
 Use these when:
 
 - you are on the default `guided` surface
 - you want quick triage with less tool selection overhead
-- you do not need raw per-instance evidence, snapshots, diffs, or artifact reads
+- you want report generation and readback without selecting a raw ZAP template
+- you do not need expert snapshots or diffs
 
 ## Expert Surface
 
-Expert results tools require `MCP_SERVER_TOOLS_SURFACE=expert`.
+Expert adds the following tools to the guided surface and requires `MCP_SERVER_TOOLS_SURFACE=expert`.
 
 Expert tools:
 
@@ -32,7 +34,6 @@ Expert tools:
 - `zap_findings_diff`
 - `zap_view_templates`
 - `zap_generate_report`
-- `zap_report_read`
 
 ## Summary Layer
 
@@ -67,6 +68,14 @@ Choose raw instances when you need:
 - attack samples
 - message IDs
 
+Raw records retain ZAP's `nodeName`, HTTP `method`, and alert `tags` when
+available. `nodeName` identifies a full structural location, including its
+origin and path; it is not just the final path segment.
+
+The `SYSTEMIC` tag marks findings that are typically site-wide. Their counts
+describe recorded examples, not the total number of affected endpoints. ZAP
+may limit additional examples; the tag alone does not prove a limit was reached.
+
 ## Snapshot And Diff
 
 Expert-only tools:
@@ -80,21 +89,45 @@ Use them when:
 - you need before/after comparison for CI or release gates
 - you want to focus on net-new findings instead of total backlog size
 
+New server snapshots use version 2. Comparisons prefer the full `nodeName`
+plus HTTP method, falling back to the raw URL when `nodeName` is unavailable.
+Rule, risk, confidence, and parameter differences still distinguish findings.
+This avoids treating changing parameter values as new locations when ZAP maps
+them to the same structural node. Keep the same ZAP context and site-structure
+configuration when comparing scans. See [ZAP's alert de-duplication guidance](https://www.zaproxy.org/blog/2025-09-30-alert-de-duplication/).
+
+Snapshots preserve individual example records; diffs count unique finding
+identities. Several exported records can therefore count as one finding.
+
+Version 1 baselines remain supported: comparisons use the previous URL-based
+algorithm and show an explicit legacy-comparison notice. Export a new baseline
+after review to use version 2 identities. Update the bundled CI gate alongside
+the server; it handles both old and new server snapshots. Older external
+snapshot readers may need an update before consuming version 2 exports.
+
 ## Report Artifacts
 
-Guided:
+Available on both surfaces:
 
 - `zap_report_generate`
+- `zap_report_read`
 
-Expert:
+Additional expert controls:
 
 - `zap_view_templates`
 - `zap_generate_report`
-- `zap_report_read`
 
-Guided report generation uses sane defaults and returns the artifact path.
+Guided report generation accepts `baseUrl`, `format` (`html` or `json`), and `theme`, and returns the artifact path. Pass that path as `reportPath` to `zap_report_read` to read the artifact through MCP on either surface.
 
-Expert reporting lets you choose the template and then read the generated artifact back through MCP without manual filesystem access.
+Expert reporting additionally lets you choose a ZAP report template.
+
+## Client Spider Findings
+
+The unreleased [Client Spider](../client-spider/) uses these same findings and report tools. Wait for crawl completion and `zap_passive_scan_wait`, then filter the summary, details, and report by the target's `baseUrl`.
+
+These tools read the shared ZAP session, not an exclusive set of findings for one crawl. A `baseUrl` filter narrows the target but does not isolate a scan ID. Other crawls, authentication checks, and active scans against that target can contribute alerts. Recorded alert instances are not necessarily distinct confirmed vulnerabilities.
+
+There is no dedicated Client Spider results-list or Client Map export tool in the server yet. `zap_ajax_spider_results` belongs to AJAX Spider. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
 
 ## Typical Flow
 

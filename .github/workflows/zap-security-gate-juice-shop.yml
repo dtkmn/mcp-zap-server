@@ -86,25 +86,25 @@ jobs:
           import os
           from pathlib import Path
 
-          def load_json(path_env: str, expected_contract: str) -> dict:
+          def load_json(path_env: str, *expected_contracts: str) -> dict:
             path = Path(os.environ[path_env])
             if not path.is_file():
               raise SystemExit(f"Missing artifact for {path_env}: {path}")
             payload = json.loads(path.read_text())
             actual = payload.get("contract_version")
-            if actual != expected_contract:
+            if actual not in expected_contracts:
               raise SystemExit(
-                  f"Unexpected contract for {path_env}: expected {expected_contract}, got {actual}"
+                  f"Unexpected contract for {path_env}: expected {' or '.join(expected_contracts)}, got {actual}"
               )
             return payload
 
           pass1_metadata = load_json("PASS1_METADATA", "ci_gate_result/v1")
-          pass1_snapshot = load_json("PASS1_SNAPSHOT", "ci_gate_findings_snapshot/v1")
+          pass1_snapshot = load_json("PASS1_SNAPSHOT", "ci_gate_findings_snapshot/v1", "ci_gate_findings_snapshot/v2")
           pass1_manifest = load_json("PASS1_MANIFEST", "ci_gate_artifact_manifest/v1")
           pass2_metadata = load_json("PASS2_METADATA", "ci_gate_result/v1")
-          pass2_snapshot = load_json("PASS2_SNAPSHOT", "ci_gate_findings_snapshot/v1")
+          pass2_snapshot = load_json("PASS2_SNAPSHOT", "ci_gate_findings_snapshot/v1", "ci_gate_findings_snapshot/v2")
           pass2_manifest = load_json("PASS2_MANIFEST", "ci_gate_artifact_manifest/v1")
-          pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v1")
+          pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v2")
 
           if pass1_metadata.get("tool_surface") != "expert":
             raise SystemExit(f"Pass 1 should use expert tools, got {pass1_metadata.get('tool_surface')}")

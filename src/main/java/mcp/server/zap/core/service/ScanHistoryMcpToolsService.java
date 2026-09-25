@@ -41,13 +41,24 @@ public class ScanHistoryMcpToolsService {
 
     @Tool(
             name = "zap_scan_history_export",
-            description = "Export a bounded scan history ledger snapshot as JSON for release evidence or handoff."
+            description = """
+                    Export scan history as inline JSON text for internal evidence processing; no export file is created.
+                    Use zap_scan_history_list for a readable listing, zap_scan_history_release_evidence for a summary bundle,
+                    or zap_scan_history_customer_handoff for a customer-facing summary.
+                    Returns version, generatedAt, retentionDays, entryCount, and entries containing scan/job/artifact records,
+                    including internal IDs, paths, and metadata; review before sharing.
+                    Only records accessible to the caller in the current workspace are included, newest first.
+                    Omitted or blank filters select all accessible records; supplied filters combine with AND.
+                    The snapshot is capped by limit, has no pagination, and returns an empty entries array when nothing matches.
+                    It does not start scans or contact targets. Querying may delete expired stored ledger entries under
+                    the configured retention policy; it does not refresh scan outcomes from ZAP.
+                    """
     )
     public String exportHistory(
-            @ToolParam(required = false, description = "Optional evidence type filter: scan_job, scan_run, or report_artifact") String evidenceType,
-            @ToolParam(required = false, description = "Optional status filter") String status,
-            @ToolParam(required = false, description = "Optional target or artifact substring filter") String target,
-            @ToolParam(required = false, description = "Optional maximum entries to export, bounded by server configuration") Integer limit
+            @ToolParam(required = false, description = "Optional case-insensitive exact type filter: scan_job, scan_run, or report_artifact. Omit or leave blank for all types.") String evidenceType,
+            @ToolParam(required = false, description = "Optional case-insensitive exact status filter: queued, running, succeeded, failed, or cancelled for jobs; started for direct scans; generated for reports. Omit or leave blank for all statuses.") String status,
+            @ToolParam(required = false, description = "Optional case-insensitive substring of the target URL, target display name, or artifact location, e.g. api.example.com. Omit or leave blank for all targets.") String target,
+            @ToolParam(required = false, description = "Positive maximum number of entries. Omission uses the configured export maximum (500 by default); larger values are capped to that maximum. Zero or negative values are rejected.") Integer limit
     ) {
         return scanHistoryLedgerService.exportHistory(evidenceType, status, target, limit);
     }

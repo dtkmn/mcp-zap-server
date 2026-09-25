@@ -130,15 +130,25 @@ public class ContextUserService {
         return response;
     }
 
+    public void configureAutoDetectSessionManagement(String contextId) {
+        engineContextAccess.configureAutoDetectSessionManagement(requireText(contextId, "contextId"));
+    }
+
     public Map<String, Object> testUserAuthentication(
             String contextId,
             String userId
     ) {
+        return testUserAuthentication(contextId, userId, null);
+    }
+
+    public Map<String, Object> testUserAuthentication(String contextId, String userId, String verificationUrl) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserId = requireText(userId, "userId");
 
-        AuthenticationDiagnostics diagnostics =
-                engineContextAccess.testUserAuthentication(normalizedContextId, normalizedUserId);
+        AuthenticationDiagnostics diagnostics = verificationUrl == null
+                ? engineContextAccess.testUserAuthentication(normalizedContextId, normalizedUserId)
+                : engineContextAccess.testUserAuthentication(normalizedContextId, normalizedUserId,
+                        requireText(verificationUrl, "verificationUrl"));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("contextId", diagnostics.contextId());

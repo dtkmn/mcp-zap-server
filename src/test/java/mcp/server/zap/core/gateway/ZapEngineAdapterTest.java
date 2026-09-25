@@ -11,7 +11,7 @@ class ZapEngineAdapterTest {
     @Test
     void declaresTheCurrentZapGatewayCapabilityContract() {
         assertThat(adapter.engineId()).isEqualTo("zap");
-        assertThat(adapter.displayName()).isEqualTo("OWASP ZAP");
+        assertThat(adapter.displayName()).isEqualTo("ZAP");
         assertThat(adapter.supportedCapabilities()).containsExactlyInAnyOrder(
                 EngineCapability.TARGET_IMPORT,
                 EngineCapability.GUIDED_CRAWL,

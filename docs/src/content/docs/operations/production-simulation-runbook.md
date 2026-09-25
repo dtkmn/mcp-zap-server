@@ -99,7 +99,7 @@ Expected operator evidence:
 
 Concrete blockers must become follow-up issues before sign-off. Common examples:
 
-- authenticated browser/AJAX crawl is required
+- authenticated guided AJAX crawl (`strategy=browser`) is required
 - bearer/API-key header injection is required for guided execution
 - policy mode cannot emit an audit decision for the pilot tool call
 - scan job or operation IDs cannot be correlated with logs

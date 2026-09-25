@@ -2,6 +2,7 @@ package mcp.server.zap.core.service.queue;
 
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
 
 import java.time.Instant;
 import java.util.List;
@@ -14,7 +15,7 @@ public class ScanJobResponseFormatter {
                 .append('\n')
                 .append("Job ID: ").append(job.getId()).append('\n')
                 .append("Type: ").append(job.getType()).append('\n')
-                .append("Status: ").append(job.getStatus()).append('\n')
+                .append("Status: ").append(formatStatus(job)).append('\n')
                 .append("Attempts: ").append(job.getAttempts()).append('/').append(job.getMaxAttempts());
 
         if (job.getStatus() == ScanJobStatus.QUEUED && job.getQueuePosition() > 0) {
@@ -24,6 +25,9 @@ public class ScanJobResponseFormatter {
         if (job.getStatus() == ScanJobStatus.QUEUED && job.getNextAttemptAt() != null) {
             sb.append('\n').append("Retry Not Before: ").append(job.getNextAttemptAt());
         }
+
+        appendEngineWaitDetail(sb, job);
+        appendCancellationDetail(sb, job);
 
         if (hasText(job.getZapScanId())) {
             sb.append('\n').append("ZAP Scan ID: ").append(job.getZapScanId());
@@ -48,10 +52,14 @@ public class ScanJobResponseFormatter {
                 .append('\n')
                 .append("Job ID: ").append(job.getId()).append('\n')
                 .append("Type: ").append(job.getType()).append('\n')
-                .append("Status: ").append(job.getStatus()).append('\n')
+                .append("Status: ").append(formatStatus(job)).append('\n')
                 .append("Attempts: ").append(job.getAttempts()).append('/').append(job.getMaxAttempts()).append('\n')
-                .append("Progress: ").append(job.getLastKnownProgress()).append('%').append('\n')
+                .append("Progress: ").append(formatProgress(job)).append('\n')
                 .append("Submitted: ").append(job.getCreatedAt());
+
+        if (job.isCleanupJob()) {
+            sb.append('\n').append("Cleanup for Job ID: ").append(job.getCleanupOfJobId());
+        }
 
         if (job.getStartedAt() != null) {
             sb.append('\n').append("Started: ").append(job.getStartedAt());
@@ -73,8 +81,12 @@ public class ScanJobResponseFormatter {
             sb.append('\n').append("Idempotency Key: ").append(job.getIdempotencyKey());
         }
         if (hasText(job.getLastError())) {
-            sb.append('\n').append("Last Error: ").append(job.getLastError());
+            if (!isWaitingForEngine(job)) {
+                sb.append('\n').append("Last Error: ").append(job.getLastError());
+            }
         }
+        appendEngineWaitDetail(sb, job);
+        appendCancellationDetail(sb, job);
         if (isDeadLetterJob(job)) {
             sb.append('\n').append("Dead Letter: true");
         }
@@ -115,14 +127,16 @@ public class ScanJobResponseFormatter {
                     .append(" | ")
                     .append(job.getType())
                     .append(" | ")
-                    .append(job.getStatus())
+                    .append(formatStatus(job))
                     .append(" | attempts=")
                     .append(job.getAttempts())
                     .append('/')
                     .append(job.getMaxAttempts())
                     .append(" | progress=")
-                    .append(job.getLastKnownProgress())
-                    .append('%');
+                    .append(formatProgress(job));
+            if (job.isCleanupJob()) {
+                output.append(" | cleanupForJob=").append(job.getCleanupOfJobId());
+            }
             if (job.getQueuePosition() > 0) {
                 output.append(" | queuePosition=").append(job.getQueuePosition());
             }
@@ -131,6 +145,19 @@ public class ScanJobResponseFormatter {
             }
             if (job.getStatus() == ScanJobStatus.QUEUED && job.getNextAttemptAt() != null) {
                 output.append(" | retryAt=").append(job.getNextAttemptAt());
+            }
+            if (isWaitingForEngine(job)) {
+                output.append(" | waitingSince=").append(job.getBusyWaitStartedAt())
+                        .append(" | reason=").append(job.getLastError());
+            }
+            if (job.isCancellationRequested()) {
+                output.append(" | cancellationDeadline=").append(job.getCancelDeadlineAt());
+                if (job.getCancelNextAttemptAt() != null) {
+                    output.append(" | nextStopAttempt=").append(job.getCancelNextAttemptAt());
+                }
+                if (hasText(job.getLastError())) {
+                    output.append(" | reason=").append(job.getLastError());
+                }
             }
             appendClaimSummary(output, job, now);
             output.append('\n');
@@ -167,6 +194,49 @@ public class ScanJobResponseFormatter {
             output.append('\n');
         }
         return output.toString().trim();
+    }
+
+    private String formatStatus(ScanJob job) {
+        if (job.isCancellationRequested()) {
+            return job.getStatus().name() + (job.isCancellationPending()
+                    ? " (cancellation pending)" : " (cancellation unconfirmed; automatic stop retries ended)");
+        }
+        if (isWaitingForEngine(job)) {
+            return "QUEUED (waiting for engine)";
+        }
+        if ((job.getType() == ScanJobType.AJAX_SPIDER || job.getType() == ScanJobType.CLIENT_SPIDER)
+                && job.getStatus() == ScanJobStatus.SUCCEEDED) {
+            return "SUCCEEDED (ZAP reports stopped; crawl outcome unknown)";
+        }
+        return job.getStatus().name();
+    }
+
+    private String formatProgress(ScanJob job) {
+        return job.getType() == ScanJobType.AJAX_SPIDER
+                ? "unavailable (ZAP does not report a percentage)"
+                : job.getLastKnownProgress() + "%";
+    }
+
+    private boolean isWaitingForEngine(ScanJob job) {
+        return job.getStatus() == ScanJobStatus.QUEUED && job.getBusyWaitStartedAt() != null
+                && !job.isCancellationRequested();
+    }
+
+    private void appendCancellationDetail(StringBuilder output, ScanJob job) {
+        if (job.isCancellationRequested()) {
+            output.append('\n').append("Cancellation Requested: ").append(job.getCancelRequestedAt())
+                    .append('\n').append("Cancellation Retry Deadline: ").append(job.getCancelDeadlineAt());
+            if (job.getCancelNextAttemptAt() != null) {
+                output.append('\n').append("Next Stop Attempt: ").append(job.getCancelNextAttemptAt());
+            }
+        }
+    }
+
+    private void appendEngineWaitDetail(StringBuilder output, ScanJob job) {
+        if (isWaitingForEngine(job)) {
+            output.append('\n').append("Waiting Since: ").append(job.getBusyWaitStartedAt())
+                    .append('\n').append("Waiting Reason: ").append(job.getLastError());
+        }
     }
 
     private void appendClaimSummary(StringBuilder output, ScanJob job, Instant now) {

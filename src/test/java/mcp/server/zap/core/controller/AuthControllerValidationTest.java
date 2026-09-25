@@ -1,5 +1,9 @@
 package mcp.server.zap.core.controller;
 
+import mcp.server.zap.core.configuration.ApiKeyProperties;
+import mcp.server.zap.core.exception.GlobalExceptionHandler;
+import mcp.server.zap.core.service.JwtService;
+import mcp.server.zap.core.service.TokenBlacklistService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -11,6 +15,8 @@ import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -173,6 +179,39 @@ class AuthControllerValidationTest {
                 .expectBody()
                 .jsonPath("$.valid").isEqualTo(false)
                 .jsonPath("$.error").isEqualTo("Token has been revoked");
+    }
+
+    @Test
+    void validateTokenReportsMalformedTokenAsInvalid() {
+        webTestClient().get()
+                .uri("/auth/validate")
+                .header("Authorization", "Bearer not-a-jwt")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.valid").isEqualTo(false)
+                .jsonPath("$.error").isEqualTo("Invalid or expired JWT token");
+    }
+
+    @Test
+    void validateTokenReportsRevocationStoreFailureAsServerError() {
+        JwtService jwtService = mock(JwtService.class);
+        TokenBlacklistService blacklistService = mock(TokenBlacklistService.class);
+        when(jwtService.getTokenId("valid-token")).thenReturn("token-id");
+        when(blacklistService.isBlacklisted("token-id"))
+                .thenThrow(new IllegalStateException("Revocation database unavailable"));
+
+        WebTestClient.bindToController(new AuthController(jwtService, mock(ApiKeyProperties.class), blacklistService))
+                .controllerAdvice(new GlobalExceptionHandler())
+                .build()
+                .get().uri("/auth/validate")
+                .header("Authorization", "Bearer valid-token")
+                .exchange()
+                .expectStatus().is5xxServerError()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(500)
+                .jsonPath("$.message").isEqualTo("The server could not complete the request.")
+                .jsonPath("$.valid").doesNotExist();
     }
 
     @Test

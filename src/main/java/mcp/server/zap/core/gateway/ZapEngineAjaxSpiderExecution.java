@@ -31,6 +31,9 @@ public class ZapEngineAjaxSpiderExecution implements EngineAjaxSpiderExecution {
             log.info("AJAX Spider scan started for URL: {}", request.targetUrl());
             return ZAP_QUEUE_SCAN_ID_PREFIX + System.currentTimeMillis();
         } catch (ClientApiException e) {
+            if ("scan_in_progress".equals(e.getCode())) {
+                throw new EngineBusyException("ZAP is busy with another AJAX Spider scan", e);
+            }
             log.error("Error launching AJAX Spider for URL {}: {}", request.targetUrl(), e.getMessage(), e);
             throw new ZapApiException("Error launching AJAX Spider for URL " + request.targetUrl() + ": " + e.getMessage(), e);
         }
@@ -82,7 +85,7 @@ public class ZapEngineAjaxSpiderExecution implements EngineAjaxSpiderExecution {
             log.error("AJAX Spider addon is not available in this ZAP installation: {}", e.getMessage());
             throw new ZapApiException(
                     "AJAX Spider addon is not available. Please ensure ZAP is started with the AJAX Spider addon enabled. "
-                            + "For Docker, use: zaproxy/zap-stable with -addoninstall ajaxSpider", e);
+                            + "For Docker, use: zaproxy/zap-stable with -addoninstall spiderAjax", e);
         }
     }
 

@@ -13,7 +13,7 @@ export default defineConfig({
 	integrations: [
 		starlight({
 			title: 'MCP ZAP Server',
-			description: 'Enterprise-grade security testing for AI agents and operators using OWASP ZAP over MCP.',
+			description: 'Enterprise-grade security testing for AI agents and operators using ZAP over MCP.',
 			tagline: 'Initialising MCP ZAP Server Protocol...',
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/dtkmn/mcp-zap-server' },
@@ -51,6 +51,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'scanning/mcp-client-scan-to-evidence' },
 						{ slug: 'scanning/scan-execution-modes' },
+						{ slug: 'scanning/client-spider' },
 						{ slug: 'scanning/ajax-spider' },
 						{ slug: 'scanning/passive-scan' },
 						{ slug: 'scanning/seeded-api-gate-playbook' },

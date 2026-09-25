@@ -5,7 +5,7 @@
 <h1 align="center">MCP ZAP Server</h1>
 
 <p align="center">
-  Give AI agents a safe, self-hosted OWASP ZAP operator for guided web security scans, findings, reports, and production guardrails.
+  Give AI agents a safe, self-hosted ZAP operator for guided web security scans, findings, reports, and production guardrails.
 </p>
 
 <p align="center">
@@ -15,9 +15,9 @@
   <img src="https://img.shields.io/github/license/dtkmn/mcp-zap-server" alt="GitHub license">
 </p>
 
-> **Note** This project is not affiliated with or endorsed by OWASP or the OWASP ZAP project. It is an independent implementation.
+> **Note** This project is not affiliated with or endorsed by the ZAP project. It is an independent implementation.
 
-`mcp-zap-server` exposes OWASP ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
+`mcp-zap-server` exposes ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 
 Use it when you want:
 
@@ -40,7 +40,7 @@ Prerequisites:
 
 - Docker 20.10+
 - Docker Compose v2 (`docker compose`)
-- an MCP-capable client, or the bundled Open WebUI client
+- your own MCP client with Streamable HTTP and custom-header support
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
@@ -63,17 +63,33 @@ contains no shell, package manager, or `curl`. A small built-in HTTP probe keeps
 the normal Docker Compose health status; `docker compose ps` still reports the
 MCP service as `(healthy)` after startup.
 
-Then open:
+Connect your MCP client:
 
-- Open WebUI: `http://localhost:3000`
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
+- Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
+- [Codex setup](./docs/src/content/docs/getting-started/mcp-client-authentication.md#codex)
 - Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
+- [Client compatibility and setup](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+
+The stack runs the MCP server, ZAP, and demo targets. Install and configure
+your preferred MCP client separately.
 
 When scanning the bundled demo targets, use the container URLs that ZAP can
 reach from inside Compose:
 
 - Juice Shop scan target: `http://juice-shop:3000`
 - Petstore scan target: `http://petstore:8080`
+
+After connecting, try this first prompt:
+
+```text
+Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
+and passive analysis to finish, show a findings summary, generate an HTML
+report, and read it back through MCP. Do not run an active scan.
+```
+
+Expect a completed crawl, a findings summary, and a report the client can
+read. Finding counts vary; a connection or scan error is not a clean result.
 
 The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
@@ -93,9 +109,14 @@ API key; never put a target website password in Cursor or an MCP prompt.
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json). The `v0.11.0` Docker images are labeled with the MCP server name expected by registry and catalog tooling.
+This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json).
+Use metadata from the same version as the image you deploy. The image includes
+the MCP server name expected by registry and catalog tooling. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+release workflow before installing a versioned image or publishing its package
+metadata; repository metadata alone is not proof of image availability.
 
-Docker Compose remains the easiest installation path because the MCP server is designed to operate with an OWASP ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where OWASP ZAP is already running and reachable from the MCP container.
+Docker Compose remains the easiest installation path because the MCP server is designed to operate with a ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where ZAP is already running and reachable from the MCP container.
 
 ## What You Get
 
@@ -103,26 +124,29 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Expert ZAP control**: optional lower-level tools for advanced ZAP context, user, scan, and report workflows.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
 - **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
-- **Scan queue and history**: queued active, spider, and AJAX Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
+- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider (unreleased) jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
+Client Spider and its browser authentication profiles are **unreleased** and are not included in `v0.12.0`. Use a source build containing these changes; see the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports.
+
 ## Latest Release
 
-`v0.11.0` modernizes the runtime and container supply chain without changing MCP tool names or input schemas:
+See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
+for the latest published version and its publication date. Version-specific
+documentation describes that version's behavior; it does not announce image
+availability. Deploy only after the corresponding release workflow succeeds
+and the versioned image is available in your registry.
 
-- gateway-core and its WebFlux adapter move to `0.8.0`, with application data binding migrated to Jackson 3 and managed by the Jackson `3.2.1` BOM
-- the final Java 25 image is built on a Cosign-verified, digest-pinned distroless runtime with a shell-free HTTP health probe
-- the unsupported native-image deployment facade is removed; use the versioned JVM image or Helm
-- main CI no longer publishes rolling `main` or `sha-*` images; stable AMD64 and ARM64 images are published only from GitHub immutable-release events
-- no database migration or authentication configuration change is required; the container remains UID/GID `1000`, now stated explicitly in Helm
+**Version `v0.12.0`** improves scan queue waiting, cancellation, and cleanup, and
+uses ZAP node identity for findings. Before upgrading, review the PostgreSQL
+V7/V8 migrations, snapshot v2 compatibility, and timeout changes in the release
+notes.
 
-Read the full notes:
-
-- [Release notes](./docs/releases/RELEASE_NOTES_0.11.0.md)
+- [0.12.0 release notes](./docs/releases/RELEASE_NOTES_0.12.0.md)
+- [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
-- [GitHub releases](https://github.com/dtkmn/mcp-zap-server/releases)
 
 ## Security Defaults
 
@@ -153,8 +177,8 @@ Production and shared deployments should review:
 
 ```mermaid
 flowchart LR
-  Client["Open WebUI / MCP Client"] -->|"MCP over Streamable HTTP"| MCP["MCP ZAP Server"]
-  MCP -->|"ZAP API"| ZAP["OWASP ZAP"]
+  Client["Your MCP Client"] -->|"MCP over Streamable HTTP"| MCP["MCP ZAP Server"]
+  MCP -->|"ZAP API"| ZAP["ZAP"]
   ZAP -->|"scan"| Target["Authorized target app"]
   MCP -->|"reports / findings / history"| Evidence["Evidence + reports"]
 ```
@@ -205,6 +229,7 @@ Scanning:
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
+- [Client Spider (unreleased)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)
 
 Operations:
@@ -216,7 +241,7 @@ Operations:
 
 ## Open Source Core And Extension Model
 
-`mcp-zap-server` is the Apache-2.0-licensed open-source core. It is intended to be useful on its own for self-hosted MCP and OWASP ZAP workflows.
+`mcp-zap-server` is the Apache-2.0-licensed open-source core. It is intended to be useful on its own for self-hosted MCP and ZAP workflows.
 
 Private or enterprise capabilities may be built as separate extensions around this core. Those extensions are not required to run the OSS project, and enterprise implementation code is not shipped in this repository.
 

@@ -29,7 +29,7 @@ public class PassiveScanServiceDockerTest {
 
     @Container
     static final GenericContainer<?> ZAP =
-            new GenericContainer<>(DockerImageName.parse("zaproxy/zap-stable:2.17.0"))
+            new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(TARGET)
                     .withExposedPorts(8090)
@@ -54,7 +54,7 @@ public class PassiveScanServiceDockerTest {
 
     @BeforeAll
     static void setupClient() throws Exception {
-        clientApi = new ClientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new PassiveScanService(new ZapEnginePassiveScanAccess(clientApi));
     }

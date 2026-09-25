@@ -15,6 +15,9 @@ import mcp.server.zap.core.service.auth.bootstrap.HttpOrigin;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,6 +32,7 @@ class GuidedSecurityToolsServiceTest {
     private GuidedExecutionModeResolver executionModeResolver;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;
+    private ClientSpiderService clientSpiderService;
     private ActiveScanService activeScanService;
     private ScanJobQueueService scanJobQueueService;
     private GuidedAuthSessionService guidedAuthSessionService;
@@ -45,6 +49,7 @@ class GuidedSecurityToolsServiceTest {
         executionModeResolver = mock(GuidedExecutionModeResolver.class);
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
+        clientSpiderService = mock(ClientSpiderService.class);
         activeScanService = mock(ActiveScanService.class);
         scanJobQueueService = mock(ScanJobQueueService.class);
         guidedAuthSessionService = mock(GuidedAuthSessionService.class);
@@ -57,6 +62,7 @@ class GuidedSecurityToolsServiceTest {
                 executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
+                clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
                 guidedAuthSessionService,
@@ -129,6 +135,63 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
+    void clientCrawlUsesItsNativeIdForDirectStatusAndStop() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
+                .thenReturn("Client Spider started.\nScan ID: 7");
+        when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 35%");
+        when(clientSpiderService.stopClientSpider("7")).thenReturn("Client Spider stop requested.");
+
+        String response = service.startCrawl("https://spa.example.com", "client", null, null);
+        String operationId = extractOperationId(response);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: direct");
+        assertThat(service.getCrawlStatus(operationId)).contains("Progress: 35%");
+        assertThat(service.stopCrawl(operationId)).contains("Client Spider stop requested.");
+        verify(clientSpiderService).getClientSpiderStatus("7");
+        verify(clientSpiderService).stopClientSpider("7");
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void clientCrawlUsesQueueJobForStatusAndCancellation() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, "crawl-key"))
+                .thenReturn("Scan job accepted\nJob ID: client-job\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-job")).thenReturn("Status: RUNNING");
+        when(scanJobQueueService.cancelScanJob("client-job")).thenReturn("Status: CANCELLED");
+
+        String response = service.startCrawl("https://spa.example.com", "client", "crawl-key", null);
+        String operationId = extractOperationId(response);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: queue");
+        assertThat(service.getCrawlStatus(operationId)).contains("Status: RUNNING");
+        assertThat(service.stopCrawl(operationId)).contains("Status: CANCELLED");
+        verify(scanJobQueueService).cancelScanJob("client-job");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
+    }
+
+    @Test
+    void stoppedClientCrawlsDoNotClaimSuccessfulCoverageInEitherExecutionMode() {
+        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
+                .thenReturn("Client Spider started.\nScan ID: 7");
+        when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 100%");
+        when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, null))
+                .thenReturn("Job ID: client-job");
+        when(scanJobQueueService.getScanJobStatus("client-job"))
+                .thenReturn("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+
+        for (GuidedExecutionModeResolver.ExecutionMode mode : GuidedExecutionModeResolver.ExecutionMode.values()) {
+            when(executionModeResolver.resolveDefaultMode()).thenReturn(mode);
+            String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "client", null, null));
+
+            assertThat(service.getCrawlStatus(operationId))
+                    .contains("successful completion is unconfirmed", "zap_passive_scan_wait")
+                    .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+        }
+    }
+
+    @Test
     void startAttackUsesQueueWhenQueuePreferred() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
         when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq("Baseline"), eq((String) null)))
@@ -178,6 +241,41 @@ class GuidedSecurityToolsServiceTest {
         assertThat(statusResponse).contains("Next Actions:");
         assertThat(statusResponse).contains("Continue security testing: call zap_attack_start");
         assertThat(statusResponse).contains("Crawl-only path: call zap_passive_scan_wait");
+    }
+
+    @Test
+    void stoppedDirectBrowserCrawlDoesNotClaimSuccessOrKeepPolling() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(ajaxSpiderService.startAjaxSpider("https://spa.example.com"))
+                .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
+        when(ajaxSpiderService.getAjaxSpiderStatus())
+                .thenReturn("AJAX Spider Status: stopped\nPages/URLs discovered: 3");
+
+        String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "browser", null, null));
+        String statusResponse = service.getCrawlStatus(operationId);
+
+        assertThat(statusResponse)
+                .contains("AJAX Spider Status: stopped")
+                .contains("successful completion is unconfirmed")
+                .contains("zap_passive_scan_wait before reviewing available findings")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+    }
+
+    @Test
+    void succeededBrowserQueueJobDoesNotImplySuccessfulCrawl() {
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueAjaxSpiderScan("https://spa.example.com", null))
+                .thenReturn("Scan job accepted\nJob ID: browser-1\nType: AJAX_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("browser-1"))
+                .thenReturn("Scan job details\nJob ID: browser-1\nStatus: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
+
+        String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "browser", null, null));
+        String statusResponse = service.getCrawlStatus(operationId);
+
+        assertThat(statusResponse)
+                .contains("successful completion is unconfirmed")
+                .contains("check crawl coverage before continuing security testing")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
     }
 
     @Test
@@ -349,16 +447,17 @@ class GuidedSecurityToolsServiceTest {
         assertThat(response).contains("Authenticated guided attack applied the prepared form-login session");
     }
 
-    @Test
-    void preparedProfileCannotBeReusedForCrawlOnAnotherOrigin() {
-        PreparedAuthSession session = preparedFormSession("auth-crawl", "https://app.example.com", "1", "7");
+    @ParameterizedTest
+    @CsvSource({"FORM,http", "BROWSER,client"})
+    void preparedProfileCannotBeReusedForCrawlOnAnotherOrigin(AuthBootstrapKind kind, String strategy) {
+        PreparedAuthSession session = preparedSession(kind, "auth-crawl", "https://app.example.com", "1", "7");
         when(guidedAuthSessionService.getPreparedSession("auth-crawl")).thenReturn(session);
 
-        assertThatThrownBy(() -> service.startCrawl("https://attacker.example", "http", null, "auth-crawl"))
+        assertThatThrownBy(() -> service.startCrawl("https://attacker.example", strategy, null, "auth-crawl"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not authorized for the requested targetUrl origin");
 
-        verifyNoInteractions(spiderScanService, scanJobQueueService);
+        verifyNoInteractions(spiderScanService, clientSpiderService, scanJobQueueService);
     }
 
     @Test
@@ -381,6 +480,141 @@ class GuidedSecurityToolsServiceTest {
         assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "browser", null, "auth-3"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("strategy=browser");
+    }
+
+    @Test
+    void clientCrawlRejectsPreparedHttpFormAuthenticationBeforeStartingAnyScan() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedFormSession("auth-client", "https://app.example.com", "1", "7"));
+
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("strategy=client requires a prepared browser authentication session");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void preparedBrowserSessionRoutesDirectClientCrawlAndNativeLifecycle() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(clientSpiderService.startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user"))
+                .thenReturn("Direct Client Spider scan started.\nScan ID: client-auth-1");
+        when(clientSpiderService.getClientSpiderStatus("client-auth-1")).thenReturn("Progress: 20%");
+        when(clientSpiderService.stopClientSpider("client-auth-1")).thenReturn("Client Spider stop requested");
+
+        String response = service.startCrawl("https://app.example.com", "client", null, "auth-client");
+        String operationId = extractOperationId(response);
+        service.getCrawlStatus(operationId);
+        service.stopCrawl(operationId);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: direct", "Authenticated Session: auth-client",
+                "prepared browser session", "browser session supports Client Spider only")
+                .doesNotContain("call zap_attack_start", "env:SHOP_PASSWORD");
+        verify(clientSpiderService).startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user");
+        verify(clientSpiderService).getClientSpiderStatus("client-auth-1");
+        verify(clientSpiderService).stopClientSpider("client-auth-1");
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void preparedBrowserSessionRoutesQueuedClientCrawlWithNamesAndIdempotencyKey() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key"))
+                .thenReturn("Scan job accepted\nJob ID: client-auth-job\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-auth-job"))
+                .thenReturn("Status: RUNNING", "Status: CANCELLED");
+        when(scanJobQueueService.cancelScanJob("client-auth-job")).thenReturn("Status: CANCELLED");
+
+        String response = service.startCrawl("https://app.example.com", "client", "crawl-key", "auth-client");
+        String operationId = extractOperationId(response);
+
+        assertThat(response).contains("Strategy: client", "Execution Mode: queue", "Authenticated Session: auth-client");
+        assertThat(service.getCrawlStatus(operationId)).contains("Status: RUNNING");
+        assertThat(service.stopCrawl(operationId)).contains("Status: CANCELLED");
+        assertThat(service.getCrawlStatus(operationId))
+                .contains("Status: CANCELLED", "Review the status/error above before trusting this scan as evidence")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+        verify(scanJobQueueService).queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key");
+        verify(scanJobQueueService).cancelScanJob("client-auth-job");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
+    }
+
+    @Test
+    void authenticatedQueuedClientFailureRemainsVisibleWithoutAnonymousFallback() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+        when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
+                .thenReturn("Scan job accepted\nJob ID: client-auth-failed\nType: CLIENT_SPIDER");
+        when(scanJobQueueService.getScanJobStatus("client-auth-failed"))
+                .thenReturn("Status: FAILED\nLast Error: Browser authentication failed\nDead Letter: true");
+
+        String operationId = extractOperationId(service.startCrawl("https://app.example.com", "client", null, "auth-client"));
+
+        assertThat(service.getCrawlStatus(operationId))
+                .contains("Status: FAILED", "Browser authentication failed", "Retry only after fixing")
+                .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
+        verify(scanJobQueueService, org.mockito.Mockito.never())
+                .queueClientSpiderScan("https://app.example.com", null, null);
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"auto", "http", "browser"})
+    void preparedBrowserSessionRejectsOtherCrawlStrategies(String strategy) {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", strategy, null, "auth-client"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("require strategy=client");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void preparedBrowserSessionRejectsActiveScanBeforeLaunch() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+
+        assertThatThrownBy(() -> service.startAttack("https://app.example.com", "true", null, null, "auth-client"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("require strategy=client");
+        verifyNoInteractions(activeScanService, scanJobQueueService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void preparedBrowserSessionRequiresBothContextAndUserNames(boolean missingContextName) {
+        PreparedAuthSession session = preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7");
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(new PreparedAuthSession(session.sessionId(), session.profileId(), session.authKind(),
+                        session.providerId(), session.target(), session.authorizedOrigin(), session.credentialReference(),
+                        missingContextName ? null : session.contextName(), session.contextId(),
+                        missingContextName ? session.zapUserName() : " ", session.userId(),
+                        session.headerName(), session.loginUrl(), session.engineBound()));
+
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("missing ZAP context/user names");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService, scanJobQueueService);
+    }
+
+    @Test
+    void authenticatedClientFailureDoesNotFallBackToAnonymousCrawl() {
+        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+                .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        ZapApiException failure = new ZapApiException("Browser authentication failed", new RuntimeException("login failed"));
+        when(clientSpiderService.startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user"))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
+                .isSameAs(failure);
+        verify(clientSpiderService, org.mockito.Mockito.never()).startClientSpider("https://app.example.com", null);
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
     }
 
     @Test
@@ -502,6 +736,7 @@ class GuidedSecurityToolsServiceTest {
                 executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
+                clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
                 guidedAuthSessionService,
@@ -567,10 +802,15 @@ class GuidedSecurityToolsServiceTest {
     }
 
     private PreparedAuthSession preparedFormSession(String sessionId, String targetUrl, String contextId, String userId) {
+        return preparedSession(AuthBootstrapKind.FORM, sessionId, targetUrl, contextId, userId);
+    }
+
+    private PreparedAuthSession preparedSession(AuthBootstrapKind kind, String sessionId, String targetUrl,
+                                               String contextId, String userId) {
         return new PreparedAuthSession(
                 sessionId,
                 "shop-form-auth",
-                AuthBootstrapKind.FORM,
+                kind,
                 "zap-form-login",
                 new TargetDescriptor(TargetDescriptor.Kind.WEB, targetUrl, "shop-auth"),
                 HttpOrigin.fromUrl(targetUrl),

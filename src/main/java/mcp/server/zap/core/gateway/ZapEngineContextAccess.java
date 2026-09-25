@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
 import org.springframework.stereotype.Component;
@@ -174,31 +175,88 @@ public class ZapEngineContextAccess implements EngineContextAccess {
     }
 
     @Override
-    public AuthenticationDiagnostics testUserAuthentication(String contextId, String userId) {
+    public void configureAutoDetectSessionManagement(String contextId) {
         try {
+            zap.sessionManagement.setSessionManagementMethod(contextId, "autoDetectSessionManagement", "");
+        } catch (ClientApiException e) {
+            log.error("Failed to configure session management for context {}: {}", contextId, e.getMessage(), e);
+            throw new ZapApiException("Failed to configure session management for context " + contextId, e);
+        }
+    }
+
+    @Override
+    public AuthenticationDiagnostics testUserAuthentication(String contextId, String userId) {
+        return testUserAuthentication(contextId, userId, null);
+    }
+
+    @Override
+    public AuthenticationDiagnostics testUserAuthentication(String contextId, String userId, String verificationUrl) {
+        try {
+            boolean verifyProtectedUrl = hasText(verificationUrl);
+            if (verifyProtectedUrl) {
+                zap.context.setContextCheckingStrategy(
+                        contextNameForId(contextId), "POLL_URL", verificationUrl, "", "", "60", "REQUESTS");
+            }
             ApiResponse authResponse = zap.users.authenticateAsUser(contextId, userId);
+            ApiResponse verificationResponse = verifyProtectedUrl ? zap.users.pollAsUser(contextId, userId) : null;
             ApiResponse authStateResponse = zap.users.getAuthenticationState(contextId, userId);
 
-            Boolean likelyAuthenticated = parseBoolean(
-                    extractFirstValue(authStateResponse, "lastPollResult", "authenticated", "loggedIn")
-            );
-            if (likelyAuthenticated == null) {
+            Boolean likelyAuthenticated;
+            if (verifyProtectedUrl) {
+                likelyAuthenticated = verifyAuthenticationResponse(contextId, verificationResponse);
+            } else {
                 likelyAuthenticated = parseBoolean(
-                        extractFirstValue(authResponse, "authSuccessful", "success", "result")
+                        extractFirstValue(authStateResponse, "lastPollResult", "authenticated", "loggedIn")
                 );
+                if (likelyAuthenticated == null) {
+                    likelyAuthenticated = parseBoolean(
+                            extractFirstValue(authResponse, "authSuccessful", "success", "result")
+                    );
+                }
             }
 
             return new AuthenticationDiagnostics(
                     contextId,
                     userId,
                     likelyAuthenticated,
-                    authResponse.toString(0),
+                    verifyProtectedUrl ? "verifiedAuthenticated=" + likelyAuthenticated : authResponse.toString(0),
                     authStateResponse.toString(0)
             );
         } catch (ClientApiException e) {
             log.error("Failed to authenticate as user {} in context {}: {}", userId, contextId, e.getMessage(), e);
             throw new ZapApiException("Failed to authenticate as user " + userId, e);
         }
+    }
+
+    private Boolean verifyAuthenticationResponse(String contextId, ApiResponse response) throws ClientApiException {
+        if (!(response instanceof ApiResponseSet set)) {
+            return null;
+        }
+        Boolean pollSuccessful = parseBoolean(set.getStringValue("pollSuccessful"));
+        if (!Boolean.TRUE.equals(pollSuccessful)) {
+            return pollSuccessful;
+        }
+        // ZAP also returns true when only the logged-out indicator is absent. Require positive evidence.
+        ApiResponse indicatorResponse = zap.authentication.getLoggedInIndicator(contextId);
+        if (!(indicatorResponse instanceof ApiResponseElement indicator) || !hasText(indicator.getValue())) {
+            return null;
+        }
+        Pattern loggedIn = Pattern.compile(indicator.getValue());
+        String responseHeader = set.getStringValue("responseHeader");
+        String responseBody = set.getStringValue("responseBody");
+        boolean matched = (responseHeader != null && loggedIn.matcher(responseHeader).find())
+                || (responseBody != null && loggedIn.matcher(responseBody).find());
+        return matched ? Boolean.TRUE : null;
+    }
+
+    private String contextNameForId(String contextId) throws ClientApiException {
+        for (String contextName : listContextNames()) {
+            ApiResponse response = zap.context.context(contextName);
+            if (response instanceof ApiResponseSet set && contextId.equals(set.getStringValue("id"))) {
+                return contextName;
+            }
+        }
+        throw new ClientApiException("Unable to resolve the ZAP context name for ID " + contextId);
     }
 
     private List<String> listContextNames() throws ClientApiException {

@@ -3,7 +3,7 @@ spring:
     mcp:
       server:
         name: mcp-zap-server
-        version: ${MCP_SERVER_VERSION:0.11.0}
+        version: ${MCP_SERVER_VERSION:0.12.0}
         instructions: "Use this server to interact with the ZAP API for security testing."
         protocol: streamable
         resource-change-notification: true
@@ -118,6 +118,8 @@ zap:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}
     apiKey: ${ZAP_API_KEY}
+    connect-timeout-ms: ${ZAP_API_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${ZAP_API_READ_TIMEOUT_MS:10000}
   
   scan:
     # Scan Limits and Timeouts
@@ -128,7 +130,6 @@ zap:
       maxConcurrentSpiderScans: ${ZAP_MAX_CONCURRENT_SPIDER_SCANS:5}
       threadPerHost: ${ZAP_THREAD_PER_HOST:10}
       hostPerScan: ${ZAP_HOST_PER_SCAN:5}
-      connectionTimeoutInSecs: ${ZAP_CONNECTION_TIMEOUT:60}
       spiderThreadCount: ${ZAP_SPIDER_THREAD_COUNT:5}
       spiderMaxDepth: ${ZAP_SPIDER_MAX_DEPTH:10}
     
@@ -152,6 +153,8 @@ zap:
 
     queue:
       dispatch-interval-ms: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:2000}
+      engine-busy-max-wait-ms: ${ZAP_SCAN_QUEUE_ENGINE_BUSY_MAX_WAIT_MS:180000}
+      cancel-max-wait-ms: ${ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS:${ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS:${zap.scan.queue.ajax-cancel-max-wait-ms:30000}}}
       claim-lease-ms: ${ZAP_SCAN_QUEUE_CLAIM_LEASE_MS:15000}
       virtual-threads:
         enabled: ${ZAP_SCAN_QUEUE_VIRTUAL_THREADS_ENABLED:false}
@@ -207,7 +210,7 @@ zap:
   # ZAP Initialization Settings (applied at startup via Network API)
   initialization:
     userAgent: ${ZAP_USER_AGENT:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}
-    connectionTimeoutInSecs: ${ZAP_INIT_CONNECTION_TIMEOUT:300}
+    connectionTimeoutInSecs: ${ZAP_INIT_CONNECTION_TIMEOUT:${ZAP_CONNECTION_TIMEOUT:300}}
     dnsTtlSuccessfulQueries: ${ZAP_DNS_TTL:60}
 
 # Actuator Configuration

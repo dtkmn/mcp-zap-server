@@ -27,6 +27,8 @@ The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
 OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
+Unreleased browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
+
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
 ## Operator Secret Setup
@@ -69,6 +71,39 @@ Credential references are exact operator-owned values:
 Wildcard references and inline secrets are not supported. Use one profile per application, environment, and credential. `allowed-origin` contains only scheme, host, and optional port; paths belong in `targetUrl` and `login-url`.
 
 The ZAP context name is derived from the unique profile ID with an `-auth` suffix. Its scope is the profile's immutable `allowed-origin`, so preparing the same profile for another path cannot rewrite the live scope behind an earlier session or queued job. Different profiles still receive different contexts.
+
+## Browser Authentication for Client Spider
+
+> **Unreleased:** Client Spider and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
+
+Add a separate browser profile to the same deployment configuration:
+
+```yaml
+mcp:
+  server:
+    auth:
+      bootstrap:
+        profiles:
+          - id: shop-browser
+            kind: browser
+            allowed-origin: https://shop.example.com
+            credential-reference: env:TARGET_SCAN_PASSWORD
+            login-url: https://shop.example.com/login
+            username: zap-scan-user
+            logged-in-indicator-regex: ".*Logout.*"
+            logged-out-indicator-regex: ".*Sign in.*"
+```
+
+ZAP discovers the username/password fields and logs into headless Firefox. Browser profiles enable automatic session detection so ZAP can replay cookies or header tokens, including bearer tokens, when verifying authentication. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This guided profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
+
+Set the existing `ZAP_API_READ_TIMEOUT_MS=60000` for browser-auth deployments (`mcp.zapClient.readTimeoutMs: 60000` in Helm). Validation launches Firefox and waits for login; the default 10-second API read timeout can expire before it finishes. This changes the existing ZAP API timeout, without adding a separate browser timeout.
+
+1. Call `zap_auth_session_prepare` with `profileId: shop-browser` and a protected target URL whose response matches the configured logged-in indicator.
+2. Call `zap_auth_session_validate` with the returned session ID and confirm `Valid: true`. This configures ZAP's native authentication polling against the prepared target and logs in. Success requires both a positive ZAP verdict and a match for the configured logged-in indicator in the fresh response headers or body. A missing verdict or positive indicator leaves the result `Valid: false`, `Outcome: authentication_unconfirmed`; an explicit negative verdict is `authentication_failed`.
+3. Call `zap_crawl_start` with the target URL, `strategy: client`, and that `authSessionId`.
+4. Use the returned operation ID for `zap_crawl_status` and `zap_crawl_stop`. Verify that protected pages were reached and returned authenticated content before trusting crawl coverage; a stopped crawl or successful start response does not prove authentication. Wait for passive scanning before reviewing findings.
+
+Both direct and queued execution use the prepared ZAP context and user. Browser profiles currently support Client Spider only: `auto`, HTTP, AJAX, and guided active scans reject them. Keep a `kind: form` profile for the existing HTTP/active authentication paths. Authentication Helper, Client Side Integration, Selenium, Firefox, and WebDriver must be available in ZAP; API configuration of browser authentication requires ZAP 2.16.1 or newer.
 
 ## Upgrade Migration: Profiles Are Explicit
 
@@ -251,9 +286,11 @@ networkPolicy:
 overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
-deployment's explicit URL-policy approval. The chart now defaults to `v0.11.0`;
-the profile contract was introduced in `v0.10.0`. The commands below use the
-versioned `v0.11.0` image published from its GitHub immutable-release event.
+deployment's explicit URL-policy approval. The commands below target chart
+`0.12.0` and image `v0.12.0`; the profile contract was introduced in `v0.10.0`.
+Before deploying, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+and verify that the release workflow has published the image to your registry.
+The unknown/disabled-tool response fix applies to `v0.11.1` and later.
 Main CI no longer publishes rolling `main` or `sha-*` tags. Do not use `v0.9.1`
 or earlier; those images do not contain the profile contract.
 
@@ -267,9 +304,9 @@ Render before applying, then wait for the MCP rollout:
 (
 set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
-MCP_ZAP_IMAGE_TAG=v0.11.0
-[[ "$MCP_ZAP_IMAGE_TAG" == "v0.11.0" ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the v0.11.0 release image tag" >&2
+MCP_ZAP_IMAGE_TAG=v0.12.0
+[[ "$MCP_ZAP_IMAGE_TAG" == "v0.12.0" ]] || {
+  echo "MCP_ZAP_IMAGE_TAG must be the v0.12.0 release image tag" >&2
   exit 1
 }
 
@@ -459,7 +496,7 @@ If validation fails, stop. Do not continue and pretend the scan is authenticated
 }
 ```
 
-Guided authenticated crawl currently accepts prepared form-login sessions on the HTTP spider path. Browser/AJAX crawl with `authSessionId` is not supported in this window.
+Guided authenticated crawl accepts prepared form-login sessions with `strategy=http` or `auto`, and prepared browser sessions with `strategy=client`. AJAX crawl (`strategy=browser`) with `authSessionId` is not supported. A browser session cannot currently be used for guided active scanning.
 
 ### 4. Attack as the Prepared Session
 
@@ -555,7 +592,7 @@ If `zap_auth_test_user` cannot prove the user is authenticated, the scan is not 
 - `Auth profile ... is invalid`: fix the operator configuration before retrying.
 - `likelyAuthenticated` is not `true`: indicators, field names, credentials, target behavior, or ZAP diagnostics are wrong or indeterminate.
 - Header session validates but crawl is still unauthenticated: bearer/API-key header injection is not in the guided engine path yet.
-- Browser strategy rejects auth: authenticated browser/AJAX guided crawl is not supported yet.
+- Crawl strategy `browser` rejects auth: this selects AJAX Spider, which does not support guided `authSessionId`. For Client Spider, use `strategy=client` with a `kind: browser` profile as described above.
 
 If you are debugging an incident, use the
 [Auth Bootstrap Failure Runbook](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md).

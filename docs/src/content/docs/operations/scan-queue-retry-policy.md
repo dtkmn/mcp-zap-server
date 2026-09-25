@@ -9,13 +9,14 @@ This policy applies to queue-managed scan job families:
 
 - `ACTIVE_SCAN`, `ACTIVE_SCAN_AS_USER`
 - `SPIDER_SCAN`, `SPIDER_SCAN_AS_USER`, `AJAX_SPIDER`
+- `CLIENT_SPIDER` (unreleased; see [Client Spider](../../scanning/client-spider/))
 
 ## Default Policy
 
 | Scan family | Max attempts | Initial backoff | Multiplier | Max backoff |
 | --- | --- | --- | --- | --- |
 | Active family | 3 | 2000 ms | 2.0 | 30000 ms |
-| Spider family, including queued AJAX Spider | 2 | 1000 ms | 2.0 | 10000 ms |
+| Spider family, including queued AJAX Spider and Client Spider | 2 | 1000 ms | 2.0 | 10000 ms |
 
 `maxAttempts` includes the first execution attempt.
 
@@ -48,13 +49,13 @@ Configure this environment variable alongside the existing retry controls in `.e
 
 ## Shared Cancellation and Cleanup Retry Window
 
-`ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS` (`zap.scan.queue.cancel-max-wait-ms`) sets one stop retry window for cancellation of running queue jobs, AJAX cancellation during startup, and abandoned active/traditional spider cleanup. It defaults to `30000` (30 seconds) and must be positive. All paths use the scan family's existing backoff without consuming startup attempts.
+`ZAP_SCAN_QUEUE_CANCEL_MAX_WAIT_MS` (`zap.scan.queue.cancel-max-wait-ms`) sets one stop retry window for cancellation of running queue jobs, AJAX cancellation during startup, and abandoned active, traditional Spider, or Client Spider cleanup. It defaults to `30000` (30 seconds) and must be positive. All paths use the scan family's existing backoff without consuming startup attempts.
 
 The former `ZAP_SCAN_QUEUE_AJAX_CANCEL_MAX_WAIT_MS` environment variable and `zap.scan.queue.ajax-cancel-max-wait-ms` property remain fallback aliases for this shared setting. The new setting takes precedence. Configure it in `.env`/Docker Compose, deployment environment variables, or Helm's `mcp.env` list.
 
 The original deadline and retry schedule survive worker changes and PostgreSQL-backed restarts. Repeating cancellation while it is pending preserves the deadline. Once the window expires, automatic stop retries end and status reports that cancellation is unconfirmed and the scan may still be running. An explicit new cancellation request opens a new window. The job retains capacity until a stop succeeds or status observation confirms completion.
 
-Cancelling a running active scan or traditional spider, including authenticated scans, saves cancellation on the existing job before attempting to stop its ZAP scan ID. A failed stop remains pending and retries within this window; it does not create a cleanup record. Other scans can continue using the remaining capacity.
+Cancelling a running active scan, traditional Spider, or Client Spider, including authenticated scans, saves cancellation on the existing job before attempting to stop its ZAP scan ID. A failed stop remains pending and retries within this window; it does not create a cleanup record. Other scans can continue using the remaining capacity.
 
 ## AJAX Cancellation During Startup
 
@@ -68,9 +69,9 @@ If an AJAX start succeeds after its queue dispatch times out, the queue records 
 
 The cancellation deadline bounds retry scheduling, separately from the connection and read timeouts above. An in-flight stop can outlast the cancellation retry window; its lifecycle lock is retained until the call returns, and a timed-out stop leaves cancellation unconfirmed. PostgreSQL deployments require migration V8, included in the application and Helm migration bundles.
 
-## Late Active Scan and Traditional Spider Cleanup
+## Late Active Scan and Spider Cleanup
 
-When an active scan or traditional spider returns its ZAP scan ID after dispatch timed out or its start result can no longer be adopted, cleanup is persisted before attempting a stop. This includes authenticated scans. A separate cleanup record links to the original job and retains the abandoned scan ID, so a newer attempt's scan ID and claim are preserved. Job details and listings identify the source job with `Cleanup for Job ID` / `cleanupForJob`.
+When an active scan, traditional Spider, or Client Spider returns its ZAP scan ID after dispatch timed out or its start result can no longer be adopted, cleanup is persisted before attempting a stop. This includes authenticated scans. A separate cleanup record links to the original job and retains the abandoned scan ID, so a newer attempt's scan ID and claim are preserved. Job details and listings identify the source job with `Cleanup for Job ID` / `cleanupForJob`.
 
 Cleanup uses the shared cancellation window above; duplicate callbacks do not renew it. In-memory storage remains process-local.
 

@@ -18,6 +18,7 @@ import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AjaxSpiderService;
 import mcp.server.zap.core.service.AutomationPlanService;
 import mcp.server.zap.core.service.ContextUserService;
+import mcp.server.zap.core.service.ClientSpiderService;
 import mcp.server.zap.core.service.CoreService;
 import mcp.server.zap.core.service.ExpertAuthMcpToolsService;
 import mcp.server.zap.core.service.ExpertAutomationMcpToolsService;
@@ -65,6 +66,7 @@ class ToolSurfaceProviderTest {
                         mock(GuidedExecutionModeResolver.class),
                         mock(SpiderScanService.class),
                         mock(AjaxSpiderService.class),
+                        mock(ClientSpiderService.class),
                         mock(ActiveScanService.class),
                         mock(ScanJobQueueService.class),
                         mock(GuidedAuthSessionService.class),
@@ -89,7 +91,8 @@ class ToolSurfaceProviderTest {
                 new ExpertDirectScanMcpToolsService(
                         mock(ActiveScanService.class),
                         mock(SpiderScanService.class),
-                        mock(AjaxSpiderService.class)
+                        mock(AjaxSpiderService.class),
+                        mock(ClientSpiderService.class)
                 ),
                 new ExpertQueueMcpToolsService(mock(ScanJobQueueService.class)),
                 new ExpertImportMcpToolsService(mock(OpenApiService.class)),

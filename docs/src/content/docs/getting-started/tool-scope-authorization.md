@@ -72,7 +72,7 @@ Common scopes:
 | `zap:scan:crawl:run` | Start guided crawl flows |
 | `zap:scan:attack:run` | Start guided attack flows |
 | `zap:scan:active:run` | Start direct or queued active scans |
-| `zap:scan:spider:run` | Start direct or queued spider scans |
+| `zap:scan:spider:run` | Start direct or queued traditional Spider and Client Spider scans (Client Spider is unreleased) |
 | `zap:scan:ajax:run` | Start direct or queued AJAX Spider scans |
 | `zap:scan:read` | Read scan status, passive backlog, queue job state, scan history evidence, and evidence handoff summaries |
 | `zap:scan:stop` | Stop direct scans or cancel queue jobs |

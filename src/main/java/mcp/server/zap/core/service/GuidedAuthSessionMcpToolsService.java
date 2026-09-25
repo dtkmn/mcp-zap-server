@@ -18,7 +18,7 @@ public class GuidedAuthSessionMcpToolsService {
 
     @Tool(
             name = "zap_auth_session_prepare",
-            description = "Prepare a guided auth session from an operator-managed profile. The requested target must remain on the profile's authorized origin."
+            description = "Prepare a guided auth session from an operator-managed profile. Use a kind=browser profile for Client Spider, or kind=form for HTTP spider and active scans. The requested target must remain on the profile's authorized origin."
     )
     public String prepareAuthSession(
             @ToolParam(description = "Operator-configured authentication profile ID") String profileId,

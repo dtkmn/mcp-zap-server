@@ -103,6 +103,7 @@ public class ScanJobQueueService {
     public ScanJobQueueService(ActiveScanService activeScanService,
                                SpiderScanService spiderScanService,
                                ObjectProvider<AjaxSpiderService> ajaxSpiderServiceProvider,
+                               ObjectProvider<ClientSpiderService> clientSpiderServiceProvider,
                                UrlValidationService urlValidationService,
                                ScanLimitProperties scanLimitProperties,
                                ObjectProvider<ScanJobStore> scanJobStoreProvider,
@@ -124,6 +125,7 @@ public class ScanJobQueueService {
                 activeScanService,
                 spiderScanService,
                 ajaxSpiderServiceProvider.getIfAvailable(),
+                clientSpiderServiceProvider.getIfAvailable(),
                 urlValidationService,
                 scanLimitProperties,
                 new RetryPolicy(activeMaxAttempts, activeInitialBackoffMs, activeMaxBackoffMs, activeBackoffMultiplier),
@@ -407,6 +409,22 @@ public class ScanJobQueueService {
                         boolean virtualThreadsEnabled,
                         ScanJobStore scanJobStore,
                         QueueLeadershipCoordinator queueLeadershipCoordinator) {
+        this(activeScanService, spiderScanService, ajaxSpiderService, null,
+                urlValidationService, scanLimitProperties, activeRetryPolicy, spiderRetryPolicy,
+                virtualThreadsEnabled, scanJobStore, queueLeadershipCoordinator);
+    }
+
+    ScanJobQueueService(ActiveScanService activeScanService,
+                        SpiderScanService spiderScanService,
+                        AjaxSpiderService ajaxSpiderService,
+                        ClientSpiderService clientSpiderService,
+                        UrlValidationService urlValidationService,
+                        ScanLimitProperties scanLimitProperties,
+                        RetryPolicy activeRetryPolicy,
+                        RetryPolicy spiderRetryPolicy,
+                        boolean virtualThreadsEnabled,
+                        ScanJobStore scanJobStore,
+                        QueueLeadershipCoordinator queueLeadershipCoordinator) {
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
         this.activeRetryPolicy = activeRetryPolicy.sanitized();
@@ -420,6 +438,7 @@ public class ScanJobQueueService {
                 activeScanService,
                 spiderScanService,
                 ajaxSpiderService,
+                clientSpiderService,
                 this::recordAcceptedAjaxStart
         );
         this.dispatcher = ScanJobDispatcher.create(runtimeExecutor, virtualThreadsEnabled, this::requestScanCleanup);
@@ -481,6 +500,31 @@ public class ScanJobQueueService {
 
     public String queueAjaxSpiderScan(String targetUrl, String idempotencyKey) {
         return submitQueuedScan(ScanJobType.AJAX_SPIDER, targetParameters(targetUrl), idempotencyKey);
+    }
+
+    public String queueClientSpiderScan(String targetUrl, Integer maxDepth, String idempotencyKey) {
+        return queueClientSpiderScan(targetUrl, maxDepth, null, null, idempotencyKey);
+    }
+
+    public String queueClientSpiderScan(String targetUrl, Integer maxDepth, String contextName,
+                                        String userName, String idempotencyKey) {
+        if (maxDepth != null && maxDepth < 0) {
+            throw new IllegalArgumentException("Client Spider maxDepth must not be negative");
+        }
+        String normalizedContextName = normalizeBlankToNull(contextName);
+        String normalizedUserName = normalizeBlankToNull(userName);
+        if ((normalizedContextName == null) != (normalizedUserName == null)) {
+            throw new IllegalArgumentException("Client Spider contextName and userName must be supplied together");
+        }
+        Map<String, String> parameters = targetParameters(targetUrl);
+        if (maxDepth != null) {
+            parameters.put(ScanJobParameterNames.MAX_DEPTH, maxDepth.toString());
+        }
+        if (normalizedContextName != null && normalizedUserName != null) {
+            parameters.put(ScanJobParameterNames.CONTEXT_NAME, normalizedContextName);
+            parameters.put(ScanJobParameterNames.USER_NAME, normalizedUserName);
+        }
+        return submitQueuedScan(ScanJobType.CLIENT_SPIDER, parameters, idempotencyKey);
     }
 
     public String queueSpiderScanAsUser(

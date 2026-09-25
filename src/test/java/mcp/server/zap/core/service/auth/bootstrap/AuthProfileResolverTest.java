@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.configuration.AuthBootstrapProperties;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
@@ -45,14 +47,50 @@ class AuthProfileResolverTest {
                 .hasMessage("Duplicate auth profile ID: shop-staging");
     }
 
-    @Test
-    void rejectsProfileWhoseLoginIsOutsideItsAllowedOrigin() {
+    @ParameterizedTest
+    @ValueSource(strings = {"form", "browser"})
+    void rejectsProfileWhoseLoginIsOutsideItsAllowedOrigin(String kind) {
         AuthBootstrapProperties.Profile profile = formProfile("shop-staging");
+        profile.setKind(kind);
         profile.setLoginUrl("https://attacker.example/login");
 
         assertThatThrownBy(() -> new AuthProfileResolver(propertiesWith(profile)))
                 .hasMessageContaining("Auth profile 'shop-staging' is invalid")
                 .hasMessageContaining("loginUrl origin is not authorized for auth profile");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"loginUrl", "username", "loggedInIndicatorRegex"})
+    void browserProfileRequiresLoginInputsAndAnAuthenticationIndicator(String missingField) {
+        AuthBootstrapProperties.Profile profile = formProfile("shop-browser");
+        profile.setKind("browser");
+        switch (missingField) {
+            case "loginUrl" -> profile.setLoginUrl(null);
+            case "username" -> profile.setUsername(" ");
+            case "loggedInIndicatorRegex" -> profile.setLoggedInIndicatorRegex(null);
+            default -> throw new AssertionError("Unexpected field: " + missingField);
+        }
+
+        assertThatThrownBy(() -> new AuthProfileResolver(propertiesWith(profile)))
+                .hasMessageContaining("Auth profile 'shop-browser' is invalid")
+                .hasMessageContaining(missingField + " cannot be null or blank");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"usernameField", "passwordField"})
+    void browserProfileRejectsHttpFormFieldOverrides(String fieldName) {
+        AuthBootstrapProperties.Profile profile = formProfile("shop-browser");
+        profile.setKind("browser");
+        if (fieldName.equals("usernameField")) {
+            profile.setUsernameField("username");
+        } else {
+            profile.setPasswordField("password");
+        }
+
+        assertThatThrownBy(() -> new AuthProfileResolver(propertiesWith(profile)))
+                .hasMessageContaining("Auth profile 'shop-browser' is invalid")
+                .hasMessageContaining(fieldName)
+                .hasMessageContaining("only supported by form auth profiles");
     }
 
     @Test
@@ -106,11 +144,12 @@ class AuthProfileResolverTest {
         assertThat(request.loggedOutIndicatorRegex()).hasSize(512);
     }
 
-    @Test
-    void springConfigurationBindingBuildsIndexedProfile() {
+    @ParameterizedTest
+    @ValueSource(strings = {"form", "browser"})
+    void springConfigurationBindingBuildsIndexedProfile(String kind) {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
                 "mcp.server.auth.bootstrap.profiles[0].id", "shop-staging",
-                "mcp.server.auth.bootstrap.profiles[0].kind", "form",
+                "mcp.server.auth.bootstrap.profiles[0].kind", kind,
                 "mcp.server.auth.bootstrap.profiles[0].allowed-origin", "https://shop.example.com",
                 "mcp.server.auth.bootstrap.profiles[0].credential-reference", "env:SHOP_PASSWORD",
                 "mcp.server.auth.bootstrap.profiles[0].login-url", "https://shop.example.com/login",
@@ -126,6 +165,7 @@ class AuthProfileResolverTest {
                 .resolve("shop-staging", "https://shop.example.com/account");
 
         assertThat(request.profileId()).isEqualTo("shop-staging");
+        assertThat(request.authKind().wireValue()).isEqualTo(kind);
         assertThat(request.allowedOrigin().toString()).hasToString("https://shop.example.com");
         assertThat(request.loginUrl()).hasToString("https://shop.example.com/login");
         assertThat(request.zapUserName()).isEqualTo("shop-zap-user");

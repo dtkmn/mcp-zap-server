@@ -235,7 +235,7 @@ class PostgresScanJobStoreRaceHarnessTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = ScanJobType.class, names = {"ACTIVE_SCAN", "SPIDER_SCAN"})
+    @EnumSource(value = ScanJobType.class, names = {"ACTIVE_SCAN", "SPIDER_SCAN", "CLIENT_SPIDER"})
     void cleanupBlocksSourceRetryAcrossWorkersWhileOtherJobsUseRemainingCapacity(ScanJobType type) {
         ScanJob source = new ScanJob("source", type, Map.of(), BASE_TIME, 3);
         ScanJob cleanup = new ScanJob("cleanup", type,

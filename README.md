@@ -67,6 +67,7 @@ Connect your MCP client:
 
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
 - Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
+- [Codex setup](./docs/src/content/docs/getting-started/mcp-client-authentication.md#codex)
 - Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
 - [Client compatibility and setup](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 
@@ -123,10 +124,12 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Expert ZAP control**: optional lower-level tools for advanced ZAP context, user, scan, and report workflows.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
 - **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
-- **Scan queue and history**: queued active, spider, and AJAX Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
+- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider (unreleased) jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
+
+Client Spider and its browser authentication profiles are **unreleased** and are not included in `v0.12.0`. Use a source build containing these changes; see the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports.
 
 ## Latest Release
 
@@ -226,6 +229,7 @@ Scanning:
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
+- [Client Spider (unreleased)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)
 
 Operations:

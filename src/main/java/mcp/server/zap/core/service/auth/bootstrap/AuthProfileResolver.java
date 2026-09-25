@@ -81,7 +81,7 @@ public class AuthProfileResolver {
                 configured.getLoggedOutIndicatorRegex(),
                 "loggedOutIndicatorRegex"
         );
-        if (authKind == AuthBootstrapKind.FORM) {
+        if (authKind == AuthBootstrapKind.FORM || authKind == AuthBootstrapKind.BROWSER) {
             loginUrl = requireProfileText(id, loginUrl, "loginUrl");
             username = requireProfileText(id, username, "username");
             loggedInIndicatorRegex = requireProfileText(id, loggedInIndicatorRegex, "loggedInIndicatorRegex");
@@ -90,6 +90,10 @@ public class AuthProfileResolver {
             } catch (IllegalArgumentException e) {
                 throw invalidProfile(id, e.getMessage(), e);
             }
+        }
+        if (authKind == AuthBootstrapKind.BROWSER
+                && (trimToNull(configured.getUsernameField()) != null || trimToNull(configured.getPasswordField()) != null)) {
+            throw invalidProfile(id, "usernameField and passwordField are only supported by form auth profiles; browser authentication discovers login fields");
         }
 
         return new ConfiguredAuthProfile(

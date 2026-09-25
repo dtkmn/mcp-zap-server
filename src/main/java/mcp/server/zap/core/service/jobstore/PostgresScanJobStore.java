@@ -737,7 +737,8 @@ public class PostgresScanJobStore implements ScanJobStore {
     private int bindFamilyTypes(PreparedStatement statement, int startIndex, boolean activeFamily) throws SQLException {
         List<ScanJobType> familyTypes = activeFamily
                 ? List.of(ScanJobType.ACTIVE_SCAN, ScanJobType.ACTIVE_SCAN_AS_USER)
-                : List.of(ScanJobType.SPIDER_SCAN, ScanJobType.SPIDER_SCAN_AS_USER, ScanJobType.AJAX_SPIDER);
+                : List.of(ScanJobType.SPIDER_SCAN, ScanJobType.SPIDER_SCAN_AS_USER, ScanJobType.AJAX_SPIDER,
+                        ScanJobType.CLIENT_SPIDER);
         int index = startIndex;
         for (ScanJobType type : familyTypes) {
             statement.setString(index++, type.name());
@@ -746,7 +747,7 @@ public class PostgresScanJobStore implements ScanJobStore {
     }
 
     private String familySqlPlaceholders(boolean activeFamily) {
-        return activeFamily ? "?, ?" : "?, ?, ?";
+        return activeFamily ? "?, ?" : "?, ?, ?, ?";
     }
 
     private void normalizeQueuePositionTransition(Connection connection, ScanJob job) throws Exception {

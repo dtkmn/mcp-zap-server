@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added Client Spider crawling through guided `strategy=client` and expert tools in direct and queued modes. Native ZAP scan IDs identify each crawl for status and cancellation; crawls reuse the existing spider duration setting and queue concurrency, retry, and cancellation handling. See [execution modes and prerequisites](./docs/src/content/docs/scanning/scan-execution-modes.md).
+- Added operator-managed `kind: browser` authentication profiles for Client Spider, using existing credential references in both execution modes. Validation requires a positive ZAP verdict and the configured logged-in indicator in a fresh response before reporting success. See [browser authentication setup](./docs/src/content/docs/scanning/authenticated-scanning-best-practices.md#browser-authentication-for-client-spider), including the required ZAP API timeout setting.
+
+### Fixed
+
+- Enabled automatic session detection for guided browser authentication profiles so verification can replay cookies or header tokens, including bearer tokens used by Juice Shop. Browser login could previously succeed while verification failed because the token was missing from the verification request.
+
 ## [0.12.0]
 
 Version-specific changes are listed below. Publication dates and availability

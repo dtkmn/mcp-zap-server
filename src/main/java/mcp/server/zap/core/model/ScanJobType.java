@@ -5,7 +5,8 @@ public enum ScanJobType {
     ACTIVE_SCAN_AS_USER,
     SPIDER_SCAN,
     SPIDER_SCAN_AS_USER,
-    AJAX_SPIDER;
+    AJAX_SPIDER,
+    CLIENT_SPIDER;
 
     /**
      * Return true when this type belongs to the active-scan family.
@@ -18,6 +19,6 @@ public enum ScanJobType {
      * Return true when this type belongs to the spider-scan family.
      */
     public boolean isSpiderFamily() {
-        return this == SPIDER_SCAN || this == SPIDER_SCAN_AS_USER || this == AJAX_SPIDER;
+        return this == SPIDER_SCAN || this == SPIDER_SCAN_AS_USER || this == AJAX_SPIDER || this == CLIENT_SPIDER;
     }
 }

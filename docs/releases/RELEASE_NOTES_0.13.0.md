@@ -102,11 +102,20 @@ traffic and authenticated responses. No controlled comparison has established
 a coverage advantage over the other crawlers.
 
 During packaged validation with ZAP `2.17.0` and Client Side Integration `0.31.0`,
-ZAP could not find a history reference for Juice Shop's `#/search` route when
-raising browser session-storage, local-storage, and JWT local-storage alerts.
-Those specific observations could not be attached as alerts. Review ZAP's logs
-alongside the report: successful crawling and an empty passive backlog do not
-prove that every browser-storage observation was recorded as a finding.
+browser login succeeded but ZAP could not find a history reference for Juice
+Shop's `#/search` route when raising session-storage, local-storage, and JWT
+local-storage alerts. Those observations were not recorded as alerts. The same
+failure reproduced during browser login through `v0.12.0`'s existing expert
+tools and through ZAP alone, before any crawl started.
+
+In a fresh-session control, asking ZAP to visit the home page once before login
+removed the warnings and allowed all three alerts to be saved. This tested
+workaround needs no full spider run, is not automatic in the guided Client
+Spider workflow, and is not a documented ZAP prerequisite. See the
+[workaround, tested versions, and native API example](../src/content/docs/scanning/client-spider.md#browser-storage-alerts-missing-during-login).
+Review ZAP's logs alongside the report: successful crawling and an empty passive
+backlog do not prove that every browser-storage observation was recorded as a
+finding.
 
 ### Deployment metadata
 

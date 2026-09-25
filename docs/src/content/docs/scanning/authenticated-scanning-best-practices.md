@@ -27,7 +27,7 @@ The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
 OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
-Unreleased browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
+In `v0.13.0`, browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
 
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
@@ -74,7 +74,7 @@ The ZAP context name is derived from the unique profile ID with an `-auth` suffi
 
 ## Browser Authentication for Client Spider
 
-> **Unreleased:** Client Spider and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
+> **Version `v0.13.0`:** In this version, Client Spider supports guided browser authentication in direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
 
 Add a separate browser profile to the same deployment configuration:
 
@@ -287,7 +287,7 @@ overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
 deployment's explicit URL-policy approval. The commands below target chart
-`0.12.0` and image `v0.12.0`; the profile contract was introduced in `v0.10.0`.
+`0.13.0` and image `v0.13.0`; the profile contract was introduced in `v0.10.0`.
 Before deploying, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 and verify that the release workflow has published the image to your registry.
 The unknown/disabled-tool response fix applies to `v0.11.1` and later.
@@ -304,9 +304,9 @@ Render before applying, then wait for the MCP rollout:
 (
 set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
-MCP_ZAP_IMAGE_TAG=v0.12.0
-[[ "$MCP_ZAP_IMAGE_TAG" == "v0.12.0" ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the v0.12.0 release image tag" >&2
+MCP_ZAP_IMAGE_TAG=v0.13.0
+[[ "$MCP_ZAP_IMAGE_TAG" == "v0.13.0" ]] || {
+  echo "MCP_ZAP_IMAGE_TAG must be the v0.13.0 release image tag" >&2
   exit 1
 }
 

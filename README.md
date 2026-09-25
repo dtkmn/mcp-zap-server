@@ -124,14 +124,14 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Expert ZAP control**: optional lower-level tools for advanced ZAP context, user, scan, and report workflows.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
 - **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
-- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider (unreleased) jobs with claim-based recovery, durable Postgres state, and evidence export.
+- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
-Client Spider and its browser authentication profiles are **unreleased** and are not included in `v0.12.0`. Use a source build containing these changes; see the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports.
+In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
 
-## Latest Release
+## Version 0.13.0
 
 See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
 for the latest published version and its publication date. Version-specific
@@ -139,12 +139,14 @@ documentation describes that version's behavior; it does not announce image
 availability. Deploy only after the corresponding release workflow succeeds
 and the versioned image is available in your registry.
 
-**Version `v0.12.0`** improves scan queue waiting, cancellation, and cleanup, and
-uses ZAP node identity for findings. Before upgrading, review the PostgreSQL
-V7/V8 migrations, snapshot v2 compatibility, and timeout changes in the release
-notes.
+**In `v0.13.0`**, Client Spider explores JavaScript applications in direct and
+queued workflows, with optional guided browser login and automatic session
+detection for cookies and header tokens. Upgrade all workers sharing a queue
+before submitting Client Spider jobs, and review the browser prerequisites and
+timeout settings in the release notes. Preparing or merging this version does
+not publish its release or container images.
 
-- [0.12.0 release notes](./docs/releases/RELEASE_NOTES_0.12.0.md)
+- [0.13.0 release notes](./docs/releases/RELEASE_NOTES_0.13.0.md)
 - [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
 
@@ -229,7 +231,7 @@ Scanning:
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
-- [Client Spider (unreleased)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
+- [Client Spider (v0.13.0)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)
 
 Operations:

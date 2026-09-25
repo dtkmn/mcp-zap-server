@@ -4,7 +4,7 @@ editUrl: false
 description: "Crawl JavaScript applications with Client Spider, verify browser login, and collect findings in direct or queued workflows."
 ---
 
-> **Unreleased:** Client Spider and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes. A successful build on `dev` does not make the feature available in a published release.
+> **Version `v0.13.0`:** In this version, Client Spider and browser authentication profiles support direct and queued crawls. They are not included in `v0.12.0`. Before installing, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and confirm that the corresponding release workflow published the image to your registry. Release preparation and a merge to `main` do not publish a release or image.
 
 Client Spider explores a website using headless Firefox and ZAP's Client Side Integration browser extension. It can observe rendered page content, JavaScript navigation, and browser storage that ordinary HTTP link discovery does not see. Crawling generates traffic and observations for ZAP's checks; it does not itself run an active vulnerability scan.
 
@@ -28,7 +28,7 @@ ZAP describes Client Spider's direct access to page content in its [Client Spide
 - `ZAP_SPIDER_MAX_DEPTH` sets the default depth (**10**). Expert start and queue calls can override it with `maxDepth`. **0** means unlimited.
 - `ZAP_MAX_SPIDER_SCAN_DURATION` sets the duration in minutes (**15** by default, **0** means unlimited) for both direct and queued crawls. The server sets ZAP's native duration option before starting; if that fails, it does not launch the crawl. Keep the setting consistent across replicas sharing ZAP.
 
-Each crawl uses one headless Firefox browser. ZAP copies the duration setting into the crawl and enforces it when processing browser events; this is not a hard deadline for a hung browser. Queue and API timeouts remain separate. Upgrade all workers sharing a queue before submitting Client Spider jobs.
+Each crawl uses one headless Firefox browser. ZAP copies the duration setting into the crawl and enforces it when processing browser events; this is not a hard deadline for a hung browser. Queue and API timeouts remain separate. Upgrade all workers sharing a queue before submitting Client Spider jobs. Older workers cannot read stored `CLIENT_SPIDER` records, including completed jobs; account for the stored queue state before rolling workers back.
 
 ## Guided Crawl
 
@@ -88,3 +88,5 @@ After the crawl stops:
 Findings and reports use the **shared ZAP session**. Filtering by `baseUrl` narrows the target; it does not isolate one Client Spider scan ID. Repeated crawls and other scans can contribute to the same report. Alert instances are recorded examples, not necessarily distinct confirmed vulnerabilities.
 
 There is currently no dedicated Client Spider results-list or Client Map export tool in this MCP server. AJAX Spider's `zap_ajax_spider_results` does not return Client Spider results. For controlled comparisons, use separate ZAP sessions or instances with the same target, authentication, and crawl settings. See [Findings and Reports](../findings-and-reports/).
+
+In packaged Juice Shop validation with ZAP `2.17.0` and Client Side Integration `0.31.0`, ZAP logged that it could not find a history reference for the `#/search` route while raising browser session-storage, local-storage, and JWT local-storage alerts. Those observations could not be attached as alerts. Review ZAP logs as well as the findings report; a finished crawl and an empty passive backlog do not prove that all browser-storage observations became findings.

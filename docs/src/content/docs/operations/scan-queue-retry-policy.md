@@ -9,7 +9,7 @@ This policy applies to queue-managed scan job families:
 
 - `ACTIVE_SCAN`, `ACTIVE_SCAN_AS_USER`
 - `SPIDER_SCAN`, `SPIDER_SCAN_AS_USER`, `AJAX_SPIDER`
-- `CLIENT_SPIDER` (unreleased; see [Client Spider](../../scanning/client-spider/))
+- `CLIENT_SPIDER` (in `v0.13.0`; see [Client Spider](../../scanning/client-spider/))
 
 ## Default Policy
 

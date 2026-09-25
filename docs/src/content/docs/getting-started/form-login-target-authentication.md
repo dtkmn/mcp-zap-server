@@ -25,12 +25,12 @@ scan-as-user capabilities. MCP ZAP Server securely configures and orchestrates
 those ZAP features through an operator-managed profile. This project did not
 build a second login engine from scratch.
 
-## What Works Today
+## Authentication Support in v0.13.0
 
 | Target authentication | Prepare and validate | Guided crawl and attack use it |
 | --- | --- | --- |
 | Traditional HTML username/password form | Yes | Yes, with the HTTP spider and active scan |
-| Browser username/password login (`kind: browser`, unreleased) | Yes, in a source build containing the feature | Client Spider only, with `strategy: client` |
+| Browser username/password login (`kind: browser`) | Yes, in `v0.13.0` | Client Spider only, with `strategy: client` |
 | Target bearer token | Credential reference only | No automatic header injection yet |
 | Target API key | Credential reference only | No automatic header injection yet |
 | Custom login steps/scripts, OAuth, SSO, MFA, or CAPTCHA | No guided configuration | No guided support |
@@ -43,8 +43,11 @@ Custom login steps and scripts still require ZAP's expert controls. ZAP itself r
 [browser-based or client-script authentication for modern flows](https://www.zaproxy.org/blog/2025-07-03-authentication-improvements/).
 
 The form-login profile workflow is available in `v0.10.0` and later. `v0.9.1`
-and earlier do not contain this contract. Client Spider and browser profiles
-are **unreleased** and are not included in `v0.12.0`.
+and earlier do not contain this contract. In `v0.13.0`, Client Spider and browser
+profiles add the browser workflow described above; `v0.12.0` does not contain
+these features. Before installing `v0.13.0`, check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and confirm
+successful image publication in the release workflow.
 
 ## Before You Start
 

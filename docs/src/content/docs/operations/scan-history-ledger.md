@@ -17,7 +17,7 @@ The shared core records three evidence shapes:
 | Evidence type | Source | Notes |
 | --- | --- | --- |
 | `scan_job` | Durable queue state from `scan_jobs` | Includes queued, running, succeeded, failed, and cancelled queue jobs. |
-| `scan_run` | Direct scan start events | Covers direct active scan, traditional Spider, AJAX Spider, and Client Spider starts, including supported authenticated variants. Client Spider is unreleased. |
+| `scan_run` | Direct scan start events | Covers direct active scan, traditional Spider, AJAX Spider, and Client Spider starts, including supported authenticated variants. Client Spider is introduced in `v0.13.0`. |
 | `report_artifact` | Generated report artifacts | Captures report path, media type, target scope, client, and workspace. |
 
 This does not change the normal MCP client setup. Clients still call `/mcp` and

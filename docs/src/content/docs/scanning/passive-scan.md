@@ -55,10 +55,10 @@ Use `zap_passive_scan_wait` after:
 - `zap_attack_start`
 - `zap_spider_start`
 - `zap_ajax_spider`
-- `zap_client_spider_start` (unreleased)
+- `zap_client_spider_start` (in `v0.13.0`)
 - `zap_queue_spider_scan`
 - `zap_queue_ajax_spider`
-- `zap_queue_client_spider_scan` (unreleased)
+- `zap_queue_client_spider_scan` (in `v0.13.0`)
 - `zap_queue_active_scan`
 
 The rule is simple: if the next step is findings review or report generation, passive wait should usually come first.

@@ -2,15 +2,16 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example targets `v0.12.0`. Before using it, confirm that
+The versioned image example targets `v0.13.0`. Before using it, confirm that
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
 corresponding release workflow show successful publication to your registry.
+Release preparation and a merge to `main` do not publish an image.
 
 ## What This Server Does
 
 MCP ZAP Server lets MCP clients drive ZAP through guided, operator-controlled security workflows:
 
-- spider, AJAX spider, active scan, passive scan, API import, findings, reports, and scan history tools
+- traditional Spider, AJAX Spider, Client Spider, active scan, passive scan, API import, findings, reports, and scan history tools
 - API-key or JWT authentication for the MCP endpoint
 - tool-scope authorization, runtime policy controls, rate limits, request limits, audit events, and metrics
 - Docker Compose for local/self-hosted use and Helm for Kubernetes deployments
@@ -125,7 +126,7 @@ docker run -d \
   -e MCP_SECURITY_ENABLED=true \
   -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
   -e MCP_API_KEY="$MCP_API_KEY" \
-  ghcr.io/dtkmn/mcp-zap-server:v0.12.0
+  ghcr.io/dtkmn/mcp-zap-server:v0.13.0
 ```
 
 Check the MCP server:

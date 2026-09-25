@@ -17,7 +17,7 @@ Raw AJAX Spider tools are `expert` only:
 
 If you stay on the default `guided` surface, use `zap_crawl_start` with `strategy=browser`.
 
-The unreleased [Client Spider](../client-spider/) is a separate crawler selected with `strategy=client`. It supports guided browser authentication profiles. AJAX Spider's `strategy=browser` rejects guided `authSessionId`; its results tool does not return Client Spider results.
+In `v0.13.0`, [Client Spider](../client-spider/) is a separate crawler selected with `strategy=client`. It supports guided browser authentication profiles. AJAX Spider's `strategy=browser` rejects guided `authSessionId`; its results tool does not return Client Spider results.
 
 ## When To Use It
 

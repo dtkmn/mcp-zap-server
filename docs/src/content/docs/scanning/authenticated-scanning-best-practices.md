@@ -94,7 +94,7 @@ mcp:
             logged-out-indicator-regex: ".*Sign in.*"
 ```
 
-ZAP discovers the username/password fields and logs into headless Firefox. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This guided profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
+ZAP discovers the username/password fields and logs into headless Firefox. Browser profiles enable automatic session detection so ZAP can replay cookies or header tokens, including bearer tokens, when verifying authentication. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This guided profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
 
 Set the existing `ZAP_API_READ_TIMEOUT_MS=60000` for browser-auth deployments (`mcp.zapClient.readTimeoutMs: 60000` in Helm). Validation launches Firefox and waits for login; the default 10-second API read timeout can expire before it finishes. This changes the existing ZAP API timeout, without adding a separate browser timeout.
 

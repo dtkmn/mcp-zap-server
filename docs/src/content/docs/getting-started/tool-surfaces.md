@@ -117,6 +117,7 @@ Pages that matter to almost everyone:
 - [JWT Quick Start](../jwt-quick-start/)
 - [Tool Scope Authorization](../tool-scope-authorization/)
 - [Scan Execution Modes](../../scanning/scan-execution-modes/)
+- [Client Spider (unreleased)](../../scanning/client-spider/)
 - [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/)
 - [Passive Scan](../../scanning/passive-scan/)
 - [Scan History Ledger](../../operations/scan-history-ledger/)

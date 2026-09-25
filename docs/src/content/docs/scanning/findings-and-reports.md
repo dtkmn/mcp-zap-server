@@ -12,16 +12,18 @@ Guided findings and report tools:
 - `zap_findings_summary`
 - `zap_findings_details`
 - `zap_report_generate`
+- `zap_report_read`
 
 Use these when:
 
 - you are on the default `guided` surface
 - you want quick triage with less tool selection overhead
-- you do not need raw per-instance evidence, snapshots, diffs, or artifact reads
+- you want report generation and readback without selecting a raw ZAP template
+- you do not need expert snapshots or diffs
 
 ## Expert Surface
 
-Expert results tools require `MCP_SERVER_TOOLS_SURFACE=expert`.
+Expert adds the following tools to the guided surface and requires `MCP_SERVER_TOOLS_SURFACE=expert`.
 
 Expert tools:
 
@@ -32,7 +34,6 @@ Expert tools:
 - `zap_findings_diff`
 - `zap_view_templates`
 - `zap_generate_report`
-- `zap_report_read`
 
 ## Summary Layer
 
@@ -106,19 +107,27 @@ snapshot readers may need an update before consuming version 2 exports.
 
 ## Report Artifacts
 
-Guided:
+Available on both surfaces:
 
 - `zap_report_generate`
+- `zap_report_read`
 
-Expert:
+Additional expert controls:
 
 - `zap_view_templates`
 - `zap_generate_report`
-- `zap_report_read`
 
-Guided report generation uses sane defaults and returns the artifact path.
+Guided report generation accepts `baseUrl`, `format` (`html` or `json`), and `theme`, and returns the artifact path. Pass that path as `reportPath` to `zap_report_read` to read the artifact through MCP on either surface.
 
-Expert reporting lets you choose the template and then read the generated artifact back through MCP without manual filesystem access.
+Expert reporting additionally lets you choose a ZAP report template.
+
+## Client Spider Findings
+
+The unreleased [Client Spider](../client-spider/) uses these same findings and report tools. Wait for crawl completion and `zap_passive_scan_wait`, then filter the summary, details, and report by the target's `baseUrl`.
+
+These tools read the shared ZAP session, not an exclusive set of findings for one crawl. A `baseUrl` filter narrows the target but does not isolate a scan ID. Other crawls, authentication checks, and active scans against that target can contribute alerts. Recorded alert instances are not necessarily distinct confirmed vulnerabilities.
+
+There is no dedicated Client Spider results-list or Client Map export tool in the server yet. `zap_ajax_spider_results` belongs to AJAX Spider. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
 
 ## Typical Flow
 

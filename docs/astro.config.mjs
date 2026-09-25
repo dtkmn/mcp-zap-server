@@ -51,6 +51,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'scanning/mcp-client-scan-to-evidence' },
 						{ slug: 'scanning/scan-execution-modes' },
+						{ slug: 'scanning/client-spider' },
 						{ slug: 'scanning/ajax-spider' },
 						{ slug: 'scanning/passive-scan' },
 						{ slug: 'scanning/seeded-api-gate-playbook' },

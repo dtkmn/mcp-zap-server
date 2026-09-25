@@ -129,7 +129,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
-Client Spider and its browser authentication profiles are **unreleased** and are not included in `v0.12.0`. Use a source build containing these changes; see [Scan Execution Modes](./docs/src/content/docs/scanning/scan-execution-modes.md) for setup and usage.
+Client Spider and its browser authentication profiles are **unreleased** and are not included in `v0.12.0`. Use a source build containing these changes; see the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports.
 
 ## Latest Release
 
@@ -229,6 +229,7 @@ Scanning:
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
+- [Client Spider (unreleased)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)
 
 Operations:

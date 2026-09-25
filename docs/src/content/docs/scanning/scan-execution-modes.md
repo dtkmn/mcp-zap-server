@@ -7,6 +7,8 @@ MCP ZAP Server supports multiple scan execution paths. If you do not understand 
 
 > **Unreleased:** Client Spider (`strategy=client`, `zap_client_spider_*`, and `zap_queue_client_spider_scan`) and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
 
+For a complete crawl-to-report workflow, see the [Client Spider guide](../client-spider/), including browser login, tool identifiers, and shared findings limitations.
+
 ## Guided Mode
 
 The default `guided` surface exposes:

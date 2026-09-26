@@ -5,7 +5,7 @@ description: "Choose between guided, direct, queue-managed, and Automation Frame
 ---
 MCP ZAP Server supports multiple scan execution paths. If you do not understand which one you are using, you will misread the behavior around durability, retries, and failover.
 
-> **Unreleased:** Client Spider (`strategy=client`, `zap_client_spider_*`, and `zap_queue_client_spider_scan`) and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
+> **Version `v0.13.0`:** In this version, Client Spider (`strategy=client`, `zap_client_spider_*`, and `zap_queue_client_spider_scan`) and browser authentication profiles support direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
 
 For a complete crawl-to-report workflow, see the [Client Spider guide](../client-spider/), including browser login, tool identifiers, and shared findings limitations.
 
@@ -54,7 +54,7 @@ The expert path can use the existing `zap_context_upsert`, `zap_context_auth_con
 
 The expert Client Spider start and queue tools accept an optional `maxDepth` (0 means unlimited); omission uses `ZAP_SPIDER_MAX_DEPTH`. For authenticated crawling, supply both `contextName` and `userName` from an existing ZAP configuration. These are ZAP names, not numeric IDs or login credentials. They use the existing `zap:scan:spider:run` permission, with `zap:scan:read` and `zap:scan:stop` for lifecycle access.
 
-Upgrade all workers sharing a queue before submitting Client Spider jobs; older workers do not recognize the new job type.
+Upgrade all workers sharing a queue before submitting Client Spider jobs; older workers do not recognize the new job type. This also applies to stored terminal `CLIENT_SPIDER` records, so completing or cancelling jobs alone does not make a worker rollback safe. Account for the stored queue state before rolling workers back.
 
 After the crawl finishes, use `zap_passive_scan_wait` before reading findings. A Client Spider scan ID identifies the crawl; it does not make the shared ZAP findings store exclusive to that crawl.
 

@@ -27,7 +27,7 @@ The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
 OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
-Unreleased browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
+In `v0.13.0`, browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
 
 Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
 
@@ -74,7 +74,7 @@ The ZAP context name is derived from the unique profile ID with an `-auth` suffi
 
 ## Browser Authentication for Client Spider
 
-> **Unreleased:** Client Spider and browser authentication profiles are not included in `v0.12.0`. Use a source build containing these changes.
+> **Version `v0.13.0`:** In this version, Client Spider supports guided browser authentication in direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
 
 Add a separate browser profile to the same deployment configuration:
 
@@ -97,6 +97,8 @@ mcp:
 ZAP discovers the username/password fields and logs into headless Firefox. Browser profiles enable automatic session detection so ZAP can replay cookies or header tokens, including bearer tokens, when verifying authentication. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This guided profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
 
 Set the existing `ZAP_API_READ_TIMEOUT_MS=60000` for browser-auth deployments (`mcp.zapClient.readTimeoutMs: 60000` in Helm). Validation launches Firefox and waits for login; the default 10-second API read timeout can expire before it finishes. This changes the existing ZAP API timeout, without adding a separate browser timeout.
+
+**Browser-storage findings in a fresh ZAP session:** In the tested Juice Shop setup, asking the same ZAP instance to visit the home page once **before browser login** prevented missing-history warnings that otherwise dropped storage alerts, even though login succeeded. See the [tested workaround and native API example](../client-spider/#browser-storage-alerts-missing-during-login). It requires one page request, not a full spider run, and is not performed automatically by this guided workflow. This is an observed workaround, not an official ZAP authentication prerequisite; keep the protected-response validation below.
 
 1. Call `zap_auth_session_prepare` with `profileId: shop-browser` and a protected target URL whose response matches the configured logged-in indicator.
 2. Call `zap_auth_session_validate` with the returned session ID and confirm `Valid: true`. This configures ZAP's native authentication polling against the prepared target and logs in. Success requires both a positive ZAP verdict and a match for the configured logged-in indicator in the fresh response headers or body. A missing verdict or positive indicator leaves the result `Valid: false`, `Outcome: authentication_unconfirmed`; an explicit negative verdict is `authentication_failed`.
@@ -287,7 +289,7 @@ overwriting them. If `SPRING_APPLICATION_JSON` already exists, merge the profile
 object into that value; do not define the variable twice. The default ZAP NetworkPolicy
 permits DNS only, so target egress is mandatory. Private targets also require the
 deployment's explicit URL-policy approval. The commands below target chart
-`0.12.0` and image `v0.12.0`; the profile contract was introduced in `v0.10.0`.
+`0.13.0` and image `v0.13.0`; the profile contract was introduced in `v0.10.0`.
 Before deploying, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 and verify that the release workflow has published the image to your registry.
 The unknown/disabled-tool response fix applies to `v0.11.1` and later.
@@ -304,9 +306,9 @@ Render before applying, then wait for the MCP rollout:
 (
 set -euo pipefail
 : "${NAMESPACE:?set NAMESPACE}"
-MCP_ZAP_IMAGE_TAG=v0.12.0
-[[ "$MCP_ZAP_IMAGE_TAG" == "v0.12.0" ]] || {
-  echo "MCP_ZAP_IMAGE_TAG must be the v0.12.0 release image tag" >&2
+MCP_ZAP_IMAGE_TAG=v0.13.0
+[[ "$MCP_ZAP_IMAGE_TAG" == "v0.13.0" ]] || {
+  echo "MCP_ZAP_IMAGE_TAG must be the v0.13.0 release image tag" >&2
   exit 1
 }
 

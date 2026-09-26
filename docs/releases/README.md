@@ -10,6 +10,7 @@ These notes describe each version. Check GitHub Releases above for publication
 status and dates, and verify that its release workflow has published the image
 before deploying it.
 
+- [0.13.0](./RELEASE_NOTES_0.13.0.md)
 - [0.12.0](./RELEASE_NOTES_0.12.0.md)
 - [0.11.1](./RELEASE_NOTES_0.11.1.md)
 - [0.11.0](./RELEASE_NOTES_0.11.0.md)

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0]
+
+Version-specific changes are listed below. Release preparation and a merge to
+`main` do not publish this version. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the release
+image workflow for availability. See the
+[upgrade notes](./docs/releases/RELEASE_NOTES_0.13.0.md) before deploying.
+
 ### Added
 
 - Added Client Spider crawling through guided `strategy=client` and expert tools in direct and queued modes. Native ZAP scan IDs identify each crawl for status and cancellation; crawls reuse the existing spider duration setting and queue concurrency, retry, and cancellation handling. See [execution modes and prerequisites](./docs/src/content/docs/scanning/scan-execution-modes.md).
@@ -15,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Enabled automatic session detection for guided browser authentication profiles so verification can replay cookies or header tokens, including bearer tokens used by Juice Shop. Browser login could previously succeed while verification failed because the token was missing from the verification request.
+- Reject malformed crawl-depth values in stored Client Spider jobs with a clear error before launching a crawl.
+
+### Changed
+
+- Aligned application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata, and versioned installation examples to `0.13.0` / `v0.13.0`.
+- Documented Client Spider prerequisites, browser login verification, queue rollout, and shared findings and report boundaries. Upgrade every worker sharing a scan queue before submitting `CLIENT_SPIDER` jobs; no new database migration is required when upgrading from `0.12.0`.
 
 ## [0.12.0]
 

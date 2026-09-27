@@ -1,6 +1,6 @@
 # Quick Start Security Guide
 
-Use this when you want the fastest sane local setup for `mcp-zap-server` without reverse-engineering the whole repo.
+Use this guide to set up an isolated local `mcp-zap-server` lab.
 
 If you are deploying for a shared team or public targets, stop here after local validation and read the full docs site plus the production checklist.
 
@@ -13,40 +13,24 @@ git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 ```
 
-### 2. Create `.env`
+### 2. Generate local credentials and prepare the workspace
 
 ```bash
-cp .env.example .env
+./bin/bootstrap-local.sh
 ```
 
-Generate keys:
+The bootstrap creates `.env`, generates separate ZAP and MCP API keys, creates
+the workspace, disables JWT, and enables private-network scanning for the bundled
+demo targets. It refuses to overwrite an existing `.env`; preserve your existing
+settings when reusing a checkout. Keep `.env` out of version control.
+
+For a manually configured workspace, use `./zap-workplace` or a literal absolute
+path in `.env`. Compose does not execute shell expressions such as `$(pwd)` there.
+
+### 3. Start the default stack
 
 ```bash
-openssl rand -hex 32
-openssl rand -hex 32
-```
-
-Set at least these values in `.env`:
-
-```bash
-ZAP_API_KEY=your-generated-zap-api-key
-MCP_API_KEY=your-generated-mcp-api-key
-LOCAL_ZAP_WORKPLACE_FOLDER=$(pwd)/zap-workplace
-MCP_SECURITY_MODE=api-key
-MCP_SECURITY_ENABLED=true
-```
-
-### 3. Create the local workspace directory
-
-```bash
-mkdir -p "$(pwd)/zap-workplace"/zap-wrk
-mkdir -p "$(pwd)/zap-workplace"/zap-home
-```
-
-### 4. Start the default stack
-
-```bash
-docker compose up -d
+./dev.sh
 ```
 
 This starts:
@@ -59,7 +43,14 @@ Use your own MCP client; the stack does not include a chat interface.
 
 The default Compose stack binds published ports to `127.0.0.1`. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
-### 5. Verify health
+### 4. Verify the MCP connection
+
+```bash
+./bin/self-serve-doctor.sh
+```
+
+The doctor checks authentication, MCP initialization, tool discovery, and a
+harmless tool call. You can also check basic service health:
 
 ```bash
 curl http://localhost:7456/actuator/health
@@ -78,7 +69,7 @@ The default local Compose stack is intentionally convenient, not hardened:
 - MCP auth defaults to `api-key`
 - configure your MCP client to send `MCP_API_KEY` in the `X-API-Key` header
 - published host ports bind to loopback by default
-- local Compose defaults allow localhost and private-network targets for development convenience
+- the bootstrap enables localhost and private-network targets for the bundled demos
 
 That is acceptable for an isolated laptop lab. It is not a production posture.
 
@@ -165,19 +156,19 @@ curl -H "X-API-Key: your-mcp-api-key" \
 
 Use JWT only when you actually need token expiry, refresh rotation, or shared production auth behavior.
 
-Enable it in `.env`:
+Generate a signing secret with `openssl rand -base64 32`, then put the generated
+value in `.env` and enable JWT:
 
 ```bash
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
-JWT_SECRET=your-base64-or-random-32-byte-secret
+JWT_SECRET=replace-with-generated-secret
 ```
 
-Then restart:
+Recreate the MCP service using the same Compose files as `./dev.sh`:
 
 ```bash
-docker compose down
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
 
 Mint a token:
@@ -189,6 +180,11 @@ curl -s -X POST http://localhost:7456/auth/token \
 ```
 
 If you manually use the returned access token against `/mcp`, you still need the same `initialize` and `Mcp-Session-Id` flow shown above.
+
+The supplied Compose file explicitly forwards JWT settings from `.env`. For a
+local `./gradlew bootRun`, supply them as exported process environment variables
+or Spring configuration instead; the application does not automatically load
+`.env`. See the [JWT quick start](docs/src/content/docs/getting-started/jwt-quick-start.md).
 
 ## Recommended Local Settings
 
@@ -207,6 +203,7 @@ ZAP_URL_WHITELIST=
 ```bash
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
+JWT_SECRET=replace-with-generated-secret
 ZAP_ALLOW_LOCALHOST=false
 ZAP_ALLOW_PRIVATE_NETWORKS=false
 ZAP_URL_WHITELIST=*.staging.yourcompany.com
@@ -246,14 +243,16 @@ Check that `LOCAL_ZAP_WORKPLACE_FOLDER` exists and is writable.
 docker compose logs -f mcp-server
 
 # Restart services
-docker compose restart
+docker compose -f docker-compose.yml -f docker-compose.dev.yml restart
+
+# Apply changed .env settings (restart alone does not reload them)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 
 # Stop services
 docker compose down
 
 # Rebuild after code changes
-docker compose build
-docker compose up -d
+./dev.sh
 
 # Check service status
 docker compose ps

@@ -7,6 +7,16 @@ project_name="${COMPOSE_PROJECT_NAME:-mcp-zap-server}"
 gateway_conf="docker/nginx/mcp-ha.conf"
 gateway_template="docker/nginx/mcp-ha.conf.tmpl"
 
+# Fail before creating files or contacting Docker when the optional setup is absent.
+for required_file in docker-compose.ha.yml "${gateway_template}"; do
+  if [ ! -f "${required_file}" ]; then
+    echo "Local HA simulation is unavailable: missing ${required_file}." >&2
+    echo "Use bin/bootstrap-local.sh for local setup or the Helm deployment guide." >&2
+    echo "See https://danieltse.org/mcp-zap-server/operations/local-ha-compose/" >&2
+    exit 1
+  fi
+done
+
 compose() {
   docker compose \
     -f docker-compose.yml \

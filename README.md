@@ -188,7 +188,7 @@ flowchart LR
 For multi-replica queueing, durable Postgres state, claim recovery, and ingress affinity, use the operations docs instead of this README:
 
 - [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/)
-- [Local HA Compose Simulation](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/)
+- [Multi-Replica Deployment Requirements](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/)
 - [Scan History Ledger](https://danieltse.org/mcp-zap-server/operations/scan-history-ledger/)
 - [Helm Deployment](./helm/mcp-zap-server/README.md)
 

@@ -52,44 +52,79 @@ do not execute commands inside the container.
 
 ## Installation
 
+Run the commands below from the repository root. They keep credentials in a
+Kubernetes Secret and retain the default single MCP replica.
+
+### Prepare Credentials
+
+For a new local namespace, generate separate credentials:
+
+```bash
+kubectl create namespace mcp-zap
+kubectl create secret generic mcp-zap-runtime --namespace mcp-zap \
+  --from-literal=ZAP_API_KEY="$(openssl rand -hex 32)" \
+  --from-literal=MCP_API_KEY="$(openssl rand -hex 32)" \
+  --from-literal=JWT_SECRET="$(openssl rand -base64 32)"
+```
+
+For an existing environment, have your secret-management pipeline provision
+`mcp-zap-runtime` in the release namespace with these three keys. Preserve
+existing credentials during upgrades; replacing the signing secret invalidates
+existing JWTs. Configure your MCP client with the generated MCP API key through
+your normal secret-management process.
+
 ### Quick Start (Local Development - kind/minikube)
 
 ```bash
-# Create namespace
-kubectl create namespace mcp-zap
-
-# Install with default values (API key security enabled)
 helm install mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.service.type=NodePort
+  --set zap.config.existingSecret.name=mcp-zap-runtime \
+  --set mcp.zapClient.existingSecret.name=mcp-zap-runtime \
+  --set mcp.security.existingSecret.name=mcp-zap-runtime
+
+kubectl port-forward -n mcp-zap svc/mcp-zap-mcp-zap-server-mcp 7456:7456
 ```
 
-### Production Deployment
+Connect to `http://localhost:7456/mcp` with the `X-API-Key` header. The default
+NetworkPolicy allows ZAP DNS traffic only. Before scanning, configure the
+authorized target CIDRs and ports under `networkPolicy.zap.egress.extraEgress`;
+private targets also need the matching URL-validation settings.
+
+### JWT Deployment
+
+After provisioning the same Secret, enable JWT explicitly:
 
 ```bash
-# Install with JWT authentication and an explicit external exposure choice
 helm install mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
-  --set mcp.service.type=LoadBalancer \
+  --set zap.config.existingSecret.name=mcp-zap-runtime \
+  --set mcp.zapClient.existingSecret.name=mcp-zap-runtime \
+  --set mcp.security.existingSecret.name=mcp-zap-runtime \
   --set mcp.security.mode=jwt \
-  --set mcp.security.allowPlaceholderApiKey=false \
-  --set mcp.security.jwt.enabled=true \
-  --set mcp.security.jwt.secret="your-secret-key-here" \
-  --set zap.config.apiKey="your-zap-api-key" \
-  --set mcp.zapClient.apiKey="your-zap-api-key"
+  --set mcp.security.jwt.enabled=true
 ```
+
+These are alternative installs for a new release; use `helm upgrade` with your
+saved configuration for an existing release. The JWT example keeps the service
+on `ClusterIP`. For production, configure a controlled TLS ingress, allowed
+ingress sources and scan-target egress, then complete the
+[production checklist](../../docs/src/content/docs/operations/production-checklist.md).
 
 ### Custom Values File
 
-Create `custom-values.yaml`:
+Create `custom-values.yaml` using the previously provisioned Secret:
 
 ```yaml
 mcp:
-  replicaCount: 5
+  replicaCount: 1
   security:
     mode: api-key
     allowPlaceholderApiKey: false
-    apiKey: "my-secure-api-key"
+    existingSecret:
+      name: mcp-zap-runtime
+  zapClient:
+    existingSecret:
+      name: mcp-zap-runtime
   
   ingress:
     enabled: true
@@ -110,10 +145,21 @@ mcp:
 
 zap:
   config:
-    apiKey: "my-zap-api-key"
+    existingSecret:
+      name: mcp-zap-runtime
   persistence:
     size: 20Gi
+
+networkPolicy:
+  mcp:
+    extraIngress:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: ingress-nginx
 ```
+
+Replace the example hostname, TLS Secret, and ingress-controller namespace with
+your deployment's values. Add approved scan-target egress as described above.
 
 Install with custom values:
 
@@ -152,7 +198,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `zap.config.apiKey` | ZAP API key | `""` |
 | `zap.config.existingSecret.name` | Existing Secret for the ZAP API key | `""` |
 | `zap.config.api.allowedAddrRegex` | ZAP API source and Host allowlist regex; custom values must allow both | loopback + RFC1918 + `zap` + chart ZAP service hostname |
-| `zap.config.addons` | ZAP addons installed at startup | `["spiderAjax", "graphql", "soap", "automation"]` |
+| `zap.config.addons` | ZAP addons installed at startup | `["spiderAjax", "client", "graphql", "soap", "automation"]` |
 | `zap.persistence.enabled` | Enable persistent storage for ZAP | `true` |
 | `zap.persistence.size` | Size of ZAP persistent volume | `10Gi` |
 
@@ -171,7 +217,10 @@ Automation Framework note:
 
 Production deployments should use secret references instead of committing runtime credentials in values files.
 
-The chart intentionally fails to render if you leave required runtime secrets blank or on placeholder values. Set explicit keys in your values file for non-secret demos, or use `existingSecret` references for real deployments.
+The chart fails to render when required keys or Secret references are absent;
+it also rejects recognized placeholder values and short JWT secrets supplied
+directly in values. Rendering does not verify the contents of an existing
+Secret. Provision generated credentials before starting the pods.
 
 ```yaml
 zap:
@@ -209,6 +258,24 @@ Use the AWS and GCP reference overlays as the starting point for ingress-control
 
 Multi-replica `streamable-http` MCP is stateful per replica. If `mcp.replicaCount > 1` or `mcp.autoscaling.minReplicas > 1`, your Kubernetes Service, ingress, or load balancer must keep follow-up MCP requests on the same backend replica. The chart fails rendering when multi-replica MCP is configured without a supported affinity preset.
 
+For example, after configuring shared PostgreSQL stores and migrations, add
+this to the custom ingress values above:
+
+```yaml
+mcp:
+  replicaCount: 3
+  streamableHttp:
+    sessionAffinity:
+      enabled: true
+      provider: ingress-nginx
+```
+
+Merge these settings into the existing `mcp` mapping. Affinity preserves MCP
+transport sessions; it does not make in-memory queue, history, or JWT revocation
+state shared. Configure the required shared stores and their network access
+before using multiple replicas. Autoscaling remains disabled unless explicitly
+enabled.
+
 Supported OSS/local pattern:
 
 - sticky sessions or equivalent client affinity at the ingress/load-balancer layer
@@ -228,14 +295,14 @@ Without that affinity, one MCP client can initialize on replica A and send follo
 ### Local Kubernetes (kind/minikube)
 
 ```bash
-# Using NodePort
+# Only when installed with mcp.service.type=NodePort
 kubectl get svc -n mcp-zap
-export NODE_PORT=$(kubectl get svc mcp-zap-mcp -n mcp-zap -o jsonpath='{.spec.ports[0].nodePort}')
+export NODE_PORT=$(kubectl get svc mcp-zap-mcp-zap-server-mcp -n mcp-zap -o jsonpath='{.spec.ports[0].nodePort}')
 export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
 echo "MCP Server: http://$NODE_IP:$NODE_PORT"
 
 # Port forwarding (alternative)
-kubectl port-forward -n mcp-zap svc/mcp-zap-mcp 7456:7456
+kubectl port-forward -n mcp-zap svc/mcp-zap-mcp-zap-server-mcp 7456:7456
 # Access at: http://localhost:7456
 ```
 
@@ -243,10 +310,10 @@ kubectl port-forward -n mcp-zap svc/mcp-zap-mcp 7456:7456
 
 ```bash
 # Get LoadBalancer IP or hostname
-kubectl get svc -n mcp-zap mcp-zap-mcp
+kubectl get svc -n mcp-zap mcp-zap-mcp-zap-server-mcp
 
 # Access via LoadBalancer address
-export LB_ADDR=$(kubectl get svc mcp-zap-mcp -n mcp-zap -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{.status.loadBalancer.ingress[0].ip}')
+export LB_ADDR=$(kubectl get svc mcp-zap-mcp-zap-server-mcp -n mcp-zap -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{.status.loadBalancer.ingress[0].ip}')
 echo "MCP Server: http://$LB_ADDR:7456"
 ```
 
@@ -268,6 +335,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 # Upgrade with specific image version
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
+  --values custom-values.yaml \
   --set mcp.image.tag=v0.13.0
 ```
 
@@ -309,7 +377,7 @@ kubectl logs -n mcp-zap -l app.kubernetes.io/name=zap-proxy
 kubectl get pvc -n mcp-zap
 
 # Describe PVC for issues
-kubectl describe pvc -n mcp-zap mcp-zap-zap-pvc
+kubectl describe pvc -n mcp-zap mcp-zap-mcp-zap-server-zap-pvc
 ```
 
 ### MCP Server Cannot Connect to ZAP
@@ -369,20 +437,28 @@ kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/late
 ```bash
 # Create kind cluster
 kind create cluster --name mcp-dev
-
-# Install chart
-helm install mcp-zap ./helm/mcp-zap-server \
-  --namespace mcp-zap --create-namespace \
-  --set mcp.service.type=NodePort \
-  --set mcp.security.mode=none
-
-# Access service
-kubectl port-forward -n mcp-zap svc/mcp-zap-mcp 7456:7456
 ```
+
+Then follow [Prepare Credentials](#prepare-credentials) and the
+[local installation](#installation) above.
+The local path keeps API-key authentication enabled.
 
 ### Example 2: AWS EKS + RDS (HA Queue Coordinator + JWT Revocation Store)
 
+Provision an RDS database and supply its credentials and generated runtime
+secrets through your deployment environment before running these commands.
+Replace the database placeholders and the ingress/database CIDRs in the copied
+values file, and add the authorized scan-target egress rules. The database and
+network infrastructure are not created by this chart.
+
 ```bash
+# Refuse empty deployment credentials
+: "${RDS_USERNAME:?Set the database username}"
+: "${RDS_PASSWORD:?Set the database password}"
+: "${ZAP_API_KEY:?Set a generated ZAP API key}"
+: "${MCP_API_KEY:?Set a generated MCP API key}"
+: "${JWT_SECRET:?Set a generated JWT signing secret}"
+
 # 1) Create runtime secret for RDS credentials used by Flyway + MCP shared Postgres access
 kubectl create namespace mcp-zap-prod
 kubectl create secret generic mcp-zap-rds \
@@ -417,26 +493,21 @@ kubectl logs -n mcp-zap-prod -l app.kubernetes.io/name=mcp-server | grep -E "lea
 
 ### Example 3: GKE with Ingress + TLS
 
-```bash
-# Install cert-manager first
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+Provision an ingress-nginx controller and a TLS Secret for your hostname, then
+use the [custom values example](#custom-values-file). That example includes
+runtime Secret references and permits the ingress-controller namespace through
+the MCP NetworkPolicy. Configure your certificate issuer separately if you use
+cert-manager.
 
-# Install chart with ingress. For multi-replica streamable MCP, add an
-# ingress-nginx affinity preset so follow-up MCP requests stay on one replica.
+```bash
 helm install mcp-zap ./helm/mcp-zap-server \
-  --namespace mcp-zap --create-namespace \
-  --set mcp.ingress.enabled=true \
-  --set mcp.ingress.className=nginx \
-  --set mcp.streamableHttp.sessionAffinity.enabled=true \
-  --set mcp.streamableHttp.sessionAffinity.provider=ingress-nginx \
-  --set mcp.ingress.hosts[0].host=mcp-zap.example.com \
-  --set mcp.ingress.tls[0].secretName=mcp-zap-tls \
-  --set mcp.ingress.tls[0].hosts[0]=mcp-zap.example.com
+  --namespace mcp-zap \
+  --values custom-values.yaml
 ```
 
 ## Security Best Practices
 
-1. **Always change default API keys** in production
+1. **Provision generated API keys** before installation
 2. **Enable JWT authentication** for production deployments
 3. **Use TLS/SSL** for external access (via Ingress or LoadBalancer)
 4. **Enable sticky ingress or equivalent client affinity** for multi-replica OSS/local streamable MCP
@@ -450,5 +521,5 @@ helm install mcp-zap ./helm/mcp-zap-server \
 ## Support
 
 For issues and questions:
-- GitHub: https://github.com/dtkmn/mcp-zap-server/issues
-- Documentation: https://dtkmn.github.io/mcp-zap-server/
+- [GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues)
+- [Documentation](https://danieltse.org/mcp-zap-server/)

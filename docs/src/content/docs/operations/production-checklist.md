@@ -10,7 +10,7 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 - [ ] Pin `zaproxy/zap-stable` to a full release tag or digest.
 - [ ] Pin the MCP server image to an explicit application version.
 - [ ] Verify required add-ons are installed explicitly for the features you plan to use.
-- [ ] Stop pretending `latest` is a release strategy.
+- [ ] Avoid mutable `latest` tags in production release manifests.
 
 ## 2. Network Boundaries
 
@@ -38,7 +38,7 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 ## 5. Capacity and Isolation
 
 - [ ] Keep ZAP as a single stateful replica. Scale the MCP layer horizontally instead.
-- [ ] Size ZAP for real scans, not for demo optimism.
+- [ ] Size ZAP using measurements from representative scan workloads.
 - [ ] Keep concurrency limits conservative until you have target-specific data.
 - [ ] Keep `MCP_PROTECTION_ENABLED=true`.
 - [ ] Tune workspace quotas and backpressure to match one real ZAP runtime.

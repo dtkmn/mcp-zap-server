@@ -12,7 +12,8 @@ Guarantee safe multi-replica queue execution by using durable worker claims for 
 - `single-node` backend: single-process runtime with a stable local worker identity
 - `postgres-lock` backend: replicas still compete for a Postgres advisory lock, but normal queue dispatch no longer depends on that lock
 
-That last point matters. If you still think only one leader can dispatch scans, your mental model is behind the code.
+Dispatch ownership comes from durable worker claims. Coordinator leadership
+does not restrict normal dispatch to one replica.
 
 ## Configuration
 

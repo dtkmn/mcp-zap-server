@@ -25,7 +25,7 @@ This implementation uses a single active signing key. Rotating `JWT_SECRET` inva
 
 Before rotation:
 
-1. Confirm all replicas share the same target secret rollout path (K8s secret, ECS task env, Docker Compose env file).
+1. Confirm all replicas share the same target secret rollout path (K8s secret, ECS task env, or the supplied Docker Compose `.env`).
 2. Ensure JWT revocation backend is healthy (`postgres` recommended for multi-replica).
 3. Confirm `/actuator/health` is green on all MCP replicas.
 4. Prepare rollback secret (current key) in secure secret manager.
@@ -42,10 +42,38 @@ Store it in your secret manager. Do not commit it.
 
 ### Step 2: Rollout New Secret to All Replicas
 
-Apply the new `JWT_SECRET` and restart/roll pods so all replicas converge to the same key.
+Apply the new `JWT_SECRET` and replace or restart the MCP processes so all
+replicas load the same key. Existing environment variables do not change when
+their source Secret or `.env` changes.
 
-- Kubernetes/Helm: update secret + `helm upgrade`
-- Docker Compose: update `.env` + `docker compose up -d --force-recreate`
+- Kubernetes/Helm with `existingSecret`: update the Secret, then explicitly
+  restart the MCP Deployment. A `helm upgrade` with unchanged values does not
+  by itself restart pods when only the Secret's contents changed. For release
+  `mcp-zap` in namespace `mcp-zap`:
+
+  ```bash
+  kubectl rollout restart deployment -n mcp-zap \
+    -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap
+  kubectl rollout status deployment -n mcp-zap \
+    -l app.kubernetes.io/name=mcp-server,app.kubernetes.io/instance=mcp-zap
+  ```
+
+- Docker Compose: update `JWT_SECRET` in `.env`, then recreate the MCP service
+  using the same files that started it. For the README's `./dev.sh` stack:
+
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
+  ```
+
+  Omit the development override if your stack uses only `docker-compose.yml`.
+  `docker compose restart` alone does not reload `.env`.
+- Local JVM process: update the exported environment or Spring configuration
+  and restart the process. The application does not automatically load `.env`.
+
+The supplied Compose stack forwards the JWT issuer, token lifetimes, and
+revocation-store settings in `.env` as well. PostgreSQL revocation requires an
+existing reachable database with the [required schema migrations](../../operations/queue-coordinator-leader-election/);
+selecting the backend does not provision that database.
 
 ### Step 3: Validate Post-Rotation
 
@@ -70,6 +98,10 @@ If post-rotation auth failures are systemic:
 1. Re-deploy previous `JWT_SECRET` from secure backup.
 2. Re-run validation on `/auth/token` and `/auth/validate`.
 3. Open an incident report and schedule a corrected rotation window.
+
+Restoring the old secret can make unexpired old tokens valid again. Do not
+restore a key suspected of compromise; issue a new key and recover client access
+instead.
 
 ## Operational Checks
 

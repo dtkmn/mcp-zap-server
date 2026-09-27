@@ -7,7 +7,7 @@ Get started with JWT authentication in a few minutes.
 
 ## Prerequisites
 
-- MCP ZAP Server running
+- A working [local Compose setup](../self-serve-first-run/) or a deployment you can configure
 - `curl`
 - `jq` if you want to use the copy-paste shell snippets as written
 
@@ -15,12 +15,13 @@ JWT is not the fastest local setup path. Use it when you need token expiry, refr
 
 ## Step 1: Configure JWT Mode
 
-Set these values in `.env`:
+For the supplied Docker Compose stack, set these values in `.env`. Keep the
+generated `MCP_API_KEY` from your existing setup:
 
 ```bash
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
-MCP_API_KEY=your-initial-api-key
+MCP_API_KEY=your-mcp-api-key
 ```
 
 ## Step 2: Generate JWT Secret
@@ -35,16 +36,33 @@ Then add it to `.env`:
 JWT_SECRET=your-generated-secret-key-here
 ```
 
-## Step 3: Restart Services
+Replace any example secret from an older `.env`; it is not a usable signing key.
+Keep `JWT_ENABLED=false` for API-key-only setups. The supplied Compose file now
+passes JWT settings into the container, so enabling JWT takes effect on recreate.
+
+## Step 3: Apply The Configuration
+
+For the README's `./dev.sh` stack, recreate the MCP service with the same Compose
+files so the changed environment reaches the container:
 
 ```bash
-docker compose down
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
 
-Or if running locally:
+If you originally started with only `docker-compose.yml`, omit the development
+override. `docker compose restart` alone does not reload `.env`.
+
+For a local JVM process, export the settings before starting it. `bootRun` does
+not automatically read `.env`; supply your ZAP connection and API keys as well:
 
 ```bash
+export MCP_SECURITY_MODE=jwt
+export JWT_ENABLED=true
+export JWT_SECRET=your-generated-secret-key-here
+export MCP_API_KEY=your-mcp-api-key
+export ZAP_API_URL=localhost
+export ZAP_API_PORT=8090
+export ZAP_API_KEY=your-zap-api-key
 ./gradlew bootRun
 ```
 
@@ -134,6 +152,9 @@ curl -X POST http://localhost:7456/auth/revoke \
 ### "JWT secret is not configured"
 
 Set `JWT_SECRET` and restart the service.
+
+For Compose, recreate the service as shown above. For a local JVM process,
+confirm the variable is exported in the environment that starts the process.
 
 ### "JWT secret must be at least 256 bits"
 

@@ -46,10 +46,10 @@ real support boundary:
 
 ### 3. Pilot Proof Scenario: Governed Authenticated Scan
 
-Use this scenario when deciding whether the gateway is pilot-ready for a design
-partner. This is the minimum realistic path: auth setup, auth validation, policy
-decision, scan execution, passive scan wait, findings, and report evidence in
-one chain.
+This scenario validates a prepared form-login session through HTTP crawling,
+active scanning, and report generation. Use a separate browser profile and
+`strategy=client` when validating authenticated Client Spider crawling; that
+browser session cannot be used for the active-scan step.
 
 Run sequence:
 
@@ -145,7 +145,7 @@ this run.
 - auth and authorization behaved as expected
 - policy decisions were observable and matched the configured mode
 - no duplicate scan start occurred during failover testing
-- unresolved gaps are explicit and accepted, not hand-waved
+- unresolved gaps have a documented owner and acceptance decision
 
 ## Suggested Sign-Off Comment
 

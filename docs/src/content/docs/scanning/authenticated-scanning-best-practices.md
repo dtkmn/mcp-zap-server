@@ -483,7 +483,8 @@ Expected evidence:
 - `likelyAuthenticated=true`
 - the same context and user IDs from preparation
 
-If validation fails, stop. Do not continue and pretend the scan is authenticated.
+If validation fails, resolve the failure before using the session for an
+authenticated scan.
 
 ### 3. Crawl as the Prepared Session
 

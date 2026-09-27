@@ -362,9 +362,11 @@ Your MCP API key or JWT setup does not change either way.
 | Session becomes unknown after restart | Prepared sessions are held in memory | Prepare and validate a new session |
 | Header profile validates but the crawl is anonymous | Target bearer/API-key injection is not implemented | Do not use header profiles as authenticated scan evidence |
 
-If the login uses OAuth, SSO, MFA, CAPTCHA, dynamic CSRF handling, or a
-JavaScript/JSON flow, stop forcing it through this provider. That is an
-unsupported flow, not a documentation typo.
+This form-login provider does not support OAuth, SSO, MFA, CAPTCHA, dynamic
+CSRF handling, or JavaScript/JSON login flows. For automatic browser-based
+username/password login, see [Client Spider](../../scanning/client-spider/#crawl-behind-a-login).
+Browser profiles have their own support limits and do not add custom login
+steps, MFA, or CAPTCHA handling.
 
 ## Next Reading
 

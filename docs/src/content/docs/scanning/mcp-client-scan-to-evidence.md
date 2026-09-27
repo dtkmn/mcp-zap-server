@@ -286,9 +286,9 @@ a managed lifecycle: queued, running, succeeded, failed, or cancelled.
 For casual local use, direct mode is fine.
 
 For release or customer evidence, prefer queue-backed execution with durable
-scan history. If customer handoff returns a caveat about direct-only scan proof,
-do not hand-wave it away. It is telling you the evidence is useful but not as
-strong as terminal queued job evidence.
+scan history. A customer-handoff caveat about direct-only scan proof means the
+record does not establish the terminal lifecycle of a queued job. Preserve that
+limitation in the evidence you share.
 
 Guided tools do not expose a per-call `use queue` flag. They choose direct or
 queue mode from deployment topology and configuration. For release evidence,

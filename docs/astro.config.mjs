@@ -9,6 +9,7 @@ export default defineConfig({
 	trailingSlash: 'always',
 	redirects: {
 		'/operations/native-image-performance': '/mcp-zap-server/operations/production-checklist/',
+		'/security-modes/implementation-summary': '/mcp-zap-server/security-modes/',
 	},
 	integrations: [
 		starlight({
@@ -69,7 +70,6 @@ export default defineConfig({
 						{ slug: 'security-modes/jwt-authentication' },
 						{ slug: 'security-modes/examples' },
 						{ slug: 'security-modes/jwt-key-rotation-runbook' },
-						{ slug: 'security-modes/implementation-summary' },
 						{ slug: 'security-modes/jwt-implementation-summary' },
 					],
 				},

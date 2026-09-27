@@ -35,6 +35,9 @@ docs/.astro/
 docs/dist/
 docs/node_modules/
 
+# Keep local review notes out of public commits.
+docs/reviews/
+
 # Runtime and verification artifacts
 .zap-work/
 .zap-artifacts/

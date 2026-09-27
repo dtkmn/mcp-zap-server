@@ -20,6 +20,11 @@ Do not keep these in the public docs tree:
 - technical debt registers and backlog rankings
 - implementation summaries written for a single task or private rollout
 
+Keep private reviews and advisor notes outside this repository. All tracked
+source, including drafts, metadata, and earlier commits, is publicly readable.
+Removing a page from navigation or adding an ignore rule does not remove
+content already committed to Git history.
+
 ## Project Layout
 
 - `src/content/docs/` - public documentation content rendered by Starlight

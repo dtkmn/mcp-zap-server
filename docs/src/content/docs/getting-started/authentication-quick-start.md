@@ -15,7 +15,9 @@ For the shipped HTTP/server defaults, the base runtime starts in `api-key`. Use 
 
 ## Choose A Mode
 
-Edit `.env` and choose one of these configurations.
+For the supplied Docker Compose stack, edit `.env` and choose one of these
+configurations. Start with the [first-run bootstrap](../self-serve-first-run/)
+if you do not have a working local setup yet.
 
 For the recommended API-key default:
 
@@ -29,7 +31,7 @@ For JWT in a deployment that manages token lifecycle:
 ```bash
 MCP_SECURITY_MODE=jwt
 JWT_ENABLED=true
-JWT_SECRET=your-256-bit-secret-minimum-32-chars
+JWT_SECRET=replace-with-generated-secret
 MCP_API_KEY=replace-with-bootstrap-api-key
 ```
 
@@ -49,11 +51,16 @@ openssl rand -hex 32
 openssl rand -base64 64
 ```
 
-Recreate the server after changing the mode:
+For the README's `./dev.sh` stack, recreate the server after changing the mode:
 
 ```bash
-docker compose up -d --force-recreate mcp-server
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
+
+If you started with only `docker-compose.yml`, omit the development override.
+The Compose file explicitly passes these settings into the MCP container.
+For a local `./gradlew bootRun` or `java -jar` process, export the variables or
+use Spring configuration; the application does not automatically read `.env`.
 
 Also update the credential in each MCP client and reconnect it.
 If you choose JWT, configure a pre-issued bearer token in each client; see
@@ -124,8 +131,12 @@ user or network to reach the server.
 
 ```bash
 # Recreate the server to pick up .env changes
-docker compose up -d --force-recreate mcp-server
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
+
+Use the same Compose files that started your stack. A simple restart preserves
+the old container environment. For a local JVM process, verify that the settings
+are exported before launching it.
 
 ## Recommendation
 

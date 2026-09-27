@@ -16,37 +16,17 @@ corresponding release workflow. See
 - Helm 3.8+
 - kubectl configured
 
-### Install on Local Kubernetes (kind)
+### Installation
 
-```bash
-# 1. Create kind cluster
-kind create cluster --name mcp-dev
+Follow the chart's [credential preparation and installation guide](mcp-zap-server/README.md#installation).
+It contains the complete API-key and JWT examples, including the required
+Kubernetes Secret references. Its commands run from the repository root and
+use `./helm/mcp-zap-server` as the chart path.
 
-# 2. Install MCP ZAP Server
-helm install mcp-zap ./mcp-zap-server \
-  --namespace mcp-zap \
-  --create-namespace \
-  --set mcp.service.type=NodePort
-
-# 3. Access the service
-kubectl port-forward -n mcp-zap svc/mcp-zap-mcp 7456:7456
-```
-
-Access at: http://localhost:7456
-
-### Install on Cloud Kubernetes
-
-```bash
-# AWS EKS
-helm install mcp-zap ./mcp-zap-server \
-  --namespace mcp-zap \
-  --create-namespace \
-  --set mcp.security.mode=jwt \
-  --set mcp.security.jwt.secret="$(openssl rand -base64 32)"
-
-# Get LoadBalancer IP
-kubectl get svc -n mcp-zap mcp-zap-mcp
-```
+The default service is `ClusterIP`; use the documented port-forward for local
+access to `http://localhost:7456/mcp`. For cloud deployments, configure a
+controlled TLS ingress and the required network rules before exposing the
+service. A JWT mode selection alone does not configure exposure or credentials.
 
 ## Architecture
 
@@ -57,10 +37,11 @@ The Helm chart deploys:
    - Persistent volume for scan data
    - 2-4GB RAM
 
-2. **MCP Server** (3+ pods)
-   - Stateless deployment
-   - Auto-scaling enabled
-   - 512MB RAM per pod
+2. **MCP Server** (1 pod by default)
+   - Streamable MCP sessions are stored in memory per replica
+   - Additional replicas require session affinity and appropriate shared stores
+   - Auto-scaling is disabled by default
+   - 512Mi memory request and 1Gi limit by default
 
 ## Documentation
 
@@ -88,35 +69,16 @@ mcp-zap-server/
 
 ## Customization
 
-Create `custom-values.yaml`:
-
-```yaml
-mcp:
-  replicaCount: 5
-  security:
-    mode: api-key
-    apiKey: "my-secure-key"
-  
-  autoscaling:
-    maxReplicas: 20
-
-zap:
-  persistence:
-    size: 50Gi
-```
-
-Install with custom values:
-
-```bash
-helm install mcp-zap ./mcp-zap-server \
-  --namespace mcp-zap \
-  --values custom-values.yaml
-```
+Use the chart's [custom values example](mcp-zap-server/README.md#custom-values-file)
+to keep credential references, ingress, and network policy together. Read the
+[multi-replica requirements](mcp-zap-server/README.md#streamable-mcp-ha-exposure)
+before changing the replica count or enabling autoscaling.
 
 ## Upgrading
 
 ```bash
-helm upgrade mcp-zap ./mcp-zap-server \
+# Run from the repository root with the values used for your deployment
+helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml
 ```

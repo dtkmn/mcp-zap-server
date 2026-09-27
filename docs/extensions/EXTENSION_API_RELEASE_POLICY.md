@@ -200,11 +200,9 @@ Before publishing any public extension API artifact:
 - confirm no enterprise package, private path, private workflow, or private
   namespace is included in the artifact or docs
 
-## Founder Translation
+## Stability Notice
 
-The API artifact is the promise. The sample proves the promise can work. The
-release policy says how expensive the promise becomes after someone depends on
-it.
-
-Until this policy graduates beyond `experimental-local`, talk about the
-extension API as a proof and builder preview path, not as a stable platform.
+The extension API remains `experimental-local`. The sample demonstrates the
+extension build and loading contract; it does not establish a stable API.
+Consumers should use the compatibility matrix and release checklist above
+before adopting an API version.

@@ -6,7 +6,7 @@ Run this before recommending a deployment as production-ready for a client or de
 
 Prove that the current product can be operated safely and repeatably inside its real support boundary.
 
-This is not a generic multi-tenant proof. The current April 2026 baseline is:
+The deployment baseline is:
 
 - one trust boundary per deployment unit
 - one private ZAP runtime per trust boundary
@@ -17,7 +17,7 @@ This is not a generic multi-tenant proof. The current April 2026 baseline is:
 
 Before you start, the environment should already satisfy the production baseline:
 
-- [`PRODUCTION_CHECKLIST.md`](../PRODUCTION_CHECKLIST.md) is materially complete
+- [Production Readiness Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/) is materially complete
 - pinned images or digests are selected
 - runtime secrets come from a secret manager or Kubernetes Secret references
 - ZAP remains private-only
@@ -64,10 +64,10 @@ If authenticated scanning is part of the customer promise, include that flow too
 
 ### 3A. Pilot Proof Scenario: Governed Authenticated Scan
 
-Use this scenario when deciding whether the gateway is pilot-ready for a design
-partner. This is the minimum realistic path: auth setup, auth validation, policy
-decision, scan execution, passive scan wait, findings, and report evidence in
-one chain.
+This scenario validates a prepared form-login session through HTTP crawling,
+active scanning, and report generation. Use a separate browser profile and
+`strategy=client` when validating authenticated Client Spider crawling; that
+browser session cannot be used for the active-scan step.
 
 Pre-flight configuration:
 
@@ -129,7 +129,7 @@ Expected operator evidence:
 
 Concrete blockers must become follow-up issues before sign-off. Common examples:
 
-- authenticated browser/AJAX crawl is required
+- authenticated guided AJAX crawl (`strategy=browser`) is required
 - bearer/API-key header injection is required for guided execution
 - policy mode cannot emit an audit decision for the pilot tool call
 - scan job or operation IDs cannot be correlated with logs
@@ -189,7 +189,7 @@ Do not call the environment production-ready unless all of the following are tru
 - policy decisions were observable and matched the configured mode
 - no duplicate scan start occurred during failover testing
 - rollback and restore evidence are recorded
-- unresolved gaps are explicit and accepted, not hand-waved
+- unresolved gaps have a documented owner and acceptance decision
 
 ## Suggested Sign-Off Comment
 
@@ -231,8 +231,11 @@ Chief/Principal engineering sign-off:
 
 ## Related Docs
 
-- [Cloud Reference Architecture](../CLOUD_REFERENCE_ARCHITECTURE.md)
-- [Production Checklist](../PRODUCTION_CHECKLIST.md)
-- [Upgrade and Rollback Runbook](./UPGRADE_AND_ROLLBACK_RUNBOOK.md)
-- [Disaster Recovery Runbook](./DISASTER_RECOVERY_RUNBOOK.md)
-- [Game Day Reliability Drill](./GAME_DAY_RELIABILITY_DRILL.md)
+- [Production Readiness Checklist](https://danieltse.org/mcp-zap-server/operations/production-checklist/)
+- [Multi-Replica Deployment Requirements](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/)
+- [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/)
+- [Release Evidence Handoff Runbook](https://danieltse.org/mcp-zap-server/operations/release-evidence-handoff-runbook/)
+- [Auth Bootstrap Failure Runbook](./AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md)
+
+Maintain rollback and disaster-recovery procedures for your own deployment.
+The repository does not provide provider-specific runbooks for those operations.

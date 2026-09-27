@@ -21,8 +21,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -82,7 +82,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void startCrawlUsesDirectSpiderWhenQueueNotPreferred() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan(eq("https://example.com")))
+        when(spiderScanService.startSpiderScan("https://example.com"))
                 .thenReturn("""
                         Direct spider scan started.
                         Scan ID: spider-1
@@ -103,28 +103,29 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String statusResponse = service.getCrawlStatus(operationId);
 
-        assertThat(startResponse).contains("Guided crawl started.");
-        assertThat(startResponse).contains("Execution Mode: direct");
-        assertThat(startResponse).contains("Strategy: http");
-        assertThat(startResponse).contains("Next Actions:");
-        assertThat(startResponse).contains("Poll: call zap_crawl_status");
-        assertThat(startResponse).contains("When crawl is complete: call zap_attack_start");
-        assertThat(startResponse).doesNotContain("zap_spider_status");
-        assertThat(startResponse).doesNotContain("zap_queue_spider_scan");
-        assertThat(statusResponse).contains("Guided crawl status.");
-        assertThat(statusResponse).contains("Progress: 45%");
-        assertThat(statusResponse).contains("Continue: call zap_crawl_status");
-        assertThat(statusResponse).doesNotContain("zap_spider_stop");
-        assertThat(statusResponse).doesNotContain("zap_queue_spider_scan");
+        assertThat(startResponse).contains("Guided crawl started.")
+            .contains("Execution Mode: direct")
+            .contains("Strategy: http")
+            .contains("Next Actions:")
+            .contains("Poll: call zap_crawl_status")
+            .contains("When crawl is complete: call zap_attack_start")
+            .doesNotContain("zap_spider_status")
+            .doesNotContain("zap_queue_spider_scan");
+
+        assertThat(statusResponse).contains("Guided crawl status.")
+            .contains("Progress: 45%")
+            .contains("Continue: call zap_crawl_status")
+            .doesNotContain("zap_spider_stop")
+            .doesNotContain("zap_queue_spider_scan");
     }
 
     @Test
     void startCrawlFallsBackToAjaxWhenAutoStrategyFailsInDirectMode() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan(eq("https://spa.example.com")))
-                .thenThrow(new ZapApiException("regular spider blocked", new RuntimeException("blocked")));
-        when(ajaxSpiderService.startAjaxSpider(eq("https://spa.example.com")))
-                .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
+        when(spiderScanService.startSpiderScan("https://spa.example.com"))
+            .thenThrow(new ZapApiException("regular spider blocked", new RuntimeException("blocked")));
+        when(ajaxSpiderService.startAjaxSpider("https://spa.example.com"))
+            .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
 
         String response = service.startCrawl("https://spa.example.com", "auto", null, null);
 
@@ -194,7 +195,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void startAttackUsesQueueWhenQueuePreferred() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq("Baseline"), eq((String) null)))
+        when(scanJobQueueService.queueActiveScan("https://example.com", "true", "Baseline", (String) null))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: job-7
@@ -220,7 +221,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void completedCrawlStatusPointsToAttackOrPassiveWait() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan(eq("https://example.com")))
+        when(spiderScanService.startSpiderScan("https://example.com"))
                 .thenReturn("""
                         Direct spider scan started.
                         Scan ID: spider-100
@@ -237,10 +238,10 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(service.startCrawl("https://example.com", "http", null, null));
         String statusResponse = service.getCrawlStatus(operationId);
 
-        assertThat(statusResponse).contains("Guided crawl status.");
-        assertThat(statusResponse).contains("Next Actions:");
-        assertThat(statusResponse).contains("Continue security testing: call zap_attack_start");
-        assertThat(statusResponse).contains("Crawl-only path: call zap_passive_scan_wait");
+        assertThat(statusResponse).contains("Guided crawl status.")
+            .contains("Next Actions:")
+            .contains("Continue security testing: call zap_attack_start")
+            .contains("Crawl-only path: call zap_passive_scan_wait");
     }
 
     @Test
@@ -281,7 +282,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void completedAttackStatusPointsToPassiveWaitAndFindings() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(activeScanService.startActiveScan(eq("https://example.com"), eq("true"), eq((String) null)))
+        when(activeScanService.startActiveScan("https://example.com", "true", (String) null))
                 .thenReturn("""
                         Active scan started.
                         Scan ID: active-100
@@ -298,16 +299,16 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(service.startAttack("https://example.com", "true", null, null, null));
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(statusResponse).contains("Guided attack status.");
-        assertThat(statusResponse).contains("Next Actions:");
-        assertThat(statusResponse).contains("Settle passive analysis: call zap_passive_scan_wait");
-        assertThat(statusResponse).contains("Then review: call zap_findings_summary");
+        assertThat(statusResponse).contains("Guided attack status.")
+            .contains("Next Actions:")
+            .contains("Settle passive analysis: call zap_passive_scan_wait")
+            .contains("Then review: call zap_findings_summary");
     }
 
     @Test
     void failedQueueStatusWithFullProgressDoesNotReturnSuccessNextActions() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueActiveScan(eq("https://example.com"), eq("true"), eq(null), eq(null)))
+        when(scanJobQueueService.queueActiveScan("https://example.com", "true", null, null))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: job-failed
@@ -336,7 +337,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void stopCrawlCancelsQueuedJobWhenQueuePreferred() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueSpiderScan(eq("https://example.com"), eq((String) null)))
+        when(scanJobQueueService.queueSpiderScan("https://example.com", (String) null))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: job-11
@@ -358,7 +359,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void stopAttackStopsDirectActiveScanWhenQueueNotPreferred() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(activeScanService.startActiveScan(eq("https://example.com"), eq("true"), eq("Baseline")))
+        when(activeScanService.startActiveScan("https://example.com", "true", "Baseline"))
                 .thenReturn("""
                         Active scan started.
                         Scan ID: active-9
@@ -371,8 +372,8 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String stopResponse = service.stopAttack(operationId);
 
-        assertThat(stopResponse).contains("Guided attack stop requested.");
-        assertThat(stopResponse).contains("Active scan stop requested for ID: active-9");
+        assertThat(stopResponse).contains("Guided attack stop requested.")
+            .contains("Active scan stop requested for ID: active-9");
         verify(activeScanService).stopActiveScan("active-9");
     }
 
@@ -391,7 +392,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void startCrawlExplainsQueuedAutoStrategySelection() {
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueSpiderScan(eq("https://example.com"), eq((String) null)))
+        when(scanJobQueueService.queueSpiderScan("https://example.com", (String) null))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: job-21
@@ -400,9 +401,9 @@ class GuidedSecurityToolsServiceTest {
 
         String startResponse = service.startCrawl("https://example.com", "auto", null, null);
 
-        assertThat(startResponse).contains("Execution Mode: queue");
-        assertThat(startResponse).contains("Strategy: http");
-        assertThat(startResponse).contains("Auto strategy in queued mode currently selects the HTTP spider by default");
+        assertThat(startResponse).contains("Execution Mode: queue")
+            .contains("Strategy: http")
+            .contains("Auto strategy in queued mode currently selects the HTTP spider by default");
     }
 
     @Test
@@ -410,7 +411,7 @@ class GuidedSecurityToolsServiceTest {
         PreparedAuthSession session = preparedFormSession("auth-1", "https://app.example.com", "1", "7");
         when(guidedAuthSessionService.getPreparedSession("auth-1")).thenReturn(session);
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScanAsUser(eq("1"), eq("7"), eq("https://app.example.com"), eq((String) null), eq("true"), eq("false")))
+        when(spiderScanService.startSpiderScanAsUser("1", "7", "https://app.example.com", (String) null, "true", "false"))
                 .thenReturn("""
                         Direct authenticated spider scan started.
                         Scan ID: auth-spider-1
@@ -419,11 +420,11 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startCrawl("https://app.example.com", "http", null, "auth-1");
 
-        assertThat(response).contains("Guided crawl started.");
-        assertThat(response).contains("Authenticated Session: auth-1");
-        assertThat(response).contains("Context ID: 1");
-        assertThat(response).contains("User ID: 7");
-        assertThat(response).contains("Authenticated guided crawl applied the prepared form-login session");
+        assertThat(response).contains("Guided crawl started.")
+            .contains("Authenticated Session: auth-1")
+            .contains("Context ID: 1")
+            .contains("User ID: 7")
+            .contains("Authenticated guided crawl applied the prepared form-login session");
     }
 
     @Test
@@ -431,7 +432,7 @@ class GuidedSecurityToolsServiceTest {
         PreparedAuthSession session = preparedFormSession("auth-2", "https://app.example.com", "11", "17");
         when(guidedAuthSessionService.getPreparedSession("auth-2")).thenReturn(session);
         when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
-        when(scanJobQueueService.queueActiveScanAsUser(eq("11"), eq("17"), eq("https://app.example.com"), eq("true"), eq("Baseline"), eq((String) null)))
+        when(scanJobQueueService.queueActiveScanAsUser("11", "17", "https://app.example.com", "true", "Baseline", (String) null))
                 .thenReturn("""
                         Scan job accepted
                         Job ID: auth-job-9
@@ -440,11 +441,11 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startAttack("https://app.example.com", "true", "Baseline", null, "auth-2");
 
-        assertThat(response).contains("Guided attack started.");
-        assertThat(response).contains("Authenticated Session: auth-2");
-        assertThat(response).contains("Execution Mode: queue");
-        assertThat(response).contains("Job ID: auth-job-9");
-        assertThat(response).contains("Authenticated guided attack applied the prepared form-login session");
+        assertThat(response).contains("Guided attack started.")
+            .contains("Authenticated Session: auth-2")
+            .contains("Execution Mode: queue")
+            .contains("Job ID: auth-job-9")
+            .contains("Authenticated guided attack applied the prepared form-login session");
     }
 
     @ParameterizedTest
@@ -557,7 +558,7 @@ class GuidedSecurityToolsServiceTest {
         assertThat(service.getCrawlStatus(operationId))
                 .contains("Status: FAILED", "Browser authentication failed", "Retry only after fixing")
                 .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
-        verify(scanJobQueueService, org.mockito.Mockito.never())
+        verify(scanJobQueueService, never())
                 .queueClientSpiderScan("https://app.example.com", null, null);
         verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
     }
@@ -613,7 +614,7 @@ class GuidedSecurityToolsServiceTest {
 
         assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
                 .isSameAs(failure);
-        verify(clientSpiderService, org.mockito.Mockito.never()).startClientSpider("https://app.example.com", null);
+        verify(clientSpiderService, never()).startClientSpider("https://app.example.com", null);
         verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
     }
 
@@ -649,13 +650,13 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.generateGuidedReport("https://example.com/admin", "html", "light");
 
-        assertThat(response).contains("Guided report generated.");
-        assertThat(response).contains("Scope: https://example.com/admin");
-        assertThat(response).contains("Path: /tmp/report.html");
-        assertThat(response).contains("Next Actions:");
-        assertThat(response).contains("Report readback: call zap_report_read with the Path above");
-        assertThat(response).contains("Internal evidence: call zap_scan_history_release_evidence with target filter https://example.com/admin");
-        assertThat(response).contains("Customer summary: call zap_scan_history_customer_handoff");
+        assertThat(response).contains("Guided report generated.")
+            .contains("Scope: https://example.com/admin")
+            .contains("Path: /tmp/report.html")
+            .contains("Next Actions:")
+            .contains("Report readback: call zap_report_read with the Path above")
+            .contains("Internal evidence: call zap_scan_history_release_evidence with target filter https://example.com/admin")
+            .contains("Customer summary: call zap_scan_history_customer_handoff");
 
         int readbackIndex = response.indexOf("Report readback: call zap_report_read");
         int evidenceIndex = response.indexOf("Internal evidence: call zap_scan_history_release_evidence");
@@ -677,13 +678,12 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.readGuidedReport("/tmp/report.html", 1000);
 
-        assertThat(response).contains("Guided report readback.");
-        assertThat(response).contains("Path: /tmp/report.html");
-        assertThat(response).contains("review the generated artifact");
-        assertThat(response).contains("Next Actions:");
-        assertThat(response).contains("Internal evidence: call zap_scan_history_release_evidence");
-        assertThat(response).contains("Customer summary: call zap_scan_history_customer_handoff");
-        assertThat(response).contains("<html>report</html>");
+        assertThat(response).contains("Guided report readback.")
+            .contains("Path: /tmp/report.html")
+            .contains("review the generated artifact").contains("Next Actions:")
+            .contains("Internal evidence: call zap_scan_history_release_evidence")
+            .contains("Customer summary: call zap_scan_history_customer_handoff")
+            .contains("<html>report</html>");
     }
 
     @Test
@@ -693,13 +693,13 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.getGuidedFindingsSummary("https://example.com/admin");
 
-        assertThat(response).contains("Guided findings summary.");
-        assertThat(response).contains("Scope: https://example.com/admin");
-        assertThat(response).contains("Use: first-pass triage");
-        assertThat(response).contains("Next Actions:");
-        assertThat(response).contains("Drill down: call zap_findings_details");
-        assertThat(response).contains("Report: call zap_report_generate");
-        assertThat(response).contains("# Findings Summary");
+        assertThat(response).contains("Guided findings summary.")
+            .contains("Scope: https://example.com/admin")
+            .contains("Use: first-pass triage")
+            .contains("Next Actions:")
+            .contains("Drill down: call zap_findings_details")
+            .contains("Report: call zap_report_generate")
+            .contains("# Findings Summary");
     }
 
     @Test
@@ -715,17 +715,17 @@ class GuidedSecurityToolsServiceTest {
                 5
         );
 
-        assertThat(response).contains("Guided findings details.");
-        assertThat(response).contains("Scope: https://example.com/admin");
-        assertThat(response).contains("Mode: raw instances");
-        assertThat(response).contains("Plugin ID Filter: 40018");
-        assertThat(response).contains("Alert Name Filter: SQL Injection");
-        assertThat(response).contains("Requested Limit: 5");
-        assertThat(response).contains("inspect concrete URLs, params, evidence, and attack samples");
-        assertThat(response).contains("Next Actions:");
-        assertThat(response).contains("Report: call zap_report_generate");
-        assertThat(response).contains("Handoff: after a report exists, call zap_scan_history_release_evidence");
-        assertThat(response).contains("Alert instances returned: 1 of 1");
+        assertThat(response).contains("Guided findings details.")
+            .contains("Scope: https://example.com/admin")
+            .contains("Mode: raw instances")
+            .contains("Plugin ID Filter: 40018")
+            .contains("Alert Name Filter: SQL Injection")
+            .contains("Requested Limit: 5")
+            .contains("inspect concrete URLs, params, evidence, and attack samples")
+            .contains("Next Actions:")
+            .contains("Report: call zap_report_generate")
+            .contains("Handoff: after a report exists, call zap_scan_history_release_evidence")
+            .contains("Alert instances returned: 1 of 1");
     }
 
     @Test

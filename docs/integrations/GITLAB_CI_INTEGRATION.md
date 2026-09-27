@@ -12,13 +12,10 @@ The artifact contracts emitted by that helper are defined in [CI Gate Contracts]
 
 ## Current Status
 
-As of March 28, 2026, GitLab is not part of the actively validated near-term acceptance bar for the current 2-3 engineer roadmap.
-
-- GitHub Actions is the primary CI target under active hosted validation.
-- The GitLab files in this repo are kept as example templates and a customer-triggered starting point.
-- Reopen full GitLab parity work only when a design partner or paid pilot is blocked on GitLab.
-
-If you need GitLab today, treat this guide as a starting template that you validate in your own GitLab project instead of assuming first-class maintained parity.
+GitHub Actions is the CI integration covered by this repository's hosted
+validation. The GitLab files are example templates that reuse the shared MCP
+helper. Validate runner permissions, service connectivity, secrets, and artifact
+handling in your own GitLab project before relying on them as a release gate.
 
 ## What The GitLab Template Does
 

@@ -6,7 +6,9 @@ The integration ships as a reusable composite action in [`.github/actions/zap-se
 
 This repository also carries a repo-local validation workflow in [`.github/workflows/zap-security-gate-juice-shop.yml`](../../.github/workflows/zap-security-gate-juice-shop.yml). That workflow builds the current image, starts Juice Shop on the same compose network, and runs the local action twice so contract artifacts are exercised inside real GitHub Actions.
 
-As of March 28, 2026, GitHub Actions is the only CI target under active hosted validation in the current 2-3 engineer roadmap. GitLab remains an example/template path until customer demand justifies parity work.
+GitHub Actions is the CI integration covered by this repository's hosted
+validation. The GitLab examples require validation in your own GitLab project;
+they do not have the same hosted validation coverage.
 
 The artifact contracts emitted by that helper are defined in [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md).
 For the team operating model around seed mode, artifact review, baseline

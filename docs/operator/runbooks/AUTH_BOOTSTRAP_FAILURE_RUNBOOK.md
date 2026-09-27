@@ -3,18 +3,19 @@
 Use this runbook when `zap_auth_session_prepare`, `zap_auth_session_validate`,
 or an authenticated guided scan fails.
 
-This is a triage guide, not a sales shield. If a flow is unsupported, say it is
-unsupported. Do not burn operator time pretending configuration will fix a
-capability gap.
+Check the support boundary before changing configuration. An unsupported flow
+requires a supported alternative or an implementation change.
 
 ## Current Support Boundary
 
-Supported in the current gateway window:
+Supported flows:
 
 - form-login bootstrap backed by ZAP context and user configuration
 - bearer/API-key profile preparation at the gateway layer
 - guided `zap_auth_session_prepare` and `zap_auth_session_validate`
-- authenticated guided crawl/attack with prepared form-login sessions
+- authenticated guided HTTP crawl and active scan with prepared form-login sessions
+- authenticated direct or queued Client Spider crawl (`strategy=client`) with
+  prepared browser sessions
 
 Important caveat:
 
@@ -23,7 +24,8 @@ Important caveat:
 
 Unsupported today:
 
-- browser/AJAX guided crawl with `authSessionId`
+- AJAX guided crawl (`strategy=browser`) with `authSessionId`
+- prepared browser sessions with `auto`, HTTP, AJAX, or guided active scans
 - MFA, SSO, CAPTCHA, device-code, or step-up login flows
 - generic customer-specific auth adapters without implementation work
 - automatic repair of broken login indicators or target-side auth behavior
@@ -58,8 +60,10 @@ Then classify the failure:
 | `authentication_failed` | ZAP could not authenticate the configured user | Check credentials, login URL, field names, and login indicators. |
 | `usernameField contains unsupported characters` or `passwordField contains unsupported characters` | Form field name could inject extra ZAP auth config parameters | Use simple field names containing letters, numbers, dot, underscore, dash, colon, or brackets. |
 | `Unknown auth session ID` | Session ID lost or wrong | Re-run `zap_auth_session_prepare`. |
-| `form-login sessions only` | Header session passed to guided scan | Use a form-login session or omit `authSessionId`. |
-| Browser strategy rejects auth | Authenticated browser crawl is unsupported today | Use HTTP guided crawl with form-login, or treat AJAX authenticated crawl as future work. |
+| `form-login sessions only` | Header session passed to an HTTP crawl or active scan | Prepare a form-login session for authenticated HTTP crawling or active scanning. |
+| `strategy=client requires a prepared browser authentication session` | Wrong profile kind for Client Spider | Prepare a `kind=browser` profile and use `strategy=client`. |
+| `Prepared browser authentication sessions currently require strategy=client` | Browser session used with another strategy or active scan | Use `strategy=client` for this session; prepare a separate form profile for HTTP crawl or active scan. |
+| `strategy=browser (AJAX Spider) does not support authSessionId` | Prepared session passed to AJAX Spider | Use Client Spider with a browser profile or HTTP crawl with a form profile. |
 
 ## Form-Login Prepare Failures
 
@@ -101,8 +105,8 @@ Validation output should include:
 - `contextId=...`
 - `userId=...`
 
-If `likelyAuthenticated` is anything other than `true`, do not continue to an
-authenticated scan and pretend the result is meaningful.
+Continue to an authenticated scan only after validation reports
+`likelyAuthenticated=true`.
 
 ## Authorized Target Checklist: Form-Login Prepare And Validate
 
@@ -180,16 +184,25 @@ For production-like use:
 
 ## Guided Scan Failures With `authSessionId`
 
-Authenticated guided crawl/attack currently accepts prepared form-login
-sessions only.
+Choose a profile kind that matches the operation:
 
-If `zap_crawl_start` or `zap_attack_start` fails after adding `authSessionId`:
+| Operation | Required profile kind | Supported strategy |
+| --- | --- | --- |
+| `zap_crawl_start` with Client Spider | `browser` | `client` (direct or queued) |
+| `zap_crawl_start` with traditional spider | `form` | `http`; authenticated `auto` uses HTTP |
+| `zap_attack_start` | `form` | Guided active scan |
 
-1. Validate the session first with `zap_auth_session_validate`.
-2. Confirm the session reports `Auth Kind: form`.
+AJAX Spider (`strategy=browser`) does not accept `authSessionId`. A browser
+profile supports Client Spider only; do not reuse it for a guided active scan.
+See the [Client Spider guide](https://danieltse.org/mcp-zap-server/scanning/client-spider/).
+
+If an authenticated guided operation fails:
+
+1. Validate the session with `zap_auth_session_validate` and require `Valid: true`.
+2. Confirm `Auth Kind` matches the operation in the table.
 3. Confirm the session reports `Engine Binding: ZAP context/user ready`.
-4. For crawl, use the HTTP strategy. Browser/AJAX strategy with auth is not
-   supported in this window.
+4. For a browser profile, use a protected validation target whose response proves
+   login and confirm fresh crawl requests reach authenticated content.
 5. Re-run prepare if the session ID is unknown or stale.
 
 If validation is failing, the scan is not the problem. Fix auth first.
@@ -214,8 +227,8 @@ belong only in restricted operator logs. Secret values must never be logged.
 
 Escalate as product work, not operator configuration, when:
 
-- the target requires MFA, SSO, CAPTCHA, or JavaScript-heavy login automation
-- the user needs authenticated AJAX/browser crawl
+- the target requires MFA, SSO, CAPTCHA, or custom login steps beyond the supported browser profile
+- the user needs authenticated AJAX crawl (`strategy=browser`)
 - bearer/API-key header injection is required for guided execution
 - multiple customers hit the same unsupported auth pattern
 

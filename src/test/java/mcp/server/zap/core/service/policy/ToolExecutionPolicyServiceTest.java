@@ -206,22 +206,21 @@ class ToolExecutionPolicyServiceTest {
 
         Map<String, Object> details = capturedPolicyDetails(observabilityService, "dry_run_allow", "corr-spoof");
         assertThat(details)
-                .containsEntry("tool", "zap_attack_start")
-                .containsEntry("mode", "dry_run")
-                .containsEntry("allowed", true)
-                .containsEntry("reason", "core reason wins")
-                .containsEntry("policyProvider", "sample");
-        assertThat(details)
-                .doesNotContainEntry("tool", "spoofed_tool")
-                .doesNotContainEntry("allowed", false)
-                .doesNotContainKeys("clientId", "workspaceId", "correlationId", "outcome");
+            .containsEntry("tool", "zap_attack_start")
+            .containsEntry("mode", "dry_run")
+            .containsEntry("allowed", true)
+            .containsEntry("reason", "core reason wins")
+            .containsEntry("policyProvider", "sample")
+            .doesNotContainEntry("tool", "spoofed_tool")
+            .doesNotContainEntry("allowed", false)
+            .doesNotContainKeys("clientId", "workspaceId", "correlationId", "outcome");
         assertThat(objectMap(details, "extensionDetails"))
-                .containsEntry("tool", "spoofed_tool")
-                .containsEntry("allowed", false)
-                .containsEntry("clientId", "spoofed-client")
-                .containsEntry("workspaceId", "spoofed-workspace")
-                .containsEntry("correlationId", "spoofed-correlation")
-                .containsEntry("outcome", "allow");
+            .containsEntry("tool", "spoofed_tool")
+            .containsEntry("allowed", false)
+            .containsEntry("clientId", "spoofed-client")
+            .containsEntry("workspaceId", "spoofed-workspace")
+            .containsEntry("correlationId", "spoofed-correlation")
+            .containsEntry("outcome", "allow");
     }
 
     @Test

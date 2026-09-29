@@ -193,13 +193,13 @@ class GuidedAuthSessionServiceTest {
     @SuppressWarnings("unchecked")
     void sameProfileContextScopeIsImmutableAcrossCallerPaths() throws Exception {
         Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
-        when(contextUserService.upsertContext(eq("shop-form-auth"), anyList(), anyList(), eq(true)))
-                .thenReturn(Map.of("contextId", "1"));
+        when(contextUserService.upsertContext("shop-form-auth", anyList(), anyList(), true))
+            .thenReturn(Map.of("contextId", "1"));
         when(contextUserService.upsertUser(
-                eq("1"),
-                eq("zap-scan-user"),
-                startsWith("username=zap-scan-user&password="),
-                eq(true)
+            "1",
+            "zap-scan-user",
+            startsWith("username=zap-scan-user&password="),
+            true
         )).thenReturn(Map.of("userId", "7", "userName", "zap-scan-user"));
 
         service.prepareSession("shop-form", "https://shop.example.com/admin");
@@ -267,11 +267,11 @@ class GuidedAuthSessionServiceTest {
         service.prepareSession("shop-form", "https://shop.example.com");
 
         verify(contextUserService).configureContextAuthentication(
-                eq("1"),
-                eq("formBasedAuthentication"),
-                eq(authMethodConfig(loginUrl, "user.name", "pass-word")),
-                eq(".*Logout.*"),
-                eq(".*Sign in.*")
+            "1",
+            "formBasedAuthentication",
+            authMethodConfig(loginUrl, "user.name", "pass-word"),
+            ".*Logout.*",
+            ".*Sign in.*"
         );
     }
 
@@ -491,17 +491,17 @@ class GuidedAuthSessionServiceTest {
                 eq(true)
         )).thenReturn(Map.of("contextId", contextId));
         when(contextUserService.configureContextAuthentication(
-                eq(contextId),
-                eq("formBasedAuthentication"),
-                eq(authMethodConfig("https://shop.example.com/login", "username", "password")),
-                eq(".*Logout.*"),
-                eq(".*Sign in.*")
+            contextId,
+            "formBasedAuthentication",
+            authMethodConfig("https://shop.example.com/login", "username", "password"),
+            ".*Logout.*",
+            ".*Sign in.*"
         )).thenReturn(Map.of("contextId", contextId));
         when(contextUserService.upsertUser(
-                eq(contextId),
-                eq("zap-scan-user"),
-                startsWith("username=zap-scan-user&password="),
-                eq(true)
+            contextId,
+            "zap-scan-user",
+            startsWith("username=zap-scan-user&password="),
+            true
         )).thenReturn(Map.of("userId", userId, "userName", "zap-scan-user"));
     }
 

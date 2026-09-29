@@ -17,7 +17,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class FindingsServiceTest {
+class FindingsServiceTest {
     private EngineFindingAccess findingAccess;
     private ScanHistoryLedgerService scanHistoryLedgerService;
     private FindingsService service;

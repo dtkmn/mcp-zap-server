@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use the existing atomic `TokenBucketRateLimiter.attempt` result for MCP client rate decisions and rejection retry delays, with one policy snapshot per attempt. This adopts the API already provided by gateway-core `0.10.0` without upgrading gateway artifacts.
+
 ## [0.13.0]
 
 Version-specific changes are listed below. Release preparation and a merge to

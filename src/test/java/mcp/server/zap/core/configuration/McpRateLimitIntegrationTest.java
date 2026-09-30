@@ -3,6 +3,7 @@ package mcp.server.zap.core.configuration;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,5 +42,9 @@ class McpRateLimitIntegrationTest extends AbstractMcpProtectionIntegrationTest {
 
         assertThat(responseBody).contains("rate_limited");
         assertThat(responseBody).contains("client_request_rate");
+        long retryAfterSeconds = OBJECT_MAPPER.readTree(responseBody).path("retryAfterSeconds").asLong();
+        assertThat(retryAfterSeconds).isBetween(1L, 1200L);
+        assertThat(rejected.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER))
+                .isEqualTo(Long.toString(retryAfterSeconds));
     }
 }

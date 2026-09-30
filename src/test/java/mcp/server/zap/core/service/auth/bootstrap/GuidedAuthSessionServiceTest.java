@@ -193,13 +193,13 @@ class GuidedAuthSessionServiceTest {
     @SuppressWarnings("unchecked")
     void sameProfileContextScopeIsImmutableAcrossCallerPaths() throws Exception {
         Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
-        when(contextUserService.upsertContext("shop-form-auth", anyList(), anyList(), true))
-            .thenReturn(Map.of("contextId", "1"));
+        when(contextUserService.upsertContext(eq("shop-form-auth"), anyList(), anyList(), eq(true)))
+                .thenReturn(Map.of("contextId", "1"));
         when(contextUserService.upsertUser(
-            "1",
-            "zap-scan-user",
-            startsWith("username=zap-scan-user&password="),
-            true
+                eq("1"),
+                eq("zap-scan-user"),
+                startsWith("username=zap-scan-user&password="),
+                eq(true)
         )).thenReturn(Map.of("userId", "7", "userName", "zap-scan-user"));
 
         service.prepareSession("shop-form", "https://shop.example.com/admin");
@@ -220,7 +220,7 @@ class GuidedAuthSessionServiceTest {
                 .isEqualTo(exclusions.getAllValues().get(1))
                 .hasSize(1);
 
-        String profileScope = firstScope.get(0);
+        String profileScope = firstScope.getFirst();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com")).isTrue();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com/admin")).isTrue();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com/admin/users")).isTrue();
@@ -267,11 +267,11 @@ class GuidedAuthSessionServiceTest {
         service.prepareSession("shop-form", "https://shop.example.com");
 
         verify(contextUserService).configureContextAuthentication(
-            "1",
-            "formBasedAuthentication",
-            authMethodConfig(loginUrl, "user.name", "pass-word"),
-            ".*Logout.*",
-            ".*Sign in.*"
+                eq("1"),
+                eq("formBasedAuthentication"),
+                eq(authMethodConfig(loginUrl, "user.name", "pass-word")),
+                eq(".*Logout.*"),
+                eq(".*Sign in.*")
         );
     }
 
@@ -353,8 +353,8 @@ class GuidedAuthSessionServiceTest {
         String prepared = service.prepareSession(profileId, "https://shop.example.com");
         String response = service.validateSession(extractSessionId(prepared));
 
-        assertThat(response).contains("Valid: false", "Outcome: authentication_failed");
-        assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
+        assertThat(response).contains("Valid: false", "Outcome: authentication_failed")
+            .doesNotContain("example-password-value", "scan-password.txt");
     }
 
     @Test
@@ -386,8 +386,8 @@ class GuidedAuthSessionServiceTest {
                 "Valid: false",
                 "Outcome: authentication_failed",
                 "likelyAuthenticated=null"
-        );
-        assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
+        )
+                .doesNotContain("example-password-value", "scan-password.txt");
     }
 
     @Test
@@ -491,17 +491,17 @@ class GuidedAuthSessionServiceTest {
                 eq(true)
         )).thenReturn(Map.of("contextId", contextId));
         when(contextUserService.configureContextAuthentication(
-            contextId,
-            "formBasedAuthentication",
-            authMethodConfig("https://shop.example.com/login", "username", "password"),
-            ".*Logout.*",
-            ".*Sign in.*"
+                eq(contextId),
+                eq("formBasedAuthentication"),
+                eq(authMethodConfig("https://shop.example.com/login", "username", "password")),
+                eq(".*Logout.*"),
+                eq(".*Sign in.*")
         )).thenReturn(Map.of("contextId", contextId));
         when(contextUserService.upsertUser(
-            contextId,
-            "zap-scan-user",
-            startsWith("username=zap-scan-user&password="),
-            true
+                eq(contextId),
+                eq("zap-scan-user"),
+                startsWith("username=zap-scan-user&password="),
+                eq(true)
         )).thenReturn(Map.of("userId", userId, "userName", "zap-scan-user"));
     }
 

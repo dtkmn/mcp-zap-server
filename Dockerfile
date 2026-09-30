@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM gradle:9.7.1-jdk25@sha256:d868117760a7c92214705f47ed173116a5d13e58d68702f974ff30acd062737e AS builder
+FROM --platform=$BUILDPLATFORM gradle:9.8.0-jdk25@sha256:30f0c2e94f2b91cffaa192cebc86f1ba8efc574b9a8e93b33164e5f2ed839c08 AS builder
 WORKDIR /usr/src/app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle

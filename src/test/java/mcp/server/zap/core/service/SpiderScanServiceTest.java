@@ -12,7 +12,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class SpiderScanServiceTest {
+
+class SpiderScanServiceTest {
     private EngineScanExecution engineScanExecution;
     private SpiderScanService service;
     private UrlValidationService urlValidationService;

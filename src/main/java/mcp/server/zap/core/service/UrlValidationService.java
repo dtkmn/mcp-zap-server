@@ -206,11 +206,8 @@ public class UrlValidationService {
             if (hostLiteral == null || !isInCidr(hostLiteral, pattern)) {
                 return false;
             }
-            if ((allowLocalhost && hostLiteral.isLoopbackAddress())
-                || isBypassablePrivateNetworkSafetyCidr(pattern, hostLiteral)) {
-                return false;
-            }
-            return true;
+            return (!allowLocalhost || !hostLiteral.isLoopbackAddress())
+                    && !isBypassablePrivateNetworkSafetyCidr(pattern, hostLiteral);
         }
         if (allowLocalhost && isLocalhost(host)) {
             return false;

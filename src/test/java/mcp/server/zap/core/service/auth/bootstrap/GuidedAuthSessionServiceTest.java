@@ -220,7 +220,7 @@ class GuidedAuthSessionServiceTest {
                 .isEqualTo(exclusions.getAllValues().get(1))
                 .hasSize(1);
 
-        String profileScope = firstScope.get(0);
+        String profileScope = firstScope.getFirst();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com")).isTrue();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com/admin")).isTrue();
         assertThat(Pattern.matches(profileScope, "https://shop.example.com/admin/users")).isTrue();
@@ -353,8 +353,8 @@ class GuidedAuthSessionServiceTest {
         String prepared = service.prepareSession(profileId, "https://shop.example.com");
         String response = service.validateSession(extractSessionId(prepared));
 
-        assertThat(response).contains("Valid: false", "Outcome: authentication_failed");
-        assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
+        assertThat(response).contains("Valid: false", "Outcome: authentication_failed")
+            .doesNotContain("example-password-value", "scan-password.txt");
     }
 
     @Test
@@ -386,8 +386,8 @@ class GuidedAuthSessionServiceTest {
                 "Valid: false",
                 "Outcome: authentication_failed",
                 "likelyAuthenticated=null"
-        );
-        assertThat(response).doesNotContain("example-password-value", "scan-password.txt");
+        )
+                .doesNotContain("example-password-value", "scan-password.txt");
     }
 
     @Test

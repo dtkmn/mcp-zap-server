@@ -11,8 +11,9 @@ class HttpOriginTest {
     void canonicalizesCaseAndDefaultPort() {
         HttpOrigin origin = HttpOrigin.fromConfiguredOrigin("https://SHOP.Example.com:443");
 
-        assertThat(origin).isEqualTo(HttpOrigin.fromUrl("https://shop.example.com/account"));
-        assertThat(origin.toString()).isEqualTo("https://shop.example.com");
+        assertThat(origin)
+            .isEqualTo(HttpOrigin.fromUrl("https://shop.example.com/account"))
+            .hasToString("https://shop.example.com");
     }
 
     @Test

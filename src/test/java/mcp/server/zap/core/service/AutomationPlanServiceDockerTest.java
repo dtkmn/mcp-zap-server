@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 @Tag("docker")
 @Testcontainers
-public class AutomationPlanServiceDockerTest {
+class AutomationPlanServiceDockerTest {
     private static final Pattern PLAN_ID_PATTERN = Pattern.compile("Plan ID: ([^\\n]+)");
     private static final Pattern PLAN_FILE_PATTERN = Pattern.compile("Plan File: ([^\\n]+)");
     private static final Duration AUTOMATION_API_READY_TIMEOUT = Duration.ofSeconds(120);

@@ -78,7 +78,7 @@ class ApiSchemaImportServiceDockerTest {
     }
 
     @Test
-    void importGraphqlSchemaUrlWorksAgainstRealZap() throws Exception {
+    void importGraphqlSchemaUrlWorksAgainstRealZap() {
         String response = service.importGraphqlSchemaUrl(
                 "http://api-schema-fixtures/graphql",
                 "http://api-schema-fixtures/schema.graphql"
@@ -89,7 +89,7 @@ class ApiSchemaImportServiceDockerTest {
     }
 
     @Test
-    void importSoapWsdlUrlWorksAgainstRealZap() throws Exception {
+    void importSoapWsdlUrlWorksAgainstRealZap() {
         String response = service.importSoapWsdlUrl("http://api-schema-fixtures/service.wsdl");
 
         assertTrue(response.contains("SOAP/WSDL import completed"));

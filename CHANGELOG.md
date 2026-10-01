@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Use the existing atomic `TokenBucketRateLimiter.attempt` result for MCP client rate decisions and rejection retry delays, with one policy snapshot per attempt. This adopts the API already provided by gateway-core `0.10.0` without upgrading gateway artifacts.
+- Use the existing atomic `TokenBucketRateLimiter.attempt` result for MCP client rate decisions and rejection retry delays, with one policy snapshot per attempt. The atomic API was introduced in gateway-core `0.10.0`.
+- Upgrade the published Gateway Core and Spring WebFlux adapter dependencies to `0.11.0`. Keep ZAP's explicit Jackson `3.2.3` BOM and configured authorization/wildcard policies.
+- Derive the active catalog and validate all exposed-tool permission mappings together through `McpToolAccessRegistry.activeToolRegistry`, using the same `ToolCallbackProvider` as server registration. Remove the duplicate startup validator; missing mappings are reported together, and invalid or duplicate active names fail startup.
+- Adopt `McpGatewayAuditObservers` once per governance signal, composing it with metrics-only callbacks. Authentication, policy and tool-completion events still use ZAP's existing audit sink. Add typed adapter-rejection audits and the bounded `mcp.zap.adapter.rejections` reason counter.
+- Align governance audits with the shared schema: authorization includes `reason` and scope lists even when empty; protection uses outcome `rejected` with a separate `errorCode`; invalid-request and adapter diagnostics use outcome `rejected` and omit unavailable workspace/tool identities. Governance records no longer repeat the principal as `data.clientId`, and protection no longer includes `data.toolFamily`; tool-family metrics remain available. The Actuator sink retains its `anonymous` fallback for absent principals. Update audit queries using the previous fields/outcomes; see the [observability guide](./docs/src/content/docs/operations/observability.md#development-gateway-0110-audit-schema).
+
+### Fixed
+
+- Mark `baseUrl` as required in the guided and expert findings-read tool schemas, matching the existing runtime requirement for a target with visible scan-history evidence. Update the findings workflow documentation; existing target/visibility checks and optional filters are retained.
+- Correct the JWT deployment guidance to use the supplied Compose configuration and required JWT enablement settings. Clarify that JWT authentication does not isolate the shared ZAP engine; deployments require a dedicated ZAP instance per trust boundary.
 
 ## [0.13.0]
 

@@ -162,7 +162,16 @@ If the wait times out:
 
 Start with `zap_findings_summary`.
 
-Use `baseUrl` when you want target-scoped results.
+Pass the scanned target as `baseUrl`, for example:
+
+```json
+{"baseUrl": "http://juice-shop:3000"}
+```
+
+`baseUrl` is required for both `zap_findings_summary` and
+`zap_findings_details`. Findings reads also require visible scan-history
+evidence for that target. Requests without a target or visible evidence are
+rejected; these tools do not provide a global read of the shared ZAP session.
 
 Then call `zap_findings_details` when you need:
 
@@ -172,7 +181,7 @@ Then call `zap_findings_details` when you need:
 - URLs, params, evidence, or attack samples
 
 For first-pass user review, do not start with raw alert instances. Start with
-summary, then drill down.
+summary, then drill down using the same `baseUrl`.
 
 ### 8. Generate And Read A Report
 

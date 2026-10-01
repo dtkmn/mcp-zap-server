@@ -30,6 +30,8 @@ MCP ZAP Server exposes a practical observability baseline:
 | `mcp.zap.tool.executions` | Timer | MCP tool duration and outcome |
 | `mcp.zap.audit.events` | Counter | Audit-stream emission volume |
 | `mcp.zap.protection.rejections` | Counter | Rate-limit, quota, and overload rejections |
+| `mcp.zap.invalid_mcp_requests` | Counter | Malformed MCP request rejections by reason |
+| `mcp.zap.adapter.rejections` | Counter | Development Gateway 0.11.0 integration: typed adapter rejections by bounded reason code |
 | `mcp.protection.rate_limited` | Counter | Legacy/shared rate-limit rejection count |
 | `mcp.protection.workspace_quota_rejections` | Counter | Legacy/shared workspace-quota rejection count |
 | `mcp.protection.backpressure_rejections` | Counter | Legacy/shared overload rejection count |
@@ -51,7 +53,53 @@ High-signal audit event types include:
 - `tool_execution`
 - `protection_rejection`
 
-Audit data includes `correlationId`, `clientId`, and `workspaceId` so operators can pivot between request logs and audit events.
+Audit events include available identity and correlation fields so operators can
+pivot between request logs and audit events. Authentication, policy and tool
+execution records retain their application-owned details. Diagnostic records do
+not establish a caller or workspace identity.
+
+### Development Gateway 0.11.0 Audit Schema
+
+The development integration uses published Gateway `0.11.0` libraries. It is not
+included in the released ZAP `v0.13.0` runtime, which uses Gateway `0.10.0`.
+Its WebFlux callbacks publish one shared audit event per signal, after updating
+ZAP's existing domain metrics. The schema below applies when running that
+development integration:
+
+| Type | Outcome | Data |
+| --- | --- | --- |
+| `authorization` | `allowed`, `denied`, or `warn` | `action`, `reason`, `requiredScopes`, `grantedScopes`; available `workspaceId` and `correlationId` |
+| `protection_rejection` | `rejected` | `tool`, `errorCode`, `reason`, `retryAfterSeconds`, `workspaceId`; available context `correlationId` |
+| `invalid_mcp_request` | `rejected` | Available `reason`, server HTTP `requestId`, and `correlationId` |
+| `adapter_rejection` | `rejected` | Typed `reason` code, server HTTP `requestId`, and available `correlationId` |
+
+The sink adds `data.outcome` and stores the event principal separately. It uses
+`anonymous` when the shared diagnostic event has no principal; it does not
+infer a workspace, client or tool from those diagnostics. `requestId` identifies
+the HTTP request, not its JSON-RPC id. Audit storage is the configured bounded
+in-memory Actuator repository plus structured logs; the bridge adds no durable
+storage or delivery guarantee.
+
+When migrating queries from the released `v0.13.0` schema:
+
+- Read the event principal instead of `data.clientId` for governance records.
+- Authorization now includes `reason` and both scope lists, including empty lists.
+  Supplied action/workspace values retain their spelling in audit details;
+  metric tags continue to use ZAP's existing normalization.
+- Filter protection audits by `outcome=rejected` and use `data.errorCode` to
+  distinguish `rate_limited`, quota or backpressure decisions. The old outcome
+  was the error code. `toolFamily` remains a protection metric tag but is absent
+  from the shared audit record.
+- Invalid-request outcomes become `rejected`, with the diagnostic reason in
+  `data.reason`; diagnostics omit the previous inferred default workspace.
+
+An allowed authorization followed by a protection rejection produces two
+different governance events. These events occur before execution and do not prove
+tool completion. A separate `tool_execution` event records actual completion.
+Audit-sink exceptions still propagate through the filter and can prevent the
+normal response and downstream execution. See the
+[Core integration reference](https://danieltse.org/mcp-gateway-core/reference/zap-integration/)
+for the configured server exercise and boundaries.
 
 ## Trace Validation
 

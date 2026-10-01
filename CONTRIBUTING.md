@@ -43,6 +43,11 @@ docker compose up -d
 
 See [README.md](./README.md) and [QUICK_START_SECURITY.md](./QUICK_START_SECURITY.md) for local setup and auth details.
 
+For the shared governance wiring, use the
+[Core integration reference](https://danieltse.org/mcp-gateway-core/reference/zap-integration/).
+It maps the published libraries to application code and exercises allowed and
+denied calls through initialized MCP sessions with synthetic test credentials.
+
 ### Docs site
 
 ```bash

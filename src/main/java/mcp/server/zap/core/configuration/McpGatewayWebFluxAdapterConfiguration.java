@@ -1,7 +1,9 @@
 package mcp.server.zap.core.configuration;
 
 import java.util.Arrays;
+import mcp.gateway.core.audit.GatewayAuditSink;
 import mcp.gateway.core.tool.McpToolRegistry;
+import mcp.gateway.spring.webflux.McpGatewayAuditObservers;
 import mcp.gateway.spring.webflux.McpGatewayAuthorizationMode;
 import mcp.gateway.spring.webflux.McpGatewayCorrelationIdResolver;
 import mcp.gateway.spring.webflux.McpGatewayWebFluxGovernanceFilter;
@@ -31,10 +33,10 @@ public class McpGatewayWebFluxAdapterConfiguration {
                                         ToolScopeRegistry toolScopeRegistry) {
         // Derive availability from the same provider used by Spring AI, not the
         // full permission inventory, which also describes disabled tools.
-        McpToolRegistry knownTools = toolScopeRegistry.getToolRegistry();
-        return McpToolRegistry.of(Arrays.stream(toolCallbackProvider.getToolCallbacks())
-                .map(callback -> knownTools.requireDescriptor(callback.getToolDefinition().name()))
-                .toList());
+        return toolScopeRegistry.getToolAccessRegistry().activeToolRegistry(
+                Arrays.stream(toolCallbackProvider.getToolCallbacks())
+                        .map(callback -> callback.getToolDefinition().name())
+                        .toList());
     }
 
     @Bean
@@ -45,11 +47,13 @@ public class McpGatewayWebFluxAdapterConfiguration {
             ToolAuthorizationService toolAuthorizationService,
             McpAbuseProtectionService protectionService,
             ObservabilityService observabilityService,
+            GatewayAuditSink auditEventSink,
             @Value("${spring.ai.mcp.server.streamable-http.mcp-endpoint:/mcp}") String mcpEndpoint,
             @Value("${mcp.server.request.max-body-bytes:262144}") int maxBodyBytes,
             @Value("${mcp.server.security.enabled:true}") boolean securityEnabled,
             @Value("${mcp.server.security.mode:api-key}") String securityMode) {
         McpGatewayCorrelationIdResolver correlationIdResolver = RequestLogContext::correlationId;
+        McpGatewayAuditObservers audits = McpGatewayAuditObservers.of(auditEventSink);
         return McpGatewayWebFluxGovernanceFilter.builder(
                         jsonMapperProvider.getIfAvailable(() -> JsonMapper.builder().build()),
                         (authentication, exchange, invocation) ->
@@ -71,23 +75,24 @@ public class McpGatewayWebFluxAdapterConfiguration {
                 )
                 .protection(protectionService::isEnabled, protectionService::evaluate)
                 .toolRegistry(mcpActiveToolRegistry)
-                .authorizationObserver(observation -> observabilityService.recordAuthorization(
-                        observation.actionName(),
-                        observation.outcome(),
-                        observation.reason(),
-                        observation.requiredScopes(),
-                        observation.grantedScopes(),
-                        observation.context() == null ? null : observation.context().principalId(),
-                        observation.context() == null ? null : observation.context().workspaceId(),
-                        observation.context() == null ? null : observation.context().correlationId()
-                ))
-                .protectionRejectionObserver((decision, context) ->
-                        observabilityService.recordProtectionRejection(
-                                decision,
-                                context == null ? null : context.correlationId()
-                        ))
+                .authorizationObserver(observation -> {
+                    observabilityService.recordAuthorizationMetrics(
+                            observation.actionName(), observation.outcome(), observation.reason());
+                    audits.record(observation);
+                })
+                .protectionRejectionObserver((decision, context) -> {
+                    observabilityService.recordProtectionRejectionMetrics(decision);
+                    audits.rejected(decision, context);
+                })
                 .correlationIdResolver(correlationIdResolver)
-                .invalidRequestObserver(observabilityService::recordInvalidMcpRequest)
+                .invalidRequestObserver((reason, requestId, correlationId) -> {
+                    observabilityService.recordInvalidMcpRequestMetrics(reason);
+                    audits.rejected(reason, requestId, correlationId);
+                })
+                .adapterRejectionObserver((reason, requestId, correlationId) -> {
+                    observabilityService.recordAdapterRejectionMetrics(reason);
+                    audits.rejected(reason, requestId, correlationId);
+                })
                 .build();
     }
 

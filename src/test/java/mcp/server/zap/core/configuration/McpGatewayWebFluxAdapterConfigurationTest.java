@@ -6,9 +6,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
+import mcp.gateway.core.audit.GatewayAuditSink;
 import mcp.gateway.core.tool.McpToolRegistry;
+import mcp.server.zap.core.observability.ObservabilityService;
+import mcp.server.zap.core.service.authz.ToolAuthorizationService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
+import mcp.server.zap.core.service.protection.McpAbuseProtectionService;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.definition.ToolDefinition;
@@ -50,11 +56,30 @@ class McpGatewayWebFluxAdapterConfigurationTest {
     }
 
     @Test
-    void registeredCallbackWithoutAnExistingDescriptorFailsClosed() {
+    void reportsAllMissingActiveMappingsInSortedOrderBeforeReturningARegistry() {
         assertThatThrownBy(() -> configuration.mcpActiveToolRegistry(
-                provider("zap_passive_scan_status", "unmapped_test_tool"), scopeRegistry))
+                provider("zeta_unmapped_tool", "zap_passive_scan_status", "alpha_unmapped_tool"), scopeRegistry))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("unknown MCP tool: unmapped_test_tool");
+                .hasMessage("Missing permission mappings for MCP tools: [alpha_unmapped_tool, zeta_unmapped_tool]");
+    }
+
+    @Test
+    void missingActivePermissionMappingsPreventConfiguredApplicationStartup() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(McpGatewayWebFluxAdapterConfiguration.class)
+                .withBean(ToolCallbackProvider.class, () -> provider("zeta_unmapped_tool", "alpha_unmapped_tool"))
+                .withBean(ToolScopeRegistry.class, () -> scopeRegistry)
+                .withBean(ClientWorkspaceResolver.class, () -> mock(ClientWorkspaceResolver.class))
+                .withBean(ToolAuthorizationService.class, () -> mock(ToolAuthorizationService.class))
+                .withBean(McpAbuseProtectionService.class, () -> mock(McpAbuseProtectionService.class))
+                .withBean(ObservabilityService.class, () -> mock(ObservabilityService.class))
+                .withBean(GatewayAuditSink.class, () -> mock(GatewayAuditSink.class))
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasRootCauseInstanceOf(IllegalArgumentException.class)
+                            .hasRootCauseMessage("Missing permission mappings for MCP tools: [alpha_unmapped_tool, zeta_unmapped_tool]");
+                });
     }
 
     @Test
@@ -62,7 +87,7 @@ class McpGatewayWebFluxAdapterConfigurationTest {
         assertThatThrownBy(() -> configuration.mcpActiveToolRegistry(
                 provider("zap_passive_scan_status", "zap_passive_scan_status"), scopeRegistry))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("duplicate MCP tool descriptor: zap_passive_scan_status");
+                .hasMessage("duplicate exposed MCP tool name: zap_passive_scan_status");
     }
 
     private ToolCallbackProvider provider(String... names) {

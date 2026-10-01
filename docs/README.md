@@ -28,6 +28,7 @@ content already committed to Git history.
 ## Project Layout
 
 - `src/content/docs/` - public documentation content rendered by Starlight
+- `scripts/sync-docs.mjs` - Astro integration generating shared pages from canonical repository Markdown
 - `src/styles/terminal-ops.css` - terminal/operator visual theme customization
 - `src/pages/[legacy].html.astro` - compatibility redirects for old Jekyll `.html` URLs
 - `public/demo.html` - static demo video page
@@ -46,6 +47,32 @@ Useful checks:
 npm run check
 npm run build
 ```
+
+## Maintaining Shared Pages
+
+The following pages have one maintained repository source. Their website
+versions are generated into the ignored `src/content/docs/generated/`
+directory; do not maintain a second copy of their bodies in the website tree.
+
+| Page | Canonical source | Website route |
+| --- | --- | --- |
+| Self-Serve First Run | [SELF_SERVE_FIRST_RUN.md](getting-started/SELF_SERVE_FIRST_RUN.md) | `/getting-started/self-serve-first-run/` |
+| Production Simulation Runbook | [PRODUCTION_SIMULATION_RUNBOOK.md](operator/runbooks/PRODUCTION_SIMULATION_RUNBOOK.md) | `/operations/production-simulation-runbook/` |
+| Seeded API Gate Playbook | [SEEDED_API_GATE_PLAYBOOK.md](scanning/SEEDED_API_GATE_PLAYBOOK.md) | `/scanning/seeded-api-gate-playbook/` |
+| Extension API Release Policy | [EXTENSION_API_RELEASE_POLICY.md](extensions/EXTENSION_API_RELEASE_POLICY.md) | `/extensions/extension-api-release-policy/` |
+| Security Policy | [SECURITY.md](../SECURITY.md) | `/reference/security-policy/` |
+
+The shared-docs integration in `astro.config.mjs` generates these pages before
+Astro reads content during development, checks, and builds. The page titles and
+existing routes are configured in `scripts/sync-docs.mjs`. It also maps the
+first-run guide's repository-relative Cursor example link to its GitHub source
+URL.
+
+The development server watches the canonical sources, including root
+`SECURITY.md`, and regenerates their website pages when they change. Keep
+existing section headings or retain an explicit anchor when renaming them so
+inbound links continue to work. Keep the root `SECURITY.md` as the security
+policy GitHub reads. `npm run preview` serves the last build.
 
 ## Notes
 

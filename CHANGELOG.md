@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct the JWT deployment guidance to use the supplied Compose configuration and required JWT enablement settings. Clarify that JWT authentication does not isolate the shared ZAP engine; deployments require a dedicated ZAP instance per trust boundary.
 - Correct the scan workflow and tool-surface guidance for Client Spider browser authentication, guided report reads, and expert-only controls. Use the `spiderAjax` add-on installation identifier.
 - Clarify protected MCP header authentication versus token-management request bodies, and trace errors through the returned correlation header without assuming every error body includes correlation fields.
+- Generate the first-run guide, production simulation runbook, seeded API gate playbook, extension release policy, and security policy website pages from their canonical repository documents. Preserve their routes and section anchors, and reconcile Codex setup, evidence exports, and rollback/restore guidance into the shared sources.
 
 ## [0.13.0]
 

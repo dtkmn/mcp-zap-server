@@ -23,6 +23,8 @@ Before you start, the environment should already satisfy the production baseline
 - ZAP remains private-only
 - MCP auth and scope enforcement are enabled
 - durable Postgres-backed state is configured for HA MCP deployments
+- Postgres-backed scan history is enabled when pilot evidence must survive
+  restart, failover, or handoff; queued evidence also requires durable scan-job state
 - observability paths, log retention, and alert routing are live
 - rollback and disaster-recovery runbooks are available to the operator
 
@@ -62,6 +64,8 @@ Run one complete supported journey against a staging target:
 
 If authenticated scanning is part of the customer promise, include that flow too.
 
+<a id="3-pilot-proof-scenario-governed-authenticated-scan"></a>
+
 ### 3A. Pilot Proof Scenario: Governed Authenticated Scan
 
 This scenario validates a prepared form-login session through HTTP crawling,
@@ -74,7 +78,8 @@ Pre-flight configuration:
 - target is a staging app you are authorized to test
 - MCP auth is enabled for the pilot client
 - the pilot client has only the scopes needed for auth prepare/validate, guided
-  crawl, guided attack, passive scan wait, findings, and report generation
+  crawl, guided attack, passive scan wait, findings, report generation, and
+  scan-history evidence; include report-read permission when using MCP readback
 - `MCP_POLICY_MODE` is `enforce` or `dry-run`
 - `MCP_POLICY_BUNDLE_FILE` or `MCP_POLICY_BUNDLE` points at the pilot policy
   bundle
@@ -87,7 +92,7 @@ Run sequence:
 
 1. Call `zap_auth_session_prepare` with the staging `profileId` and a
    `targetUrl` on that profile's authorized origin.
-2. Record the response `correlationId`, `Auth Profile`, `Authorized Origin`,
+2. Record the response `X-Correlation-Id` header, `Auth Profile`, `Authorized Origin`,
    `Context ID`, `User ID`, provider, and `Engine Binding`. Keep the raw session
    ID only for this live workflow; retain only its SHA-256 fingerprint.
 3. Call `zap_auth_session_validate` with the raw session ID.
@@ -104,15 +109,30 @@ Run sequence:
     and backend scan/job ID if present.
 11. Poll `zap_attack_status` until complete enough for the pilot target.
 12. Call `zap_passive_scan_wait` again before reading evidence.
-13. Call `zap_findings_summary`, then `zap_findings_details` for one material
-    alert family if findings exist.
+13. Call `zap_findings_summary` with the scanned target as `baseUrl`, then
+    `zap_findings_details` with the same `baseUrl` for one material alert family
+    if findings exist.
 14. Call `zap_report_generate` and record the report artifact path.
-15. If report readback is enabled in the chosen surface, call the report-read
-    path and confirm the artifact is retrievable.
-16. Query audit events or the configured audit sink for matching
+15. If validating report retrieval through MCP, call `zap_report_read`
+    with the returned `reportPath` and confirm the artifact is retrievable.
+16. Call `zap_scan_history_release_evidence` with `releaseName` set to the pilot
+    label, a `target` filter, and a bounded `limit`. Review the bundle summary and
+    every warning.
+17. Call `zap_scan_history_customer_handoff` with `handoffName` set to the same
+    label and the same target filter and limit. Review its Acceptance Checklist
+    and redaction contract before attaching the curated summary to a customer
+    package. Keep raw ledger JSON internal unless explicitly reviewed and redacted.
+18. Query audit events or the configured audit sink for matching
     `policy_decision` events on the crawl/attack/report correlation IDs.
-17. Confirm the policy outcome is `allow`, `deny`, `dry_run_allow`, or
+19. Confirm the policy outcome is `allow`, `deny`, `dry_run_allow`, or
     `dry_run_deny` according to the selected policy mode and bundle.
+
+Evidence exports are bounded snapshots of retained, caller-accessible ledger
+entries. Labels identify the package; they do not filter the run. Choose the
+target filter and limit carefully, check for truncation warnings, and confirm the
+selected records belong to this staged exercise. Direct scan launch records do
+not establish successful completion. Review report contents separately before
+sharing them; the curated summary does not attach or redact report files.
 
 Expected operator evidence:
 
@@ -125,6 +145,8 @@ Expected operator evidence:
 | Passive evidence | Passive scan wait result after crawl and after attack. |
 | Findings evidence | Findings summary and one details drilldown when findings exist. |
 | Report evidence | Generated report artifact path and readback/storage confirmation where available. |
+| Release evidence | `zap_scan_history_release_evidence` bundle with the selected targets, summary counts, and reviewed warnings. |
+| Customer handoff | `zap_scan_history_customer_handoff` curated summary with the Acceptance Checklist and redaction contract reviewed; named caveats for unchecked items. |
 | Secret handling | No raw secret in client response, logs, audit event, report, ticket, or screenshot. |
 
 Concrete blockers must become follow-up issues before sign-off. Common examples:
@@ -172,6 +194,8 @@ If the deployment is single-replica, record that HA recovery is out of scope for
 - one passive-scan wait result after scan traffic
 - one findings summary result
 - one generated report artifact reference
+- one release/pilot evidence bundle with its warnings reviewed
+- one curated customer handoff summary with its acceptance result and caveats
 - relevant correlation IDs
 - HA failover evidence where applicable
 - rollback revision and validation notes
@@ -189,11 +213,16 @@ Do not call the environment production-ready unless all of the following are tru
 - policy decisions were observable and matched the configured mode
 - no duplicate scan start occurred during failover testing
 - rollback and restore evidence are recorded
+- the release evidence window and customer handoff checklist were reviewed;
+  unchecked items and warnings have an explicit owner and acceptance decision
 - unresolved gaps have a documented owner and acceptance decision
+
+Accepted caveats must state the narrower deployment or scan path being approved.
+A failed required workflow is a failed proof.
 
 ## Suggested Sign-Off Comment
 
-Use this structure when posting the final sign-off on the cloud-readiness gate:
+Use this structure to record the staged simulation decision:
 
 ```text
 Staged production simulation completed on YYYY-MM-DD.
@@ -218,12 +247,13 @@ Evidence:
 - policy_decision audit event reference
 - guided operation ID and backend scan/job ID
 - report artifact location
+- release evidence bundle summary, warnings, and customer handoff checklist result
 - restore timestamps / rollback revision
 
 Result:
 - pass / pass with accepted caveats / fail
 
-Chief/Principal engineering sign-off:
+Principal engineering sign-off:
 - approved / not approved
 - name
 - date
@@ -235,7 +265,7 @@ Chief/Principal engineering sign-off:
 - [Multi-Replica Deployment Requirements](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/)
 - [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/)
 - [Release Evidence Handoff Runbook](https://danieltse.org/mcp-zap-server/operations/release-evidence-handoff-runbook/)
-- [Auth Bootstrap Failure Runbook](./AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md)
+- [Auth Bootstrap Failure Runbook](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md)
 
 Maintain rollback and disaster-recovery procedures for your own deployment.
 The repository does not provide provider-specific runbooks for those operations.

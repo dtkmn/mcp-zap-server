@@ -5,14 +5,14 @@ import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import mcp.gateway.core.audit.GatewayAuditSink;
 import mcp.gateway.core.context.GatewayExecutionContext;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
+import mcp.gateway.spring.webflux.McpAdapterRejectionReason;
 import mcp.server.zap.core.gateway.GatewayCoreAuditAdapter;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -97,14 +97,7 @@ public class ObservabilityService {
         );
     }
 
-    public void recordAuthorization(String action,
-                                    String outcome,
-                                    String reason,
-                                    List<String> requiredScopes,
-                                    List<String> grantedScopes,
-                                    String clientId,
-                                    String workspaceId,
-                                    String correlationId) {
+    public void recordAuthorizationMetrics(String action, String outcome, String reason) {
         String normalizedAction = normalize(action, "unknown");
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
@@ -114,25 +107,9 @@ public class ObservabilityService {
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
         ).increment();
-
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("action", normalizedAction);
-        if (requiredScopes != null && !requiredScopes.isEmpty()) {
-            details.put("requiredScopes", requiredScopes);
-        }
-        if (grantedScopes != null && !grantedScopes.isEmpty()) {
-            details.put("grantedScopes", grantedScopes);
-        }
-
-        auditEventSink.publish(
-                "authorization",
-                clientId,
-                normalizedOutcome,
-                auditDetails(correlationId, clientId, workspaceId, details)
-        );
     }
 
-    public void recordProtectionRejection(McpAbuseProtectionDecision decision, String correlationId) {
+    public void recordProtectionRejectionMetrics(McpAbuseProtectionDecision decision) {
         if (decision == null || decision.allowed()) {
             return;
         }
@@ -144,39 +121,21 @@ public class ObservabilityService {
                 "reason", normalize(decision.reason(), "unknown"),
                 "toolFamily", toolFamily
         ).increment();
-
-        auditEventSink.publish(
-                "protection_rejection",
-                decision.clientId(),
-                normalize(decision.errorCode(), "unknown"),
-                auditDetails(correlationId, decision.clientId(), decision.workspaceId(), Map.of(
-                        "reason", normalize(decision.reason(), "unknown"),
-                        "tool", normalize(decision.toolName(), "unknown"),
-                        "toolFamily", toolFamily,
-                        "retryAfterSeconds", Math.max(1L, decision.retryAfterSeconds())
-                ))
-        );
     }
 
-    public void recordInvalidMcpRequest(String reason, String requestId, String correlationId) {
+    public void recordInvalidMcpRequestMetrics(String reason) {
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
                 "mcp.zap.invalid_mcp_requests",
                 "reason", normalizedReason
         ).increment();
+    }
 
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("reason", normalizedReason);
-        if (requestId != null && !requestId.isBlank()) {
-            details.put("requestId", requestId);
-        }
-
-        auditEventSink.publish(
-                "invalid_mcp_request",
-                "anonymous",
-                normalizedReason,
-                auditDetails(correlationId, "anonymous", "default-workspace", details)
-        );
+    public void recordAdapterRejectionMetrics(McpAdapterRejectionReason reason) {
+        meterRegistry.counter(
+                "mcp.zap.adapter.rejections",
+                "reason", reason.code()
+        ).increment();
     }
 
     public void recordToolExecution(String toolName,

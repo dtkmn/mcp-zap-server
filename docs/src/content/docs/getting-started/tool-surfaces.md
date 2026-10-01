@@ -78,7 +78,7 @@ Use `guided` when:
 - you want a smaller, intent-first tool surface
 - you are onboarding a new client quickly
 - you want the server to choose direct versus queue execution for crawl and attack flows
-- you want guided form-login auth bootstrap without exposing raw ZAP context/user tools
+- you want guided target authentication without exposing raw ZAP context/user tools
 - you want scan history evidence without switching to the raw queue or report surfaces
 - you do not need raw queue administration, raw auth-context setup, scan-policy tuning, or Automation Framework control
 
@@ -90,7 +90,7 @@ Use `guided` when:
 - direct scans: `zap_spider_*`, `zap_active_scan_*`, `zap_ajax_spider*`, `zap_client_spider_*` (Client Spider is introduced in `v0.13.0`)
 - queue lifecycle: `zap_queue_*`, `zap_scan_job_*`
 - API imports: `zap_import_*`
-- findings and reports: `zap_alert_*`, `zap_findings_snapshot`, `zap_findings_diff`, `zap_view_templates`, `zap_generate_report`, `zap_report_read`
+- findings and reports: `zap_alert_*`, `zap_get_findings_summary`, `zap_findings_snapshot`, `zap_findings_diff`, `zap_view_templates`, `zap_generate_report`
 - authenticated scanning setup: `zap_context_*`, `zap_user_*`, `zap_auth_test_user`
 - Automation Framework: `zap_automation_*`
 - scan-policy controls: `zap_scan_policies_list`, `zap_scan_policy_view`, `zap_scan_policy_rule_set`
@@ -101,13 +101,15 @@ Use `expert` when:
 - you need low-level authenticated scanning workflows
 - you need queue job inspection, retry, or dead-letter control
 - you want raw API schema import tools instead of the guided import wrapper
-- you want findings snapshots, diffs, or raw report artifact reads
+- you want findings snapshots, diffs, or custom report templates
 - you want Automation Framework plans
 - you need direct control over ZAP active-scan policies
 
 ## How The Docs Map To Surfaces
 
-These docs now call out expert-only pages explicitly.
+Check each page's tool names and surface requirements. A page can describe
+guided workflows and optional expert tools without requiring expert mode for
+the guided workflow.
 
 Pages that matter to almost everyone:
 
@@ -122,12 +124,18 @@ Pages that matter to almost everyone:
 - [Passive Scan](../../scanning/passive-scan/)
 - [Scan History Ledger](../../operations/scan-history-ledger/)
 
-Pages that require `expert`:
+Pages covering both guided and expert workflows:
 
 - [AJAX Spider](../../scanning/ajax-spider/)
 - [API Schema Imports](../../scanning/api-schema-imports/)
-- [Scan Policy Controls](../../scanning/scan-policy-controls/)
 - [Findings and Reports](../../scanning/findings-and-reports/)
+
+Use `expert` only for the raw tools and additional controls marked as expert
+on those pages. `zap_report_read` is available on both surfaces.
+
+Pages that require `expert`:
+
+- [Scan Policy Controls](../../scanning/scan-policy-controls/)
 - [Automation Framework](../../scanning/automation-framework/)
 
 ## Recommendation

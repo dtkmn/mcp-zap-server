@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Mark `baseUrl` as required in the guided and expert findings-read tool schemas, matching the existing runtime requirement for a target with visible scan-history evidence. Update the findings workflow documentation; existing target/visibility checks and optional filters are retained.
 - Correct the JWT deployment guidance to use the supplied Compose configuration and required JWT enablement settings. Clarify that JWT authentication does not isolate the shared ZAP engine; deployments require a dedicated ZAP instance per trust boundary.
+- Correct the scan workflow and tool-surface guidance for Client Spider browser authentication, guided report reads, and expert-only controls. Use the `spiderAjax` add-on installation identifier.
+- Clarify protected MCP header authentication versus token-management request bodies, and trace errors through the returned correlation header without assuming every error body includes correlation fields.
 
 ## [0.13.0]
 

@@ -105,4 +105,4 @@ If you bring your own ZAP deployment, make sure the matching add-ons are install
 
 - `graphql`
 - `soap`
-- `ajaxSpider` when your next step depends on browser crawling
+- `spiderAjax` when your next step uses AJAX Spider crawling

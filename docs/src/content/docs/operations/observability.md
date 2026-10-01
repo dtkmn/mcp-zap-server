@@ -105,11 +105,24 @@ for the configured server exercise and boundaries.
 
 Recommended validation flow:
 
-1. send a request with `X-Correlation-Id`
-2. confirm the response echoes `X-Correlation-Id`
-3. confirm error bodies include `correlationId`
-4. search `request.completed` logs for that ID
-5. query `/actuator/auditevents` and confirm related audit entries include the same ID
+1. Send a request with a safe `X-Correlation-Id`, such as `trace-check-1`.
+2. Read the response's `X-Correlation-Id` and use that returned value for tracing;
+   missing or unsafe caller values may be replaced.
+3. Search `request.completed` logs for that ID.
+4. When auditing is enabled and the request emits an audit event, query
+   `/actuator/auditevents` and match `data.correlationId` in retained entries.
+
+Error-body fields depend on the response path:
+
+| Response | Body tracing fields |
+| --- | --- |
+| HTTP governance errors: permission denial (`403`), protection rejection (`429`), invalid message shape (`400`), or body-size limit (`413`) | Normally include `correlationId` and the server HTTP `requestId`. |
+| Gateway JSON-RPC errors, such as an unknown or disabled tool (`-32602`) | Contain only `jsonrpc`, JSON-RPC `id`, and `error.code` / `error.message`; trace through the response header. |
+| Development Gateway `0.11.0`: invalid execution context (`500`) | Contains only `{"error":"invalid_execution_context"}`; trace through the response header. |
+
+The JSON-RPC `id` and server HTTP `requestId` are separate identifiers. Use the
+response correlation header across these paths, including errors whose bodies
+omit `correlationId`.
 
 ## Bundled Assets
 

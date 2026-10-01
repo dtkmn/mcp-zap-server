@@ -157,7 +157,8 @@ This server tracks the [Model Context Protocol Security Best Practices](https://
 - **Token Passthrough Prevention**: Server validates JWT tokens issued specifically for this server (custom issuer `mcp-zap-server`), not accepting arbitrary third-party tokens
 - **Session Authentication Boundary**: MCP session IDs are transport state only. Authentication is checked from request credentials, not from the session ID alone.
 - **Local Server Authorization**: HTTP transport requires authentication via JWT or API key for protected endpoints (`/mcp`)
-- **Secure Token Storage**: Tokens are transmitted via HTTP headers only, never in URLs or request bodies
+- **Protected MCP Call Credentials**: Protected `/mcp` calls authenticate through `X-API-Key` or, in JWT mode, `Authorization: Bearer` headers. URL parameters and request bodies are not used for that authentication.
+- **Token Management Requests**: When JWT support is enabled, `/auth/token` accepts the API key in a JSON request body or the `X-API-Key` header; `/auth/refresh` accepts `refreshToken` and `/auth/revoke` accepts `token` in JSON request bodies. These are the supported credential-exchange, refresh, and revocation operations.
 - **Scope Minimization**: API-key and JWT clients can be constrained with per-tool scopes. The server has an authoritative tool-to-scope registry and fails startup if an exposed MCP tool lacks a mapping.
 - **Wildcard Migration Control**: Legacy `*` scopes remain available only when `MCP_SECURITY_AUTHORIZATION_ALLOW_WILDCARD=true`. Shared or production deployments should disable wildcard scopes after explicit client grants are configured.
 - **Abuse Protection**: Rate limiting, workspace quotas, backpressure decisions, and audit events are available for shared deployments.

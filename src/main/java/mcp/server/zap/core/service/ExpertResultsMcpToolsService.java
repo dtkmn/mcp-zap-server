@@ -20,10 +20,10 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_alert_details",
-            description = "Get grouped alert metadata for a target, plugin ID, or alert name."
+            description = "Get grouped alert metadata for a required target baseUrl covered by scan evidence visible to the caller, optionally narrowed by plugin ID or alert name."
     )
     public String getAlertDetails(
-            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl,
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
             @ToolParam(required = false, description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
             @ToolParam(required = false, description = "Alert name to narrow to a single alert family (optional)") String alertName
     ) {
@@ -32,10 +32,10 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_alert_instances",
-            description = "Get bounded alert instances for a target, plugin ID, or alert name."
+            description = "Get bounded alert instances for a required target baseUrl covered by scan evidence visible to the caller, optionally narrowed by plugin ID or alert name."
     )
     public String getAlertInstances(
-            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl,
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
             @ToolParam(required = false, description = "ZAP plugin ID to narrow to a single alert family (optional)") String pluginId,
             @ToolParam(required = false, description = "Alert name to narrow to a single alert family (optional)") String alertName,
             @ToolParam(required = false, description = "Maximum instances to return (optional, default: 20, max: 100)") Integer limit
@@ -45,20 +45,20 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_findings_snapshot",
-            description = "Export a normalized findings snapshot as JSON so CI or release workflows can save a stable baseline."
+            description = "Export a normalized findings snapshot as JSON for a required target baseUrl covered by scan evidence visible to the caller, so CI or release workflows can save a stable baseline."
     )
     public String exportFindingsSnapshot(
-            @ToolParam(required = false, description = "Base URL to filter alerts (optional)") String baseUrl
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl
     ) {
         return findingsService.exportFindingsSnapshot(baseUrl);
     }
 
     @Tool(
             name = "zap_findings_diff",
-            description = "Compare the current findings set against a previously exported findings snapshot."
+            description = "Compare current findings for a required target baseUrl covered by scan evidence visible to the caller against a previously exported findings snapshot."
     )
     public String diffFindings(
-            @ToolParam(required = false, description = "Base URL to filter current alerts (optional)") String baseUrl,
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
             @ToolParam(description = "JSON findings snapshot returned earlier by zap_findings_snapshot") String baselineSnapshot,
             @ToolParam(description = "Maximum grouped result lines to render") Integer maxGroups
     ) {
@@ -84,9 +84,11 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_get_findings_summary",
-            description = "Get a high-level markdown summary of scan findings, grouped by risk and alert type."
+            description = "Get a high-level markdown summary of scan findings for a required target baseUrl covered by scan evidence visible to the caller, grouped by risk and alert type."
     )
-    public String getFindingsSummary(@ToolParam(required = false, description = "Base URL to filter (optional)") String baseUrl) {
+    public String getFindingsSummary(
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl
+    ) {
         return findingsService.getFindingsSummary(baseUrl);
     }
 

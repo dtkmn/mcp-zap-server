@@ -1,7 +1,10 @@
 package mcp.server.zap.core.service;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
@@ -18,6 +21,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -684,6 +691,31 @@ class GuidedSecurityToolsServiceTest {
             .contains("Internal evidence: call zap_scan_history_release_evidence")
             .contains("Customer summary: call zap_scan_history_customer_handoff")
             .contains("<html>report</html>");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"zap_findings_summary", "zap_findings_details"})
+    void guidedFindingsDiscoveryRequiresTargetWithoutRequiringOptionalFilters(String toolName) throws Exception {
+        ToolCallback callback = Arrays.stream(MethodToolCallbackProvider.builder()
+                        .toolObjects(service)
+                        .build()
+                        .getToolCallbacks())
+                .filter(tool -> toolName.equals(tool.getToolDefinition().name()))
+                .findFirst()
+                .orElseThrow();
+        JsonNode schema = new ObjectMapper().readTree(callback.getToolDefinition().inputSchema());
+        List<String> requiredProperties = new ArrayList<>();
+        for (JsonNode property : schema.path("required")) {
+            requiredProperties.add(property.asString());
+        }
+
+        assertThat(requiredProperties).containsExactly("baseUrl");
+        if ("zap_findings_details".equals(toolName)) {
+            assertThat(schema.path("properties").propertyNames())
+                    .containsExactlyInAnyOrder("baseUrl", "pluginId", "alertName", "includeInstances", "limit");
+        } else {
+            assertThat(schema.path("properties").propertyNames()).containsExactly("baseUrl");
+        }
     }
 
     @Test

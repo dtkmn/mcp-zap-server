@@ -2,6 +2,7 @@ package mcp.server.zap.core.configuration;
 
 import mcp.server.zap.core.service.JwtService;
 import mcp.server.zap.core.service.TokenBlacklistService;
+import mcp.server.zap.core.service.revocation.TokenRevocationUnavailableException;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
@@ -357,6 +358,17 @@ public class SecurityConfig {
             
             return filterWithAuthentication(exchange, chain, authentication, authMethod);
 
+        } catch (TokenRevocationUnavailableException e) {
+            log.warn("JWT revocation check unavailable");
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "revocation_unavailable",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
+            return authenticationErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
         } catch (JwtException e) {
             log.warn("JWT validation failed");
             observabilityService.recordAuthentication(
@@ -479,8 +491,12 @@ public class SecurityConfig {
      * Return 401 Unauthorized response with error message.
      */
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         exchange.getResponse().getHeaders().add("WWW-Authenticate", "API-Key");
+        return authenticationErrorResponse(exchange, HttpStatus.UNAUTHORIZED, message);
+    }
+
+    private Mono<Void> authenticationErrorResponse(ServerWebExchange exchange, HttpStatus status, String message) {
+        exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().set(HttpHeaders.CONTENT_TYPE, "application/json");
 
         String correlationId = RequestLogContext.correlationId(exchange);

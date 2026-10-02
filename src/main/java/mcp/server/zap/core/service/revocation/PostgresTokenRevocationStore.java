@@ -19,7 +19,6 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     private static final Pattern SQL_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private final TokenRevocationStoreProperties.Postgres properties;
-    private final InMemoryTokenRevocationStore fallbackStore = new InMemoryTokenRevocationStore();
     private final String tableName;
 
     /**
@@ -48,12 +47,15 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                 statement.setTimestamp(3, Timestamp.from(now));
                 statement.executeUpdate();
             }
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
+        }
 
-            // Keep table bounded during normal revoke activity.
+        // Housekeeping must not negate an already persisted revocation.
+        try {
             cleanupExpired();
-        } catch (Exception e) {
-            handleFailure("token revoke", e);
-            fallbackStore.revoke(tokenId, expiresAt);
+        } catch (TokenRevocationUnavailableException e) {
+            log.warn("Expired JWT revocation cleanup failed after a successful revocation");
         }
     }
 
@@ -79,9 +81,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                 int affectedRows = statement.executeUpdate();
                 return affectedRows > 0;
             }
-        } catch (Exception e) {
-            handleFailure("conditional token revoke", e);
-            return fallbackStore.revokeIfActive(tokenId, expiresAt);
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -100,9 +101,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                     return resultSet.next();
                 }
             }
-        } catch (Exception e) {
-            handleFailure("token revocation lookup", e);
-            return fallbackStore.isRevoked(tokenId);
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -118,9 +118,11 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                 statement.setTimestamp(1, Timestamp.from(Instant.now()));
                 statement.executeUpdate();
             }
-        } catch (Exception e) {
-            handleFailure("expired token cleanup", e);
-            fallbackStore.cleanupExpired();
+        } catch (SQLException e) {
+            if (properties.isFailFast()) {
+                throw new TokenRevocationUnavailableException(e);
+            }
+            log.warn("Expired JWT revocation cleanup failed");
         }
     }
 
@@ -141,9 +143,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                     return 0;
                 }
             }
-        } catch (Exception e) {
-            handleFailure("token revocation count", e);
-            return fallbackStore.size();
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -158,9 +159,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                  Statement statement = connection.createStatement()) {
                 statement.executeUpdate(sql);
             }
-        } catch (Exception e) {
-            handleFailure("token revocation clear", e);
-            fallbackStore.clear();
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -190,15 +190,5 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
             );
         }
         return value;
-    }
-
-    /**
-     * Apply fail-fast or warning fallback policy on backend failures.
-     */
-    private void handleFailure(String operation, Exception e) {
-        if (properties.isFailFast()) {
-            throw new IllegalStateException("Postgres JWT revocation " + operation + " failed", e);
-        }
-        log.warn("Postgres JWT revocation {} failed (using in-memory fallback): {}", operation, e.getMessage());
     }
 }

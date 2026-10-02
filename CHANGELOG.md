@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Make PostgreSQL authoritative for JWT revocation and refresh-token consumption, with no process-local fallback. Backend failures return sanitized HTTP `503` responses for protected JWT requests and token refresh, revoke, and validate endpoints; uncertain writes return no token pair or success acknowledgment. Reject invalid backend configuration at startup and default `failFast` to `true`; `false` only relaxes expired-record cleanup. See the [development failure and recovery guidance](./docs/src/content/docs/security-modes/jwt-authentication.md#development-postgresql-failure-behavior).
 - Mark `baseUrl` as required in the guided and expert findings-read tool schemas, matching the existing runtime requirement for a target with visible scan-history evidence. Update the findings workflow documentation; existing target/visibility checks and optional filters are retained.
 - Correct the JWT deployment guidance to use the supplied Compose configuration and required JWT enablement settings. Clarify that JWT authentication does not isolate the shared ZAP engine; deployments require a dedicated ZAP instance per trust boundary.
 - Correct the scan workflow and tool-surface guidance for Client Spider browser authentication, guided report reads, and expert-only controls. Use the `spiderAjax` add-on installation identifier.

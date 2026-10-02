@@ -19,6 +19,7 @@ public class TokenRevocationStoreProperties {
         private String username = "";
         private String password = "";
         private String tableName = "jwt_token_revocation";
-        private boolean failFast = false;
+        // Applies only to explicit expired-record cleanup; security operations always fail closed.
+        private boolean failFast = true;
     }
 }

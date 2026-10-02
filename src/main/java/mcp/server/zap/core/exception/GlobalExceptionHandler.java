@@ -3,6 +3,7 @@ package mcp.server.zap.core.exception;
 import lombok.extern.slf4j.Slf4j;
 import mcp.gateway.core.policy.ToolPolicyDeniedException;
 import mcp.server.zap.core.gateway.EngineBusyException;
+import mcp.server.zap.core.service.revocation.TokenRevocationUnavailableException;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.logging.RequestLogContext;
 import org.springframework.http.HttpStatus;
@@ -75,6 +76,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex, ServerWebExchange exchange) {
         log.warn("Invalid argument: {}", ex.getMessage());
         return buildErrorResponse(exchange, HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
+    }
+
+    /**
+     * Acknowledge backend unavailability without exposing database diagnostics.
+     */
+    @ExceptionHandler(TokenRevocationUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleTokenRevocationUnavailableException(
+            TokenRevocationUnavailableException ex, ServerWebExchange exchange) {
+        log.warn("Authoritative token revocation operation unavailable");
+        return buildErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage());
     }
 
     /**

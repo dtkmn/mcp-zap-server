@@ -73,7 +73,8 @@ mcp:
             username: ${JWT_REVOCATION_STORE_POSTGRES_USERNAME:}
             password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
             table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
-            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
+            # Only explicit expiration cleanup may be fail-soft; authentication never falls back.
+            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:true}
       bootstrap:
         # Profiles are operator-owned configuration. Each profile binds one exact credential
         # reference to one canonical HTTP(S) origin; callers provide only profileId + targetUrl.

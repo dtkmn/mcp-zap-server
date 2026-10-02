@@ -15,7 +15,7 @@ This matters most for shared or production deployments where static API keys are
 - short-lived access tokens and long-lived refresh tokens
 - refresh-token rotation with replay rejection
 - token revocation
-- shared revocation state with either in-memory or Postgres backends
+- local in-memory revocation state or shared Postgres revocation state
 - the same scope model for API-key and JWT clients
 
 ## Required Settings
@@ -38,7 +38,8 @@ JWT_REVOCATION_STORE_POSTGRES_URL=jdbc:postgresql://postgres:5432/mcp_zap
 JWT_REVOCATION_STORE_POSTGRES_USERNAME=mcp_user
 JWT_REVOCATION_STORE_POSTGRES_PASSWORD=change-me
 JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME=jwt_token_revocation
-JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST=false
+# Unreleased development default; v0.13.0 defaults to false.
+JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST=true
 ```
 
 ## Token Flow
@@ -162,6 +163,41 @@ Tradeoff:
 - shared revocation decisions across replicas
 - survives process restarts
 - introduces a database dependency
+
+Apply the bundled, opt-in Flyway migrations to the revocation database before
+starting replicas. Set `DB_MIGRATIONS_ENABLED=true` and the
+`DB_MIGRATIONS_POSTGRES_URL`, `DB_MIGRATIONS_POSTGRES_USERNAME`, and
+`DB_MIGRATIONS_POSTGRES_PASSWORD` settings to the same database used by
+`JWT_REVOCATION_STORE_POSTGRES_*`. The migrations create the default
+`jwt_token_revocation` table; a custom table must match that schema.
+
+### Development: PostgreSQL failure behavior
+
+**Unreleased; not included in `v0.13.0`.** PostgreSQL is authoritative when
+selected: the server never falls back to process-local revocation state. An
+unknown backend, missing PostgreSQL URL, invalid table name, or missing or
+inaccessible revocation table prevents startup. `JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST` now defaults
+to `true`; the previous default was `false`.
+
+Revocation lookups, refresh-token consumption, and revocation writes must succeed
+in PostgreSQL even when `failFast=false`. Backend failures return a sanitized
+HTTP `503` for protected JWT requests and `/auth/refresh`, `/auth/revoke`, and
+`/auth/validate`. A failing or uncertain write produces no token pair or success
+acknowledgment. `/auth/token` and registered API-key authentication do not depend
+on the revocation database.
+
+Previously persisted revocations and refresh-token consumption remain effective
+across replicas after database recovery. Retry an unsuccessful revocation after
+recovery; a failed request does not confirm a durable revocation. If a refresh
+write committed but its result could not be confirmed, the refresh token may be
+consumed without a token pair being delivered. A retry may return `401`; exchange
+the registered API key for a new pair if needed.
+
+Setting `failFast=false` only tolerates failures during explicit cleanup of
+expired records. It never relaxes JWT enforcement or required writes. A cleanup
+failure after a revocation has been persisted does not negate that successful
+revocation. Explicit `in-memory` mode remains local to one process and loses
+state on restart.
 
 ## Scope Model
 

@@ -72,6 +72,24 @@ class SecurityStartupConfigurationTest {
     }
 
     @Test
+    void packagedRevocationConfigurationDefaultsToFailFast() {
+        runner(Map.of("MCP_API_KEY", "registered-key"))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(TokenRevocationStoreProperties.class).getPostgres().isFailFast()).isTrue();
+                });
+    }
+
+    @Test
+    void explicitRevocationCleanupOverrideRemainsBindable() {
+        runner(Map.of("MCP_API_KEY", "registered-key", "JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST", "false"))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(TokenRevocationStoreProperties.class).getPostgres().isFailFast()).isFalse();
+                });
+    }
+
+    @Test
     void shippedConfigurationRejectsPlaceholderCredentialsByDefault() {
         runner(Map.of("MCP_API_KEY", "changeme-default-key"))
                 .run(context -> {
@@ -177,7 +195,7 @@ class SecurityStartupConfigurationTest {
     }
 
     @Configuration(proxyBeanMethods = false)
-    @EnableConfigurationProperties(ApiKeyProperties.class)
+    @EnableConfigurationProperties({ApiKeyProperties.class, TokenRevocationStoreProperties.class})
     @Import(SecurityStartupValidator.class)
     static class StartupConfiguration {
     }

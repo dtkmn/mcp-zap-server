@@ -9,6 +9,7 @@ import mcp.server.zap.core.model.TokenRequest;
 import mcp.server.zap.core.model.TokenResponse;
 import mcp.server.zap.core.service.TokenBlacklistService;
 import mcp.server.zap.core.service.JwtService;
+import mcp.server.zap.core.service.revocation.TokenRevocationUnavailableException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -158,6 +159,9 @@ public class AuthController {
             
             return ResponseEntity.ok(response);
             
+        } catch (TokenRevocationUnavailableException _) {
+            log.warn("Token refresh unavailable because authoritative revocation could not be completed");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         } catch (Exception _) {
             log.error("Error refreshing token");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();

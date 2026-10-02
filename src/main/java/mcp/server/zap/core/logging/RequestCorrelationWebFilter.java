@@ -12,9 +12,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.HandlerMapping;
+import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
+import org.springframework.web.util.pattern.PathPattern;
 import reactor.core.publisher.Mono;
 
 /**
@@ -81,7 +84,7 @@ public class RequestCorrelationWebFilter implements WebFilter, Ordered {
                 : 0;
         String status = statusCode > 0 ? Integer.toString(statusCode) : "unknown";
 
-        observabilityService.recordHttpRequest(method, path, statusCode, clientId, duration);
+        observabilityService.recordHttpRequest(method, metricRoutePattern(exchange), statusCode, clientId, duration);
 
         try (MDC.MDCCloseable ignoredCorrelation = MDC.putCloseable(RequestLogContext.CORRELATION_ID_MDC_KEY, correlationId);
              MDC.MDCCloseable ignoredClient = MDC.putCloseable(RequestLogContext.CLIENT_ID_MDC_KEY, clientId);
@@ -95,6 +98,14 @@ public class RequestCorrelationWebFilter implements WebFilter, Ordered {
             log.info("request.completed correlationId={} method={} path={} status={} durationMs={} signal={} clientId={} workspaceId={}",
                     correlationId, method, path, status, durationMs, signalType, clientId, workspaceId);
         }
+    }
+
+    private String metricRoutePattern(ServerWebExchange exchange) {
+        Object pattern = exchange.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
+        if (!(pattern instanceof PathPattern)) {
+            pattern = exchange.getAttribute(RouterFunctions.MATCHING_PATTERN_ATTRIBUTE);
+        }
+        return pattern instanceof PathPattern pathPattern ? pathPattern.getPatternString() : null;
     }
 
     private String stringAttribute(ServerWebExchange exchange, String attributeName) {

@@ -43,6 +43,24 @@ MCP ZAP Server exposes a practical observability baseline:
 | `mcp.zap.queue.leadership.failures` | Counter | Coordinator acquire and heartbeat failures |
 | `mcp.zap.operations.active` | Gauge | In-memory direct-scan and automation activity |
 
+### Development HTTP Metric Labels
+
+The following changes apply to the development branch and are not included in
+released `v0.13.0`:
+
+- The `path` tag uses the matched route pattern, including configured MCP
+  endpoints and templates such as `/entries/{id}`. Requests rejected before
+  routing, and unmatched requests, use `/unmatched`. Raw paths remain in the
+  structured completion log rather than becoming metric labels.
+- Standard HTTP methods retain their lowercase labels. Extension methods use
+  `other`; unavailable methods and status codes use `unknown`.
+- The custom HTTP timer admits at most 1,016 distinct tag combinations. Further
+  combinations use at most eight overflow series with `path=/overflow`,
+  `method=other`, and `status=unknown`, retaining the original `outcome` and
+  `authenticated` values. This keeps the total at or below 1,024 series even
+  during concurrent registration. Overflow requests still contribute their
+  count and duration; existing series continue to retain their detailed labels.
+
 ## Audit Event Stream
 
 High-signal audit event types include:

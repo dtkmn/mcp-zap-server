@@ -7,8 +7,11 @@ import static org.mockito.Mockito.when;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
 import mcp.gateway.core.audit.GatewayAuditEvent;
 import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.gateway.spring.webflux.McpAdapterRejectionReason;
@@ -18,6 +21,73 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class ObservabilityServiceTest {
+
+    @Test
+    void arbitraryHttpMethodsShareOneMetricWithoutLosingResponseDimensions() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ObservabilityService service = service(meters, new ArrayList<>());
+
+        for (int i = 0; i < 500; i++) {
+            service.recordHttpRequest("EXTENSION" + i, "/mcp", 401, "anonymous", Duration.ofMillis(2));
+        }
+        service.recordHttpRequest("GET", "/auth/validate", 200, "client", Duration.ofMillis(3));
+
+        assertThat(meters.find("mcp.zap.http.requests").timers()).hasSize(2);
+        assertThat(meters.get("mcp.zap.http.requests")
+                .tags("method", "other", "path", "/mcp", "status", "401",
+                        "outcome", "client_error", "authenticated", "false")
+                .timer().count()).isEqualTo(500);
+        assertThat(meters.get("mcp.zap.http.requests")
+                .tags("method", "get", "path", "/auth/validate", "status", "200",
+                        "outcome", "success", "authenticated", "true")
+                .timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentHttpMetricRegistrationIsBoundedAndOverflowStillCountsRequests() throws Exception {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ObservabilityService service = service(meters, new ArrayList<>());
+        List<Callable<Void>> work = new ArrayList<>();
+        for (int i = 0; i < 4000; i++) {
+            int number = i;
+            work.add(() -> {
+                int status = switch (number % 4) {
+                    case 0 -> 200;
+                    case 1 -> 401;
+                    case 2 -> 500;
+                    default -> 0;
+                };
+                service.recordHttpRequest("GET", "/route-" + number, status,
+                        number % 2 == 0 ? "client" : "anonymous", Duration.ofMillis(1));
+                return null;
+            });
+        }
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            for (var result : executor.invokeAll(work)) {
+                result.get();
+            }
+        }
+
+        var timers = meters.find("mcp.zap.http.requests").timers();
+        assertThat(timers.size()).isLessThanOrEqualTo(1024);
+        assertThat(timers.stream().mapToLong(timer -> timer.count()).sum()).isEqualTo(4000);
+        assertThat(timers).anyMatch(timer -> "/overflow".equals(timer.getId().getTag("path")));
+    }
+
+    @Test
+    void invalidHttpStatusesAndMissingRoutesUseFixedLabels() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        ObservabilityService service = service(meters, new ArrayList<>());
+        for (int i = 0; i < 500; i++) {
+            service.recordHttpRequest(null, null, 1000 + i, null, Duration.ZERO);
+        }
+
+        assertThat(meters.find("mcp.zap.http.requests").timers()).hasSize(1);
+        assertThat(meters.get("mcp.zap.http.requests")
+                .tags("method", "unknown", "path", "/unmatched", "status", "unknown",
+                        "outcome", "server_error", "authenticated", "false")
+                .timer().count()).isEqualTo(500);
+    }
 
     @Test
     void governanceMetricsRemainAvailableWithoutPublishingDuplicateAuditEvents() {

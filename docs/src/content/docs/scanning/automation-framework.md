@@ -44,6 +44,23 @@ That gives you:
 
 The returned `Plan File` path is the one to reuse with `zap_automation_plan_artifacts`.
 
+### YAML Limits
+
+The limits below apply to the current development checkout and are not included in released v0.13.0.
+
+Inline plans and workspace plan files must fit within 1 MiB of UTF-8 input and contain a single YAML document with a mapping at the root. Plans must define at least one `env.contexts` entry. The normalized per-run copy must satisfy the same limits, so an expanded plan that exceeds them is rejected before the plan is written or ZAP is called.
+
+The server checks the composed YAML graph before constructing or normalizing the plan. The limits are:
+
+- 10,000 expanded node occurrences, including mapping keys and values
+- expanded depth of 50, including paths through aliases
+- 1,048,576 expanded scalar characters, including mapping keys and repeated scalar aliases
+- 50 aliases to collections and parser nesting depth of 50
+
+Bounded acyclic aliases, merge mappings, and ordinary typed scalars are supported. Cyclic aliases and collection-valued mapping keys are rejected. Mapping keys must be scalars; their parsed scalar values are converted to strings during normalization. YAML object tags that construct arbitrary Java classes are unsupported.
+
+These limits also apply when `zap_automation_plan_artifacts` reads a plan to find its declared reports. Invalid or oversized plan input is rejected before ZAP starts the plan.
+
 ## Example Inline Plan
 
 ```json

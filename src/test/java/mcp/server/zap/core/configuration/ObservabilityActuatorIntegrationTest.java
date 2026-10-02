@@ -119,6 +119,13 @@ class ObservabilityActuatorIntegrationTest {
                 .contains("\"tag\":\"family\"")
                 .contains("\"tag\":\"outcome\"");
 
+        EntityExchangeResult<String> httpMetric = actuator("observer-api-key", "/actuator/metrics/mcp.zap.http.requests");
+        assertThat(httpMetric.getResponseBody())
+                .contains("/mcp")
+                .contains("/auth/validate")
+                .contains("/actuator/metrics/{name}")
+                .contains("/unmatched");
+
         EntityExchangeResult<String> prometheus = actuator("observer-api-key", "/actuator/prometheus");
         assertThat(prometheus.getResponseBody())
                 .contains("mcp_zap_http_requests_seconds_count")

@@ -4,9 +4,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import mcp.gateway.core.audit.GatewayAuditSink;
 import mcp.gateway.core.context.GatewayExecutionContext;
 import mcp.gateway.core.protection.McpAbuseProtectionDecision;
@@ -22,7 +24,11 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ObservabilityService {
+    private static final int MAX_HTTP_REQUEST_SERIES = 1024;
+    // Reserve one overflow series for each outcome/authenticated combination.
+    private static final int MAX_NORMAL_HTTP_REQUEST_SERIES = MAX_HTTP_REQUEST_SERIES - 8;
     private final MeterRegistry meterRegistry;
+    private final Set<HttpRequestMetricTags> httpRequestMetricTags = new HashSet<>();
     private final GatewayAuditSink auditEventSink;
     private final ClientWorkspaceResolver clientWorkspaceResolver;
     private final GatewayCoreAuditAdapter gatewayCoreAuditAdapter;
@@ -38,19 +44,53 @@ public class ObservabilityService {
     }
 
     public void recordHttpRequest(String method,
-                                  String path,
+                                  String routePattern,
                                   int status,
                                   String clientId,
                                   Duration duration) {
+        HttpRequestMetricTags tags = boundedHttpRequestTags(new HttpRequestMetricTags(
+                normalizeHttpMethod(method),
+                routePattern == null || routePattern.isBlank() ? "/unmatched" : normalizePath(routePattern),
+                status >= 100 && status < 600 ? Integer.toString(status) : "unknown",
+                normalizeHttpOutcome(status),
+                isAuthenticated(clientId) ? "true" : "false"));
         Timer.builder("mcp.zap.http.requests")
                 .description("HTTP request duration for MCP, auth, and actuator flows")
-                .tag("method", normalize(method, "unknown"))
-                .tag("path", normalizePath(path))
-                .tag("status", Integer.toString(status))
-                .tag("outcome", normalizeHttpOutcome(status))
-                .tag("authenticated", isAuthenticated(clientId) ? "true" : "false")
+                .tag("method", tags.method())
+                .tag("path", tags.path())
+                .tag("status", tags.status())
+                .tag("outcome", tags.outcome())
+                .tag("authenticated", tags.authenticated())
                 .register(meterRegistry)
                 .record(duration);
+    }
+
+    private HttpRequestMetricTags boundedHttpRequestTags(HttpRequestMetricTags tags) {
+        synchronized (httpRequestMetricTags) {
+            if (httpRequestMetricTags.contains(tags)) {
+                return tags;
+            }
+            if (httpRequestMetricTags.size() < MAX_NORMAL_HTTP_REQUEST_SERIES) {
+                httpRequestMetricTags.add(tags);
+                return tags;
+            }
+        }
+        return new HttpRequestMetricTags("other", "/overflow", "unknown", tags.outcome(), tags.authenticated());
+    }
+
+    private String normalizeHttpMethod(String method) {
+        if (method == null || method.isBlank()) {
+            return "unknown";
+        }
+        return switch (method.toUpperCase(Locale.ROOT)) {
+            case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT" ->
+                    method.toLowerCase(Locale.ROOT);
+            default -> "other";
+        };
+    }
+
+    private record HttpRequestMetricTags(String method, String path, String status,
+                                         String outcome, String authenticated) {
     }
 
     public void recordAuthentication(String method,

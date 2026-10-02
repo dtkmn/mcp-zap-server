@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Remove the legacy `mcp.server.apiKey` fallback. Register every key in `mcp.server.auth.apiKeys`; `MCP_API_KEY` still configures the packaged default client. Reject nonblank removed-property values at startup, require a key in API-key/JWT modes, and restrict explicit placeholder opt-in to active `local`/`dev`/`test` profiles. See the [development migration guide](./docs/src/content/docs/security-modes/index.md#development-migration-registered-api-keys) for client and workspace mapping.
 - Use the existing atomic `TokenBucketRateLimiter.attempt` result for MCP client rate decisions and rejection retry delays, with one policy snapshot per attempt. The atomic API was introduced in gateway-core `0.10.0`.
 - Upgrade the published Gateway Core and Spring WebFlux adapter dependencies to `0.11.0`. Keep ZAP's explicit Jackson `3.2.3` BOM and configured authorization/wildcard policies.
 - Derive the active catalog and validate all exposed-tool permission mappings together through `McpToolAccessRegistry.activeToolRegistry`, using the same `ToolCallbackProvider` as server registration. Remove the duplicate startup validator; missing mappings are reported together, and invalid or duplicate active names fail startup.

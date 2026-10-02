@@ -181,7 +181,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `mcp.service.type` | Kubernetes service type | `ClusterIP` |
 | `mcp.autoscaling.enabled` | Enable horizontal pod autoscaler | `false` |
 | `mcp.autoscaling.maxReplicas` | Maximum replicas for autoscaling | `1` |
-| `mcp.security.allowPlaceholderApiKey` | Allow placeholder MCP API keys instead of failing startup | `false` |
+| `mcp.security.allowPlaceholderApiKey` | Opt in to placeholder MCP API keys; in development/unreleased builds, requires nonempty active Spring profiles all among `local`, `dev`, and `test` | `false` |
 | `mcp.streamableHttp.sessionAffinity.provider` | Sticky-session preset for multi-replica streamable MCP (`aws-nlb`, `ingress-nginx`, `service-client-ip`) | `""` |
 | `networkPolicy.mcp.enabled` | Enable MCP ingress and egress NetworkPolicy boundary | `true` |
 | `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |

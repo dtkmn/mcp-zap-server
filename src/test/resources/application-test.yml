@@ -10,7 +10,6 @@ mcp:
   server:
     tools:
       surface: expert
-    apiKey: test-api-key
     security:
       enabled: false
     

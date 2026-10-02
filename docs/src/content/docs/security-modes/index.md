@@ -234,6 +234,48 @@ Useful follow-on docs:
 
 ## 🔄 Migration Path
 
+### Development migration: registered API keys
+
+**Unreleased change; not included in `v0.13.0`.** Every API key must match an
+entry in `mcp.server.auth.apiKeys`. The legacy `mcp.server.apiKey` fallback is
+removed. A nonblank value for that property, including relaxed spellings such as
+`mcp.server.api-key` or `MCP_SERVER_API_KEY`, fails startup with a migration
+message even when security is disabled or the mode is `none`. Remove it from
+application configuration, environment variables, and command-line overrides.
+
+`MCP_API_KEY` remains the shortcut for the packaged `default-client` entry
+(`MCP_CLIENT_ID` can change its client ID). Overriding `auth.apiKeys` replaces that
+list; it does not add a fallback client for `MCP_API_KEY`. Deployments using the
+removed property must register their key explicitly, for example:
+
+```yaml
+mcp:
+  server:
+    security:
+      mode: api-key
+    auth:
+      apiKeys:
+        - clientId: legacy-client
+          key: ${MCP_API_KEY}
+          scopes:
+            - mcp:tools:list
+            - zap:report:read
+          workspaceId: legacy-client
+```
+
+Choose the client's required [tool scopes](../getting-started/tool-scope-authorization/).
+The removed fallback identified callers as `legacy-client`; its workspace
+defaulted to that client ID. Preserve those identities with explicit `clientId`
+and `workspaceId` values if existing policies or records depend on them. A new
+client ID changes the effective workspace when `workspaceId` is omitted.
+
+The packaged application and Compose defaults no longer supply a placeholder
+key. API-key and JWT modes fail startup without a configured key.
+`allowPlaceholderApiKey` defaults to `false`; recognized placeholders require an
+explicit opt-in and at least one active Spring profile, with every active profile
+among `local`, `dev`, and `test`. Production or mixed profile sets reject them.
+JWT mode continues to accept registered API keys alongside JWT tokens.
+
 ### From `none` to `api-key`:
 ```yaml
 # Before (development)

@@ -87,9 +87,6 @@ public class SecurityConfig {
     @Value("${mcp.server.security.mode:api-key}")
     private String securityModeConfig;
 
-    @Value("${mcp.server.apiKey:}")
-    private String legacyMcpApiKey;
-
     @Value("${mcp.server.security.enabled:true}")
     private boolean securityEnabled;
 
@@ -386,14 +383,7 @@ public class SecurityConfig {
                 .filter(client -> client.getKey().equals(apiKey))
                 .findFirst();
 
-        boolean validKey = clientOpt.isPresent();
-
-        // Also check legacy API key for backward compatibility
-        if (!validKey && legacyMcpApiKey != null && !legacyMcpApiKey.trim().isEmpty()) {
-            validKey = legacyMcpApiKey.equals(apiKey);
-        }
-
-        if (!validKey) {
+        if (clientOpt.isEmpty()) {
             log.warn("Invalid API key provided for {}", exchange.getRequest().getPath());
             observabilityService.recordAuthentication(
                     authMethod,
@@ -407,12 +397,9 @@ public class SecurityConfig {
         }
 
         // Authentication successful - populate SecurityContext
-        String clientId = clientOpt
-            .map(ApiKeyProperties.ApiKeyClient::getClientId)
-            .orElse("legacy-client");
-        List<String> scopes = clientOpt
-                .map(ApiKeyProperties.ApiKeyClient::getScopes)
-                .orElse(List.of("*"));
+        ApiKeyProperties.ApiKeyClient client = clientOpt.get();
+        String clientId = client.getClientId();
+        List<String> scopes = client.getScopes();
         
         log.debug("API key authentication successful for client: {}", clientId);
         

@@ -34,7 +34,7 @@ class AutomationPlanServiceTest {
     @BeforeEach
     void setup() throws Exception {
         automationAccess = mock(EngineAutomationAccess.class);
-        service = new AutomationPlanService(automationAccess);
+        service = new AutomationPlanService(automationAccess, mock(UrlValidationService.class));
         automationRoot = Files.createTempDirectory("automation-plan-service-test");
         ReflectionTestUtils.setField(service, "automationLocalDirectory", automationRoot.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", "/zap/automation");

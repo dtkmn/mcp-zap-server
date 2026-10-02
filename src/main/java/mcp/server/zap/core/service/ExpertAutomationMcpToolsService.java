@@ -17,7 +17,9 @@ public class ExpertAutomationMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_automation_plan_run",
-            description = "Run a ZAP Automation Framework plan from an existing file path or inline YAML content."
+            description = "Run a supported ZAP Automation Framework plan from a workspace file or inline YAML. "
+                    + "Literal context, requestor, scan, and login URLs must pass the configured destination policy. "
+                    + "Script/import/browser jobs, proxy/config overrides, and variable-based destinations are unsupported."
     )
     public String runAutomationPlan(
             @ToolParam(required = false, description = "Existing plan file path under the automation workspace (optional; provide either this or planYaml)") String planPath,

@@ -63,6 +63,7 @@ public class AutomationPlanService {
     private static final int MAX_PLAN_COLLECTION_ALIASES = 50;
 
     private final EngineAutomationAccess automationAccess;
+    private final AutomationPlanTargetPolicy targetPolicy;
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
 
@@ -72,8 +73,9 @@ public class AutomationPlanService {
     @Value("${zap.automation.zap-directory:/zap/wrk/automation}")
     private String automationZapDirectory;
 
-    public AutomationPlanService(EngineAutomationAccess automationAccess) {
+    public AutomationPlanService(EngineAutomationAccess automationAccess, UrlValidationService urlValidationService) {
         this.automationAccess = automationAccess;
+        this.targetPolicy = new AutomationPlanTargetPolicy(urlValidationService);
     }
 
     @Autowired(required = false)
@@ -231,6 +233,9 @@ public class AutomationPlanService {
             sourcePlanContent = readFile(sourcePlanPath);
         }
 
+        Map<String, Object> normalizedPlan = parseYamlObject(sourcePlanContent);
+        targetPolicy.validate(normalizedPlan);
+
         String runId = "plan-" + Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
         Path localRunDirectory = localRoot.resolve("runs").resolve(runId).normalize();
         Path localArtifactsDirectory = localRunDirectory.resolve("artifacts").normalize();
@@ -239,8 +244,6 @@ public class AutomationPlanService {
 
         createDirectories(localArtifactsDirectory);
 
-        Map<String, Object> normalizedPlan = parseYamlObject(sourcePlanContent);
-        validatePlanContexts(normalizedPlan);
         List<ReportArtifactSpec> reportArtifacts = normalizeReportJobs(
                 normalizedPlan,
                 localRoot,
@@ -317,14 +320,6 @@ public class AutomationPlanService {
         }
 
         return List.copyOf(reportArtifacts);
-    }
-
-    private void validatePlanContexts(Map<String, Object> plan) {
-        Map<String, Object> env = childMap(plan.get("env"));
-        List<Map<String, Object>> contexts = childMapList(env.get("contexts"));
-        if (contexts.isEmpty()) {
-            throw new IllegalArgumentException("Automation plans must define at least one env.contexts entry");
-        }
     }
 
     private Map<String, Object> parseYamlObject(String yamlText) {

@@ -249,8 +249,20 @@ The chart now ships with:
 
 - ZAP ingress restricted to MCP pods by default via `networkPolicy.zap.enabled=true`
 - ZAP egress restricted by default; add explicit target CIDRs/ports under `networkPolicy.zap.egress.extraEgress` for real scan traffic
-- MCP ingress and egress restricted by default via `networkPolicy.mcp.enabled=true`
+- MCP ingress defaults to pods in the release namespace via `networkPolicy.mcp.enabled=true` and `networkPolicy.mcp.allowSameNamespace=true`
 - MCP can reach ZAP and DNS by default; add Postgres, JWKS, or other operator-approved endpoints under `networkPolicy.mcp.egress.extraEgress`
+
+Add permitted MCP ingress source peers under `networkPolicy.mcp.extraIngress`.
+Set `networkPolicy.mcp.allowSameNamespace=false` to allow only those explicit
+peers on the MCP service target port. With that setting and an empty or omitted
+`extraIngress` list, the chart renders `ingress: []`, so this policy allows no
+MCP ingress. Disabling the MCP NetworkPolicy omits it entirely.
+
+NetworkPolicies are additive: another policy selecting the same MCP pods can
+still allow traffic. Review all applicable policies when enforcing a deny-all
+configuration. These rules require a cluster CNI that enforces Kubernetes
+NetworkPolicy; rendering or installing the chart alone does not establish
+network isolation.
 
 Use the AWS and GCP reference overlays as the starting point for ingress-controller namespace, CIDR, and data-store egress allowlists.
 

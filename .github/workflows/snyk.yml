@@ -45,7 +45,7 @@ jobs:
           cache-dependency-path: docs/package-lock.json
 
       - name: Set up Snyk CLI
-        uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master
+        uses: snyk/actions/setup@b075801f26076be9bb50521154cafab73f44da0c # master
 
       - name: Require Snyk configuration
         env:
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('snyk-open-source.sarif') != ''
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           sarif_file: snyk-open-source.sarif
           category: snyk-open-source
@@ -105,7 +105,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Snyk CLI
-        uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master
+        uses: snyk/actions/setup@b075801f26076be9bb50521154cafab73f44da0c # master
 
       - name: Require Snyk configuration
         env:
@@ -144,7 +144,7 @@ jobs:
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('snyk-container.sarif') != ''
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           sarif_file: snyk-container.sarif
           category: snyk-container
@@ -173,7 +173,7 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
 
       - name: Set up Snyk CLI
-        uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master
+        uses: snyk/actions/setup@b075801f26076be9bb50521154cafab73f44da0c # master
 
       - name: Require Snyk configuration
         env:
@@ -213,7 +213,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('snyk-iac.sarif') != ''
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           sarif_file: snyk-iac.sarif
           category: snyk-iac

@@ -199,6 +199,44 @@ failure after a revocation has been persisted does not negate that successful
 revocation. Explicit `in-memory` mode remains local to one process and loses
 state on restart.
 
+### Development: JWT expiration and revocation lifetime
+
+**Unreleased; not included in `v0.13.0`.** JWT validation and both revocation
+backends use the same existing 60-second clock-skew allowance. Revocations and
+used refresh-token records remain effective through 60 seconds after the token's
+original `exp`, including that boundary. They become inactive and eligible for
+cleanup only after it. A token that expires beyond this allowance while its
+revocation check or refresh consumption is in progress is rejected. Stored `exp`
+values remain unchanged; no schema migration
+or expiry backfill is required. Token expiration claims, response expiry fields,
+and registered API-key behavior are unchanged.
+
+JWTs without an `exp` claim are now rejected. Server-issued access and refresh
+tokens already include it. Keep replica and database clocks synchronized.
+
+#### Upgrade and recover safely
+
+Patched processes apply the corrected lifetime comparisons to surviving
+PostgreSQL records, but the upgrade cannot reconstruct records already deleted.
+Stop all older replicas, token writers, and cleanup processes before treating
+the fleet as protected; mixed versions can still discard required revocation
+state.
+
+If state is missing or untrusted, including after an in-memory restart, hold
+traffic and stop the older processes. Deploy the patched fleet with a new shared
+`JWT_SECRET` using the [JWT Key Rotation Runbook](../jwt-key-rotation-runbook/),
+then resume traffic and obtain new token pairs through registered API keys. The
+new secret invalidates tokens signed with the previous key.
+
+If keeping PostgreSQL state and the existing signing key, and the only known
+state loss is expired-row cleanup, hold traffic for **strictly more than 60
+seconds after the final older writer or cleanup process stops**, plus a margin
+for clock differences. This drains only that expiry gap; it does not cover lost
+revocations for future-expiring tokens or lost in-memory state. If waiting for
+untrusted tokens to expire instead of invalidating them, use the maximum
+outstanding access or refresh-token lifetime plus the 60-second allowance and a
+clock margin, rather than a universal 60-second wait.
+
 ## Scope Model
 
 JWT does not define a separate permission model. The access token inherits the configured client scopes from the API-key client entry.

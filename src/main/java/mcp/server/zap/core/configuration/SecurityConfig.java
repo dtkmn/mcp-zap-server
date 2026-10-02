@@ -317,7 +317,6 @@ public class SecurityConfig {
             String clientId = jwtService.getClientIdFromToken(token);
             String tokenType = jwtService.getTokenType(token);
             String tokenId = jwtService.getTokenId(token);
-            List<String> scopes = jwtService.getScopesFromToken(token);
 
             // Check token type
             if (!"access".equals(tokenType)) {
@@ -346,6 +345,9 @@ public class SecurityConfig {
                 );
                 return unauthorizedResponse(exchange, "Token has been revoked");
             }
+
+            // Revalidate after the lookup, which can finish after denial retention ends.
+            List<String> scopes = jwtService.getScopesFromToken(token);
 
             // Authentication successful - populate SecurityContext
             log.debug("JWT authentication successful for client: {}", clientId);

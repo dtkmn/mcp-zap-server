@@ -110,9 +110,7 @@ public class AuthController {
             String clientId = jwt.getSubject();
             String tokenType = jwt.getClaimAsString("type");
             String tokenId = jwt.getId();
-            Instant expiresAt = jwt.getExpiresAt() != null
-                    ? jwt.getExpiresAt()
-                    : Instant.now().plusSeconds(60);
+            Instant expiresAt = jwt.getExpiresAt();
 
             if (!"refresh".equals(tokenType)) {
                 log.warn("Invalid token type for refresh");
@@ -141,6 +139,9 @@ public class AuthController {
                 log.warn("Refresh token replay detected");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
+
+            // Consumption can wait on the backend; the submitted token must still be valid.
+            jwtService.validateToken(refreshToken);
             
             // Rotation: issue a new token pair.
             String newAccessToken = jwtService.generateAccessToken(client.getClientId(), client.getScopes());
@@ -185,9 +186,7 @@ public class AuthController {
                         .body(Map.of("revoked", false, "error", "Token is missing jti claim"));
             }
 
-            Instant expiresAt = jwt.getExpiresAt() != null
-                    ? jwt.getExpiresAt()
-                    : Instant.now().plusSeconds(60);
+            Instant expiresAt = jwt.getExpiresAt();
             tokenBlacklistService.blacklistToken(tokenId, expiresAt);
 
             log.info("Revoked token");

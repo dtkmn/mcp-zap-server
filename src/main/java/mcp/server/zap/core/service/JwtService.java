@@ -56,7 +56,8 @@ public class JwtService {
         NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS256)
                 .build();
-        JwtTimestampValidator timestampValidator = new JwtTimestampValidator();
+        JwtTimestampValidator timestampValidator = new JwtTimestampValidator(JwtTokenLifetime.CLOCK_SKEW);
+        timestampValidator.setAllowEmptyExpiryClaim(false);
         timestampValidator.setClock(this.clock);
         decoder.setJwtValidator(JwtValidators.createDefaultWithValidators(List.of(timestampValidator)));
         this.jwtDecoder = decoder;

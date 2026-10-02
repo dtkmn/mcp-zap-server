@@ -3,7 +3,9 @@ package mcp.server.zap.core.service.revocation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,15 +33,18 @@ class InMemoryTokenRevocationStoreTest {
     }
 
     @Test
-    void revokeIfActiveShouldAllowReuseAfterStoredExpiry() {
+    void revokeIfActiveShouldRejectExpiredInputWithoutBlockingLaterActiveInput() {
         String tokenId = "refresh-token-2";
-        Instant alreadyExpired = Instant.now().minusSeconds(60);
-        Instant activeExpiry = Instant.now().plusSeconds(3600);
+        Instant now = Instant.parse("2030-01-01T00:00:00Z");
+        store = new InMemoryTokenRevocationStore(Clock.fixed(now, ZoneOffset.UTC));
+        Instant alreadyExpired = now.minusSeconds(61);
+        Instant activeExpiry = now.plusSeconds(3600);
 
         boolean first = store.revokeIfActive(tokenId, alreadyExpired);
+        assertThat(first).isFalse();
+        assertThat(store.size()).isZero();
         boolean second = store.revokeIfActive(tokenId, activeExpiry);
 
-        assertThat(first).isTrue();
         assertThat(second).isTrue();
         assertThat(store.isRevoked(tokenId)).isTrue();
     }

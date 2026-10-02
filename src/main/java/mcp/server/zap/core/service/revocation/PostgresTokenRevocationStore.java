@@ -2,6 +2,7 @@ package mcp.server.zap.core.service.revocation;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
+import mcp.server.zap.core.service.JwtTokenLifetime;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -10,7 +11,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -20,13 +23,19 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
 
     private final TokenRevocationStoreProperties.Postgres properties;
     private final String tableName;
+    private final Clock clock;
 
     /**
      * Build Postgres-backed token revocation store with validated table name.
      */
     public PostgresTokenRevocationStore(TokenRevocationStoreProperties.Postgres properties) {
+        this(properties, Clock.systemUTC());
+    }
+
+    public PostgresTokenRevocationStore(TokenRevocationStoreProperties.Postgres properties, Clock clock) {
         this.properties = properties;
         this.tableName = validateTableName(properties.getTableName());
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     /**
@@ -39,7 +48,7 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                     + " (token_id, expires_at, revoked_at) VALUES (?, ?, ?) "
                     + "ON CONFLICT (token_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, "
                     + "revoked_at = EXCLUDED.revoked_at";
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
@@ -64,22 +73,28 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
      */
     @Override
     public boolean revokeIfActive(String tokenId, Instant expiresAt) {
+        Instant now = clock.instant();
+        Instant cutoff = JwtTokenLifetime.revocationCutoff(now);
+        if (expiresAt.isBefore(cutoff)) {
+            return false;
+        }
         try {
             String sql = "INSERT INTO " + tableName
                     + " (token_id, expires_at, revoked_at) VALUES (?, ?, ?) "
                     + "ON CONFLICT (token_id) DO UPDATE SET "
                     + "expires_at = EXCLUDED.expires_at, "
                     + "revoked_at = EXCLUDED.revoked_at "
-                    + "WHERE " + tableName + ".expires_at <= ?";
-            Instant now = Instant.now();
+                    + "WHERE " + tableName + ".expires_at < ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
                 statement.setTimestamp(2, Timestamp.from(expiresAt));
                 statement.setTimestamp(3, Timestamp.from(now));
-                statement.setTimestamp(4, Timestamp.from(now));
+                statement.setTimestamp(4, Timestamp.from(cutoff));
                 int affectedRows = statement.executeUpdate();
-                return affectedRows > 0;
+                // A successful write must not revive a token that expired while the query waited.
+                return affectedRows > 0
+                        && !expiresAt.isBefore(JwtTokenLifetime.revocationCutoff(clock.instant()));
             }
         } catch (SQLException e) {
             throw new TokenRevocationUnavailableException(e);
@@ -87,16 +102,16 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     }
 
     /**
-     * Return true when token has an unexpired revocation record.
+     * Return true while the JWT validator can still accept the recorded token.
      */
     @Override
     public boolean isRevoked(String tokenId) {
         try {
-            String sql = "SELECT 1 FROM " + tableName + " WHERE token_id = ? AND expires_at > ? LIMIT 1";
+            String sql = "SELECT 1 FROM " + tableName + " WHERE token_id = ? AND expires_at >= ? LIMIT 1";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
-                statement.setTimestamp(2, Timestamp.from(Instant.now()));
+                statement.setTimestamp(2, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 try (ResultSet resultSet = statement.executeQuery()) {
                     return resultSet.next();
                 }
@@ -112,10 +127,10 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     @Override
     public void cleanupExpired() {
         try {
-            String sql = "DELETE FROM " + tableName + " WHERE expires_at <= ?";
+            String sql = "DELETE FROM " + tableName + " WHERE expires_at < ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setTimestamp(1, Timestamp.from(Instant.now()));
+                statement.setTimestamp(1, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 statement.executeUpdate();
             }
         } catch (SQLException e) {
@@ -132,10 +147,10 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     @Override
     public int size() {
         try {
-            String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE expires_at > ?";
+            String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE expires_at >= ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setTimestamp(1, Timestamp.from(Instant.now()));
+                statement.setTimestamp(1, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 try (ResultSet resultSet = statement.executeQuery()) {
                     if (resultSet.next()) {
                         return resultSet.getInt(1);

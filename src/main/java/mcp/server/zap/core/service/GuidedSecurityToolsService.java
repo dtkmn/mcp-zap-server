@@ -59,7 +59,7 @@ public class GuidedSecurityToolsService {
             @ToolParam(description = "Required source mode: url for a definition ZAP downloads, or file for a definition on ZAP's filesystem. Case-insensitive.") String sourceKind,
             @ToolParam(description = "Required HTTP(S) definition URL reachable by ZAP and allowed by server URL policy, or a file path readable inside the ZAP host/container (for example /zap/wrk/openapi.yaml). File contents are not accepted here.") String source,
             @ToolParam(required = false, description = "Required for graphql: HTTP(S) API endpoint to test, for example https://api.example.com/graphql; must be reachable by ZAP and allowed by server URL policy. Ignored for openapi and soap.") String endpointUrl,
-            @ToolParam(required = false, description = "Optional OpenAPI target URL override, for example https://api.example.com/v1. Supports partial scheme, authority, or path; omit or leave blank for default target resolution. Ignored for graphql and soap.") String hostOverride
+            @ToolParam(required = false, description = "Optional OpenAPI target override allowed by server URL policy: a full HTTP(S) URL or authority/path with an explicit host, for example https://api.example.com/v1 or api.example.com:9090/v1. Scheme-only and path-only overrides are rejected; use a full URL instead. Omit or leave blank only for trusted definition-derived targets constrained by ZAP egress controls. Ignored for graphql and soap.") String hostOverride
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);

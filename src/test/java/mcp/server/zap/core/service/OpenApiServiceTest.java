@@ -37,6 +37,8 @@ public class OpenApiServiceTest {
 
         assertTrue(result.contains("jobs: 9"));
         verify(urlValidationService).validateUrl("http://example.com/api.yaml");
+        verify(urlValidationService).validateUrl("http://host");
+        verify(urlValidationService).validateUrl("https://host");
     }
 
     @Test
@@ -63,6 +65,8 @@ public class OpenApiServiceTest {
 
         assertTrue(result.contains("OpenAPI import completed and is ready to scan"));
         verify(importAccess).importOpenApiFile(request);
+        verify(urlValidationService).validateUrl("http://api.example.com");
+        verify(urlValidationService).validateUrl("https://api.example.com");
     }
 
     @Test

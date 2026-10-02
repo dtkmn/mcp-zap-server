@@ -21,7 +21,7 @@ public class ExpertImportMcpToolsService implements ExpertToolGroup {
     )
     public String importOpenApiSpec(
             @ToolParam(description = "OpenAPI/Swagger spec URL") String apiUrl,
-            @ToolParam(required = false, description = "Host override for the API spec (optional)") String hostOverride
+            @ToolParam(required = false, description = "Optional full HTTP(S) target or authority/path override with an explicit host, allowed by server URL policy. Scheme-only and path-only overrides are rejected. Omit only for trusted definition-derived targets constrained by ZAP egress controls.") String hostOverride
     ) {
         return openApiService.importOpenApiSpec(apiUrl, hostOverride);
     }
@@ -32,7 +32,7 @@ public class ExpertImportMcpToolsService implements ExpertToolGroup {
     )
     public String importOpenApiSpecFile(
             @ToolParam(description = "Path to the OpenAPI/Swagger spec file (JSON or YAML)") String filePath,
-            @ToolParam(description = "Host override for the API spec") String hostOverride
+            @ToolParam(required = false, description = "Optional full HTTP(S) target or authority/path override with an explicit host, allowed by server URL policy. Scheme-only and path-only overrides are rejected. Omit only for trusted definition-derived targets constrained by ZAP egress controls.") String hostOverride
     ) {
         return openApiService.importOpenApiSpecFile(filePath, hostOverride);
     }

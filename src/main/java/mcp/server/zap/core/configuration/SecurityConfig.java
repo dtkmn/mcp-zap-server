@@ -2,6 +2,7 @@ package mcp.server.zap.core.configuration;
 
 import mcp.server.zap.core.service.JwtService;
 import mcp.server.zap.core.service.TokenBlacklistService;
+import mcp.server.zap.core.service.revocation.TokenRevocationUnavailableException;
 import mcp.server.zap.core.logging.RequestLogContext;
 import mcp.server.zap.core.logging.RequestCorrelationHolder;
 import mcp.server.zap.core.observability.ObservabilityService;
@@ -86,9 +87,6 @@ public class SecurityConfig {
 
     @Value("${mcp.server.security.mode:api-key}")
     private String securityModeConfig;
-
-    @Value("${mcp.server.apiKey:}")
-    private String legacyMcpApiKey;
 
     @Value("${mcp.server.security.enabled:true}")
     private boolean securityEnabled;
@@ -319,7 +317,6 @@ public class SecurityConfig {
             String clientId = jwtService.getClientIdFromToken(token);
             String tokenType = jwtService.getTokenType(token);
             String tokenId = jwtService.getTokenId(token);
-            List<String> scopes = jwtService.getScopesFromToken(token);
 
             // Check token type
             if (!"access".equals(tokenType)) {
@@ -349,6 +346,9 @@ public class SecurityConfig {
                 return unauthorizedResponse(exchange, "Token has been revoked");
             }
 
+            // Revalidate after the lookup, which can finish after denial retention ends.
+            List<String> scopes = jwtService.getScopesFromToken(token);
+
             // Authentication successful - populate SecurityContext
             log.debug("JWT authentication successful for client: {}", clientId);
             
@@ -360,6 +360,17 @@ public class SecurityConfig {
             
             return filterWithAuthentication(exchange, chain, authentication, authMethod);
 
+        } catch (TokenRevocationUnavailableException e) {
+            log.warn("JWT revocation check unavailable");
+            observabilityService.recordAuthentication(
+                    authMethod,
+                    "failure",
+                    "revocation_unavailable",
+                    "anonymous",
+                    "default-workspace",
+                    RequestLogContext.correlationId(exchange)
+            );
+            return authenticationErrorResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
         } catch (JwtException e) {
             log.warn("JWT validation failed");
             observabilityService.recordAuthentication(
@@ -386,14 +397,7 @@ public class SecurityConfig {
                 .filter(client -> client.getKey().equals(apiKey))
                 .findFirst();
 
-        boolean validKey = clientOpt.isPresent();
-
-        // Also check legacy API key for backward compatibility
-        if (!validKey && legacyMcpApiKey != null && !legacyMcpApiKey.trim().isEmpty()) {
-            validKey = legacyMcpApiKey.equals(apiKey);
-        }
-
-        if (!validKey) {
+        if (clientOpt.isEmpty()) {
             log.warn("Invalid API key provided for {}", exchange.getRequest().getPath());
             observabilityService.recordAuthentication(
                     authMethod,
@@ -407,12 +411,9 @@ public class SecurityConfig {
         }
 
         // Authentication successful - populate SecurityContext
-        String clientId = clientOpt
-            .map(ApiKeyProperties.ApiKeyClient::getClientId)
-            .orElse("legacy-client");
-        List<String> scopes = clientOpt
-                .map(ApiKeyProperties.ApiKeyClient::getScopes)
-                .orElse(List.of("*"));
+        ApiKeyProperties.ApiKeyClient client = clientOpt.get();
+        String clientId = client.getClientId();
+        List<String> scopes = client.getScopes();
         
         log.debug("API key authentication successful for client: {}", clientId);
         
@@ -492,8 +493,12 @@ public class SecurityConfig {
      * Return 401 Unauthorized response with error message.
      */
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {
-        exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
         exchange.getResponse().getHeaders().add("WWW-Authenticate", "API-Key");
+        return authenticationErrorResponse(exchange, HttpStatus.UNAUTHORIZED, message);
+    }
+
+    private Mono<Void> authenticationErrorResponse(ServerWebExchange exchange, HttpStatus status, String message) {
+        exchange.getResponse().setStatusCode(status);
         exchange.getResponse().getHeaders().set(HttpHeaders.CONTENT_TYPE, "application/json");
 
         String correlationId = RequestLogContext.correlationId(exchange);

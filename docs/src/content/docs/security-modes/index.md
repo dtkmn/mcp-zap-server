@@ -123,11 +123,16 @@ response = requests.post("http://localhost:7456/mcp", headers=headers)
 
 ### 3. JWT Authentication (`jwt`)
 
-**✅ Recommended for: Production deployments, multi-tenant systems**
+**✅ Recommended for: Clients needing token expiration, refresh, and revocation**
 
-- **Use Case**: Production environments, cloud deployments, multi-user systems
+- **Use Case**: Authenticated clients within one trust boundary who need expiring tokens
 - **Security**: Token-based authentication with expiration
 - **Setup**: Exchange API key for JWT tokens
+
+JWT authenticates callers; it does not isolate tenants, scan results, or other
+shared ZAP state. Use a dedicated MCP ZAP deployment and ZAP instance for each
+trust boundary. See the [Production Readiness Checklist](../operations/production-checklist/)
+and [Multi-Replica Deployment Requirements](../operations/local-ha-compose/).
 
 **Configuration:**
 ```yaml
@@ -136,6 +141,7 @@ mcp:
   server:
     security:
       mode: jwt
+      enabled: true
     auth:
       apiKeys:
         - clientId: client-1
@@ -152,6 +158,7 @@ mcp:
 **Environment Variables:**
 ```bash
 export MCP_SECURITY_MODE=jwt
+export MCP_SECURITY_ENABLED=true
 export JWT_ENABLED=true
 export JWT_SECRET=your-256-bit-secret-key-minimum-32-chars-required
 export MCP_API_KEY=your-initial-api-key
@@ -192,7 +199,7 @@ curl -X POST http://localhost:7456/auth/refresh \
 **When to Use:**
 - ✅ Production environments
 - ✅ Cloud deployments (AWS, Azure, GCP)
-- ✅ Multi-tenant applications
+- ✅ Multiple clients within one trust boundary
 - ✅ Public or semi-public access
 - ✅ Compliance requirements (audit trails)
 - ✅ Fine-grained access control needed
@@ -226,6 +233,48 @@ Useful follow-on docs:
 ---
 
 ## 🔄 Migration Path
+
+### Development migration: registered API keys
+
+**Unreleased change; not included in `v0.13.0`.** Every API key must match an
+entry in `mcp.server.auth.apiKeys`. The legacy `mcp.server.apiKey` fallback is
+removed. A nonblank value for that property, including relaxed spellings such as
+`mcp.server.api-key` or `MCP_SERVER_API_KEY`, fails startup with a migration
+message even when security is disabled or the mode is `none`. Remove it from
+application configuration, environment variables, and command-line overrides.
+
+`MCP_API_KEY` remains the shortcut for the packaged `default-client` entry
+(`MCP_CLIENT_ID` can change its client ID). Overriding `auth.apiKeys` replaces that
+list; it does not add a fallback client for `MCP_API_KEY`. Deployments using the
+removed property must register their key explicitly, for example:
+
+```yaml
+mcp:
+  server:
+    security:
+      mode: api-key
+    auth:
+      apiKeys:
+        - clientId: legacy-client
+          key: ${MCP_API_KEY}
+          scopes:
+            - mcp:tools:list
+            - zap:report:read
+          workspaceId: legacy-client
+```
+
+Choose the client's required [tool scopes](../getting-started/tool-scope-authorization/).
+The removed fallback identified callers as `legacy-client`; its workspace
+defaulted to that client ID. Preserve those identities with explicit `clientId`
+and `workspaceId` values if existing policies or records depend on them. A new
+client ID changes the effective workspace when `workspaceId` is omitted.
+
+The packaged application and Compose defaults no longer supply a placeholder
+key. API-key and JWT modes fail startup without a configured key.
+`allowPlaceholderApiKey` defaults to `false`; recognized placeholders require an
+explicit opt-in and at least one active Spring profile, with every active profile
+among `local`, `dev`, and `test`. Production or mixed profile sets reject them.
+JWT mode continues to accept registered API keys alongside JWT tokens.
 
 ### From `none` to `api-key`:
 ```yaml
@@ -261,6 +310,7 @@ mcp:
   server:
     security:
       mode: jwt
+      enabled: true
     auth:
       jwt:
         enabled: true
@@ -296,18 +346,13 @@ openssl rand -base64 64
 ```
 
 ### Docker Deployment:
-```yaml
-# docker-compose.yml
-services:
-  mcp-zap-server:
-    environment:
-      - MCP_SECURITY_MODE=jwt
-      - JWT_SECRET=${JWT_SECRET}  # From .env file
-      - MCP_API_KEY=${MCP_API_KEY}
-    secrets:
-      - jwt_secret
-      - api_key
-```
+Use the [Local Compose Environment File example](examples/#local-compose-environment-file)
+for the supplied Compose stack. JWT requires `MCP_SECURITY_MODE=jwt`,
+`MCP_SECURITY_ENABLED=true`, and `JWT_ENABLED=true`, along with a generated
+signing secret and the configured MCP API key.
+
+Mounting Docker secret files alone does not configure authentication. Custom
+deployments must [map those values into the application's Spring configuration](examples/#kubernetes-secrets).
 
 ---
 
@@ -319,7 +364,7 @@ services:
 | Docker Compose (internal) | `api-key` | Simple, sufficient for trusted networks |
 | Kubernetes (internal) | `api-key` or `jwt` | Depends on security requirements |
 | Cloud deployment (public) | `jwt` | Token expiration, better security |
-| Multi-tenant SaaS | `jwt` | Client isolation, audit trails |
+| Multi-tenant SaaS | `api-key` or `jwt` in a dedicated MCP/ZAP deployment per trust boundary | Authentication does not isolate shared ZAP state |
 | CI/CD pipeline | `api-key` | Simple automation |
 | Production (exposed) | `jwt` | Industry best practices |
 
@@ -356,6 +401,7 @@ mcp:
   server:
     security:
       mode: jwt
+      enabled: true
     auth:
       apiKeys:
         - clientId: prod-client-1

@@ -8,6 +8,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Locale;
+
 @Slf4j
 @Configuration
 @EnableConfigurationProperties(TokenRevocationStoreProperties.class)
@@ -21,26 +23,17 @@ public class TokenRevocationStoreConfiguration {
         String backend = normalize(properties.getBackend());
         if ("postgres".equals(backend)) {
             if (properties.getPostgres().getUrl() == null || properties.getPostgres().getUrl().isBlank()) {
-                log.warn("JWT revocation backend is set to postgres but URL is blank; using in-memory revocation store");
-                return new InMemoryTokenRevocationStore();
+                throw new IllegalStateException("JWT revocation backend 'postgres' requires "
+                        + "JWT_REVOCATION_STORE_POSTGRES_URL or mcp.server.auth.jwt.revocation.postgres.url.");
             }
-            try {
-                log.info("JWT revocation store backend: postgres");
-                return new PostgresTokenRevocationStore(properties.getPostgres());
-            } catch (RuntimeException e) {
-                if (properties.getPostgres().isFailFast()) {
-                    throw e;
-                }
-                log.warn("JWT revocation postgres initialization failed (using in-memory): {}", e.getMessage());
-                return new InMemoryTokenRevocationStore();
-            }
+            log.info("JWT revocation store backend: postgres");
+            return new PostgresTokenRevocationStore(properties.getPostgres());
         }
 
         if (!"in-memory".equals(backend)) {
-            log.warn("Unknown JWT revocation backend '{}'; using in-memory revocation store", properties.getBackend());
-        } else {
-            log.info("JWT revocation store backend: in-memory");
+            throw new IllegalArgumentException("Unsupported JWT revocation backend. Use 'in-memory' or 'postgres'.");
         }
+        log.info("JWT revocation store backend: in-memory");
         return new InMemoryTokenRevocationStore();
     }
 
@@ -51,6 +44,6 @@ public class TokenRevocationStoreConfiguration {
         if (value == null) {
             return "in-memory";
         }
-        return value.trim().toLowerCase();
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 }

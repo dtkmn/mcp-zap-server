@@ -16,6 +16,18 @@ public class ClientRateLimiter {
         this.properties = properties;
     }
 
+    /**
+     * Consumes at most one token and returns its decision and retry delay from
+     * the same attempt. Disabled rate protection allows without consuming a
+     * token and reports zero retry delay.
+     *
+     * @param clientId client used as the rate-limit key
+     * @return result evaluated with one snapshot of the rate policy
+     */
+    public TokenBucketRateLimiter.Attempt attempt(String clientId) {
+        return limiter.attempt(clientId, rateLimitPolicy());
+    }
+
     public boolean tryConsume(String clientId) {
         if (!properties.isEnabled() || !properties.getRateLimit().isEnabled()) {
             return true;

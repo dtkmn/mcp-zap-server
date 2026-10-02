@@ -1,15 +1,28 @@
 package mcp.server.zap.core.service.revocation;
 
+import mcp.server.zap.core.service.JwtTokenLifetime;
+
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class InMemoryTokenRevocationStore implements TokenRevocationStore {
 
     private final Map<String, Instant> revokedTokens = new ConcurrentHashMap<>();
+    private final Clock clock;
+
+    public InMemoryTokenRevocationStore() {
+        this(Clock.systemUTC());
+    }
+
+    public InMemoryTokenRevocationStore(Clock clock) {
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    }
 
     /**
-     * Mark token as revoked until its expiration instant.
+     * Retain the raw expiry claim through the full JWT validation lifetime.
      */
     @Override
     public void revoke(String tokenId, Instant expiresAt) {
@@ -22,27 +35,30 @@ public class InMemoryTokenRevocationStore implements TokenRevocationStore {
      */
     @Override
     public boolean revokeIfActive(String tokenId, Instant expiresAt) {
-        Instant now = Instant.now();
+        Instant cutoff = JwtTokenLifetime.revocationCutoff(clock.instant());
+        if (expiresAt.isBefore(cutoff)) {
+            return false;
+        }
         while (true) {
             Instant existing = revokedTokens.putIfAbsent(tokenId, expiresAt);
             if (existing == null) {
-                cleanupExpired();
-                return true;
+                break;
             }
 
-            if (!existing.isAfter(now)) {
+            if (existing.isBefore(cutoff)) {
                 if (revokedTokens.replace(tokenId, existing, expiresAt)) {
-                    cleanupExpired();
-                    return true;
+                    break;
                 }
                 continue;
             }
             return false;
         }
+        cleanupExpired();
+        return !expiresAt.isBefore(JwtTokenLifetime.revocationCutoff(clock.instant()));
     }
 
     /**
-     * Return true when token exists and has not naturally expired.
+     * Return true while the JWT validator can still accept the recorded token.
      */
     @Override
     public boolean isRevoked(String tokenId) {
@@ -51,8 +67,8 @@ public class InMemoryTokenRevocationStore implements TokenRevocationStore {
             return false;
         }
 
-        Instant now = Instant.now();
-        if (!expiresAt.isAfter(now)) {
+        Instant cutoff = JwtTokenLifetime.revocationCutoff(clock.instant());
+        if (expiresAt.isBefore(cutoff)) {
             revokedTokens.remove(tokenId, expiresAt);
             return false;
         }
@@ -64,8 +80,8 @@ public class InMemoryTokenRevocationStore implements TokenRevocationStore {
      */
     @Override
     public void cleanupExpired() {
-        Instant now = Instant.now();
-        revokedTokens.entrySet().removeIf(entry -> !entry.getValue().isAfter(now));
+        Instant cutoff = JwtTokenLifetime.revocationCutoff(clock.instant());
+        revokedTokens.entrySet().removeIf(entry -> entry.getValue().isBefore(cutoff));
     }
 
     /**

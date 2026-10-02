@@ -2,6 +2,8 @@ package mcp.server.zap.core.service;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import mcp.server.zap.core.gateway.ZapEngineApiImportAccess;
 import org.junit.jupiter.api.Tag;
 import org.testcontainers.containers.GenericContainer;
@@ -34,6 +36,7 @@ class ApiSchemaImportServiceDockerTest {
             new GenericContainer<>(DockerImageName.parse("nginx:1.27-alpine"))
                     .withNetwork(NETWORK)
                     .withNetworkAliases("api-schema-fixtures")
+                    .withCopyToContainer(MountableFile.forClasspathResource("api-schema/openapi.yaml"), "/usr/share/nginx/html/openapi.yaml")
                     .withCopyToContainer(MountableFile.forClasspathResource("api-schema/schema.graphql"), "/usr/share/nginx/html/schema.graphql")
                     .withCopyToContainer(MountableFile.forClasspathResource("api-schema/service.wsdl"), "/usr/share/nginx/html/service.wsdl")
                     .withCopyToContainer(MountableFile.forClasspathResource("api-schema/graphql"), "/usr/share/nginx/html/graphql")
@@ -46,6 +49,7 @@ class ApiSchemaImportServiceDockerTest {
             new GenericContainer<>(ZapDockerTestSupport.zapImage())
                     .withNetwork(NETWORK)
                     .dependsOn(FIXTURES)
+                    .withCopyToContainer(MountableFile.forClasspathResource("api-schema/openapi.yaml"), "/zap/wrk/openapi.yaml")
                     .withExposedPorts(8090)
                     .withCommand(
                             "zap.sh",
@@ -61,6 +65,8 @@ class ApiSchemaImportServiceDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true",
                             "-addoninstall",
+                            "openapi",
+                            "-addoninstall",
                             "graphql",
                             "-addoninstall",
                             "soap"
@@ -75,6 +81,24 @@ class ApiSchemaImportServiceDockerTest {
         clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "url, http://api-schema-fixtures/full-url, /full-url/pets",
+            "file, http://api-schema-fixtures/full-file, /full-file/pets",
+            "url, api-schema-fixtures/partial-url, /partial-url/pets",
+            "file, api-schema-fixtures/partial-file, /partial-file/pets",
+            "url, //api-schema-fixtures/relative-url, /relative-url/pets",
+            "file, //api-schema-fixtures/relative-file, /relative-file/pets"
+    })
+    void openApiTargetOverrideControlsRealZapDestination(String sourceKind, String target, String expectedPath) {
+        String response = "file".equals(sourceKind)
+                ? service.importOpenApiSpecFile("/zap/wrk/openapi.yaml", target)
+                : service.importOpenApiSpec("http://api-schema-fixtures/openapi.yaml", target);
+
+        assertTrue(response.contains("OpenAPI import completed"));
+        awaitImportedUrl("http://api-schema-fixtures" + expectedPath);
     }
 
     @Test

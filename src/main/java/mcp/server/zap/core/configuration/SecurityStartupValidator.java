@@ -2,6 +2,7 @@ package mcp.server.zap.core.configuration;
 
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -11,7 +12,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Enforces a safer default posture for networked deployments while still allowing
@@ -20,6 +20,8 @@ import java.util.stream.Stream;
 @Component
 public class SecurityStartupValidator implements InitializingBean {
     private static final Logger log = LoggerFactory.getLogger(SecurityStartupValidator.class);
+
+    private static final Set<String> PLACEHOLDER_PROFILES = Set.of("local", "dev", "test");
 
     private static final Set<String> PLACEHOLDER_API_KEYS = Set.of(
             "changeme-default-key",
@@ -39,7 +41,6 @@ public class SecurityStartupValidator implements InitializingBean {
     private final String securityModeConfig;
     private final boolean securityEnabled;
     private final boolean allowPlaceholderApiKey;
-    private final String legacyMcpApiKey;
     private final boolean jwtEnabled;
     private final String jwtSecret;
 
@@ -48,7 +49,6 @@ public class SecurityStartupValidator implements InitializingBean {
                                     @Value("${mcp.server.security.mode:api-key}") String securityModeConfig,
                                     @Value("${mcp.server.security.enabled:true}") boolean securityEnabled,
                                     @Value("${mcp.server.security.allowPlaceholderApiKey:false}") boolean allowPlaceholderApiKey,
-                                    @Value("${mcp.server.apiKey:}") String legacyMcpApiKey,
                                     @Value("${mcp.server.auth.jwt.enabled:false}") boolean jwtEnabled,
                                     @Value("${mcp.server.auth.jwt.secret:}") String jwtSecret) {
         this.apiKeyProperties = apiKeyProperties;
@@ -56,13 +56,21 @@ public class SecurityStartupValidator implements InitializingBean {
         this.securityModeConfig = securityModeConfig;
         this.securityEnabled = securityEnabled;
         this.allowPlaceholderApiKey = allowPlaceholderApiKey;
-        this.legacyMcpApiKey = legacyMcpApiKey;
         this.jwtEnabled = jwtEnabled;
         this.jwtSecret = jwtSecret;
     }
 
     @Override
     public void afterPropertiesSet() {
+        String removedApiKey = Binder.get(environment).bind("mcp.server.api-key", String.class).orElse("");
+        if (!removedApiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "mcp.server.apiKey is no longer supported. Remove it and register the key in "
+                            + "mcp.server.auth.apiKeys with an explicit clientId and scopes. "
+                            + "MCP_API_KEY still configures the packaged default client."
+            );
+        }
+
         SecurityConfig.SecurityMode mode = resolveMode();
         if (!securityEnabled || mode == SecurityConfig.SecurityMode.NONE) {
             return;
@@ -72,10 +80,8 @@ public class SecurityStartupValidator implements InitializingBean {
             return;
         }
 
-        List<String> configuredKeys = Stream.concat(
-                        apiKeyProperties.getApiKeys().stream().map(ApiKeyProperties.ApiKeyClient::getKey),
-                        Stream.of(legacyMcpApiKey)
-                )
+        List<String> configuredKeys = apiKeyProperties.getApiKeys().stream()
+                .map(ApiKeyProperties.ApiKeyClient::getKey)
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(key -> !key.isEmpty())
@@ -103,14 +109,20 @@ public class SecurityStartupValidator implements InitializingBean {
                 + "' is enabled. Replace MCP_API_KEY / mcp.server.auth.apiKeys[].key with a real secret "
                 + "before exposing this service. Active profiles=" + activeProfiles;
 
-        if (allowPlaceholderApiKey) {
+        if (allowPlaceholderApiKey && hasOnlyPlaceholderProfiles()) {
             log.warn(message);
-            log.warn("Placeholder API keys are allowed only for local/dev convenience in this environment.");
+            log.warn("Placeholder API keys are explicitly allowed for local/dev/test use in this environment.");
             validateJwtConfiguration(mode);
             return;
         }
 
-        throw new IllegalStateException(message + ". Placeholder API keys are disallowed in this environment.");
+        throw new IllegalStateException(message + ". Placeholder API keys require explicit opt-in and "
+                + "active profiles exclusively among local, dev, and test.");
+    }
+
+    private boolean hasOnlyPlaceholderProfiles() {
+        String[] profiles = environment.getActiveProfiles();
+        return profiles.length > 0 && Arrays.stream(profiles).allMatch(PLACEHOLDER_PROFILES::contains);
     }
 
     private void validateJwtConfiguration(SecurityConfig.SecurityMode mode) {

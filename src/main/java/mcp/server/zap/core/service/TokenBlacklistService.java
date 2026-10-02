@@ -71,7 +71,7 @@ public class TokenBlacklistService {
 
     /**
      * Remove expired tokens from blacklist.
-     * Only keeps tokens that haven't expired yet.
+     * Keeps denial state until the full JWT validation lifetime has ended.
      */
     public void cleanupExpiredTokens() {
         tokenRevocationStore.cleanupExpired();

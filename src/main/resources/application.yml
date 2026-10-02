@@ -49,18 +49,14 @@ mcp:
       authorization:
         mode: ${MCP_SECURITY_AUTHORIZATION_MODE:enforce}
         allowWildcard: ${MCP_SECURITY_AUTHORIZATION_ALLOW_WILDCARD:true}
-      # Allow placeholder API keys only for local/dev convenience.
-      # Set to false for cloud/prod deployments to fail fast on insecure defaults.
-      allowPlaceholderApiKey: ${MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY:true}
-    
-    # Legacy single API key (for backward compatibility)
-    apiKey: ${MCP_API_KEY:changeme-default-key}
+      # Explicit placeholder opt-in requires active profiles exclusively among local, dev, and test.
+      allowPlaceholderApiKey: ${MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY:false}
     
     # Multi-Client API Key Configuration
     auth:
       apiKeys:
         - clientId: ${MCP_CLIENT_ID:default-client}
-          key: ${MCP_API_KEY:changeme-default-key}
+          key: ${MCP_API_KEY:}
           description: ${MCP_CLIENT_DESCRIPTION:Default MCP client}
       
       # JWT Token Configuration
@@ -77,7 +73,8 @@ mcp:
             username: ${JWT_REVOCATION_STORE_POSTGRES_USERNAME:}
             password: ${JWT_REVOCATION_STORE_POSTGRES_PASSWORD:}
             table-name: ${JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME:jwt_token_revocation}
-            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:false}
+            # Only explicit expiration cleanup may be fail-soft; authentication never falls back.
+            fail-fast: ${JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST:true}
       bootstrap:
         # Profiles are operator-owned configuration. Each profile binds one exact credential
         # reference to one canonical HTTP(S) origin; callers provide only profileId + targetUrl.

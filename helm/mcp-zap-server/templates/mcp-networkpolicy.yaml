@@ -12,6 +12,7 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+  {{- if or .Values.networkPolicy.mcp.allowSameNamespace .Values.networkPolicy.mcp.extraIngress }}
   ingress:
     - from:
         {{- if .Values.networkPolicy.mcp.allowSameNamespace }}
@@ -23,6 +24,9 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.mcp.service.targetPort }}
+  {{- else }}
+  ingress: []
+  {{- end }}
   {{- if or .Values.networkPolicy.mcp.egress.allowZap .Values.networkPolicy.mcp.egress.allowDns .Values.networkPolicy.mcp.egress.extraEgress }}
   egress:
     {{- if .Values.networkPolicy.mcp.egress.allowZap }}

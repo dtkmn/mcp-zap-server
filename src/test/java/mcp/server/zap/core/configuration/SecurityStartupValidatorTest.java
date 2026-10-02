@@ -104,7 +104,6 @@ class SecurityStartupValidatorTest {
                 securityMode,
                 securityEnabled,
                 allowPlaceholderApiKey,
-                apiKey,
                 jwtEnabled,
                 jwtSecret
         );

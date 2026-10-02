@@ -343,7 +343,8 @@ podAnnotations: {}
 # Pod labels
 podLabels: {}
 
-# Network policy defaults
+# Network policy defaults. Requires a CNI that enforces Kubernetes NetworkPolicy.
+# Policies are additive: another policy selecting these pods can allow traffic.
 networkPolicy:
   zap:
     enabled: true
@@ -370,6 +371,7 @@ networkPolicy:
       #       kubernetes.io/metadata.name: tools
   mcp:
     enabled: true
+    # Allow MCP service ingress from pods in the release namespace.
     allowSameNamespace: true
     egress:
       # MCP should only reach ZAP, DNS, and operator-approved dependencies
@@ -388,6 +390,8 @@ networkPolicy:
         #   ports:
         #     - protocol: TCP
         #       port: 5432
+    # Additional allowed source peers. With allowSameNamespace=false and no
+    # extraIngress peers, this policy denies all MCP ingress.
     extraIngress: []
       # - namespaceSelector:
       #     matchLabels:

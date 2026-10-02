@@ -10,21 +10,38 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStreamWriter;
+import java.io.StringReader;
+import java.io.Writer;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -38,8 +55,15 @@ public class AutomationPlanService {
     private static final int DEFAULT_ARTIFACT_PREVIEW_CHARS = 8000;
     private static final int MAX_ARTIFACT_PREVIEW_CHARS = 50000;
     private static final int MAX_PREVIEW_PER_FILE = 2000;
+    private static final int MAX_PLAN_INPUT_BYTES = 1024 * 1024;
+    private static final int MAX_PLAN_CODE_POINTS = 1024 * 1024;
+    private static final int MAX_PLAN_EXPANDED_NODES = 10_000;
+    private static final int MAX_PLAN_EXPANDED_DEPTH = 50;
+    private static final int MAX_PLAN_EXPANDED_SCALAR_CHARS = 1024 * 1024;
+    private static final int MAX_PLAN_COLLECTION_ALIASES = 50;
 
     private final EngineAutomationAccess automationAccess;
+    private final AutomationPlanTargetPolicy targetPolicy;
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
 
@@ -49,8 +73,9 @@ public class AutomationPlanService {
     @Value("${zap.automation.zap-directory:/zap/wrk/automation}")
     private String automationZapDirectory;
 
-    public AutomationPlanService(EngineAutomationAccess automationAccess) {
+    public AutomationPlanService(EngineAutomationAccess automationAccess, UrlValidationService urlValidationService) {
         this.automationAccess = automationAccess;
+        this.targetPolicy = new AutomationPlanTargetPolicy(urlValidationService);
     }
 
     @Autowired(required = false)
@@ -184,6 +209,7 @@ public class AutomationPlanService {
 
     private PreparedAutomationPlan preparePlan(String planPath, String planYaml, String planFileName) {
         boolean hasPlanPath = hasText(planPath);
+        validatePlanInputSize(planYaml);
         boolean hasPlanYaml = hasText(planYaml);
         if (hasPlanPath == hasPlanYaml) {
             throw new IllegalArgumentException("Provide exactly one of planPath or planYaml");
@@ -207,6 +233,9 @@ public class AutomationPlanService {
             sourcePlanContent = readFile(sourcePlanPath);
         }
 
+        Map<String, Object> normalizedPlan = parseYamlObject(sourcePlanContent);
+        targetPolicy.validate(normalizedPlan);
+
         String runId = "plan-" + Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
         Path localRunDirectory = localRoot.resolve("runs").resolve(runId).normalize();
         Path localArtifactsDirectory = localRunDirectory.resolve("artifacts").normalize();
@@ -215,8 +244,6 @@ public class AutomationPlanService {
 
         createDirectories(localArtifactsDirectory);
 
-        Map<String, Object> normalizedPlan = parseYamlObject(sourcePlanContent);
-        validatePlanContexts(normalizedPlan);
         List<ReportArtifactSpec> reportArtifacts = normalizeReportJobs(
                 normalizedPlan,
                 localRoot,
@@ -295,24 +322,118 @@ public class AutomationPlanService {
         return List.copyOf(reportArtifacts);
     }
 
-    private void validatePlanContexts(Map<String, Object> plan) {
-        Map<String, Object> env = childMap(plan.get("env"));
-        List<Map<String, Object>> contexts = childMapList(env.get("contexts"));
-        if (contexts.isEmpty()) {
-            throw new IllegalArgumentException("Automation plans must define at least one env.contexts entry");
-        }
-    }
-
     private Map<String, Object> parseYamlObject(String yamlText) {
+        validatePlanInputSize(yamlText);
         if (!hasText(yamlText)) {
             throw new IllegalArgumentException("Automation plan content cannot be blank");
         }
 
-        Object loaded = new Yaml().load(yamlText);
+        LoaderOptions options = new LoaderOptions();
+        options.setCodePointLimit(MAX_PLAN_CODE_POINTS);
+        options.setNestingDepthLimit(MAX_PLAN_EXPANDED_DEPTH);
+        options.setMaxAliasesForCollections(MAX_PLAN_COLLECTION_ALIASES);
+        options.setAllowRecursiveKeys(false);
+        options.setMergeOnCompose(false);
+        PlanSafeConstructor constructor = new PlanSafeConstructor(options);
+        Object loaded;
+        try {
+            Node root = new Yaml(constructor).compose(new StringReader(yamlText));
+            if (root == null) {
+                throw new IllegalArgumentException("Automation plan YAML must be a mapping at the root");
+            }
+            // Compose retains alias identities without hashing keys or flattening merges. Bound
+            // their full expansion before SafeConstructor or normalization can do that work.
+            new PlanNodeBudget().visit(root, 1);
+            loaded = constructor.constructPlan(root);
+        } catch (YAMLException e) {
+            throw new IllegalArgumentException("Invalid automation plan YAML: " + e.getMessage(), e);
+        }
         if (!(loaded instanceof Map<?, ?> rawMap)) {
             throw new IllegalArgumentException("Automation plan YAML must be a mapping at the root");
         }
         return normalizeMap(rawMap);
+    }
+
+    private void validatePlanInputSize(String yamlText) {
+        if (yamlText == null) {
+            return;
+        }
+        if (yamlText.length() > MAX_PLAN_INPUT_BYTES) {
+            throw planInputTooLarge();
+        }
+        int bytes = 0;
+        for (int i = 0; i < yamlText.length(); i++) {
+            char character = yamlText.charAt(i);
+            if (character <= 0x7f) {
+                bytes++;
+            } else if (character <= 0x7ff) {
+                bytes += 2;
+            } else if (Character.isHighSurrogate(character) && i + 1 < yamlText.length()
+                    && Character.isLowSurrogate(yamlText.charAt(i + 1))) {
+                bytes += 4;
+                i++;
+            } else {
+                // UTF-8 replaces an unpaired surrogate with one byte; SnakeYAML rejects it.
+                bytes += Character.isSurrogate(character) ? 1 : 3;
+            }
+            if (bytes > MAX_PLAN_INPUT_BYTES) {
+                throw planInputTooLarge();
+            }
+        }
+    }
+
+    private static IllegalArgumentException planInputTooLarge() {
+        return new IllegalArgumentException("Automation plan YAML exceeds " + MAX_PLAN_INPUT_BYTES + " UTF-8 bytes");
+    }
+
+    private static final class PlanSafeConstructor extends SafeConstructor {
+        private PlanSafeConstructor(LoaderOptions options) {
+            super(options);
+        }
+
+        private Object constructPlan(Node root) {
+            return constructDocument(root);
+        }
+    }
+
+    private static final class PlanNodeBudget {
+        private final Set<Node> activeNodes = Collections.newSetFromMap(new IdentityHashMap<>());
+        private int expandedNodes;
+        private long expandedScalarChars;
+
+        private void visit(Node node, int depth) {
+            if (!activeNodes.add(node)) {
+                throw new IllegalArgumentException("Automation plan YAML contains cyclic aliases");
+            }
+            try {
+                if (++expandedNodes > MAX_PLAN_EXPANDED_NODES) {
+                    throw new IllegalArgumentException("Automation plan YAML exceeds " + MAX_PLAN_EXPANDED_NODES + " expanded nodes");
+                }
+                if (depth > MAX_PLAN_EXPANDED_DEPTH) {
+                    throw new IllegalArgumentException("Automation plan YAML exceeds expanded depth " + MAX_PLAN_EXPANDED_DEPTH);
+                }
+                if (node instanceof ScalarNode scalar) {
+                    expandedScalarChars += scalar.getValue().length();
+                    if (expandedScalarChars > MAX_PLAN_EXPANDED_SCALAR_CHARS) {
+                        throw new IllegalArgumentException("Automation plan YAML exceeds " + MAX_PLAN_EXPANDED_SCALAR_CHARS + " expanded scalar characters");
+                    }
+                } else if (node instanceof SequenceNode sequence) {
+                    for (Node child : sequence.getValue()) {
+                        visit(child, depth + 1);
+                    }
+                } else if (node instanceof MappingNode mapping) {
+                    for (NodeTuple tuple : mapping.getValue()) {
+                        if (!(tuple.getKeyNode() instanceof ScalarNode)) {
+                            throw new IllegalArgumentException("Automation plan YAML requires scalar mapping keys");
+                        }
+                        visit(tuple.getKeyNode(), depth + 1);
+                        visit(tuple.getValueNode(), depth + 1);
+                    }
+                }
+            } finally {
+                activeNodes.remove(node);
+            }
+        }
     }
 
     private String dumpYaml(Map<String, Object> plan) {
@@ -320,7 +441,36 @@ public class AutomationPlanService {
         options.setPrettyFlow(true);
         options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
         options.setIndent(2);
-        return new Yaml(options).dump(plan);
+        PlanOutputStream output = new PlanOutputStream();
+        try (Writer writer = new OutputStreamWriter(output, StandardCharsets.UTF_8)) {
+            new Yaml(options).dump(plan, writer);
+        } catch (IOException e) {
+            throw new ZapApiException("Error normalizing automation plan YAML", e);
+        }
+        String yamlText = output.toString(StandardCharsets.UTF_8);
+        // Normalization can add report parameters or expand aliases. The returned plan file
+        // must satisfy the same parser limits used when artifacts are inspected later.
+        parseYamlObject(yamlText);
+        return yamlText;
+    }
+
+    private static final class PlanOutputStream extends ByteArrayOutputStream {
+        @Override
+        public synchronized void write(int value) {
+            if (count >= MAX_PLAN_INPUT_BYTES) {
+                throw planInputTooLarge();
+            }
+            super.write(value);
+        }
+
+        @Override
+        public synchronized void write(byte[] bytes, int offset, int length) {
+            Objects.checkFromIndexSize(offset, length, bytes.length);
+            if (length > MAX_PLAN_INPUT_BYTES - count) {
+                throw planInputTooLarge();
+            }
+            super.write(bytes, offset, length);
+        }
     }
 
     private Map<String, Object> normalizeMap(Map<?, ?> rawMap) {
@@ -563,7 +713,17 @@ public class AutomationPlanService {
 
     private String readFile(Path path) {
         try {
-            return Files.readString(path, StandardCharsets.UTF_8);
+            if (Files.size(path) > MAX_PLAN_INPUT_BYTES) {
+                throw planInputTooLarge();
+            }
+            try (InputStream input = Files.newInputStream(path)) {
+                // Bound the read itself as well: a workspace file can grow after the size check.
+                byte[] content = input.readNBytes(MAX_PLAN_INPUT_BYTES + 1);
+                if (content.length > MAX_PLAN_INPUT_BYTES) {
+                    throw planInputTooLarge();
+                }
+                return StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
+            }
         } catch (IOException e) {
             log.error("Error reading automation plan {}: {}", path, e.getMessage(), e);
             throw new ZapApiException("Error reading automation plan file", e);

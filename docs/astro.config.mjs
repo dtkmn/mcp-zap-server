@@ -2,6 +2,7 @@
 import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import starlight from '@astrojs/starlight';
+import sharedDocs from './scripts/sync-docs.mjs';
 
 export default defineConfig({
 	site: 'https://danieltse.org',
@@ -12,6 +13,7 @@ export default defineConfig({
 		'/security-modes/implementation-summary': '/mcp-zap-server/security-modes/',
 	},
 	integrations: [
+		sharedDocs(),
 		starlight({
 			title: 'MCP ZAP Server',
 			description: 'Enterprise-grade security testing for AI agents and operators using ZAP over MCP.',

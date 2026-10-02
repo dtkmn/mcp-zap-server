@@ -11,6 +11,7 @@ import mcp.server.zap.core.gateway.EngineApiImportAccess.SoapUrlImportRequest;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,7 +33,7 @@ public class OpenApiService {
      * Import an OpenAPI/Swagger spec by URL into ZAP and return the importId.
      *
      * @param apiUrl       The OpenAPI/Swagger spec URL (JSON or YAML)
-     * @param hostOverride Optional host override for the API spec
+     * @param hostOverride Optional full HTTP(S) target or authority/path override with an explicit host
      * @return A message indicating the import status
      */
     public String importOpenApiSpec(
@@ -43,7 +44,7 @@ public class OpenApiService {
         urlValidationService.validateUrl(normalizedApiUrl);
 
         ImportResult result = engineApiImportAccess.importOpenApiUrl(
-                new UrlImportRequest(normalizedApiUrl, trimToNull(hostOverride)));
+                new UrlImportRequest(normalizedApiUrl, validateOpenApiTargetOverride(hostOverride)));
         return formatImportResponse("OpenAPI import", result);
     }
 
@@ -52,7 +53,7 @@ public class OpenApiService {
      * Import an OpenAPI/Swagger spec from a local file into ZAP and return the importId.
      *
      * @param filePath     The path to the OpenAPI/Swagger spec file (JSON or YAML)
-     * @param hostOverride Optional host override for the API spec
+     * @param hostOverride Optional full HTTP(S) target or authority/path override with an explicit host
      * @return A message indicating the import status
      */
     public String importOpenApiSpecFile(
@@ -61,7 +62,7 @@ public class OpenApiService {
     ) {
         String normalizedFilePath = requireText(filePath, "filePath");
         ImportResult result = engineApiImportAccess.importOpenApiFile(
-                new FileImportRequest(normalizedFilePath, trimToNull(hostOverride)));
+                new FileImportRequest(normalizedFilePath, validateOpenApiTargetOverride(hostOverride)));
         return formatImportResponse("OpenAPI import", result);
     }
 
@@ -77,6 +78,46 @@ public class OpenApiService {
         ImportResult result = engineApiImportAccess.importGraphqlUrl(
                 new GraphqlUrlImportRequest(normalizedEndpointUrl, normalizedSchemaUrl));
         return formatImportResponse("GraphQL import", result);
+    }
+
+    private String validateOpenApiTargetOverride(String value) {
+        String target = trimToNull(value);
+        if (target == null) {
+            // No override retains ZAP's definition-derived target resolution. The definition
+            // and its references must be trusted; engine egress controls remain necessary.
+            return null;
+        }
+
+        boolean hasScheme = target.contains("://");
+        if (!hasScheme && target.contains("//") && !target.startsWith("//")) {
+            // ZAP's lenient target parser treats // as an authority delimiter, even in a path.
+            throw new IllegalArgumentException("Invalid hostOverride authority/path syntax");
+        }
+        String candidate = hasScheme ? target
+                : target.startsWith("//") ? "http:" + target : "http://" + target;
+        URI uri;
+        try {
+            uri = URI.create(candidate);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid hostOverride; supply an HTTP(S) target with an explicit host", e);
+        }
+        if (uri.getHost() == null || uri.getHost().isBlank()) {
+            throw new IllegalArgumentException("hostOverride must include an explicit host; supply a full HTTP(S) target URL instead of a scheme-only or path-only override");
+        }
+        if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IllegalArgumentException("hostOverride supports only HTTP and HTTPS");
+        }
+        if (uri.getRawUserInfo() != null || uri.getRawQuery() != null || uri.getRawFragment() != null
+                || uri.getPort() < -1 || uri.getPort() == 0 || uri.getPort() > 65535) {
+            throw new IllegalArgumentException("hostOverride must have a valid port and no user info, query, or fragment");
+        }
+        urlValidationService.validateUrl(candidate);
+        if (!hasScheme) {
+            // ZAP inherits HTTP or HTTPS from the definition. Check both possible destinations
+            // without substituting the definition download URL for the API's server URL.
+            urlValidationService.validateUrl("https:" + uri.getRawSchemeSpecificPart());
+        }
+        return target;
     }
 
     public String importGraphqlSchemaFile(

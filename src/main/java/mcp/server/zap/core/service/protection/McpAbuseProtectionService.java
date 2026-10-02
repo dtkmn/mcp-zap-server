@@ -10,6 +10,7 @@ import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.gateway.core.protection.McpAbuseProtectionContext;
 import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.gateway.core.protection.McpQuotaLimit;
+import mcp.gateway.core.rate.TokenBucketRateLimiter;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
@@ -79,13 +80,14 @@ public class McpAbuseProtectionService {
             return McpAbuseProtectionDecision.allow(protectionContext);
         }
 
-        if (!clientRateLimiter.tryConsume(clientId)) {
+        TokenBucketRateLimiter.Attempt rateAttempt = clientRateLimiter.attempt(clientId);
+        if (!rateAttempt.allowed()) {
             metrics.rateLimited.increment();
             return McpAbuseProtectionDecision.reject(
                     "rate_limited",
                     "client_request_rate",
                     protectionContext,
-                    clientRateLimiter.retryAfterSeconds(clientId)
+                    rateAttempt.retryAfterSeconds()
             );
         }
 

@@ -367,5 +367,5 @@ Next steps:
 - Cursor: start from examples/cursor/mcp.json; see the client guide if GUI-launched Cursor does not inherit your shell environment.
 - Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
 - First-run guide: docs/getting-started/SELF_SERVE_FIRST_RUN.md
-- Published docs route: docs/src/content/docs/getting-started/self-serve-first-run.md
+- Published docs route: https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/
 EOF

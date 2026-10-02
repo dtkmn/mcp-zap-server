@@ -2,6 +2,7 @@ package mcp.server.zap.core.service.revocation;
 
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
+import mcp.server.zap.core.service.JwtTokenLifetime;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -10,7 +11,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -19,15 +22,20 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     private static final Pattern SQL_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     private final TokenRevocationStoreProperties.Postgres properties;
-    private final InMemoryTokenRevocationStore fallbackStore = new InMemoryTokenRevocationStore();
     private final String tableName;
+    private final Clock clock;
 
     /**
      * Build Postgres-backed token revocation store with validated table name.
      */
     public PostgresTokenRevocationStore(TokenRevocationStoreProperties.Postgres properties) {
+        this(properties, Clock.systemUTC());
+    }
+
+    public PostgresTokenRevocationStore(TokenRevocationStoreProperties.Postgres properties, Clock clock) {
         this.properties = properties;
         this.tableName = validateTableName(properties.getTableName());
+        this.clock = Objects.requireNonNull(clock, "clock must not be null");
     }
 
     /**
@@ -40,7 +48,7 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                     + " (token_id, expires_at, revoked_at) VALUES (?, ?, ?) "
                     + "ON CONFLICT (token_id) DO UPDATE SET expires_at = EXCLUDED.expires_at, "
                     + "revoked_at = EXCLUDED.revoked_at";
-            Instant now = Instant.now();
+            Instant now = clock.instant();
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
@@ -48,12 +56,15 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                 statement.setTimestamp(3, Timestamp.from(now));
                 statement.executeUpdate();
             }
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
+        }
 
-            // Keep table bounded during normal revoke activity.
+        // Housekeeping must not negate an already persisted revocation.
+        try {
             cleanupExpired();
-        } catch (Exception e) {
-            handleFailure("token revoke", e);
-            fallbackStore.revoke(tokenId, expiresAt);
+        } catch (TokenRevocationUnavailableException e) {
+            log.warn("Expired JWT revocation cleanup failed after a successful revocation");
         }
     }
 
@@ -62,47 +73,51 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
      */
     @Override
     public boolean revokeIfActive(String tokenId, Instant expiresAt) {
+        Instant now = clock.instant();
+        Instant cutoff = JwtTokenLifetime.revocationCutoff(now);
+        if (expiresAt.isBefore(cutoff)) {
+            return false;
+        }
         try {
             String sql = "INSERT INTO " + tableName
                     + " (token_id, expires_at, revoked_at) VALUES (?, ?, ?) "
                     + "ON CONFLICT (token_id) DO UPDATE SET "
                     + "expires_at = EXCLUDED.expires_at, "
                     + "revoked_at = EXCLUDED.revoked_at "
-                    + "WHERE " + tableName + ".expires_at <= ?";
-            Instant now = Instant.now();
+                    + "WHERE " + tableName + ".expires_at < ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
                 statement.setTimestamp(2, Timestamp.from(expiresAt));
                 statement.setTimestamp(3, Timestamp.from(now));
-                statement.setTimestamp(4, Timestamp.from(now));
+                statement.setTimestamp(4, Timestamp.from(cutoff));
                 int affectedRows = statement.executeUpdate();
-                return affectedRows > 0;
+                // A successful write must not revive a token that expired while the query waited.
+                return affectedRows > 0
+                        && !expiresAt.isBefore(JwtTokenLifetime.revocationCutoff(clock.instant()));
             }
-        } catch (Exception e) {
-            handleFailure("conditional token revoke", e);
-            return fallbackStore.revokeIfActive(tokenId, expiresAt);
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
     /**
-     * Return true when token has an unexpired revocation record.
+     * Return true while the JWT validator can still accept the recorded token.
      */
     @Override
     public boolean isRevoked(String tokenId) {
         try {
-            String sql = "SELECT 1 FROM " + tableName + " WHERE token_id = ? AND expires_at > ? LIMIT 1";
+            String sql = "SELECT 1 FROM " + tableName + " WHERE token_id = ? AND expires_at >= ? LIMIT 1";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setString(1, tokenId);
-                statement.setTimestamp(2, Timestamp.from(Instant.now()));
+                statement.setTimestamp(2, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 try (ResultSet resultSet = statement.executeQuery()) {
                     return resultSet.next();
                 }
             }
-        } catch (Exception e) {
-            handleFailure("token revocation lookup", e);
-            return fallbackStore.isRevoked(tokenId);
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -112,15 +127,17 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     @Override
     public void cleanupExpired() {
         try {
-            String sql = "DELETE FROM " + tableName + " WHERE expires_at <= ?";
+            String sql = "DELETE FROM " + tableName + " WHERE expires_at < ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setTimestamp(1, Timestamp.from(Instant.now()));
+                statement.setTimestamp(1, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 statement.executeUpdate();
             }
-        } catch (Exception e) {
-            handleFailure("expired token cleanup", e);
-            fallbackStore.cleanupExpired();
+        } catch (SQLException e) {
+            if (properties.isFailFast()) {
+                throw new TokenRevocationUnavailableException(e);
+            }
+            log.warn("Expired JWT revocation cleanup failed");
         }
     }
 
@@ -130,10 +147,10 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
     @Override
     public int size() {
         try {
-            String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE expires_at > ?";
+            String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE expires_at >= ?";
             try (Connection connection = openConnection();
                  PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setTimestamp(1, Timestamp.from(Instant.now()));
+                statement.setTimestamp(1, Timestamp.from(JwtTokenLifetime.revocationCutoff(clock.instant())));
                 try (ResultSet resultSet = statement.executeQuery()) {
                     if (resultSet.next()) {
                         return resultSet.getInt(1);
@@ -141,9 +158,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                     return 0;
                 }
             }
-        } catch (Exception e) {
-            handleFailure("token revocation count", e);
-            return fallbackStore.size();
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -158,9 +174,8 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
                  Statement statement = connection.createStatement()) {
                 statement.executeUpdate(sql);
             }
-        } catch (Exception e) {
-            handleFailure("token revocation clear", e);
-            fallbackStore.clear();
+        } catch (SQLException e) {
+            throw new TokenRevocationUnavailableException(e);
         }
     }
 
@@ -190,15 +205,5 @@ public class PostgresTokenRevocationStore implements TokenRevocationStore {
             );
         }
         return value;
-    }
-
-    /**
-     * Apply fail-fast or warning fallback policy on backend failures.
-     */
-    private void handleFailure(String operation, Exception e) {
-        if (properties.isFailFast()) {
-            throw new IllegalStateException("Postgres JWT revocation " + operation + " failed", e);
-        }
-        log.warn("Postgres JWT revocation {} failed (using in-memory fallback): {}", operation, e.getMessage());
     }
 }

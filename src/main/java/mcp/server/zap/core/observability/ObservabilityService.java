@@ -4,15 +4,17 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import mcp.gateway.core.audit.GatewayAuditSink;
 import mcp.gateway.core.context.GatewayExecutionContext;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
+import mcp.gateway.spring.webflux.McpAdapterRejectionReason;
 import mcp.server.zap.core.gateway.GatewayCoreAuditAdapter;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
@@ -22,7 +24,11 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ObservabilityService {
+    private static final int MAX_HTTP_REQUEST_SERIES = 1024;
+    // Reserve one overflow series for each outcome/authenticated combination.
+    private static final int MAX_NORMAL_HTTP_REQUEST_SERIES = MAX_HTTP_REQUEST_SERIES - 8;
     private final MeterRegistry meterRegistry;
+    private final Set<HttpRequestMetricTags> httpRequestMetricTags = new HashSet<>();
     private final GatewayAuditSink auditEventSink;
     private final ClientWorkspaceResolver clientWorkspaceResolver;
     private final GatewayCoreAuditAdapter gatewayCoreAuditAdapter;
@@ -38,19 +44,53 @@ public class ObservabilityService {
     }
 
     public void recordHttpRequest(String method,
-                                  String path,
+                                  String routePattern,
                                   int status,
                                   String clientId,
                                   Duration duration) {
+        HttpRequestMetricTags tags = boundedHttpRequestTags(new HttpRequestMetricTags(
+                normalizeHttpMethod(method),
+                routePattern == null || routePattern.isBlank() ? "/unmatched" : normalizePath(routePattern),
+                status >= 100 && status < 600 ? Integer.toString(status) : "unknown",
+                normalizeHttpOutcome(status),
+                isAuthenticated(clientId) ? "true" : "false"));
         Timer.builder("mcp.zap.http.requests")
                 .description("HTTP request duration for MCP, auth, and actuator flows")
-                .tag("method", normalize(method, "unknown"))
-                .tag("path", normalizePath(path))
-                .tag("status", Integer.toString(status))
-                .tag("outcome", normalizeHttpOutcome(status))
-                .tag("authenticated", isAuthenticated(clientId) ? "true" : "false")
+                .tag("method", tags.method())
+                .tag("path", tags.path())
+                .tag("status", tags.status())
+                .tag("outcome", tags.outcome())
+                .tag("authenticated", tags.authenticated())
                 .register(meterRegistry)
                 .record(duration);
+    }
+
+    private HttpRequestMetricTags boundedHttpRequestTags(HttpRequestMetricTags tags) {
+        synchronized (httpRequestMetricTags) {
+            if (httpRequestMetricTags.contains(tags)) {
+                return tags;
+            }
+            if (httpRequestMetricTags.size() < MAX_NORMAL_HTTP_REQUEST_SERIES) {
+                httpRequestMetricTags.add(tags);
+                return tags;
+            }
+        }
+        return new HttpRequestMetricTags("other", "/overflow", "unknown", tags.outcome(), tags.authenticated());
+    }
+
+    private String normalizeHttpMethod(String method) {
+        if (method == null || method.isBlank()) {
+            return "unknown";
+        }
+        return switch (method.toUpperCase(Locale.ROOT)) {
+            case "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT" ->
+                    method.toLowerCase(Locale.ROOT);
+            default -> "other";
+        };
+    }
+
+    private record HttpRequestMetricTags(String method, String path, String status,
+                                         String outcome, String authenticated) {
     }
 
     public void recordAuthentication(String method,
@@ -97,14 +137,7 @@ public class ObservabilityService {
         );
     }
 
-    public void recordAuthorization(String action,
-                                    String outcome,
-                                    String reason,
-                                    List<String> requiredScopes,
-                                    List<String> grantedScopes,
-                                    String clientId,
-                                    String workspaceId,
-                                    String correlationId) {
+    public void recordAuthorizationMetrics(String action, String outcome, String reason) {
         String normalizedAction = normalize(action, "unknown");
         String normalizedOutcome = normalize(outcome, "unknown");
         String normalizedReason = normalize(reason, "unknown");
@@ -114,25 +147,9 @@ public class ObservabilityService {
                 "outcome", normalizedOutcome,
                 "reason", normalizedReason
         ).increment();
-
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("action", normalizedAction);
-        if (requiredScopes != null && !requiredScopes.isEmpty()) {
-            details.put("requiredScopes", requiredScopes);
-        }
-        if (grantedScopes != null && !grantedScopes.isEmpty()) {
-            details.put("grantedScopes", grantedScopes);
-        }
-
-        auditEventSink.publish(
-                "authorization",
-                clientId,
-                normalizedOutcome,
-                auditDetails(correlationId, clientId, workspaceId, details)
-        );
     }
 
-    public void recordProtectionRejection(McpAbuseProtectionDecision decision, String correlationId) {
+    public void recordProtectionRejectionMetrics(McpAbuseProtectionDecision decision) {
         if (decision == null || decision.allowed()) {
             return;
         }
@@ -144,39 +161,21 @@ public class ObservabilityService {
                 "reason", normalize(decision.reason(), "unknown"),
                 "toolFamily", toolFamily
         ).increment();
-
-        auditEventSink.publish(
-                "protection_rejection",
-                decision.clientId(),
-                normalize(decision.errorCode(), "unknown"),
-                auditDetails(correlationId, decision.clientId(), decision.workspaceId(), Map.of(
-                        "reason", normalize(decision.reason(), "unknown"),
-                        "tool", normalize(decision.toolName(), "unknown"),
-                        "toolFamily", toolFamily,
-                        "retryAfterSeconds", Math.max(1L, decision.retryAfterSeconds())
-                ))
-        );
     }
 
-    public void recordInvalidMcpRequest(String reason, String requestId, String correlationId) {
+    public void recordInvalidMcpRequestMetrics(String reason) {
         String normalizedReason = normalize(reason, "unknown");
         meterRegistry.counter(
                 "mcp.zap.invalid_mcp_requests",
                 "reason", normalizedReason
         ).increment();
+    }
 
-        Map<String, Object> details = new LinkedHashMap<>();
-        details.put("reason", normalizedReason);
-        if (requestId != null && !requestId.isBlank()) {
-            details.put("requestId", requestId);
-        }
-
-        auditEventSink.publish(
-                "invalid_mcp_request",
-                "anonymous",
-                normalizedReason,
-                auditDetails(correlationId, "anonymous", "default-workspace", details)
-        );
+    public void recordAdapterRejectionMetrics(McpAdapterRejectionReason reason) {
+        meterRegistry.counter(
+                "mcp.zap.adapter.rejections",
+                "reason", reason.code()
+        ).increment();
     }
 
     public void recordToolExecution(String toolName,

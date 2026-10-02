@@ -1,12 +1,18 @@
 package mcp.server.zap.core.configuration;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import mcp.gateway.core.context.GatewayToolExecutionContext;
+import mcp.gateway.core.invocation.McpToolInvocation;
+import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.gateway.core.tool.McpToolRegistry;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
@@ -22,8 +28,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.audit.AuditEvent;
+import org.springframework.boot.actuate.audit.AuditEventRepository;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpHeaders;
@@ -41,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -48,8 +58,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Consumer acceptance tests for issue #227. These deliberately exercise the real
- * tool provider and HTTP filter wiring, without assuming a future catalog API.
+ * Consumer acceptance tests for issues #227 and #259, using initialized MCP
+ * sessions against the configured server and its real tool provider.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -60,9 +70,11 @@ import static org.mockito.Mockito.when;
                 "mcp.server.security.authorization.mode=enforce",
                 "mcp.server.security.authorization.allow-wildcard=true",
                 "mcp.server.auth.apiKeys[0].clientId=visibility-lister",
+                "mcp.server.auth.apiKeys[0].workspaceId=visibility-list-workspace",
                 "mcp.server.auth.apiKeys[0].key=visibility-list-key",
                 "mcp.server.auth.apiKeys[0].scopes[0]=mcp:tools:list",
                 "mcp.server.auth.apiKeys[1].clientId=visibility-reader",
+                "mcp.server.auth.apiKeys[1].workspaceId=visibility-read-workspace",
                 "mcp.server.auth.apiKeys[1].key=visibility-read-key",
                 "mcp.server.auth.apiKeys[1].scopes[0]=mcp:tools:list",
                 "mcp.server.auth.apiKeys[1].scopes[1]=zap:scan:read",
@@ -91,6 +103,12 @@ class McpToolVisibilityIntegrationTest {
 
     @Autowired
     private McpToolRegistry mcpActiveToolRegistry;
+
+    @Autowired
+    private AuditEventRepository auditEventRepository;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     @Autowired
     private ToolAuthorizationProperties authorizationProperties;
@@ -139,8 +157,11 @@ class McpToolVisibilityIntegrationTest {
         protectionProperties.setEnabled(protectionEnabled);
         clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
 
-        EntityExchangeResult<String> unknown = call(LIST_KEY, sessionId, UNKNOWN_TOOL, "visibility-request");
-        EntityExchangeResult<String> disabled = call(LIST_KEY, sessionId, DISABLED_TOOL, "visibility-request");
+        String unknownCorrelation = "unknown-" + mode + "-" + protectionEnabled;
+        String disabledCorrelation = "disabled-" + mode + "-" + protectionEnabled;
+        double previousRejections = counterCount("mcp.zap.adapter.rejections", "reason", "unknown_tool");
+        EntityExchangeResult<String> unknown = call(LIST_KEY, sessionId, UNKNOWN_TOOL, "visibility-request", unknownCorrelation);
+        EntityExchangeResult<String> disabled = call(LIST_KEY, sessionId, DISABLED_TOOL, "visibility-request", disabledCorrelation);
 
         assertAll(
                 () -> assertUnknownToolResponse(unknown, "visibility-request"),
@@ -150,6 +171,10 @@ class McpToolVisibilityIntegrationTest {
                 () -> verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class)),
                 () -> verifyNoInteractions(passiveScanAccess, spiderScanService)
         );
+        assertAdapterRejectionAudit(unknownCorrelation, "unknown_tool");
+        assertAdapterRejectionAudit(disabledCorrelation, "unknown_tool");
+        assertThat(counterCount("mcp.zap.adapter.rejections", "reason", "unknown_tool"))
+                .isEqualTo(previousRejections + 2);
     }
 
     @ParameterizedTest(name = "Disabled tool remains unavailable with credential {0}")
@@ -199,8 +224,11 @@ class McpToolVisibilityIntegrationTest {
     void activeToolStillRequiresItsPermissionAndDoesNotExecuteWhenDenied() throws Exception {
         String sessionId = initializeSession(LIST_KEY);
         clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        String correlationId = "helper-permission-denied";
+        double previousDecisions = authorizationCount("denied", "insufficient_scope");
+        long previousExecutions = successfulExecutionCount();
 
-        EntityExchangeResult<String> result = call(LIST_KEY, sessionId, ACTIVE_TOOL, 9);
+        EntityExchangeResult<String> result = call(LIST_KEY, sessionId, ACTIVE_TOOL, 9, correlationId);
 
         assertThat(result.getStatus().value()).isEqualTo(403);
         assertThat(result.getResponseHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE))
@@ -210,6 +238,12 @@ class McpToolVisibilityIntegrationTest {
         verify(authorizationService, times(1)).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
         verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
         verifyNoInteractions(passiveScanAccess, spiderScanService);
+        assertAuthorizationAudit(correlationId, "visibility-lister", "visibility-list-workspace",
+                "denied", "insufficient_scope", List.of("mcp:tools:list"));
+        assertThat(authorizationCount("denied", "insufficient_scope")).isEqualTo(previousDecisions + 1);
+        assertThat(successfulExecutionCount()).isEqualTo(previousExecutions);
+        assertThat(audits(correlationId, "tool_execution")).isEmpty();
+        assertAuthorizationContext("visibility-lister", "visibility-list-workspace", correlationId);
     }
 
     @Test
@@ -218,8 +252,11 @@ class McpToolVisibilityIntegrationTest {
         String sessionId = initializeSession(apiKey);
         protectionProperties.setEnabled(true);
         clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        String correlationId = "helper-permission-allowed";
+        double previousDecisions = authorizationCount("allowed", "scope_granted");
+        long previousExecutions = successfulExecutionCount();
 
-        EntityExchangeResult<String> result = call(apiKey, sessionId, ACTIVE_TOOL, "allowed-request");
+        EntityExchangeResult<String> result = call(apiKey, sessionId, ACTIVE_TOOL, "allowed-request", correlationId);
 
         assertThat(result.getStatus().value()).isEqualTo(200);
         assertThat(result.getResponseHeaders().containsHeader(HttpHeaders.WWW_AUTHENTICATE)).isFalse();
@@ -231,6 +268,101 @@ class McpToolVisibilityIntegrationTest {
         verify(protectionService, times(1)).evaluate(any(GatewayToolExecutionContext.class));
         verify(passiveScanAccess, times(1)).loadPassiveScanSnapshot();
         verifyNoInteractions(spiderScanService);
+        assertAuthorizationAudit(correlationId, "visibility-reader", "visibility-read-workspace",
+                "allowed", "scope_granted", List.of("mcp:tools:list", "zap:scan:read"));
+        assertThat(authorizationCount("allowed", "scope_granted")).isEqualTo(previousDecisions + 1);
+        assertSuccessfulToolExecution(correlationId, previousExecutions);
+        GatewayToolExecutionContext authorizationContext = assertAuthorizationContext(
+                "visibility-reader", "visibility-read-workspace", correlationId);
+        ArgumentCaptor<GatewayToolExecutionContext> protectionContext = ArgumentCaptor.forClass(GatewayToolExecutionContext.class);
+        verify(protectionService).evaluate(protectionContext.capture());
+        assertThat(protectionContext.getValue()).isSameAs(authorizationContext);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"WARN", "OFF"})
+    void warningAndDisabledAuthorizationRetainExecutionAndDomainObservability(String mode) throws Exception {
+        String sessionId = initializeSession(LIST_KEY);
+        authorizationProperties.setMode(ToolAuthorizationProperties.Mode.valueOf(mode));
+        protectionProperties.setEnabled(true);
+        clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        String correlationId = "helper-permission-" + mode;
+        double previousWarnings = authorizationCount("warn", "insufficient_scope");
+        long previousExecutions = successfulExecutionCount();
+
+        EntityExchangeResult<String> result = call(LIST_KEY, sessionId, ACTIVE_TOOL, "mode-request", correlationId);
+
+        assertThat(result.getStatus().value()).isEqualTo(200);
+        assertThat(responseEnvelope(result).path("result").path("isError").asBoolean()).isFalse();
+        verify(protectionService).evaluate(any(GatewayToolExecutionContext.class));
+        verify(passiveScanAccess).loadPassiveScanSnapshot();
+        verifyNoInteractions(spiderScanService);
+        assertSuccessfulToolExecution(correlationId, previousExecutions);
+        if ("WARN".equals(mode)) {
+            assertAuthorizationAudit(correlationId, "visibility-lister", "visibility-list-workspace",
+                    "warn", "insufficient_scope", List.of("mcp:tools:list"));
+            assertThat(authorizationCount("warn", "insufficient_scope")).isEqualTo(previousWarnings + 1);
+            assertAuthorizationContext("visibility-lister", "visibility-list-workspace", correlationId);
+        } else {
+            verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
+            assertThat(governanceAudits(correlationId)).isEmpty();
+            assertThat(authorizationCount("warn", "insufficient_scope")).isEqualTo(previousWarnings);
+        }
+    }
+
+    @Test
+    void protectionRejectionPublishesOneSignalAfterAuthorizationAndPreservesMetrics() throws Exception {
+        String sessionId = initializeSession("visibility-read-key");
+        protectionProperties.setEnabled(true);
+        clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        String correlationId = "helper-protection-rejection";
+        doReturn(McpAbuseProtectionDecision.reject("rate_limited", "client_request_rate", ACTIVE_TOOL,
+                "visibility-reader", "visibility-read-workspace", 37))
+                .when(protectionService).evaluate(any(GatewayToolExecutionContext.class));
+        double previousRejections = counterCount("mcp.zap.protection.rejections",
+                "error", "rate_limited", "reason", "client_request_rate");
+
+        EntityExchangeResult<String> result = call("visibility-read-key", sessionId, ACTIVE_TOOL, 37, correlationId);
+
+        assertThat(result.getStatus().value()).isEqualTo(429);
+        assertThat(result.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("37");
+        assertThat(responseEnvelope(result).path("retryAfterSeconds").asLong()).isEqualTo(37);
+        verifyNoInteractions(passiveScanAccess, spiderScanService);
+        assertThat(governanceAudits(correlationId)).extracting(AuditEvent::getType)
+                .containsExactlyInAnyOrder("authorization", "protection_rejection");
+        List<AuditEvent> rejections = audits(correlationId, "protection_rejection");
+        assertThat(rejections).hasSize(1);
+        assertThat(rejections.getFirst().getPrincipal()).isEqualTo("visibility-reader");
+        assertThat(rejections.getFirst().getData()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "tool", ACTIVE_TOOL, "errorCode", "rate_limited", "reason", "client_request_rate",
+                "retryAfterSeconds", 37L, "workspaceId", "visibility-read-workspace",
+                "correlationId", correlationId, "outcome", "rejected"));
+        assertThat(counterCount("mcp.zap.protection.rejections",
+                "error", "rate_limited", "reason", "client_request_rate")).isEqualTo(previousRejections + 1);
+        assertThat(audits(correlationId, "tool_execution")).isEmpty();
+    }
+
+    @Test
+    void invalidRequestPublishesOneSparseDiagnosticSignalBeforeGovernanceOrExecution() throws Exception {
+        String sessionId = initializeSession("visibility-read-key");
+        clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        String correlationId = "helper-invalid-request";
+        double previousInvalidRequests = counterCount("mcp.zap.invalid_mcp_requests",
+                "reason", "invalid_request_shape");
+
+        EntityExchangeResult<String> result = post("visibility-read-key", sessionId, Map.of(
+                "jsonrpc", "2.0", "id", 91, "method", "tools/call", "params", Map.of()
+        ), correlationId);
+
+        assertThat(result.getStatus().value()).isEqualTo(400);
+        assertThat(responseEnvelope(result).path("reason").asString()).isEqualTo("invalid_request_shape");
+        verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
+        verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
+        verifyNoInteractions(passiveScanAccess, spiderScanService);
+        assertDiagnosticAudit("invalid_mcp_request", correlationId, "invalid_request_shape");
+        assertThat(counterCount("mcp.zap.invalid_mcp_requests", "reason", "invalid_request_shape"))
+                .isEqualTo(previousInvalidRequests + 1);
+        assertThat(audits(correlationId, "tool_execution")).isEmpty();
     }
 
     @ParameterizedTest
@@ -308,6 +440,84 @@ class McpToolVisibilityIntegrationTest {
         verifyNoInteractions(passiveScanAccess, spiderScanService);
     }
 
+    private void assertAuthorizationAudit(String correlationId, String clientId, String workspaceId,
+                                          String outcome, String reason, List<String> grantedScopes) {
+        List<AuditEvent> events = governanceAudits(correlationId);
+        assertThat(events).hasSize(1);
+        AuditEvent event = events.getFirst();
+        assertThat(event.getType()).isEqualTo("authorization");
+        assertThat(event.getPrincipal()).isEqualTo(clientId);
+        assertThat(event.getData()).containsExactlyInAnyOrderEntriesOf(Map.of(
+                "action", ACTIVE_TOOL, "reason", reason,
+                "requiredScopes", List.of("zap:scan:read"), "grantedScopes", grantedScopes,
+                "workspaceId", workspaceId, "correlationId", correlationId, "outcome", outcome));
+    }
+
+    private void assertAdapterRejectionAudit(String correlationId, String reason) {
+        assertDiagnosticAudit("adapter_rejection", correlationId, reason);
+    }
+
+    private void assertDiagnosticAudit(String type, String correlationId, String reason) {
+        List<AuditEvent> events = governanceAudits(correlationId);
+        assertThat(events).hasSize(1);
+        AuditEvent event = events.getFirst();
+        assertThat(event.getType()).isEqualTo(type);
+        assertThat(event.getPrincipal()).isEqualTo("anonymous");
+        assertThat(event.getData()).containsOnlyKeys("reason", "requestId", "correlationId", "outcome")
+                .containsEntry("reason", reason).containsEntry("correlationId", correlationId)
+                .containsEntry("outcome", "rejected");
+        assertThat(event.getData().get("requestId")).isInstanceOf(String.class);
+        assertThat((String) event.getData().get("requestId")).isNotBlank();
+    }
+
+    private List<AuditEvent> governanceAudits(String correlationId) {
+        return auditEventRepository.find(null, Instant.EPOCH, null).stream()
+                .filter(event -> List.of("authorization", "protection_rejection", "invalid_mcp_request",
+                        "adapter_rejection").contains(event.getType()))
+                .filter(event -> correlationId.equals(event.getData().get("correlationId")))
+                .toList();
+    }
+
+    private List<AuditEvent> audits(String correlationId, String type) {
+        return auditEventRepository.find(null, Instant.EPOCH, type).stream()
+                .filter(event -> correlationId.equals(event.getData().get("correlationId")))
+                .toList();
+    }
+
+    private GatewayToolExecutionContext assertAuthorizationContext(String clientId, String workspaceId,
+                                                                    String correlationId) {
+        ArgumentCaptor<GatewayToolExecutionContext> context = ArgumentCaptor.forClass(GatewayToolExecutionContext.class);
+        verify(authorizationService).authorize(anyCollection(), context.capture());
+        assertThat(context.getValue().principalId()).isEqualTo(clientId);
+        assertThat(context.getValue().workspaceId()).isEqualTo(workspaceId);
+        assertThat(context.getValue().correlationId()).isEqualTo(correlationId);
+        assertThat(context.getValue().invocation()).isEqualTo(McpToolInvocation.fromJsonRpc("tools/call", ACTIVE_TOOL));
+        return context.getValue();
+    }
+
+    private double authorizationCount(String outcome, String reason) {
+        return counterCount("mcp.zap.authorization.decisions", "action", ACTIVE_TOOL,
+                "outcome", outcome, "reason", reason);
+    }
+
+    private double counterCount(String name, String... tags) {
+        Counter counter = meterRegistry.find(name).tags(tags).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    private long successfulExecutionCount() {
+        Timer timer = meterRegistry.find("mcp.zap.tool.executions")
+                .tags("tool", ACTIVE_TOOL, "outcome", "success").timer();
+        return timer == null ? 0 : timer.count();
+    }
+
+    private void assertSuccessfulToolExecution(String correlationId, long previousExecutions) {
+        assertThat(successfulExecutionCount()).isEqualTo(previousExecutions + 1);
+        List<AuditEvent> executions = audits(correlationId, "tool_execution");
+        assertThat(executions).hasSize(1);
+        assertThat(executions.getFirst().getData()).containsEntry("tool", ACTIVE_TOOL).containsEntry("outcome", "success");
+    }
+
     private void assertUnknownToolResponse(EntityExchangeResult<String> result, Object requestId) throws Exception {
         JsonNode expected = OBJECT_MAPPER.valueToTree(Map.of(
                 "jsonrpc", "2.0",
@@ -370,20 +580,30 @@ class McpToolVisibilityIntegrationTest {
 
     private EntityExchangeResult<String> call(String apiKey, String sessionId, String toolName, Object requestId)
             throws Exception {
+        return call(apiKey, sessionId, toolName, requestId, "tool-visibility-regression");
+    }
+
+    private EntityExchangeResult<String> call(String apiKey, String sessionId, String toolName, Object requestId,
+                                             String correlationId) throws Exception {
         return post(apiKey, sessionId, Map.of(
                 "jsonrpc", "2.0", "id", requestId, "method", "tools/call",
                 "params", Map.of("name", toolName, "arguments",
                         DISABLED_TOOL.equals(toolName) ? Map.of("scanId", "1") : Map.of())
-        ));
+        ), correlationId);
     }
 
     private EntityExchangeResult<String> post(String apiKey, String sessionId, Map<String, Object> payload)
             throws Exception {
+        return post(apiKey, sessionId, payload, "tool-visibility-regression");
+    }
+
+    private EntityExchangeResult<String> post(String apiKey, String sessionId, Map<String, Object> payload,
+                                             String correlationId) throws Exception {
         WebTestClient.RequestBodySpec request = WebTestClient.bindToServer()
                 .baseUrl("http://localhost:" + port).build()
                 .post().uri("/mcp")
                 .header("X-API-Key", apiKey)
-                .header("X-Correlation-Id", "tool-visibility-regression")
+                .header("X-Correlation-Id", correlationId)
                 .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
                 .contentType(MediaType.APPLICATION_JSON);
         if (sessionId != null) {

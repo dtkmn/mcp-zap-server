@@ -57,6 +57,13 @@ tool call.
 
 ## 4. Connect A Client
 
+### Codex
+
+Use the [Codex setup instructions](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#codex)
+to add `http://localhost:7456/mcp` to `~/.codex/config.toml` with the `X-API-Key`
+header. The guide covers CLI environment variables and a desktop app fallback.
+Then return here to confirm tool discovery and run the first scan.
+
 ### Cursor
 
 - Start from [examples/cursor/mcp.json](../../examples/cursor/mcp.json).
@@ -95,8 +102,8 @@ Petstore examples can be scanned without an auth profile.
 If your authorized target requires a traditional username/password HTML form,
 use the
 [Form-Login Target Authentication guide](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/).
-That optional setup is separate from the API key or JWT used by Cursor. Never
-put the website password in Cursor or an MCP prompt.
+That optional setup is separate from the API key or JWT used by your MCP
+client. Never put the website password in client configuration or an MCP prompt.
 
 ## 6. Use The Guided Happy Path
 

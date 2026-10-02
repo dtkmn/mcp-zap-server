@@ -9,6 +9,7 @@ import mcp.server.zap.core.model.TokenRequest;
 import mcp.server.zap.core.model.TokenResponse;
 import mcp.server.zap.core.service.TokenBlacklistService;
 import mcp.server.zap.core.service.JwtService;
+import mcp.server.zap.core.service.revocation.TokenRevocationUnavailableException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -109,9 +110,7 @@ public class AuthController {
             String clientId = jwt.getSubject();
             String tokenType = jwt.getClaimAsString("type");
             String tokenId = jwt.getId();
-            Instant expiresAt = jwt.getExpiresAt() != null
-                    ? jwt.getExpiresAt()
-                    : Instant.now().plusSeconds(60);
+            Instant expiresAt = jwt.getExpiresAt();
 
             if (!"refresh".equals(tokenType)) {
                 log.warn("Invalid token type for refresh");
@@ -140,6 +139,9 @@ public class AuthController {
                 log.warn("Refresh token replay detected");
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
+
+            // Consumption can wait on the backend; the submitted token must still be valid.
+            jwtService.validateToken(refreshToken);
             
             // Rotation: issue a new token pair.
             String newAccessToken = jwtService.generateAccessToken(client.getClientId(), client.getScopes());
@@ -158,6 +160,9 @@ public class AuthController {
             
             return ResponseEntity.ok(response);
             
+        } catch (TokenRevocationUnavailableException _) {
+            log.warn("Token refresh unavailable because authoritative revocation could not be completed");
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         } catch (Exception _) {
             log.error("Error refreshing token");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -181,9 +186,7 @@ public class AuthController {
                         .body(Map.of("revoked", false, "error", "Token is missing jti claim"));
             }
 
-            Instant expiresAt = jwt.getExpiresAt() != null
-                    ? jwt.getExpiresAt()
-                    : Instant.now().plusSeconds(60);
+            Instant expiresAt = jwt.getExpiresAt();
             tokenBlacklistService.blacklistToken(tokenId, expiresAt);
 
             log.info("Revoked token");

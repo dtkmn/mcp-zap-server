@@ -78,23 +78,35 @@ discovery.
 
 ### 2. Optional Target Authentication
 
-Skip this step for public routes and unauthenticated APIs. If the authorized
-target has a traditional username/password HTML form, complete the
-[first-timer form-login setup](../../getting-started/form-login-target-authentication/),
-then prepare and validate a guided auth session:
+Skip this step for public routes and unauthenticated APIs. Choose an
+operator-managed profile for the authorized target:
+
+- For a traditional username/password HTML form, use a `kind: form` profile
+  from the [first-timer form-login setup](../../getting-started/form-login-target-authentication/).
+- For a JavaScript application that needs browser login, use a
+  [`kind: browser` profile](../authenticated-scanning-best-practices/#browser-authentication-for-client-spider).
+  Follow the [Client Spider login guide](../client-spider/#crawl-behind-a-login)
+  for prerequisites and protected-response validation.
+
+Then prepare and validate a guided auth session:
 
 1. `zap_auth_session_prepare`
 2. `zap_auth_session_validate`
+
+Continue only after `Valid: true` and evidence that the protected target
+response belongs to the expected user. A public page returning HTTP `200` is
+not proof of login.
 
 Select an operator-managed auth profile and provide a target URL on that
 profile's allowed origin. Profiles hold exact `env:NAME` or
 `file:/absolute/path` credential references; MCP callers never provide secret
 references or inline secrets.
 
-Current guided authenticated crawl and attack support prepared form-login
-sessions. Bearer and API-key session preparation is useful as a contract and
-validation path, but do not assume every guided scan mode consumes those
-session types yet.
+Prepared form-login sessions support HTTP crawling and guided active scans.
+In `v0.13.0`, prepared browser sessions support direct and queued Client Spider
+crawls with `strategy=client`; they do not support guided active scans. Bearer
+and API-key session preparation is useful as a contract and validation path,
+but do not assume every guided scan mode consumes those session types yet.
 
 The target's website password never belongs in the MCP client or prompt. The
 operator stores it in a mounted secret; MCP Server resolves it server-side to
@@ -107,8 +119,14 @@ Call `zap_crawl_start`.
 Recommended parameters:
 
 - `targetUrl`: the container-reachable target, such as `http://juice-shop:3000`
-- `strategy`: `auto` for unauthenticated first runs; use `http` with a prepared form-login session
-- `authSessionId`: only when you prepared and validated a form-login session
+- `strategy`: `auto` for unauthenticated first runs; `http` with a prepared
+  form-login session; `client` with a prepared browser session
+- `authSessionId`: only when you prepared and validated a form-login or browser
+  session; it must match the strategy above
+
+`strategy=browser` means AJAX Spider, not a browser authentication profile;
+it rejects `authSessionId`. See [Client Spider](../client-spider/) for
+JavaScript crawling without authentication and deployment prerequisites.
 
 The response returns a guided `Operation ID`. Use that operation ID with
 `zap_crawl_status`. Do not switch to direct spider IDs unless you are debugging
@@ -119,7 +137,12 @@ with expert tools.
 Call `zap_crawl_status` until the response says the crawl is complete or tells
 you to continue polling.
 
-When the crawl completes, choose one:
+For a browser-authenticated Client Spider crawl, verify that protected pages
+returned content as the expected user, then continue to step 6 for passive
+analysis and findings. Crawl completion alone does not prove authenticated
+coverage.
+
+For other crawls, when the crawl completes, choose one:
 
 - continue to `zap_attack_start` if active testing is approved
 - call `zap_passive_scan_wait` if crawl-only evidence is enough
@@ -138,6 +161,10 @@ Recommended parameters:
 - `policy`: optional scan policy name when you need a non-default rule set
 - `authSessionId`: only when you prepared and validated a supported form-login
   session
+
+A prepared browser session cannot be used here. Guided authenticated active
+testing requires a separately prepared and validated form-login session for
+targets that support that login flow.
 
 Then poll with `zap_attack_status` until the response says the attack is
 complete or tells you what to fix.
@@ -162,7 +189,16 @@ If the wait times out:
 
 Start with `zap_findings_summary`.
 
-Use `baseUrl` when you want target-scoped results.
+Pass the scanned target as `baseUrl`, for example:
+
+```json
+{"baseUrl": "http://juice-shop:3000"}
+```
+
+`baseUrl` is required for both `zap_findings_summary` and
+`zap_findings_details`. Findings reads also require visible scan-history
+evidence for that target. Requests without a target or visible evidence are
+rejected; these tools do not provide a global read of the shared ZAP session.
 
 Then call `zap_findings_details` when you need:
 
@@ -172,7 +208,7 @@ Then call `zap_findings_details` when you need:
 - URLs, params, evidence, or attack samples
 
 For first-pass user review, do not start with raw alert instances. Start with
-summary, then drill down.
+summary, then drill down using the same `baseUrl`.
 
 ### 8. Generate And Read A Report
 
@@ -310,7 +346,6 @@ Not today:
 
 - runtime multi-engine switching
 - Nuclei, Semgrep, Burp, or other scanner adapters
-- a generic extracted MCP gateway core repository
 - marketplace-style extension discovery
 - enterprise-only governance in the OSS guide
 
@@ -322,12 +357,13 @@ Not today:
 | Client keeps asking for ZAP scan IDs | It is following expert guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
 | Findings look empty immediately after scan | Passive analysis has not drained. | Run `zap_passive_scan_wait`, then check findings again. |
 | Handoff has caveats | Evidence window is incomplete or direct-only. | Review `zap_scan_history_release_evidence` warnings and rerun with stronger coverage if needed. |
-| Authenticated scan fails | Profile origin, login indicators, form fields, or configured credential reference is wrong. | Use the [form-login troubleshooting guide](../../getting-started/form-login-target-authentication/#troubleshooting), fix the profile, then prepare and validate a new session. |
+| Authenticated scan fails | Profile origin, login indicators, form fields, or configured credential reference is wrong, or browser login is unconfirmed. | Use the [form-login troubleshooting guide](../../getting-started/form-login-target-authentication/#troubleshooting) or [Client Spider login guide](../client-spider/#crawl-behind-a-login), fix the profile, then prepare and validate a new session. |
 
 ## Related Docs
 
 - [MCP Client Authentication](../../getting-started/mcp-client-authentication/)
 - [Form-Login Target Authentication](../../getting-started/form-login-target-authentication/)
+- [Client Spider](../client-spider/)
 - [Authenticated Scanning Reference](../authenticated-scanning-best-practices/)
 - [Scan Execution Modes](../scan-execution-modes/)
 - [Passive Scan](../passive-scan/)

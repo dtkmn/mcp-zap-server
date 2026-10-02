@@ -25,11 +25,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @Tag("docker")
@@ -80,6 +86,8 @@ class AutomationPlanServiceDockerTest {
                     .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
     private static AutomationPlanService service;
+    private static ZapEngineAutomationAccess automationAccess;
+    private static String targetUrl;
 
     @BeforeAll
     static void setupService() throws Exception {
@@ -87,7 +95,14 @@ class AutomationPlanServiceDockerTest {
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 
-        service = new AutomationPlanService(new ZapEngineAutomationAccess(clientApi));
+        String targetIp = TARGET.getContainerInfo().getNetworkSettings().getNetworks().values().iterator().next().getIpAddress();
+        targetUrl = "http://" + targetIp + "/";
+        UrlValidationService policy = new UrlValidationService();
+        ReflectionTestUtils.setField(policy, "allowPrivateNetworks", true);
+        ReflectionTestUtils.setField(policy, "whitelist", List.of(targetIp));
+        ReflectionTestUtils.setField(policy, "blacklist", List.of());
+        automationAccess = spy(new ZapEngineAutomationAccess(clientApi));
+        service = new AutomationPlanService(automationAccess, policy);
         ReflectionTestUtils.setField(service, "automationLocalDirectory", AUTOMATION_ROOT.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", AUTOMATION_ROOT.toString());
     }
@@ -101,17 +116,22 @@ class AutomationPlanServiceDockerTest {
                           contexts:
                             - name: local-target
                               urls:
-                                - http://automation-target/
+                                - %s
                           parameters:
                             progressToStdout: true
                         jobs:
                           - type: requestor
                             requests:
-                              - url: http://automation-target/
+                              - url: %s
                                 method: GET
                                 responseCode: 200
                           - type: passiveScan-wait
                             parameters:
+                              maxDuration: 1
+                          - type: spider
+                            parameters:
+                              context: local-target
+                              maxDepth: 1
                               maxDuration: 1
                           - type: report
                             parameters:
@@ -120,8 +140,8 @@ class AutomationPlanServiceDockerTest {
                               reportTitle: Automation Test Report
                               displayReport: false
                             sites:
-                              - automation-target
-                        """,
+                              - %s
+                        """.formatted(targetUrl, targetUrl, targetUrl),
                 "smoke-plan.yaml"
         );
 
@@ -136,6 +156,18 @@ class AutomationPlanServiceDockerTest {
         assertTrue(finalStatus.contains("Job report generated report"), finalStatus);
         assertTrue(artifacts.contains("automation-report.json"), artifacts);
         assertTrue(artifacts.contains("\"@programName\": \"ZAP\""), artifacts);
+    }
+
+    @Test
+    void destinationPolicyRejectsInlineAndFilePlansBeforeRealZapDispatch() throws Exception {
+        org.mockito.Mockito.clearInvocations(automationAccess);
+        String forbiddenPlan = "env: {contexts: [{name: forbidden, urls: ['http://127.0.0.1/']}] }\njobs: []\n";
+        assertThrows(IllegalArgumentException.class, () -> service.runAutomationPlan(null, forbiddenPlan, "forbidden.yaml"));
+        Path file = AUTOMATION_ROOT.resolve("forbidden-file.yaml");
+        Files.writeString(file, "env: {contexts: [{name: allowed, urls: ['" + targetUrl + "']}] }\n"
+                + "jobs: [{type: requestor, requests: [{url: 'http://169.254.169.254/'}]}]\n");
+        assertThrows(IllegalArgumentException.class, () -> service.runAutomationPlan(file.toString(), null, null));
+        verify(automationAccess, never()).runAutomationPlan(anyString());
     }
 
     private static void awaitAutomationApiReady(ClientApi clientApi) throws Exception {

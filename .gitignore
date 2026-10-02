@@ -34,6 +34,7 @@ __pycache__/
 docs/.astro/
 docs/dist/
 docs/node_modules/
+docs/src/content/docs/generated/
 
 # Keep local review notes out of public commits.
 docs/reviews/

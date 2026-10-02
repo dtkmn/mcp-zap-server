@@ -5,6 +5,18 @@ description: "Choose the right guided or expert findings and report tools for tr
 ---
 MCP ZAP Server supports multiple findings and report layers. The right tool depends on whether you want a fast summary, grouped detail, raw evidence, or a stable artifact.
 
+## Required Findings Scope
+
+Findings reads require a nonblank `baseUrl` for the scanned target and visible
+scan-history evidence for that target. This applies to guided summary/details
+and expert summary, details, instances, snapshots and diffs. Supply the target
+you scanned, such as `http://juice-shop:3000`; other supported filters narrow
+that target's findings. Missing `baseUrl` or visible evidence is rejected.
+
+These tools do not provide a global read of the shared ZAP session. A target
+scope also does not isolate results to one scan ID; see
+[Client Spider findings](#client-spider-findings) below.
+
 ## Guided Surface
 
 Guided findings and report tools:
@@ -134,8 +146,8 @@ There is no dedicated Client Spider results-list or Client Map export tool in th
 ```text
 1. Finish crawl or attack work
 2. Run zap_passive_scan_wait
-3. Read findings summary
-4. Drill into grouped details
+3. Read findings summary with the scanned target's baseUrl
+4. Drill into grouped details using the same baseUrl
 5. Expand to raw instances only when you need evidence
 6. Generate a report artifact
 7. In expert mode, snapshot or diff findings for later comparison

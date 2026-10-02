@@ -181,7 +181,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `mcp.service.type` | Kubernetes service type | `ClusterIP` |
 | `mcp.autoscaling.enabled` | Enable horizontal pod autoscaler | `false` |
 | `mcp.autoscaling.maxReplicas` | Maximum replicas for autoscaling | `1` |
-| `mcp.security.allowPlaceholderApiKey` | Allow placeholder MCP API keys instead of failing startup | `false` |
+| `mcp.security.allowPlaceholderApiKey` | Opt in to placeholder MCP API keys; in development/unreleased builds, requires nonempty active Spring profiles all among `local`, `dev`, and `test` | `false` |
 | `mcp.streamableHttp.sessionAffinity.provider` | Sticky-session preset for multi-replica streamable MCP (`aws-nlb`, `ingress-nginx`, `service-client-ip`) | `""` |
 | `networkPolicy.mcp.enabled` | Enable MCP ingress and egress NetworkPolicy boundary | `true` |
 | `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |
@@ -249,8 +249,20 @@ The chart now ships with:
 
 - ZAP ingress restricted to MCP pods by default via `networkPolicy.zap.enabled=true`
 - ZAP egress restricted by default; add explicit target CIDRs/ports under `networkPolicy.zap.egress.extraEgress` for real scan traffic
-- MCP ingress and egress restricted by default via `networkPolicy.mcp.enabled=true`
+- MCP ingress defaults to pods in the release namespace via `networkPolicy.mcp.enabled=true` and `networkPolicy.mcp.allowSameNamespace=true`
 - MCP can reach ZAP and DNS by default; add Postgres, JWKS, or other operator-approved endpoints under `networkPolicy.mcp.egress.extraEgress`
+
+Add permitted MCP ingress source peers under `networkPolicy.mcp.extraIngress`.
+Set `networkPolicy.mcp.allowSameNamespace=false` to allow only those explicit
+peers on the MCP service target port. With that setting and an empty or omitted
+`extraIngress` list, the chart renders `ingress: []`, so this policy allows no
+MCP ingress. Disabling the MCP NetworkPolicy omits it entirely.
+
+NetworkPolicies are additive: another policy selecting the same MCP pods can
+still allow traffic. Review all applicable policies when enforcing a deny-all
+configuration. These rules require a cluster CNI that enforces Kubernetes
+NetworkPolicy; rendering or installing the chart alone does not establish
+network isolation.
 
 Use the AWS and GCP reference overlays as the starting point for ingress-controller namespace, CIDR, and data-store egress allowlists.
 

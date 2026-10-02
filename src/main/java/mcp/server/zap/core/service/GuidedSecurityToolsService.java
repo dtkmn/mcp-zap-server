@@ -59,7 +59,7 @@ public class GuidedSecurityToolsService {
             @ToolParam(description = "Required source mode: url for a definition ZAP downloads, or file for a definition on ZAP's filesystem. Case-insensitive.") String sourceKind,
             @ToolParam(description = "Required HTTP(S) definition URL reachable by ZAP and allowed by server URL policy, or a file path readable inside the ZAP host/container (for example /zap/wrk/openapi.yaml). File contents are not accepted here.") String source,
             @ToolParam(required = false, description = "Required for graphql: HTTP(S) API endpoint to test, for example https://api.example.com/graphql; must be reachable by ZAP and allowed by server URL policy. Ignored for openapi and soap.") String endpointUrl,
-            @ToolParam(required = false, description = "Optional OpenAPI target URL override, for example https://api.example.com/v1. Supports partial scheme, authority, or path; omit or leave blank for default target resolution. Ignored for graphql and soap.") String hostOverride
+            @ToolParam(required = false, description = "Optional OpenAPI target override allowed by server URL policy: a full HTTP(S) URL or authority/path with an explicit host, for example https://api.example.com/v1 or api.example.com:9090/v1. Scheme-only and path-only overrides are rejected; use a full URL instead. Omit or leave blank only for trusted definition-derived targets constrained by ZAP egress controls. Ignored for graphql and soap.") String hostOverride
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);
@@ -144,10 +144,10 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_findings_summary",
-            description = "Get the first-pass findings view after a scan or passive-scan wait. This returns a concise grouped risk summary for fast triage. Use baseUrl to scope results to a specific host or path."
+            description = "Get the first-pass findings view after a scan or passive-scan wait. This returns a concise grouped risk summary for fast triage. Requires a nonblank target baseUrl covered by scan evidence visible to the caller."
     )
     public String getGuidedFindingsSummary(
-            @ToolParam(required = false, description = "Optional base URL filter to scope findings to a specific host or path, for example https://app.example.com/admin") String baseUrl
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller, for example https://app.example.com/admin") String baseUrl
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.FINDINGS_READ, "findings read");
         String normalizedBaseUrl = trimToEmpty(baseUrl);
@@ -158,10 +158,10 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_findings_details",
-            description = "Drill into findings after reading the summary. By default this returns grouped details for matching alerts. Set includeInstances=true when you need bounded raw alert occurrences with concrete URLs, params, evidence, or attack samples."
+            description = "Drill into findings after reading the summary. Requires a nonblank target baseUrl covered by scan evidence visible to the caller. By default this returns grouped details for matching alerts. Set includeInstances=true when you need bounded raw alert occurrences with concrete URLs, params, evidence, or attack samples."
     )
     public String getGuidedFindingsDetails(
-            @ToolParam(required = false, description = "Optional base URL filter to scope findings to one host or path") String baseUrl,
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
             @ToolParam(required = false, description = "Optional plugin ID filter when you already know the ZAP alert/plugin identifier to inspect") String pluginId,
             @ToolParam(required = false, description = "Optional alert name filter when you want one alert family only") String alertName,
             @ToolParam(required = false, description = "Optional true to include bounded raw instances with concrete URLs and evidence; false returns grouped detail blocks") Boolean includeInstances,

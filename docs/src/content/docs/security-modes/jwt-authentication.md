@@ -38,7 +38,7 @@ JWT_REVOCATION_STORE_POSTGRES_URL=jdbc:postgresql://postgres:5432/mcp_zap
 JWT_REVOCATION_STORE_POSTGRES_USERNAME=mcp_user
 JWT_REVOCATION_STORE_POSTGRES_PASSWORD=change-me
 JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME=jwt_token_revocation
-# Unreleased development default; v0.13.0 defaults to false.
+# Default in v0.14.0; v0.13.0 defaults to false.
 JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST=true
 ```
 
@@ -171,9 +171,13 @@ starting replicas. Set `DB_MIGRATIONS_ENABLED=true` and the
 `JWT_REVOCATION_STORE_POSTGRES_*`. The migrations create the default
 `jwt_token_revocation` table; a custom table must match that schema.
 
-### Development: PostgreSQL failure behavior
+<a id="development-postgresql-failure-behavior"></a>
 
-**Unreleased; not included in `v0.13.0`.** PostgreSQL is authoritative when
+### PostgreSQL failure behavior in v0.14.0
+
+**Version `v0.14.0` change; not included in `v0.13.0`.** Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) for availability.
+PostgreSQL is authoritative when
 selected: the server never falls back to process-local revocation state. An
 unknown backend, missing PostgreSQL URL, invalid table name, or missing or
 inaccessible revocation table prevents startup. `JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST` now defaults
@@ -199,9 +203,11 @@ failure after a revocation has been persisted does not negate that successful
 revocation. Explicit `in-memory` mode remains local to one process and loses
 state on restart.
 
-### Development: JWT expiration and revocation lifetime
+<a id="development-jwt-expiration-and-revocation-lifetime"></a>
 
-**Unreleased; not included in `v0.13.0`.** JWT validation and both revocation
+### JWT expiration and revocation lifetime in v0.14.0
+
+**Version `v0.14.0` change; not included in `v0.13.0`.** JWT validation and both revocation
 backends use the same existing 60-second clock-skew allowance. Revocations and
 used refresh-token records remain effective through 60 seconds after the token's
 original `exp`, including that boundary. They become inactive and eligible for

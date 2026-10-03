@@ -25,7 +25,7 @@ scan-as-user capabilities. MCP ZAP Server securely configures and orchestrates
 those ZAP features through an operator-managed profile. This project did not
 build a second login engine from scratch.
 
-## Authentication Support in v0.13.0
+## Authentication Support
 
 | Target authentication | Prepare and validate | Guided crawl and attack use it |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ Custom login steps and scripts still require ZAP's expert controls. ZAP itself r
 The form-login profile workflow is available in `v0.10.0` and later. `v0.9.1`
 and earlier do not contain this contract. In `v0.13.0`, Client Spider and browser
 profiles add the browser workflow described above; `v0.12.0` does not contain
-these features. Before installing `v0.13.0`, check
+these features. Before installing a version, check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and confirm
 successful image publication in the release workflow.
 

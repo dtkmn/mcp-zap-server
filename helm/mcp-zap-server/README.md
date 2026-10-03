@@ -4,14 +4,21 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.13.0` defaults to MCP image `v0.13.0`. Use the chart from the same release
+Chart `0.14.0` defaults to MCP image `v0.14.0`. Use the chart from the same release
 as your image, and confirm that the corresponding release workflow has published
 the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 is the source for publication status. Release preparation does not publish images.
-Version `0.13.0` adds Client Spider and browser authentication profiles. Upgrade
-all queue workers before submitting Client Spider jobs, and use a 60000 ms ZAP
-API read timeout for browser login. There is no new database migration compared
-with `v0.12.0`; see the [0.13.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.13.0.md).
+Version `0.14.0` removes the legacy API-key property, makes PostgreSQL JWT
+revocation fail closed, and corrects the empty-peer MCP ingress policy. Review
+custom authentication configuration, upgrade every JWT replica and cleanup
+process, and check explicit ingress peers before rollout. There is no new
+database migration compared with `v0.13.0`; see the
+[0.14.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.14.0.md).
+
+Client Spider and browser authentication profiles were introduced in `0.13.0`.
+Deployments upgrading from `0.12.0` must also upgrade all queue workers before
+submitting Client Spider jobs and use a 60000 ms ZAP API read timeout for browser
+login; see the [0.13.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.13.0.md).
 
 Upgrading from `v0.11.1` requires V7/V8
 migrations for PostgreSQL scan-job storage. Migration execution is disabled by
@@ -348,7 +355,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml \
-  --set mcp.image.tag=v0.13.0
+  --set mcp.image.tag=v0.14.0
 ```
 
 ## Uninstalling

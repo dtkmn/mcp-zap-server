@@ -20,13 +20,20 @@ public class OpenApiService {
 
     private final EngineApiImportAccess engineApiImportAccess;
     private final UrlValidationService urlValidationService;
+    private final OpenApiContentImportService contentImportService;
 
     /**
      * Build-time dependency injection constructor.
      */
-    public OpenApiService(EngineApiImportAccess engineApiImportAccess, UrlValidationService urlValidationService) {
+    public OpenApiService(EngineApiImportAccess engineApiImportAccess, UrlValidationService urlValidationService,
+                          OpenApiContentImportService contentImportService) {
         this.engineApiImportAccess = engineApiImportAccess;
         this.urlValidationService = urlValidationService;
+        this.contentImportService = contentImportService;
+    }
+
+    public String importOpenApiContent(String content, String hostOverride) {
+        return contentImportService.importContent(content, hostOverride);
     }
 
     /**

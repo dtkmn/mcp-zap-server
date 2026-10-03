@@ -203,6 +203,14 @@ zap:
   automation:
     local-directory: ${ZAP_AUTOMATION_LOCAL_DIRECTORY:/zap/wrk/automation}
     zap-directory: ${ZAP_AUTOMATION_ZAP_DIRECTORY:/zap/wrk/automation}
+
+  openapi:
+    content-import:
+      enabled: ${ZAP_OPENAPI_CONTENT_ENABLED:false}
+      local-directory: ${ZAP_OPENAPI_CONTENT_LOCAL_DIRECTORY:}
+      zap-directory: ${ZAP_OPENAPI_CONTENT_ZAP_DIRECTORY:}
+      max-retained-imports: ${ZAP_OPENAPI_CONTENT_MAX_RETAINED_IMPORTS:64}
+      retention-minutes: ${ZAP_OPENAPI_CONTENT_RETENTION_MINUTES:60}
   
   # ZAP Initialization Settings (applied at startup via Network API)
   initialization:

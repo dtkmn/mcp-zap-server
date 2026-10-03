@@ -49,22 +49,28 @@ public class GuidedSecurityToolsService {
                     Import changes the current ZAP session and may send requests to the definition source and API targets;
                     use only authorized targets. It does not start an active scan: after reviewing import messages,
                     call zap_attack_start with the API target URL when active testing is needed.
-                    Returns plain text containing definition type, source kind, source, and ZAP import messages or job IDs
-                    when provided, not findings or a structured JSON result. Review warnings before proceeding.
+                    Content mode accepts actual OpenAPI JSON/YAML text with a required full HTTP(S) hostOverride
+                    and an explicitly enabled shared filesystem; it cannot read chat attachments automatically.
+                    Returns plain text containing definition type, source kind, and import status. URL/file mode
+                    also includes source and engine messages; content mode withholds contents, internal paths,
+                    and raw engine warning text. Review warnings before proceeding.
                     Invalid inputs, blocked URLs, and ZAP API failures raise errors.
                     """
     )
     public String importTargetDefinition(
             @ToolParam(description = "Required definition format: openapi (OpenAPI/Swagger), graphql (GraphQL schema), or soap (WSDL). Case-insensitive.") String definitionType,
-            @ToolParam(description = "Required source mode: url for a definition ZAP downloads, or file for a definition on ZAP's filesystem. Case-insensitive.") String sourceKind,
-            @ToolParam(description = "Required HTTP(S) definition URL reachable by ZAP and allowed by server URL policy, or a file path readable inside the ZAP host/container (for example /zap/wrk/openapi.yaml). File contents are not accepted here.") String source,
+            @ToolParam(description = "Required source mode: url for a definition ZAP downloads, file for a definition on ZAP's filesystem, or content for self-contained OpenAPI JSON/YAML text. Content is OpenAPI-only and requires configured shared staging. Case-insensitive.") String sourceKind,
+            @ToolParam(description = "Required definition URL, ZAP-readable file path, or actual JSON/YAML text when sourceKind=content. A chat attachment name, client-local path or inaccessible resource URI is not definition content. Content imports are bounded to 1 MiB and reject external references and YAML aliases.") String source,
             @ToolParam(required = false, description = "Required for graphql: HTTP(S) API endpoint to test, for example https://api.example.com/graphql; must be reachable by ZAP and allowed by server URL policy. Ignored for openapi and soap.") String endpointUrl,
-            @ToolParam(required = false, description = "Optional OpenAPI target override allowed by server URL policy: a full HTTP(S) URL or authority/path with an explicit host, for example https://api.example.com/v1 or api.example.com:9090/v1. Scheme-only and path-only overrides are rejected; use a full URL instead. Omit or leave blank only for trusted definition-derived targets constrained by ZAP egress controls. Ignored for graphql and soap.") String hostOverride
+            @ToolParam(required = false, description = "OpenAPI target override allowed by server URL policy. Required full HTTP(S) URL for content imports, for example https://api.example.com/v1. URL/file imports also allow authority/path with an explicit host, for example api.example.com:9090/v1; omit only for trusted definition-derived targets constrained by ZAP egress controls. Ignored for graphql and soap.") String hostOverride
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);
         String normalizedSourceKind = normalizeSourceKind(sourceKind);
-        String normalizedSource = requireText(source, "source");
+        if ("content".equals(normalizedSourceKind) && !"openapi".equals(normalizedType)) {
+            throw new IllegalArgumentException("sourceKind=content is supported only for OpenAPI definitions");
+        }
+        String normalizedSource = "content".equals(normalizedSourceKind) ? source : requireText(source, "source");
         String delegateResponse = importDefinition(
                 normalizedType,
                 normalizedSourceKind,
@@ -245,6 +251,7 @@ public class GuidedSecurityToolsService {
             case "openapi" -> switch (sourceKind) {
                 case "url" -> openApiService.importOpenApiSpec(source, hostOverride);
                 case "file" -> openApiService.importOpenApiSpecFile(source, hostOverride);
+                case "content" -> openApiService.importOpenApiContent(source, hostOverride);
                 default -> throw new IllegalStateException("Unexpected OpenAPI source kind: " + sourceKind);
             };
             case "graphql" -> {
@@ -269,10 +276,10 @@ public class GuidedSecurityToolsService {
                                        String source,
                                        String delegateResponse) {
         return new StringBuilder()
-                .append("Guided target import completed.\n")
+                .append("content".equals(sourceKind) ? "Guided target import result.\n" : "Guided target import completed.\n")
                 .append("Definition Type: ").append(definitionType).append('\n')
                 .append("Source Kind: ").append(sourceKind).append('\n')
-                .append("Source: ").append(source).append('\n')
+                .append("Source: ").append("content".equals(sourceKind) ? "client-supplied definition (contents withheld)" : source).append('\n')
                 .append('\n')
                 .append(delegateResponse)
                 .toString();
@@ -347,8 +354,8 @@ public class GuidedSecurityToolsService {
     private String normalizeSourceKind(String sourceKind) {
         String normalized = requireText(sourceKind, "sourceKind").toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "url", "file" -> normalized;
-            default -> throw new IllegalArgumentException("sourceKind must be one of: url, file");
+            case "url", "file", "content" -> normalized;
+            default -> throw new IllegalArgumentException("sourceKind must be one of: url, file, content");
         };
     }
 

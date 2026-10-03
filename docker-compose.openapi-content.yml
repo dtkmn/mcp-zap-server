@@ -1,0 +1,23 @@
+# Optional shared-filesystem staging for the Unreleased OpenAPI content mode.
+# Pre-provision the host directory and set ZAP_OPENAPI_CONTENT_ENABLED=true.
+# See docs/src/content/docs/scanning/api-schema-imports.md for permissions/limits.
+services:
+  zap:
+    volumes:
+      - type: bind
+        source: ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/content-imports
+        target: /zap/imports
+        read_only: true
+        bind:
+          create_host_path: false
+
+  mcp-server:
+    environment:
+      ZAP_OPENAPI_CONTENT_LOCAL_DIRECTORY: ${ZAP_OPENAPI_CONTENT_LOCAL_DIRECTORY:-/zap/imports}
+      ZAP_OPENAPI_CONTENT_ZAP_DIRECTORY: ${ZAP_OPENAPI_CONTENT_ZAP_DIRECTORY:-/zap/imports}
+    volumes:
+      - type: bind
+        source: ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/content-imports
+        target: /zap/imports
+        bind:
+          create_host_path: false

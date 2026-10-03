@@ -25,7 +25,7 @@ public class OpenApiServiceTest {
     void setup() {
         importAccess = mock(EngineApiImportAccess.class);
         urlValidationService = mock(UrlValidationService.class);
-        service = new OpenApiService(importAccess, urlValidationService);
+        service = new OpenApiService(importAccess, urlValidationService, mock(OpenApiContentImportService.class));
     }
 
     @Test

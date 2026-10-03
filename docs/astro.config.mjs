@@ -99,7 +99,10 @@ export default defineConfig({
 				{
 					label: 'Reference',
 					collapsed: true,
-					items: [{ slug: 'reference/security-policy' }],
+					items: [
+						{ slug: 'reference/security-policy' },
+						{ slug: 'reference/dependency-security' },
+					],
 				},
 				{
 					label: 'Project Links',

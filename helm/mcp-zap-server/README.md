@@ -409,6 +409,100 @@ Review the new storage/exposure defaults before an upgrade: AWS and secure-Secre
 examples are single-replica/private, HA uses TLS ingress and existing RWX storage,
 and raw JWT revocation environment entries move to typed chart fields.
 
+### Preserve the workspace before changing claims
+
+For a `0.13.0` to `0.14.0` upgrade, keeping the same chart-managed PVC does not
+require `zap.persistence.existingClaim`: both pods now share that claim by default.
+Moving to the HA reference's RWX claim, or setting `existingClaim` to the old
+chart-managed claim, changes Helm's ownership of the old PVC. Follow this procedure
+before either change.
+
+The `0.13.0` chart did not annotate its PVC for retention. Setting `existingClaim`
+removes that PVC from the new chart manifest, so Helm can delete it during the
+upgrade. The `0.14.0` default `retainOnDelete=true` cannot protect a resource omitted
+from that manifest. Add and verify the annotation on the **live old PVC before
+changing the claim or its ownership**.
+
+1. Identify the actual workspace claim from the running ZAP pod and inspect any
+   MCP mounts. Use your release and namespace; do not infer the PVC name from an
+   example or the release name. Record the current values, claim, bound PV, storage
+   class, access modes, and PV reclaim policy before starting the cutover.
+
+   ```bash
+   HELM_RELEASE=mcp-zap
+   RELEASE_NAMESPACE=mcp-zap
+   kubectl get pods --namespace "$RELEASE_NAMESPACE" \
+     --selector "app.kubernetes.io/instance=$HELM_RELEASE" \
+     -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .spec.volumes[*]}{.name}{"="}{.persistentVolumeClaim.claimName}{" "}{end}{"\n"}{end}'
+
+   # Set this to the zap-data claim shown for the running ZAP pod.
+   OLD_WORKSPACE_CLAIM='<actual-workspace-claim>'
+   kubectl get pvc "$OLD_WORKSPACE_CLAIM" --namespace "$RELEASE_NAMESPACE" -o yaml
+   OLD_WORKSPACE_PV="$(kubectl get pvc "$OLD_WORKSPACE_CLAIM" \
+     --namespace "$RELEASE_NAMESPACE" -o jsonpath='{.spec.volumeName}')"
+   : "${OLD_WORKSPACE_PV:?The old workspace PVC must be bound}"
+   kubectl get pv "$OLD_WORKSPACE_PV" \
+     -o jsonpath='{.metadata.name}{"\t"}{.spec.persistentVolumeReclaimPolicy}{"\n"}'
+   ```
+
+2. Stop if the old PVC is already being deleted. Otherwise, preserve it and verify
+   the live annotation before running a storage-changing Helm upgrade:
+
+   ```bash
+   (
+     set -e
+     OLD_WORKSPACE_DELETION_TIME="$(kubectl get pvc "$OLD_WORKSPACE_CLAIM" \
+       --namespace "$RELEASE_NAMESPACE" -o jsonpath='{.metadata.deletionTimestamp}')"
+     test -z "$OLD_WORKSPACE_DELETION_TIME"
+     kubectl annotate pvc "$OLD_WORKSPACE_CLAIM" --namespace "$RELEASE_NAMESPACE" \
+       helm.sh/resource-policy=keep --overwrite
+     OLD_WORKSPACE_KEEP_POLICY="$(kubectl get pvc "$OLD_WORKSPACE_CLAIM" \
+       --namespace "$RELEASE_NAMESPACE" \
+       -o jsonpath='{.metadata.annotations.helm\.sh/resource-policy}')"
+     test "$OLD_WORKSPACE_KEEP_POLICY" = keep
+   )
+   ```
+
+   Continue only if both checks succeed. This prevents Helm's upgrade deletion of
+   the old claim; it does not replace a backup.
+
+3. Hold new scan submissions, drain or stop active work, and quiesce every process
+   writing the workspace, including MCP, ZAP, external workers, and scheduled jobs.
+   Ensure controllers cannot restart writers during migration. Take a consistent
+   filesystem backup or supported storage snapshot and verify its restore before
+   moving files. A workspace backup does not capture in-memory scans or external
+   PostgreSQL state; preserve required database state separately.
+
+4. For a move to RWX, provision a new claim in the release namespace and restore
+   the required workspace data, including report and automation files, using a
+   transfer procedure validated for your source and destination storage. Preserve
+   the required file ownership and permissions, and verify read/write access with
+   the actual MCP and ZAP UID/GID (both default to `1000:1000`). EFS access-point
+   identity rules and CSI permissions require deployment-specific verification;
+   this guide does not establish a tested EFS transfer procedure. Declaring
+   `accessMode: ReadWriteMany` does not convert an existing RWO volume into RWX.
+
+5. Set `zap.persistence.existingClaim` to the verified destination claim and
+   `accessMode` to its real supported mode. Keep the old claim and backup. Review
+   the rendered workloads and saved values, then perform the upgrade during the
+   cutover window. When adopting the same old claim, keep its actual access mode;
+   multiple MCP replicas still require genuine RWX storage.
+
+6. Before resuming normal traffic, confirm both workloads mount the intended claim,
+   can access the same files, and become ready. Verify existing report readback,
+   generate and read a new report, and submit a representative automation plan.
+   For HA, verify access from each MCP replica and test session routing. Keep the
+   old volume until these checks and the recovery procedure have passed.
+
+7. Retire the old claim only after confirming it has no remaining users and its
+   data is no longer required. A PV reclaim policy of `Delete` can remove the
+   backing storage after PVC deletion; `Retain` leaves storage for explicit
+   recovery or cleanup. The Helm `keep` annotation does not protect a PVC from
+   manual deletion or namespace deletion. Review the storage provider's actual
+   reclaim behavior before either action.
+
+### Database migrations and upgrade commands
+
 When migrations are enabled, Helm creates the SQL ConfigMap as a weight -10
 pre-install/pre-upgrade hook, then runs Flyway at weight 0. The SQL remains mounted
 until the Job finishes and is refreshed before the next migration. Provision the
@@ -444,7 +538,15 @@ helm uninstall mcp-zap --namespace mcp-zap
 ```
 
 The chart retains its PVC by default (`zap.persistence.retainOnDelete=true`).
-An existing claim is never managed by this release. Hook SQL ConfigMaps can remain
+For a claim still managed by an older chart, check `helm get manifest` for its
+stored `helm.sh/resource-policy: keep` annotation before uninstalling. Helm's
+uninstall filtering uses the stored release manifest; an annotation added only
+to the live PVC does not guarantee retention during uninstall. Complete the
+preservation migration above before removing an older release whose manifest
+does not retain the claim.
+A separately provisioned `existingClaim` is not managed by this release; adopting
+a formerly chart-managed claim requires the preservation steps above. Hook SQL
+ConfigMaps can remain
 until the next migration hook replaces them and are not normally removed by Helm
 uninstall. The first upgrade from an ordinary SQL ConfigMap has the deletion caveat
 described above. List the release's remaining PVC and migration ConfigMap,

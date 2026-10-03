@@ -76,6 +76,13 @@ before changing the replica count or enabling autoscaling.
 
 ## Upgrading
 
+Read the [workspace preservation procedure](mcp-zap-server/README.md#preserve-the-workspace-before-changing-claims)
+before moving a `0.13.0` chart-managed PVC to `existingClaim` or the HA reference's
+RWX storage. Protect the actual live old claim before changing ownership, back up
+with writers quiesced, and verify restored data and both workloads before retiring
+the old volume. Setting `retainOnDelete=true` during the same upgrade does not
+protect a PVC omitted from the new manifest.
+
 ```bash
 # Run from the repository root with the values used for your deployment
 helm upgrade mcp-zap ./helm/mcp-zap-server \
@@ -87,5 +94,13 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 
 ```bash
 helm uninstall mcp-zap --namespace mcp-zap
-kubectl delete namespace mcp-zap
 ```
+
+Review the stored Helm release manifest and backup before uninstalling, especially
+for older charts. A keep annotation added only to the live PVC does not establish
+uninstall retention; use the detailed guide's preservation procedure first.
+Namespace deletion is a separate, destructive cleanup step: it
+removes PVCs even when Helm retention is enabled, and a PV reclaim policy of
+`Delete` can also remove backing storage. Keep the namespace until its remaining
+data and resources can be retired deliberately; follow the
+[storage and uninstall guidance](mcp-zap-server/README.md#uninstalling).

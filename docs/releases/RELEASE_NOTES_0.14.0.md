@@ -18,6 +18,15 @@ following migration steps before upgrading from `v0.13.0`.
 
 ## Upgrade Notes
 
+### Known upstream dependency findings
+
+The reviewed build still reports four Debian 13 runtime-image findings and two
+documentation cache-library findings. No compatible fixed versions were listed
+on 3 October 2026. Their scopes, owner, review date and remediation criteria are
+recorded in the [dependency security status](../src/content/docs/reference/dependency-security.md).
+The docs dependencies are absent from the Java runtime image; the base-image
+findings remain present. A green security workflow does not mean these are fixed.
+
 ### Review Helm deployment values
 
 The AWS and secure-Secret references now start with one private MCP instance.
@@ -33,8 +42,18 @@ that would bypass its security configuration. Unrelated Spring JSON bootstrap
 profiles and client registrations remain supported.
 
 Both pods share the workspace PVC by default. RWO storage requires same-node
-placement; multiple MCP replicas require RWX. Chart PVCs are retained on Helm
-uninstall by default, but namespace deletion still removes them. Migration SQL
+placement; multiple MCP replicas require RWX. Before moving a `0.13.0`
+chart-managed workspace to `existingClaim` or a new RWX claim, identify the actual
+live old PVC, add and verify `helm.sh/resource-policy=keep`, quiesce all workspace
+writers, and take a consistent, verified backup. Migrate required files with the
+destination filesystem's real UID/GID permissions and validate both workloads
+before retiring the old volume. The new retention default cannot protect an old
+PVC omitted from the upgrade manifest; declaring RWX does not convert an RWO
+volume. Follow the [workspace preservation procedure](../../helm/mcp-zap-server/README.md#preserve-the-workspace-before-changing-claims).
+
+Chart PVCs are retained on Helm uninstall by default. Manual PVC deletion and
+namespace deletion bypass Helm retention; the PV reclaim policy determines
+whether backing storage is deleted or retained. Migration SQL
 is now an ordered, retained pre-install/pre-upgrade hook. Review the
 [Helm upgrade and storage guidance](../../helm/mcp-zap-server/README.md#upgrading)
 before upgrading; the application migration bundle has no new SQL from 0.13.0.

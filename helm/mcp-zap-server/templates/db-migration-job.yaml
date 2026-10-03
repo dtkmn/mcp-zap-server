@@ -7,6 +7,7 @@ metadata:
     {{- include "mcp-zap-server.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 3
@@ -16,12 +17,19 @@ spec:
         {{- include "mcp-zap-server.selectorLabels" . | nindent 8 }}
     spec:
       restartPolicy: OnFailure
+      # Hooks run before the chart's ServiceAccount is created on installation.
+      # Flyway needs database credentials, not Kubernetes API access.
+      automountServiceAccountToken: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: flyway
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.migrations.image.repository }}:{{ .Values.migrations.image.tag }}"
           imagePullPolicy: {{ .Values.migrations.image.pullPolicy }}
           args:
@@ -44,6 +52,8 @@ spec:
                 secretKeyRef:
                   name: {{ required "migrations.postgres.existingSecret.name is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.name }}
                   key: {{ required "migrations.postgres.existingSecret.passwordKey is required when migrations.enabled=true" .Values.migrations.postgres.existingSecret.passwordKey }}
+          resources:
+            {{- toYaml (default dict .Values.migrations.resources) | nindent 12 }}
           volumeMounts:
             - name: flyway-sql
               mountPath: /flyway/sql

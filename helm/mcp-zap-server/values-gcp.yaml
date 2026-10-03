@@ -1,4 +1,4 @@
-# GKE reference values for cloud deployments.
+# GKE single-replica reference with TLS ingress.
 # Copy this file and replace placeholders before production use.
 
 global:
@@ -16,7 +16,7 @@ zap:
     size: 20Gi
 
 mcp:
-  replicaCount: 3
+  replicaCount: 1
   ingress:
     enabled: true
     className: nginx
@@ -51,13 +51,7 @@ mcp:
       apiKeyKey: ZAP_API_KEY
 
 migrations:
-  enabled: true
-  postgres:
-    url: jdbc:postgresql://<cloudsql-endpoint>:5432/<db>
-    existingSecret:
-      name: mcp-zap-db
-      usernameKey: username
-      passwordKey: password
+  enabled: false
 
 networkPolicy:
   zap:
@@ -72,12 +66,3 @@ networkPolicy:
       - namespaceSelector:
           matchLabels:
             kubernetes.io/metadata.name: monitoring
-    egress:
-      extraEgress:
-        - to:
-            - ipBlock:
-                cidr: 10.0.0.0/8
-                # Replace with your Cloud SQL/private dependency CIDR range.
-          ports:
-            - protocol: TCP
-              port: 5432

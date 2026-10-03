@@ -1,8 +1,12 @@
-{{- if and .Values.zap.enabled .Values.zap.persistence.enabled }}
+{{- if and .Values.zap.enabled .Values.zap.persistence.enabled (not .Values.zap.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: {{ include "mcp-zap-server.fullname" . }}-zap-pvc
+  {{- if .Values.zap.persistence.retainOnDelete }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
   labels:
     {{- include "mcp-zap-server.zap.labels" . | nindent 4 }}
 spec:

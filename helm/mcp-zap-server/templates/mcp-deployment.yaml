@@ -1,4 +1,7 @@
 {{- if .Values.mcp.enabled }}
+{{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp }}
+{{- $workspaceClaim := default (printf "%s-zap-pvc" (include "mcp-zap-server.fullname" .)) .Values.zap.persistence.existingClaim }}
+{{- $affinity := include "mcp-zap-server.workspaceAffinity" (dict "root" . "affinity" .Values.mcp.affinity) | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,6 +32,9 @@ spec:
         {{- end }}
       labels:
         {{- include "mcp-zap-server.mcp.selectorLabels" . | nindent 8 }}
+        {{- if $sharedWorkspace }}
+        mcp-zap-server.io/workspace: {{ include "mcp-zap-server.fullname" . | quote }}
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -71,6 +77,14 @@ spec:
           {{- else }}
           value: "{{ default .Values.zap.config.apiKey .Values.mcp.zapClient.apiKey }}"
           {{- end }}
+        {{- if $sharedWorkspace }}
+        - name: ZAP_REPORT_DIRECTORY
+          value: {{ .Values.zap.persistence.mountPath | quote }}
+        - name: ZAP_AUTOMATION_LOCAL_DIRECTORY
+          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+        - name: ZAP_AUTOMATION_ZAP_DIRECTORY
+          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+        {{- end }}
         - name: MCP_SECURITY_MODE
           value: "{{ .Values.mcp.security.mode }}"
         - name: MCP_SECURITY_ENABLED
@@ -103,6 +117,26 @@ spec:
           value: "{{ .Values.mcp.security.jwt.accessTokenExpiry }}"
         - name: JWT_REFRESH_TOKEN_EXPIRATION
           value: "{{ .Values.mcp.security.jwt.refreshTokenExpiry }}"
+        - name: JWT_REVOCATION_STORE_BACKEND
+          value: {{ .Values.mcp.security.jwt.revocation.backend | lower | trim | quote }}
+        - name: JWT_REVOCATION_STORE_POSTGRES_URL
+          value: {{ .Values.mcp.security.jwt.revocation.postgres.url | quote }}
+        - name: JWT_REVOCATION_STORE_POSTGRES_TABLE_NAME
+          value: {{ .Values.mcp.security.jwt.revocation.postgres.tableName | quote }}
+        - name: JWT_REVOCATION_STORE_POSTGRES_FAIL_FAST
+          value: {{ .Values.mcp.security.jwt.revocation.postgres.failFast | toString | quote }}
+        {{- with .Values.mcp.security.jwt.revocation.postgres.existingSecret.name }}
+        - name: JWT_REVOCATION_STORE_POSTGRES_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ . | quote }}
+              key: {{ $.Values.mcp.security.jwt.revocation.postgres.existingSecret.usernameKey | quote }}
+        - name: JWT_REVOCATION_STORE_POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ . | quote }}
+              key: {{ $.Values.mcp.security.jwt.revocation.postgres.existingSecret.passwordKey | quote }}
+        {{- end }}
         - name: ZAP_MAX_ACTIVE_SCAN_DURATION
           value: "{{ .Values.mcp.scan.limits.maxActiveScanDurationInMins }}"
         - name: ZAP_MAX_SPIDER_SCAN_DURATION
@@ -140,9 +174,14 @@ spec:
         {{- end }}
         {{- if .Values.mcp.livenessProbe.enabled }}
         livenessProbe:
+          {{- if .Values.mcp.livenessProbe.tcpSocket }}
+          tcpSocket:
+            {{- toYaml .Values.mcp.livenessProbe.tcpSocket | nindent 12 }}
+          {{- else }}
           httpGet:
             path: {{ .Values.mcp.livenessProbe.httpGet.path }}
             port: {{ .Values.mcp.livenessProbe.httpGet.port }}
+          {{- end }}
           initialDelaySeconds: {{ .Values.mcp.livenessProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.mcp.livenessProbe.periodSeconds }}
           timeoutSeconds: {{ .Values.mcp.livenessProbe.timeoutSeconds }}
@@ -168,11 +207,22 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.mcp.resources | nindent 12 }}
+        {{- if $sharedWorkspace }}
+        volumeMounts:
+        - name: zap-data
+          mountPath: {{ .Values.zap.persistence.mountPath | quote }}
+        {{- end }}
+      {{- if $sharedWorkspace }}
+      volumes:
+      - name: zap-data
+        persistentVolumeClaim:
+          claimName: {{ $workspaceClaim | quote }}
+      {{- end }}
       {{- with .Values.mcp.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.mcp.affinity }}
+      {{- with $affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}

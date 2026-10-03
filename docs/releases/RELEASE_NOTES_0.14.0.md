@@ -18,6 +18,27 @@ following migration steps before upgrading from `v0.13.0`.
 
 ## Upgrade Notes
 
+### Review Helm deployment values
+
+The AWS and secure-Secret references now start with one private MCP instance.
+The HA reference uses TLS nginx ingress, shared PostgreSQL revocation and an
+operator-provisioned RWX workspace. Provision its TLS Secret and shared PVC,
+replace database/hostname/network placeholders, and test your controller's
+session routing before scaling.
+
+Move raw `JWT_REVOCATION_STORE_*` entries from `mcp.env` to
+`mcp.security.jwt.revocation`. The chart rejects multiple JWT replicas using
+local memory, including an HPA whose maximum exceeds one, and explicit overrides
+that would bypass its security configuration. Unrelated Spring JSON bootstrap
+profiles and client registrations remain supported.
+
+Both pods share the workspace PVC by default. RWO storage requires same-node
+placement; multiple MCP replicas require RWX. Chart PVCs are retained on Helm
+uninstall by default, but namespace deletion still removes them. Migration SQL
+is now an ordered, retained pre-install/pre-upgrade hook. Review the
+[Helm upgrade and storage guidance](../../helm/mcp-zap-server/README.md#upgrading)
+before upgrading; the application migration bundle has no new SQL from 0.13.0.
+
 ### Register every API key
 
 Remove nonblank `mcp.server.apiKey`, `mcp.server.api-key`, and

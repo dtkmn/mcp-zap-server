@@ -46,6 +46,7 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 - [ ] Persist `/zap/wrk`.
 - [ ] Verify both MCP and ZAP see the same report and automation files. Helm shares the PVC by default; RWO co-locates both pods, while multiple MCP replicas require RWX.
 - [ ] For Helm, provision any `zap.persistence.existingClaim` and verify its real access mode and UID/GID permissions.
+- [ ] Before moving an older chart-managed workspace to `existingClaim` or RWX, identify its actual live PVC and verify `helm.sh/resource-policy=keep` before changing ownership. Quiesce all writers, verify a consistent backup/restore, migrate required files with the destination's real UID/GID permissions, and validate both workloads before retiring the old volume; follow the [Helm workspace preservation procedure](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#preserve-the-workspace-before-changing-claims).
 - [ ] Prove backup/restore and review PVC retention, namespace deletion and uninstall consequences.
 
 ## 6. HA and State Management

@@ -181,4 +181,4 @@ runs:
         INPUT_ZAP_IMAGE: ${{ inputs.zap-image }}
         INPUT_ZAP_API_KEY: ${{ inputs.zap-api-key }}
         INPUT_MCP_API_KEY: ${{ inputs.mcp-api-key }}
-      run: bash "${{ github.action_path }}/run-gate.sh"
+      run: bash "${GITHUB_ACTION_PATH}/run-gate.sh"

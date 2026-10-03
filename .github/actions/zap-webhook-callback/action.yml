@@ -111,4 +111,4 @@ runs:
         INPUT_BACKOFF_MULTIPLIER: ${{ inputs.backoff-multiplier }}
         INPUT_OUTPUT_PATH: ${{ inputs.output-path }}
         INPUT_ALLOW_FAILURE: ${{ inputs.allow-failure }}
-      run: bash "${{ github.action_path }}/run-webhook.sh"
+      run: bash "${GITHUB_ACTION_PATH}/run-webhook.sh"

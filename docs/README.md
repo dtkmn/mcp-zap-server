@@ -64,6 +64,10 @@ The complete npm audit report stays visible in the workflow log. Confirm the
 log contains an actual npm audit report: missing or empty output does not
 establish that dependencies were checked successfully.
 
+The public [dependency security status](src/content/docs/reference/dependency-security.md)
+records known upstream findings and their deployment scope, owner and review
+date. Keep it consistent with the actual scan reports and advisory status.
+
 ## Maintaining Shared Pages
 
 The following pages have one maintained repository source. Their website

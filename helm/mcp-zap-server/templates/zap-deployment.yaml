@@ -1,4 +1,6 @@
 {{- if .Values.zap.enabled }}
+{{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp }}
+{{- $affinity := include "mcp-zap-server.workspaceAffinity" (dict "root" . "affinity" .Values.zap.affinity) | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +23,9 @@ spec:
         {{- end }}
       labels:
         {{- include "mcp-zap-server.zap.selectorLabels" . | nindent 8 }}
+        {{- if $sharedWorkspace }}
+        mcp-zap-server.io/workspace: {{ include "mcp-zap-server.fullname" . | quote }}
+        {{- end }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -93,19 +98,19 @@ spec:
         {{- if .Values.zap.persistence.enabled }}
         volumeMounts:
         - name: zap-data
-          mountPath: {{ .Values.zap.persistence.mountPath }}
+          mountPath: {{ .Values.zap.persistence.mountPath | quote }}
         {{- end }}
       {{- if .Values.zap.persistence.enabled }}
       volumes:
       - name: zap-data
         persistentVolumeClaim:
-          claimName: {{ include "mcp-zap-server.fullname" . }}-zap-pvc
+          claimName: {{ default (printf "%s-zap-pvc" (include "mcp-zap-server.fullname" .)) .Values.zap.persistence.existingClaim | quote }}
       {{- end }}
       {{- with .Values.zap.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.zap.affinity }}
+      {{- with $affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}

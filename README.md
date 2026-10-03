@@ -131,7 +131,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
 
-## Version 0.13.0
+## Version 0.14.0
 
 See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
 for the latest published version and its publication date. Version-specific
@@ -139,14 +139,16 @@ documentation describes that version's behavior; it does not announce image
 availability. Deploy only after the corresponding release workflow succeeds
 and the versioned image is available in your registry.
 
-**In `v0.13.0`**, Client Spider explores JavaScript applications in direct and
-queued workflows, with optional guided browser login and automatic session
-detection for cookies and header tokens. Upgrade all workers sharing a queue
-before submitting Client Spider jobs, and review the browser prerequisites and
-timeout settings in the release notes. Preparing or merging this version does
-not publish its release or container images.
+**Version `v0.14.0`** hardens API-key configuration, JWT revocation and refresh,
+Automation Framework plans, OpenAPI target overrides, HTTP metrics, and Helm
+ingress policy. It also adopts Gateway Core and the Spring WebFlux adapter
+`0.11.0`, including shared governance audits and active-tool validation.
+Read the upgrade notes before deploying: the legacy API-key property is removed,
+JWT backend failures fail closed, and accepted automation inputs and audit fields
+have changed. Preparing or merging this version does not publish its release or
+container images.
 
-- [0.13.0 release notes](./docs/releases/RELEASE_NOTES_0.13.0.md)
+- [0.14.0 release notes and migration requirements](./docs/releases/RELEASE_NOTES_0.14.0.md)
 - [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
 

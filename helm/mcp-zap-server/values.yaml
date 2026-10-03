@@ -57,6 +57,9 @@ zap:
   
   persistence:
     enabled: true
+    existingClaim: ""  # Reuse an operator-provisioned PVC; no chart PVC is created.
+    shareWithMcp: true  # Required for report readback and submitted automation plans.
+    retainOnDelete: true  # Retain the chart PVC on Helm uninstall; namespace deletion still removes it.
     storageClass: ""  # Use default storage class
     accessMode: ReadWriteOnce
     size: 10Gi
@@ -138,7 +141,7 @@ mcp:
       serviceClientIp:
         timeoutSeconds: 10800
       ingressNginx:
-        upstreamHashBy: "$http_mcp_session_id$remote_addr$http_user_agent"
+        upstreamHashBy: "$remote_addr$http_user_agent"
         proxyReadTimeout: "3600"
         proxySendTimeout: "3600"
         proxyBuffering: "off"
@@ -175,13 +178,23 @@ mcp:
       apiKeyKey: MCP_API_KEY
       jwtSecretKey: JWT_SECRET
     
-    # JWT Configuration (only used if mode=jwt)
+    # JWT endpoints are enabled by jwt.enabled, independently of the auth mode.
     jwt:
       enabled: false
       secret: ""  # Generate with: openssl rand -base64 32
       issuer: "mcp-zap-server"
       accessTokenExpiry: 3600
       refreshTokenExpiry: 604800
+      revocation:
+        backend: in-memory  # Multi-replica JWT requires postgres.
+        postgres:
+          url: ""
+          tableName: jwt_token_revocation
+          failFast: true
+          existingSecret:
+            name: ""  # Optional when the JDBC URL supplies the database identity.
+            usernameKey: username
+            passwordKey: password
   
   # ZAP Client Configuration (connects to ZAP pod)
   zapClient:
@@ -218,8 +231,8 @@ mcp:
   # Liveness and readiness probes
   livenessProbe:
     enabled: true
-    httpGet:
-      path: /actuator/health
+    # Listener health is independent of ZAP; readiness checks the dependency.
+    tcpSocket:
       port: 7456
     initialDelaySeconds: 60
     periodSeconds: 30
@@ -286,6 +299,14 @@ mcp:
 # Shared Postgres schema migration job
 migrations:
   enabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
   image:
     repository: flyway/flyway

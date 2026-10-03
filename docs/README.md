@@ -48,6 +48,22 @@ npm run check
 npm run build
 ```
 
+The Pages workflow uses the pinned `audit-ci` development dependency to block
+unaccepted findings of moderate severity or higher. Run the same check from
+`docs/` with:
+
+```bash
+./node_modules/.bin/audit-ci --config audit-ci.jsonc
+```
+
+Temporary advisory exceptions are recorded in [`audit-ci.jsonc`](audit-ci.jsonc)
+with a reason, owner, and UTC expiry. They apply to the named advisory across
+its affected versions and paths. An exception accepts risk; it does not fix the
+dependency. Review it when dependency versions or documentation behavior change.
+The complete npm audit report stays visible in the workflow log. Confirm the
+log contains an actual npm audit report: missing or empty output does not
+establish that dependencies were checked successfully.
+
 ## Maintaining Shared Pages
 
 The following pages have one maintained repository source. Their website

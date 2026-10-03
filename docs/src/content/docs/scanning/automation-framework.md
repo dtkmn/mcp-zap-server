@@ -46,9 +46,15 @@ The returned `Plan File` path is the one to reuse with `zap_automation_plan_arti
 
 ### YAML Limits
 
-The limits below apply to the current development checkout and are not included in released v0.13.0.
+The limits below are introduced in `v0.14.0` and are not included in `v0.13.0`.
+Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) for availability.
 
 Inline plans and workspace plan files must fit within 1 MiB of UTF-8 input and contain a single YAML document with a mapping at the root. Plans must define at least one `env.contexts` entry. The normalized per-run copy must satisfy the same limits, so an expanded plan that exceeds them is rejected before the plan is written or ZAP is called.
+
+Inline plans also have to fit inside the MCP HTTP request body, which defaults
+to **256 KiB** (`MCP_REQUEST_MAX_BODY_BYTES=262144`). The JSON envelope and escaped
+YAML count toward that limit. The 1 MiB plan limit does not increase the HTTP
+limit; use a workspace plan file for plans that exceed the configured envelope.
 
 The server checks the composed YAML graph before constructing or normalizing the plan. The limits are:
 
@@ -63,7 +69,7 @@ These limits also apply when `zap_automation_plan_artifacts` reads a plan to fin
 
 ### Destination Policy
 
-This contract applies to the current development checkout and is not included in released v0.13.0.
+This contract is introduced in `v0.14.0` and is not included in `v0.13.0`.
 
 Both inline YAML and workspace files use the same validation before the normalized plan is written or ZAP is called. A file's presence in the workspace does not grant it an exemption.
 

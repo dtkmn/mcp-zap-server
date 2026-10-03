@@ -111,11 +111,11 @@ The response also includes:
 
 If a public MCP tool is exposed without a scope mapping, startup validation fails instead of silently leaving an authorization gap.
 
-The development Gateway `0.11.0` integration performs active selection and
+The ZAP `v0.14.0` integration with Gateway `0.11.0` performs active selection and
 permission coverage in one `activeToolRegistry` call. It reports all missing
 active-tool mappings together, and rejects null, blank, padded or duplicate
 active names. It replaces the separate ZAP startup validator. This integration
-is not included in released ZAP `v0.13.0`; see the
+is not included in ZAP `v0.13.0`; see the
 [Core integration reference](https://danieltse.org/mcp-gateway-core/reference/zap-integration/) for its code map and
 reproducible tests using the published libraries.
 

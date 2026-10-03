@@ -1,4 +1,5 @@
-# AWS/EKS reference values for cloud deployments.
+# AWS/EKS private single-replica baseline. Use an encrypted tunnel or TLS ingress.
+# For multiple MCP replicas, start from values-ha.yaml instead.
 # Copy this file and replace placeholders before production use.
 
 global:
@@ -16,13 +17,13 @@ zap:
     size: 20Gi
 
 mcp:
-  replicaCount: 3
+  replicaCount: 1
   service:
-    type: LoadBalancer
+    type: ClusterIP
   streamableHttp:
     sessionAffinity:
-      enabled: true
-      provider: aws-nlb
+      enabled: false
+      provider: ""
   security:
     mode: jwt
     enabled: true
@@ -38,18 +39,12 @@ mcp:
       name: mcp-zap-runtime
       apiKeyKey: ZAP_API_KEY
   autoscaling:
-    enabled: true
-    minReplicas: 3
-    maxReplicas: 10
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 1
 
 migrations:
-  enabled: true
-  postgres:
-    url: jdbc:postgresql://<rds-endpoint>:5432/<db>
-    existingSecret:
-      name: mcp-zap-rds
-      usernameKey: RDS_USERNAME
-      passwordKey: RDS_PASSWORD
+  enabled: false
 
 networkPolicy:
   zap:
@@ -60,13 +55,4 @@ networkPolicy:
     extraIngress:
       - ipBlock:
           cidr: 10.0.0.0/16
-          # Replace with your ingress/NLB source CIDR range.
-    egress:
-      extraEgress:
-        - to:
-            - ipBlock:
-                cidr: 10.0.0.0/16
-                # Replace with your RDS/private dependency CIDR range.
-          ports:
-            - protocol: TCP
-              port: 5432
+          # Replace with your permitted private client source CIDR range.

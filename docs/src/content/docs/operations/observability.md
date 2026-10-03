@@ -31,7 +31,7 @@ MCP ZAP Server exposes a practical observability baseline:
 | `mcp.zap.audit.events` | Counter | Audit-stream emission volume |
 | `mcp.zap.protection.rejections` | Counter | Rate-limit, quota, and overload rejections |
 | `mcp.zap.invalid_mcp_requests` | Counter | Malformed MCP request rejections by reason |
-| `mcp.zap.adapter.rejections` | Counter | Development Gateway 0.11.0 integration: typed adapter rejections by bounded reason code |
+| `mcp.zap.adapter.rejections` | Counter | Gateway 0.11.0 integration in ZAP v0.14.0: typed adapter rejections by bounded reason code |
 | `mcp.protection.rate_limited` | Counter | Legacy/shared rate-limit rejection count |
 | `mcp.protection.workspace_quota_rejections` | Counter | Legacy/shared workspace-quota rejection count |
 | `mcp.protection.backpressure_rejections` | Counter | Legacy/shared overload rejection count |
@@ -43,10 +43,13 @@ MCP ZAP Server exposes a practical observability baseline:
 | `mcp.zap.queue.leadership.failures` | Counter | Coordinator acquire and heartbeat failures |
 | `mcp.zap.operations.active` | Gauge | In-memory direct-scan and automation activity |
 
-### Development HTTP Metric Labels
+<a id="development-http-metric-labels"></a>
 
-The following changes apply to the development branch and are not included in
-released `v0.13.0`:
+### HTTP metric labels in v0.14.0
+
+The following changes apply to `v0.14.0` and are not included in `v0.13.0`.
+Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) for
+availability:
 
 - The `path` tag uses the matched route pattern, including configured MCP
   endpoints and templates such as `/entries/{id}`. Requests rejected before
@@ -76,13 +79,14 @@ pivot between request logs and audit events. Authentication, policy and tool
 execution records retain their application-owned details. Diagnostic records do
 not establish a caller or workspace identity.
 
-### Development Gateway 0.11.0 Audit Schema
+<a id="development-gateway-0110-audit-schema"></a>
 
-The development integration uses published Gateway `0.11.0` libraries. It is not
-included in the released ZAP `v0.13.0` runtime, which uses Gateway `0.10.0`.
+### Gateway 0.11.0 audit schema in v0.14.0
+
+ZAP `v0.14.0` uses published Gateway `0.11.0` libraries. This integration is not
+included in ZAP `v0.13.0`, which uses Gateway `0.10.0`.
 Its WebFlux callbacks publish one shared audit event per signal, after updating
-ZAP's existing domain metrics. The schema below applies when running that
-development integration:
+ZAP's existing domain metrics. The schema below applies to `v0.14.0`:
 
 | Type | Outcome | Data |
 | --- | --- | --- |
@@ -136,7 +140,7 @@ Error-body fields depend on the response path:
 | --- | --- |
 | HTTP governance errors: permission denial (`403`), protection rejection (`429`), invalid message shape (`400`), or body-size limit (`413`) | Normally include `correlationId` and the server HTTP `requestId`. |
 | Gateway JSON-RPC errors, such as an unknown or disabled tool (`-32602`) | Contain only `jsonrpc`, JSON-RPC `id`, and `error.code` / `error.message`; trace through the response header. |
-| Development Gateway `0.11.0`: invalid execution context (`500`) | Contains only `{"error":"invalid_execution_context"}`; trace through the response header. |
+| ZAP `v0.14.0` with Gateway `0.11.0`: invalid execution context (`500`) | Contains only `{"error":"invalid_execution_context"}`; trace through the response header. |
 
 The JSON-RPC `id` and server HTTP `requestId` are separate identifiers. Use the
 response correlation header across these paths, including errors whose bodies

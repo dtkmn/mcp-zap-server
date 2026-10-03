@@ -234,9 +234,14 @@ Useful follow-on docs:
 
 ## 🔄 Migration Path
 
-### Development migration: registered API keys
+<a id="development-migration-registered-api-keys"></a>
 
-**Unreleased change; not included in `v0.13.0`.** Every API key must match an
+### Registered API keys in v0.14.0
+
+**Version `v0.14.0` change; not included in `v0.13.0`.** Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+[upgrade notes](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/RELEASE_NOTES_0.14.0.md)
+for availability and deployment preparation. Every API key must match an
 entry in `mcp.server.auth.apiKeys`. The legacy `mcp.server.apiKey` fallback is
 removed. A nonblank value for that property, including relaxed spellings such as
 `mcp.server.api-key` or `MCP_SERVER_API_KEY`, fails startup with a migration

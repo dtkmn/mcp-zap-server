@@ -42,6 +42,10 @@ Parameters:
 
 ### OpenAPI Target Policy
 
+The override validation below is introduced in `v0.14.0` and is not included in
+`v0.13.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+for availability.
+
 The definition source and the API target can be different addresses. URL imports
 validate `apiUrl` before ZAP downloads the definition. Both URL and file imports
 also validate any supplied `hostOverride` through the configured scan URL policy

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "package-manager": "npm",
+  "moderate": true,
+  "report-type": "full",
+  "allowlist": [
+    {
+      "GHSA-ch52-4w7c-c8xp": {
+        "active": true,
+        "notes": "Owner: @dtkmn. Temporary acceptance for http-cache-semantics (currently 4.2.0) in the static documentation build; absent from the Java runtime image. No remote optimized image use found and no upstream patched release listed. Reassess when dependency versions, remote asset processing, or server-rendered docs change.",
+        "expiry": "2026-10-17T00:00:00Z"
+      }
+    }
+  ]
+}

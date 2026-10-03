@@ -15,7 +15,8 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 ## 2. Network Boundaries
 
 - [ ] Keep the ZAP API on private networking only.
-- [ ] Expose the MCP server through a controlled ingress or internal load balancer.
+- [ ] Use HTTPS for non-local MCP access, including internal load balancers; verify the certificate and hostname.
+- [ ] Expose the MCP server through a controlled TLS ingress or an encrypted private access path.
 - [ ] Add network rules so only trusted clients can reach `/mcp`.
 
 ## 3. Authentication and Secrets
@@ -43,11 +44,14 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 - [ ] Keep `MCP_PROTECTION_ENABLED=true`.
 - [ ] Tune workspace quotas and backpressure to match one real ZAP runtime.
 - [ ] Persist `/zap/wrk`.
-- [ ] If you use automation tools, provide a shared automation workspace and set `ZAP_AUTOMATION_LOCAL_DIRECTORY` plus `ZAP_AUTOMATION_ZAP_DIRECTORY`.
+- [ ] Verify both MCP and ZAP see the same report and automation files. Helm shares the PVC by default; RWO co-locates both pods, while multiple MCP replicas require RWX.
+- [ ] For Helm, provision any `zap.persistence.existingClaim` and verify its real access mode and UID/GID permissions.
+- [ ] Prove backup/restore and review PVC retention, namespace deletion and uninstall consequences.
 
 ## 6. HA and State Management
 
 - [ ] Use durable queue state for multi-replica MCP deployments.
+- [ ] Use shared PostgreSQL JWT revocation for multiple replicas or revocations that must survive restart; in Helm configure `mcp.security.jwt.revocation`, not raw duplicate environment entries.
 - [ ] Use Postgres-backed scan history when scan evidence must survive restart, failover, or release handoff.
 - [ ] Use Postgres-backed scan-job state when queued jobs are part of release or pilot evidence.
 - [ ] Set a sane queue claim lease with `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS`.
@@ -69,7 +73,8 @@ Use this checklist before exposing MCP ZAP Server outside a single-user developm
 
 ## 8. Pre-Go-Live Validation
 
-- [ ] Smoke-test crawl, attack, report generation, and authenticated scanning against a staging target.
+- [ ] Smoke-test crawl, attack, report generation followed by MCP readback, and authenticated scanning against a staging target.
+- [ ] For Helm, test a clean installation and a migration-bearing upgrade against a disposable database; lint/render checks alone do not test hook ordering.
 - [ ] Run `zap_scan_history_list`, `zap_scan_history_release_evidence`, and `zap_scan_history_customer_handoff` after the smoke test. Attach raw JSON only to the internal record, and attach the curated summary to customer-facing packages.
 - [ ] Confirm the deployed MCP endpoint requires auth and the ZAP endpoint is not reachable from untrusted networks.
 - [ ] Re-run this checklist whenever you change image tags, add-ons, exposure model, or queue backend.

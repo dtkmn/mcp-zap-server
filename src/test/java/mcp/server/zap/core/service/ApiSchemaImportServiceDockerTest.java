@@ -80,7 +80,7 @@ class ApiSchemaImportServiceDockerTest {
     static void setupService() throws Exception {
         clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
-        service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class));
+        service = new OpenApiService(new ZapEngineApiImportAccess(clientApi), mock(UrlValidationService.class), mock(OpenApiContentImportService.class));
     }
 
     @ParameterizedTest

@@ -35,7 +35,7 @@ class OpenApiTargetPolicyTest {
         policy = new UrlValidationService();
         ReflectionTestUtils.setField(policy, "whitelist", List.of());
         ReflectionTestUtils.setField(policy, "blacklist", List.of());
-        service = new OpenApiService(engine, policy);
+        service = new OpenApiService(engine, policy, mock(OpenApiContentImportService.class));
         when(engine.importOpenApiUrl(any())).thenReturn(new ImportResult(List.of()));
         when(engine.importOpenApiFile(any())).thenReturn(new ImportResult(List.of()));
     }

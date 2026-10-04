@@ -41,7 +41,8 @@ public class ZapEngineApiImportAccess implements EngineApiImportAccess {
         try {
             return new ImportResult(flattenResponseValues(zap.openapi.importFile(request.filePath(), request.hostOverride())));
         } catch (ClientApiException e) {
-            log.error("Error importing OpenAPI spec file: {}", e.getMessage(), e);
+            // Parser diagnostics can include submitted content and internal staging paths.
+            log.error("Error importing OpenAPI spec file; inspect restricted ZAP diagnostics");
             throw new ZapApiException("Error importing OpenAPI/Swagger spec file", e);
         }
     }

@@ -36,6 +36,26 @@ import static org.mockito.Mockito.when;
 
 class GuidedSecurityToolsServiceTest {
 
+    @Test
+    void contentImportDelegatesActualTextWithoutEchoingDefinitionData() {
+        String content = "{\"openapi\":\"3.0.3\",\"description\":\"private-token\"}";
+        when(openApiService.importOpenApiContent(content, "https://api.example.com/v1"))
+                .thenReturn("OpenAPI content import completed with no reported import warnings.");
+
+        assertThat(service.importTargetDefinition("openapi", "content", content, null, "https://api.example.com/v1"))
+                .contains("Source Kind: content", "contents withheld", "no reported import warnings")
+                .doesNotContain(content, "private-token");
+        verify(openApiService).importOpenApiContent(content, "https://api.example.com/v1");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"graphql", "soap"})
+    void contentModeRejectsOtherDefinitionFamilies(String type) {
+        assertThatThrownBy(() -> service.importTargetDefinition(type, "content", "private-content", null, null))
+                .isInstanceOf(IllegalArgumentException.class).hasMessage("sourceKind=content is supported only for OpenAPI definitions");
+        verifyNoInteractions(openApiService);
+    }
+
     private GuidedExecutionModeResolver executionModeResolver;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;

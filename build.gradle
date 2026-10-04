@@ -1,3 +1,14 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        // Build plugins resolve Jackson separately from the application's runtime BOM.
+        classpath platform('tools.jackson:jackson-bom:3.1.7')
+        classpath platform('com.fasterxml.jackson:jackson-bom:2.22.3')
+    }
+}
+
 plugins {
     id 'java'
     id 'maven-publish'

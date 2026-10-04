@@ -5,8 +5,10 @@ description: "Known upstream dependency findings, affected deployment layers, an
 
 Last reviewed: **3 October 2026**, against the `v0.14.0` preparation commit
 `8cbcd1a455e2307f029537d99a6df34bd9f9146d` and its main-branch scan results.
-Findings below remain open; this review does not patch their dependencies or
-establish that every affected native operation is unreachable.
+The six upstream findings in the table below remain open in that scan; this
+dated review does not establish that every affected native operation is
+unreachable. The build-tool alignment section was updated on **4 October 2026**
+for the next release.
 
 The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up for each row.
 The next review is due **17 October 2026 UTC**, or sooner when a relevant fix or
@@ -73,12 +75,27 @@ successful scan evidence.
 ## Build tooling and coverage follow-up
 
 The application's Jackson `3.2.3` BOM does not align Gradle plugin classpaths.
-The current build-tool graph separately resolves Jackson `3.1.5` through Spring
-Boot tooling and Jackson `2.22.1` through CycloneDX tooling. Compatible alignment
-and dependency-graph verification remain tracked in
-[issue #275](https://github.com/dtkmn/mcp-zap-server/issues/275), with the same
-17 October review date. Keep this distinct from the packaged application's
-Jackson version; the runtime scan cannot close the build-tool follow-up.
+The **unreleased** build now uses two separate Gradle buildscript BOMs: Jackson
+`3.1.7` for Spring Boot tooling and Jackson `2.22.3` for CycloneDX tooling. These
+replace the previously resolved `3.1.5` and `2.22.1` families and meet the fixed
+version floors for the reviewed [core memory-growth](https://github.com/advisories/GHSA-7hhh-6rmp-j9qf),
+[core CPU-exhaustion](https://github.com/advisories/GHSA-p6pp-m3f8-5c89) and
+[databind CPU-exhaustion](https://github.com/advisories/GHSA-cxp5-3px4-pw24)
+advisories, alongside the earlier Jackson findings tracked in
+[issue #275](https://github.com/dtkmn/mcp-zap-server/issues/275).
+
+Regular platform constraints align the modules in each family without forcing
+all dependency configurations. Shared `jackson-annotations` remains `2.22`;
+the application's selected runtime graph and packaged Jackson `3.2.3` family
+are unchanged. Plugin versions and Gateway Core/WebFlux `0.11.0` are unchanged.
+This removes affected versions from the selected build-tool graph; it does not
+establish that an attacker could reach the vulnerable library operations in
+the previous build.
+
+Published `v0.14.0` does not contain this build-tool alignment. Verify the fresh
+GitHub dependency submission and targeted alert state before closing #275;
+local dependency resolution and a runtime scan alone do not establish alert
+closure. The follow-up retains the **17 October 2026 UTC** review deadline.
 
 Snyk also reported that one of two detected Gradle manifests did not return
 dependencies. The experimental standalone extension sample is a separate build

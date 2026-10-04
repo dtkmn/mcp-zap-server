@@ -94,7 +94,9 @@ class McpOpenApiContentImportIntegrationTest extends AbstractMcpProtectionIntegr
                 importTool = tool;
             }
         }
-        assertThat(importTool).isNotNull();
+        if (importTool == null) {
+            throw new AssertionError("Missing tool: " + TOOL_NAME);
+        }
         for (String argument : List.of("sourceKind", "source", "hostOverride")) {
             assertThat(importTool.path("inputSchema").path("properties").path(argument).path("type").asString())
                     .isEqualTo("string");

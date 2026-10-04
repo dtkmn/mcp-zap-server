@@ -282,7 +282,9 @@ public class OpenApiContentImportService {
     private int retainedCount() throws IOException {
         int count = 0;
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(localRoot, "import-*")) {
-            for (Path ignored : entries) {
+            var iterator = entries.iterator();
+            while (iterator.hasNext()) {
+                iterator.next();
                 count++;
                 if (count >= properties.getMaxRetainedImports()) {
                     return count;

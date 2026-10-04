@@ -461,7 +461,7 @@ public final class OpenApiContentPolicy {
         }
     }
 
-    private final class DocumentWalker {
+    private static final class DocumentWalker {
         private final Map<String, Object> document;
         private final boolean modern;
         private final String target;

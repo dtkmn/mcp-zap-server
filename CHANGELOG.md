@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Align Spring Boot and CycloneDX build-tool Jackson dependencies to `3.1.7` and `2.22.3` through separate Gradle buildscript BOMs. Application runtime Jackson remains `3.2.3`; plugin versions and Gateway Core/WebFlux dependencies are unchanged.
+
 ## [0.14.0]
 
 Release preparation and a merge to `main` do not publish this version or its

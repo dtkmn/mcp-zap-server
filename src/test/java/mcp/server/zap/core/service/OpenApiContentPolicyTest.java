@@ -7,6 +7,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -81,6 +83,43 @@ class OpenApiContentPolicyTest {
         assertThat(result.path("basePath").asString()).isEqualTo("/v1");
         assertThat(result.path("schemes").get(0).asString()).isEqualTo("https");
         assertThat(result.path("paths").path("/pets").path("get").path("schemes").get(0).asString()).isEqualTo("https");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "3.0.3, https://api.example.com, /, https://api.example.com/pets",
+            "3.0.3, https://api.example.com/, /, https://api.example.com/pets",
+            "3.0.3, https://api.example.com/v1, /v1, https://api.example.com/v1/pets",
+            "3.0.3, https://api.example.com/v1/, /v1/, https://api.example.com/v1/pets",
+            "2.0, https://api.example.com, /, https://api.example.com/pets",
+            "2.0, https://api.example.com/, /, https://api.example.com/pets",
+            "2.0, https://api.example.com/v1, /v1, https://api.example.com/v1/pets",
+            "2.0, https://api.example.com/v1/, /v1/, https://api.example.com/v1/pets"
+    })
+    void preservesSelectedTargetMetadataAndJoinsOperationPathsOnce(String version, String target,
+                                                                  String basePath, String operationUrl) {
+        Map<String, Object> input = definition();
+        boolean legacy = "2.0".equals(version);
+        if (legacy) {
+            input.remove("openapi");
+            input.put("swagger", version);
+            operation(input).put("schemes", List.of("http"));
+        }
+
+        JsonNode result = JSON.readTree(policy.prepare(JSON.writeValueAsString(input), target));
+
+        if (legacy) {
+            assertThat(result.path("host").asString()).isEqualTo("api.example.com");
+            assertThat(result.path("basePath").asString()).isEqualTo(basePath);
+            assertThat(result.path("schemes").get(0).asString()).isEqualTo("https");
+            assertThat(result.path("paths").path("/pets").path("get").path("schemes").get(0).asString()).isEqualTo("https");
+        } else {
+            assertThat(result.path("servers").get(0).path("url").asString()).isEqualTo(target);
+            assertThat(result.path("paths").path("/pets").path("servers").get(0).path("url").asString()).isEqualTo(target);
+            assertThat(result.path("paths").path("/pets").path("get").path("servers").get(0).path("url").asString()).isEqualTo(target);
+        }
+        verify(urls).validateUrl(target);
+        verify(urls).validateUrl(operationUrl);
     }
 
     @Test
@@ -301,6 +340,43 @@ class OpenApiContentPolicyTest {
         doThrow(new IllegalArgumentException("blocked path")).when(urls).validateUrl(TARGET + "/pets");
         assertThatThrownBy(() -> policy.prepare(YAML, TARGET)).isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("prohibited");
+    }
+
+    @Test
+    void validatesEveryOperationBeforeRejectingALaterProhibitedPath() {
+        Map<String, Object> input = definition();
+        Map<String, Object> item = pathItem(input);
+        item.put("post", new LinkedHashMap<>(operation(input)));
+        Map<String, Object> paths = new LinkedHashMap<>();
+        paths.put("/pets", item);
+        paths.put("/owners", Map.of("get", new LinkedHashMap<>(operation(input))));
+        input.put("paths", paths);
+        doThrow(new IllegalArgumentException("blocked path")).when(urls).validateUrl(TARGET + "/owners");
+
+        assertThatThrownBy(() -> prepared(input)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("prohibited");
+
+        verify(urls).validateUrl(TARGET);
+        verify(urls, times(2)).validateUrl(TARGET + "/pets");
+        verify(urls).validateUrl(TARGET + "/owners");
+    }
+
+    @Test
+    void rejectsReferencesInvalidatedByServerRewritingAfterOperationValidation() {
+        Map<String, Object> input = definition();
+        pathItem(input).put("servers", List.of(
+                Map.of("url", "https://original.example.com/first"),
+                Map.of("url", "https://original.example.com/second")));
+        Object paths = input.remove("paths");
+        // Resolve the reference before its later path item's server array is rewritten.
+        input.put("components", Map.of("schemas", Map.of("Node", Map.of("$ref", "#/paths/~1pets/servers/1"))));
+        input.put("paths", paths);
+
+        assertThatThrownBy(() -> prepared(input)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unresolved internal OpenAPI reference");
+
+        // Reaching this check proves the initial traversal accepted the original reference.
+        verify(urls).validateUrl(TARGET + "/pets");
     }
 
     @ParameterizedTest

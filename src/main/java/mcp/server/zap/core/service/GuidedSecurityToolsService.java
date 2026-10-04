@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class GuidedSecurityToolsService {
+    private static final String DEFINITION_TYPE_OPENAPI = "openapi";
+    private static final String SOURCE_KIND_CONTENT = "content";
     private static final String REPORT_FORMAT_HTML = "html";
     private static final String REPORT_FORMAT_JSON = "json";
     private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
@@ -67,10 +69,10 @@ public class GuidedSecurityToolsService {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.TARGET_IMPORT, "target import");
         String normalizedType = normalizeDefinitionType(definitionType);
         String normalizedSourceKind = normalizeSourceKind(sourceKind);
-        if ("content".equals(normalizedSourceKind) && !"openapi".equals(normalizedType)) {
+        if (SOURCE_KIND_CONTENT.equals(normalizedSourceKind) && !DEFINITION_TYPE_OPENAPI.equals(normalizedType)) {
             throw new IllegalArgumentException("sourceKind=content is supported only for OpenAPI definitions");
         }
-        String normalizedSource = "content".equals(normalizedSourceKind) ? source : requireText(source, "source");
+        String normalizedSource = SOURCE_KIND_CONTENT.equals(normalizedSourceKind) ? source : requireText(source, "source");
         String delegateResponse = importDefinition(
                 normalizedType,
                 normalizedSourceKind,
@@ -248,10 +250,10 @@ public class GuidedSecurityToolsService {
                                     String endpointUrl,
                                     String hostOverride) {
         return switch (definitionType) {
-            case "openapi" -> switch (sourceKind) {
+            case DEFINITION_TYPE_OPENAPI -> switch (sourceKind) {
                 case "url" -> openApiService.importOpenApiSpec(source, hostOverride);
                 case "file" -> openApiService.importOpenApiSpecFile(source, hostOverride);
-                case "content" -> openApiService.importOpenApiContent(source, hostOverride);
+                case SOURCE_KIND_CONTENT -> openApiService.importOpenApiContent(source, hostOverride);
                 default -> throw new IllegalStateException("Unexpected OpenAPI source kind: " + sourceKind);
             };
             case "graphql" -> {
@@ -276,10 +278,10 @@ public class GuidedSecurityToolsService {
                                        String source,
                                        String delegateResponse) {
         return new StringBuilder()
-                .append("content".equals(sourceKind) ? "Guided target import result.\n" : "Guided target import completed.\n")
+                .append(SOURCE_KIND_CONTENT.equals(sourceKind) ? "Guided target import result.\n" : "Guided target import completed.\n")
                 .append("Definition Type: ").append(definitionType).append('\n')
                 .append("Source Kind: ").append(sourceKind).append('\n')
-                .append("Source: ").append("content".equals(sourceKind) ? "client-supplied definition (contents withheld)" : source).append('\n')
+                .append("Source: ").append(SOURCE_KIND_CONTENT.equals(sourceKind) ? "client-supplied definition (contents withheld)" : source).append('\n')
                 .append('\n')
                 .append(delegateResponse)
                 .toString();
@@ -346,7 +348,7 @@ public class GuidedSecurityToolsService {
     private String normalizeDefinitionType(String definitionType) {
         String normalized = requireText(definitionType, "definitionType").toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "openapi", "graphql", "soap" -> normalized;
+            case DEFINITION_TYPE_OPENAPI, "graphql", "soap" -> normalized;
             default -> throw new IllegalArgumentException("definitionType must be one of: openapi, graphql, soap");
         };
     }
@@ -354,7 +356,7 @@ public class GuidedSecurityToolsService {
     private String normalizeSourceKind(String sourceKind) {
         String normalized = requireText(sourceKind, "sourceKind").toLowerCase(Locale.ROOT);
         return switch (normalized) {
-            case "url", "file", "content" -> normalized;
+            case "url", "file", SOURCE_KIND_CONTENT -> normalized;
             default -> throw new IllegalArgumentException("sourceKind must be one of: url, file, content");
         };
     }

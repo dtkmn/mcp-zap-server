@@ -42,6 +42,11 @@ public final class OpenApiContentPolicy {
     static final int MAX_OPERATIONS = 1_000;
     private static final int MAX_TARGET_CHARS = 8_192;
     private static final int MAX_NUMBER_CHARS = 1_000;
+    private static final String FIELD_SERVERS = "servers";
+    private static final String FIELD_SCHEMES = "schemes";
+    private static final String FIELD_PARAMETERS = "parameters";
+    private static final String FIELD_EXAMPLES = "examples";
+    private static final String UNRESOLVED_REFERENCE_MESSAGE = "Unresolved internal OpenAPI reference";
     private static final Set<String> METHODS = Set.of("get", "put", "post", "delete", "options", "head", "patch", "trace");
     private static final Set<String> SCHEMA_IDENTIFIERS = Set.of(
             "$id", "id", "$schema", "$dynamicRef", "$anchor", "$dynamicAnchor", "$recursiveRef", "$recursiveAnchor");
@@ -69,6 +74,17 @@ public final class OpenApiContentPolicy {
         }
         String target = validateTarget(fullTargetUrl);
         Map<String, Object> document = parse(content);
+        boolean modern = validateDocumentHeader(document);
+        Map<String, Object> paths = object(document.get("paths"), "OpenAPI paths must be an object");
+        new DocumentWalker(document, modern, target).visit(document);
+        rewriteDocumentTarget(document, modern, target);
+        validateOperations(document, paths, modern, target);
+        // Rewriting servers can invalidate references into the former server arrays.
+        new DocumentWalker(document, modern, target).visit(document);
+        return normalizedJson(document);
+    }
+
+    private static boolean validateDocumentHeader(Map<String, Object> document) {
         Object openapi = document.get("openapi");
         Object swagger = document.get("swagger");
         boolean modern = openapi instanceof String version && version.matches("3\\.[01]\\.\\d+");
@@ -84,56 +100,81 @@ public final class OpenApiContentPolicy {
                 || !(info.get("version") instanceof String version) || version.isBlank()) {
             throw invalid("OpenAPI info requires a title and version");
         }
-        Map<String, Object> paths = object(document.get("paths"), "OpenAPI paths must be an object");
-        new DocumentWalker(document, modern, target).visit(document);
+        return modern;
+    }
+
+    private static void rewriteDocumentTarget(Map<String, Object> document, boolean modern, String target) {
         if (modern) {
-            document.put("servers", selectedServer(target));
+            document.put(FIELD_SERVERS, selectedServer(target));
         } else {
             URI uri = URI.create(target);
             document.put("host", uri.getRawAuthority());
-            document.put("schemes", List.of(uri.getScheme()));
+            document.put(FIELD_SCHEMES, List.of(uri.getScheme()));
             document.put("basePath", uri.getRawPath().isEmpty() ? "/" : uri.getRawPath());
         }
+    }
+
+    private void validateOperations(Map<String, Object> document, Map<String, Object> paths, boolean modern, String target) {
+        String operationBase = withoutTrailingSlashes(target);
         int operations = 0;
         for (Map.Entry<String, Object> entry : paths.entrySet()) {
             if (entry.getKey().startsWith("x-")) {
                 continue;
             }
-            String path = entry.getKey();
-            String requestPath = validateOperationPath(path);
-            Map<String, Object> pathItem = resolveObject(document, entry.getValue(), newIdentitySet());
-            if (modern) {
-                object(entry.getValue(), "OpenAPI path items must be objects").put("servers", selectedServer(target));
-            }
-            for (Map.Entry<String, Object> field : pathItem.entrySet()) {
-                if (!METHODS.contains(field.getKey())) {
-                    if (!Set.of("$ref", "summary", "description", "servers", "parameters").contains(field.getKey())
-                            && !field.getKey().startsWith("x-")) {
-                        throw invalid("Unsupported OpenAPI path item field");
-                    }
-                    continue;
-                }
-                if (++operations > MAX_OPERATIONS) {
-                    throw invalid("OpenAPI content exceeds the operation limit");
-                }
-                Map<String, Object> operation = object(field.getValue(), "OpenAPI operations must be objects");
-                if (modern) {
-                    operation.put("servers", selectedServer(target));
-                } else if (operation.containsKey("schemes")) {
-                    operation.put("schemes", List.of(URI.create(target).getScheme()));
-                }
-                validatePathParameters(document, pathItem.get("parameters"));
-                validatePathParameters(document, operation.get("parameters"));
-                String operationUrl = target.replaceFirst("/+$", "") + requestPath;
-                try {
-                    validatePolicy(URI.create(operationUrl).toASCIIString());
-                } catch (IllegalArgumentException e) {
-                    throw invalid("OpenAPI operation target is invalid or prohibited");
-                }
-            }
+            operations = validatePathItem(document, entry, modern, target, operationBase, operations);
         }
-        // Rewriting servers can invalidate references into the former server arrays.
-        new DocumentWalker(document, modern, target).visit(document);
+    }
+
+    private int validatePathItem(Map<String, Object> document, Map.Entry<String, Object> entry,
+            boolean modern, String target, String operationBase, int operations) {
+        String requestPath = validateOperationPath(entry.getKey());
+        Map<String, Object> pathItem = resolveObject(document, entry.getValue(), newIdentitySet());
+        if (modern) {
+            object(entry.getValue(), "OpenAPI path items must be objects").put(FIELD_SERVERS, selectedServer(target));
+        }
+        String operationUrl = operationBase + requestPath;
+        for (Map.Entry<String, Object> field : pathItem.entrySet()) {
+            if (!METHODS.contains(field.getKey())) {
+                if (!Set.of("$ref", "summary", "description", FIELD_SERVERS, FIELD_PARAMETERS).contains(field.getKey())
+                        && !field.getKey().startsWith("x-")) {
+                    throw invalid("Unsupported OpenAPI path item field");
+                }
+                continue;
+            }
+            if (++operations > MAX_OPERATIONS) {
+                throw invalid("OpenAPI content exceeds the operation limit");
+            }
+            validateOperation(document, pathItem, field.getValue(), modern, target, operationUrl);
+        }
+        return operations;
+    }
+
+    private void validateOperation(Map<String, Object> document, Map<String, Object> pathItem, Object rawOperation,
+            boolean modern, String target, String operationUrl) {
+        Map<String, Object> operation = object(rawOperation, "OpenAPI operations must be objects");
+        if (modern) {
+            operation.put(FIELD_SERVERS, selectedServer(target));
+        } else if (operation.containsKey(FIELD_SCHEMES)) {
+            operation.put(FIELD_SCHEMES, List.of(URI.create(target).getScheme()));
+        }
+        validatePathParameters(document, pathItem.get(FIELD_PARAMETERS));
+        validatePathParameters(document, operation.get(FIELD_PARAMETERS));
+        try {
+            validatePolicy(URI.create(operationUrl).toASCIIString());
+        } catch (IllegalArgumentException e) {
+            throw invalid("OpenAPI operation target is invalid or prohibited");
+        }
+    }
+
+    private static String withoutTrailingSlashes(String target) {
+        int end = target.length();
+        while (end > 0 && target.charAt(end - 1) == '/') {
+            end--;
+        }
+        return target.substring(0, end);
+    }
+
+    private static byte[] normalizedJson(Map<String, Object> document) {
         new ObjectBudget().visit(document, 1);
         BoundedOutput output = new BoundedOutput();
         try {
@@ -312,12 +353,12 @@ public final class OpenApiContentPolicy {
             validateParameterSamples(document, pointer(document, map.get("$ref")), visited, referenceDepth + 1);
         }
         for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if ("examples".equals(entry.getKey()) && entry.getValue() instanceof Map<?, ?> examples) {
+            if (FIELD_EXAMPLES.equals(entry.getKey()) && entry.getValue() instanceof Map<?, ?> examples) {
                 for (Object rawExample : examples.values()) {
                     Map<String, Object> example = resolveObject(document, rawExample, newIdentitySet());
                     validateSample(example.get("value"));
                 }
-            } else if (LITERAL_DATA.contains(entry.getKey()) || "examples".equals(entry.getKey())) {
+            } else if (LITERAL_DATA.contains(entry.getKey()) || FIELD_EXAMPLES.equals(entry.getKey())) {
                 validateSample(entry.getValue());
             } else if ("schema".equals(entry.getKey()) || SCHEMA_VALUES.contains(entry.getKey())) {
                 validateParameterSamples(document, entry.getValue(), visited, referenceDepth);
@@ -400,14 +441,14 @@ public final class OpenApiContentPolicy {
                 try {
                     int index = Integer.parseInt(token);
                     if (index >= list.size()) {
-                        throw invalid("Unresolved internal OpenAPI reference");
+                        throw invalid(UNRESOLVED_REFERENCE_MESSAGE);
                     }
                     current = list.get(index);
                 } catch (NumberFormatException e) {
-                    throw invalid("Unresolved internal OpenAPI reference");
+                    throw invalid(UNRESOLVED_REFERENCE_MESSAGE);
                 }
             } else {
-                throw invalid("Unresolved internal OpenAPI reference");
+                throw invalid(UNRESOLVED_REFERENCE_MESSAGE);
             }
         }
         return current;
@@ -502,47 +543,58 @@ public final class OpenApiContentPolicy {
         private void visitChecked(Object value) {
             if (value instanceof List<?> list) {
                 list.forEach(this::visit);
-            } else if (value instanceof Map<?, ?>) {
-                Map<String, Object> map = object(value, "Invalid OpenAPI object");
-                if (map.containsKey("$ref")) {
-                    requireReferenceDepth(referenceDepth + 1);
-                    referenceDepth++;
-                    activeReferences.add(map);
-                    try {
-                        visit(pointer(document, map.get("$ref")));
-                    } finally {
-                        activeReferences.remove(map);
-                        referenceDepth--;
-                    }
-                }
-                if (map.containsKey("externalValue") || map.containsKey("operationRef") || map.containsKey("server")) {
-                    throw invalid("External examples, Link operation references and request server overrides are not supported");
-                }
-                if (modern && map.containsKey("servers")) {
-                    map.put("servers", selectedServer(target));
-                }
-                for (Map.Entry<String, Object> entry : map.entrySet()) {
-                    String name = entry.getKey();
-                    if (LITERAL_DATA.contains(name) || ("examples".equals(name)
-                            && (!modern || entry.getValue() instanceof List<?>))) {
-                        continue;
-                    }
-                    if (("callbacks".equals(name) || "webhooks".equals(name))
-                            && (!(entry.getValue() instanceof Map<?, ?> callbacks) || !callbacks.isEmpty())) {
-                        throw invalid("OpenAPI callbacks and webhooks are not supported for content import");
-                    }
-                    if ("schema".equals(name)) {
-                        schema(entry.getValue());
-                    } else if ("schemas".equals(name) || "definitions".equals(name)) {
-                        object(entry.getValue(), "OpenAPI schemas must be objects").values().forEach(this::schema);
-                    } else if (NAMED_OBJECTS.contains(name) || "examples".equals(name)
-                            || ("parameters".equals(name) && entry.getValue() instanceof Map<?, ?>)) {
-                        object(entry.getValue(), "OpenAPI named members must be objects").values().forEach(this::visit);
-                    } else {
-                        visit(entry.getValue());
-                    }
-                }
+                return;
             }
+            Map<String, Object> map = object(value, "Invalid OpenAPI object");
+            followObjectReference(map);
+            if (map.containsKey("externalValue") || map.containsKey("operationRef") || map.containsKey("server")) {
+                throw invalid("External examples, Link operation references and request server overrides are not supported");
+            }
+            if (modern && map.containsKey(FIELD_SERVERS)) {
+                map.put(FIELD_SERVERS, selectedServer(target));
+            }
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                visitMember(entry.getKey(), entry.getValue());
+            }
+        }
+
+        private void followObjectReference(Map<String, Object> map) {
+            if (!map.containsKey("$ref")) {
+                return;
+            }
+            requireReferenceDepth(referenceDepth + 1);
+            referenceDepth++;
+            activeReferences.add(map);
+            try {
+                visit(pointer(document, map.get("$ref")));
+            } finally {
+                activeReferences.remove(map);
+                referenceDepth--;
+            }
+        }
+
+        private void visitMember(String name, Object value) {
+            if (LITERAL_DATA.contains(name) || (FIELD_EXAMPLES.equals(name) && (!modern || value instanceof List<?>))) {
+                return;
+            }
+            if (("callbacks".equals(name) || "webhooks".equals(name))
+                    && (!(value instanceof Map<?, ?> callbacks) || !callbacks.isEmpty())) {
+                throw invalid("OpenAPI callbacks and webhooks are not supported for content import");
+            }
+            if ("schema".equals(name)) {
+                schema(value);
+                return;
+            }
+            if ("schemas".equals(name) || "definitions".equals(name)) {
+                object(value, "OpenAPI schemas must be objects").values().forEach(this::schema);
+                return;
+            }
+            if (NAMED_OBJECTS.contains(name) || FIELD_EXAMPLES.equals(name)
+                    || (FIELD_PARAMETERS.equals(name) && value instanceof Map<?, ?>)) {
+                object(value, "OpenAPI named members must be objects").values().forEach(this::visit);
+                return;
+            }
+            visit(value);
         }
 
         private void schema(Object value) {
@@ -578,49 +630,61 @@ public final class OpenApiContentPolicy {
                 throw invalid("Schema identifiers, anchors and dialect rebasing are not supported");
             }
             if (map.containsKey("$ref")) {
-                requireReferenceDepth(referenceDepth + 1);
-                referenceDepth++;
-                try {
-                    schema(pointer(document, map.get("$ref")));
-                } finally {
-                    referenceDepth--;
-                }
+                followSchemaReference(map.get("$ref"));
             }
             for (Map.Entry<String, Object> entry : map.entrySet()) {
-                String name = entry.getKey();
-                if (LITERAL_DATA.contains(name) || "examples".equals(name)) {
-                    continue;
-                }
-                if (SCHEMA_MAPS.contains(name)) {
-                    object(entry.getValue(), "Schema members must be objects").values().forEach(this::schema);
-                } else if ("discriminator".equals(name) && entry.getValue() instanceof Map<?, ?>) {
-                    Map<String, Object> discriminator = object(entry.getValue(), "Invalid OpenAPI discriminator");
-                    Object rawMappings = discriminator.get("mapping");
-                    if (rawMappings != null) {
-                        for (Object reference : object(rawMappings, "Discriminator mappings must be objects").values()) {
-                            requireReferenceDepth(referenceDepth + 1);
-                            referenceDepth++;
-                            try {
-                                schema(pointer(document, reference));
-                            } finally {
-                                referenceDepth--;
-                            }
-                        }
-                    }
-                } else if (SCHEMA_VALUES.contains(name)) {
-                    if (entry.getValue() instanceof List<?> list) {
-                        list.forEach(this::schema);
-                    } else {
-                        schema(entry.getValue());
-                    }
-                } else if (SCHEMA_LISTS.contains(name)) {
-                    if (!(entry.getValue() instanceof List<?> list)) {
-                        throw invalid("Schema alternatives must be arrays");
-                    }
+                visitSchemaMember(entry.getKey(), entry.getValue());
+            }
+        }
+
+        private void followSchemaReference(Object reference) {
+            requireReferenceDepth(referenceDepth + 1);
+            referenceDepth++;
+            try {
+                schema(pointer(document, reference));
+            } finally {
+                referenceDepth--;
+            }
+        }
+
+        private void visitSchemaMember(String name, Object value) {
+            if (LITERAL_DATA.contains(name) || FIELD_EXAMPLES.equals(name)) {
+                return;
+            }
+            if (SCHEMA_MAPS.contains(name)) {
+                object(value, "Schema members must be objects").values().forEach(this::schema);
+                return;
+            }
+            if ("discriminator".equals(name) && value instanceof Map<?, ?>) {
+                visitDiscriminatorMappings(value);
+                return;
+            }
+            if (SCHEMA_VALUES.contains(name)) {
+                if (value instanceof List<?> list) {
                     list.forEach(this::schema);
                 } else {
-                    visit(entry.getValue());
+                    schema(value);
                 }
+                return;
+            }
+            if (SCHEMA_LISTS.contains(name)) {
+                if (!(value instanceof List<?> list)) {
+                    throw invalid("Schema alternatives must be arrays");
+                }
+                list.forEach(this::schema);
+                return;
+            }
+            visit(value);
+        }
+
+        private void visitDiscriminatorMappings(Object value) {
+            Map<String, Object> discriminator = object(value, "Invalid OpenAPI discriminator");
+            Object rawMappings = discriminator.get("mapping");
+            if (rawMappings == null) {
+                return;
+            }
+            for (Object reference : object(rawMappings, "Discriminator mappings must be objects").values()) {
+                followSchemaReference(reference);
             }
         }
     }

@@ -1,6 +1,10 @@
 # AWS/EKS private single-replica baseline. Use an encrypted tunnel or TLS ingress.
 # For multiple MCP replicas, start from values-ha.yaml instead.
 # Copy this file and replace placeholders before production use.
+# Set a working EBS CSI RWO StorageClass below, and verify CNI NetworkPolicy
+# enforcement. Target/add-on/background HTTP egress remains opt-in; see README.
+# OpenAPI content import also needs the README's sibling-storage/Recreate block
+# and an MCP image containing that unreleased feature.
 
 global:
   environment: prod
@@ -15,6 +19,7 @@ zap:
   persistence:
     enabled: true
     size: 20Gi
+    # storageClass: your-ebs-rwo-storage-class
 
 mcp:
   replicaCount: 1

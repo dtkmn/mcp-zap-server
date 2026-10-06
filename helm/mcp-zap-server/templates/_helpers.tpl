@@ -160,11 +160,81 @@ Self-affinity lets the first workspace pod bootstrap without a peer dependency.
 {{- end }}
 
 {{/*
+Prepare PVC subdirectories without granting ZAP write access to import staging.
+The volume root is provisioned by fsGroup; application directories stay owned
+by the shared nonroot UID. OnRootMismatch preserves their restrictive modes.
+*/}}
+{{- define "mcp-zap-server.workspaceInitialization" -}}
+{{- $persistence := .Values.zap.persistence -}}
+{{- if or $persistence.workspaceSubPath $persistence.contentImport.enabled -}}
+initContainers:
+- name: initialize-shared-directories
+  image: {{ include "mcp-zap-server.zap.image" . | quote }}
+  imagePullPolicy: {{ .Values.zap.image.pullPolicy }}
+  command:
+  - /bin/sh
+  - -ec
+  - |
+    umask 027
+    if [ -L /shared ]; then
+      echo "Shared volume mount must not be a symlink" >&2
+      exit 1
+    fi
+    workspace=/shared/{{ $persistence.workspaceSubPath }}
+    if [ -L "$workspace" ]; then
+      echo "Shared workspace must not be a symlink" >&2
+      exit 1
+    fi
+    mkdir -p "$workspace"
+    if [ ! -d "$workspace" ] || [ -L "$workspace" ]; then
+      echo "Shared workspace must be a directory without symlinks" >&2
+      exit 1
+    fi
+    {{- if $persistence.contentImport.enabled }}
+    imports=/shared/{{ $persistence.contentImport.subPath }}
+    if [ -L "$imports" ]; then
+      echo "Content import directory must not be a symlink" >&2
+      exit 1
+    fi
+    mkdir -p "$imports"
+    if [ ! -d "$imports" ] || [ -L "$imports" ] || [ "$(stat -c '%u:%g' "$imports")" != "1000:1000" ]; then
+      echo "Content import directory must be owned by UID/GID 1000" >&2
+      exit 1
+    fi
+    chmod u=rwx,g=rx,o=,u-s,g-s "$imports"
+    {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  volumeMounts:
+  - name: zap-data
+    mountPath: /shared
+{{- end -}}
+{{- end }}
+
+{{/*
 Recognize chart-owned variables and their direct Spring property aliases.
 */}}
 {{- define "mcp-zap-server.isSecurityProperty" -}}
 {{- $name := regexReplaceAll "[^a-z0-9]" (lower .) "" -}}
 {{- if or (hasPrefix "jwtrevocationstore" $name) (hasPrefix "mcpserverauthjwt" $name) (has $name (list "mcpsecuritymode" "mcpsecurityenabled" "mcpapikey" "mcpsecurityallowplaceholderapikey" "mcpserversecuritymode" "mcpserversecurityenabled" "mcpserversecurityallowplaceholderapikey" "jwtenabled" "jwtsecret" "jwtissuer" "jwtaccesstokenexpiration" "jwtrefreshtokenexpiration")) -}}
+true
+{{- end -}}
+{{- end }}
+
+{{/*
+Recognize chart-owned content import variables and their Spring property aliases.
+*/}}
+{{- define "mcp-zap-server.isContentImportProperty" -}}
+{{- $name := regexReplaceAll "[^a-z0-9]" (lower .) "" -}}
+{{- if has $name (list "zapopenapicontentenabled" "zapopenapicontentlocaldirectory" "zapopenapicontentzapdirectory" "zapopenapicontentimportenabled" "zapopenapicontentimportlocaldirectory" "zapopenapicontentimportzapdirectory") -}}
 true
 {{- end -}}
 {{- end }}
@@ -183,8 +253,11 @@ Other JSON configuration, including bootstrap authentication profiles, remains s
 {{- if and $.sharedWorkspace (has $normalized (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
 {{- fail (printf "SPRING_APPLICATION_JSON must not override shared workspace property %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" $property) -}}
 {{- end -}}
+{{- if and $.contentImport (eq (include "mcp-zap-server.isContentImportProperty" $property) "true") -}}
+{{- fail (printf "SPRING_APPLICATION_JSON must not override content import property %s; use zap.persistence.contentImport" $property) -}}
+{{- end -}}
 {{- if kindIs "map" $value -}}
-{{- include "mcp-zap-server.validateSecurityJson" (dict "values" $value "prefix" (printf "%s." $property) "sharedWorkspace" $.sharedWorkspace) -}}
+{{- include "mcp-zap-server.validateSecurityJson" (dict "values" $value "prefix" (printf "%s." $property) "sharedWorkspace" $.sharedWorkspace "contentImport" $.contentImport) -}}
 {{- end -}}
 {{- end -}}
 {{- end }}
@@ -211,11 +284,24 @@ Validate security-sensitive Helm values before rendering resources.
 {{- $revocation := .Values.mcp.security.jwt.revocation -}}
 {{- $revocationBackend := lower (trim $revocation.backend) -}}
 {{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp -}}
+{{- $contentImport := .Values.zap.persistence.contentImport -}}
+{{- $workspaceSubPath := .Values.zap.persistence.workspaceSubPath -}}
+{{- if not (kindIs "bool" $contentImport.enabled) -}}
+{{- fail "zap.persistence.contentImport.enabled must be a boolean" -}}
+{{- end -}}
 {{- if hasKey .Values.podLabels "mcp-zap-server.io/workspace" -}}
 {{- fail "podLabels must not override the chart-owned mcp-zap-server.io/workspace label" -}}
 {{- end -}}
 {{- if eq $effectiveZapClientApiKey "" -}}
 {{- $effectiveZapClientApiKey = $zapApiKey -}}
+{{- end -}}
+{{- if $contentImport.enabled -}}
+{{- if or .Values.mcp.autoscaling.enabled (ne (int .Values.mcp.replicaCount) 1) -}}
+{{- fail "content import staging supports one MCP writer; set mcp.replicaCount=1 and mcp.autoscaling.enabled=false" -}}
+{{- end -}}
+{{- if ne .Values.mcp.deploymentStrategy.type "Recreate" -}}
+{{- fail "content import staging requires mcp.deploymentStrategy.type=Recreate so MCP writers do not overlap during rollout" -}}
+{{- end -}}
 {{- end -}}
 
 {{- if and .Values.mcp.enabled $multiReplicaMcp (not $sessionAffinity.enabled) -}}
@@ -230,6 +316,48 @@ Validate security-sensitive Helm values before rendering resources.
 {{- end -}}
 {{- if and .Values.zap.enabled (ne (int .Values.zap.replicaCount) 1) -}}
 {{- fail "the chart supports one stateful ZAP replica; zap.replicaCount must be 1" -}}
+{{- end -}}
+{{- if not (kindIs "string" $workspaceSubPath) -}}
+{{- fail "zap.persistence.workspaceSubPath must be empty or a single portable directory name" -}}
+{{- end -}}
+{{- if and $workspaceSubPath (not (regexMatch "^[A-Za-z0-9_-]+$" $workspaceSubPath)) -}}
+{{- fail "zap.persistence.workspaceSubPath must be empty or a single portable directory name" -}}
+{{- end -}}
+{{- if or $contentImport.enabled $workspaceSubPath -}}
+{{- if not .Values.zap.persistence.enabled -}}
+{{- fail "PVC subdirectories require zap.persistence.enabled=true" -}}
+{{- end -}}
+{{- if or (ne (toString .Values.podSecurityContext.runAsUser) "1000") (ne (toString .Values.podSecurityContext.runAsGroup) "1000") (ne (toString .Values.podSecurityContext.fsGroup) "1000") (ne .Values.podSecurityContext.fsGroupChangePolicy "OnRootMismatch") (ne (toString .Values.securityContext.runAsUser) "1000") (ne (toString .Values.securityContext.runAsGroup) "1000") -}}
+{{- fail "PVC subdirectories require pod and container UID/GID 1000, fsGroup=1000, and fsGroupChangePolicy=OnRootMismatch" -}}
+{{- end -}}
+{{- end -}}
+{{- if $contentImport.enabled -}}
+{{- if not (and .Values.mcp.enabled .Values.zap.enabled $sharedWorkspace) -}}
+{{- fail "content import requires chart-managed MCP and ZAP with zap.persistence.enabled=true and shareWithMcp=true" -}}
+{{- end -}}
+{{- if not $workspaceSubPath -}}
+{{- fail "content import requires zap.persistence.workspaceSubPath (e.g. workspace); migrate existing PVC-root reports and automation files before changing layout" -}}
+{{- end -}}
+{{- if not (kindIs "string" $contentImport.subPath) -}}
+{{- fail "zap.persistence.contentImport.subPath must be a single portable directory name" -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z0-9_-]+$" $contentImport.subPath) -}}
+{{- fail "zap.persistence.contentImport.subPath must be a single portable directory name" -}}
+{{- end -}}
+{{- if eq $workspaceSubPath $contentImport.subPath -}}
+{{- fail "content import staging and the report workspace must use separate sibling PVC subPaths" -}}
+{{- end -}}
+{{- $importMount := $contentImport.mountPath -}}
+{{- if not (kindIs "string" $importMount) -}}
+{{- fail "zap.persistence.contentImport.mountPath must be an absolute non-root portable directory without dot segments" -}}
+{{- end -}}
+{{- if or (not (regexMatch "^/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$" $importMount)) (regexMatch "(^|/)[.][.]?(/|$)" $importMount) -}}
+{{- fail "zap.persistence.contentImport.mountPath must be an absolute non-root portable directory without dot segments" -}}
+{{- end -}}
+{{- $workspaceMount := trimSuffix "/" .Values.zap.persistence.mountPath -}}
+{{- if or (eq $importMount $workspaceMount) (hasPrefix (printf "%s/" $workspaceMount) $importMount) (hasPrefix (printf "%s/" $importMount) $workspaceMount) -}}
+{{- fail "content import mountPath must be separate from the report and automation workspace mountPath" -}}
+{{- end -}}
 {{- end -}}
 {{- if and .Values.mcp.enabled $sharedWorkspace -}}
 {{- if not .Values.zap.enabled -}}
@@ -263,6 +391,9 @@ Validate security-sensitive Helm values before rendering resources.
 {{- if and $sharedWorkspace (has $name (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
 {{- fail (printf "mcp.env must not override shared workspace variable %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" .name) -}}
 {{- end -}}
+{{- if and $contentImport.enabled (eq (include "mcp-zap-server.isContentImportProperty" .name) "true") -}}
+{{- fail (printf "mcp.env must not override content import variable %s; use zap.persistence.contentImport" .name) -}}
+{{- end -}}
 {{- if eq $name "springapplicationjson" -}}
 {{- if not (hasKey . "value") -}}
 {{- fail "SPRING_APPLICATION_JSON in mcp.env requires a literal JSON object so chart-owned security can be validated" -}}
@@ -271,7 +402,7 @@ Validate security-sensitive Helm values before rendering resources.
 {{- if not (kindIs "map" $json) -}}
 {{- fail "SPRING_APPLICATION_JSON must be a JSON object" -}}
 {{- end -}}
-{{- include "mcp-zap-server.validateSecurityJson" (dict "values" $json "prefix" "" "sharedWorkspace" $sharedWorkspace) -}}
+{{- include "mcp-zap-server.validateSecurityJson" (dict "values" $json "prefix" "" "sharedWorkspace" $sharedWorkspace "contentImport" $contentImport.enabled) -}}
 {{- end -}}
 {{- if has $name (list "javatooloptions" "jdkjavaoptions" "javaoptions") -}}
 {{- if not (hasKey . "value") -}}
@@ -285,6 +416,9 @@ Validate security-sensitive Helm values before rendering resources.
 {{- end -}}
 {{- if and $sharedWorkspace (has $normalized (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
 {{- fail (printf "JVM options must not override shared workspace property %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" $property) -}}
+{{- end -}}
+{{- if and $contentImport.enabled (eq (include "mcp-zap-server.isContentImportProperty" $property) "true") -}}
+{{- fail (printf "JVM options must not override content import property %s; use zap.persistence.contentImport" $property) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

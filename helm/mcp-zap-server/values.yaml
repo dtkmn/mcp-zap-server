@@ -64,9 +64,20 @@ zap:
     accessMode: ReadWriteOnce
     size: 10Gi
     mountPath: /zap/wrk
+    # Empty preserves the existing PVC-root workspace layout. A nonempty value
+    # selects a directory within the PVC; migrate existing workspace files first.
+    workspaceSubPath: ""
     # Relative to the shared mount. For one default API-key client, use
     # workspaces/default-client/automation to allow automation report readback.
     automationSubdirectory: automation
+    # Opt-in shared staging for self-contained OpenAPI content imports.
+    # Set workspaceSubPath to a separate sibling (e.g. workspace), and use one
+    # MCP replica with deploymentStrategy.type=Recreate. Requires UID/GID 1000
+    # and fsGroupChangePolicy=OnRootMismatch for protected staging permissions.
+    contentImport:
+      enabled: false
+      subPath: content-imports
+      mountPath: /zap/imports
   
   # Liveness and readiness probes
   livenessProbe:
@@ -219,7 +230,8 @@ mcp:
       maxConcurrentSpiderScans: 5
       threadPerHost: 10
       hostPerScan: 5
-      # ZAP target timeout applied at startup (ZAP_CONNECTION_TIMEOUT).
+      # ZAP target timeout reconciled at startup/readiness/outbound starts
+      # (ZAP_CONNECTION_TIMEOUT), separate from MCP-to-ZAP API timeouts.
       connectionTimeoutInSecs: 60
       spiderThreadCount: 5
       spiderMaxDepth: 10  # HTTP and Client Spider depth; 0 means unlimited

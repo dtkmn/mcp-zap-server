@@ -16,6 +16,16 @@ const pages = [
     },
   },
   {
+    source: 'docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md',
+    slug: 'operations/aws-ec2-compose',
+    title: 'AWS EC2 with Docker Compose',
+    description: 'Deploy one private MCP ZAP Server on EC2, verify scans and reports, and clean up the evaluation.',
+    links: {
+      '../../../examples/aws-ec2/': 'https://github.com/dtkmn/mcp-zap-server/tree/main/examples/aws-ec2',
+      '../../../helm/mcp-zap-server/README.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md',
+    },
+  },
+  {
     source: 'docs/operator/runbooks/PRODUCTION_SIMULATION_RUNBOOK.md',
     slug: 'operations/production-simulation-runbook',
     title: 'Production Simulation Runbook',

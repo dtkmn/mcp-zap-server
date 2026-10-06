@@ -5,6 +5,8 @@ description: "Use this checklist before exposing MCP ZAP Server outside a single
 ---
 Use this checklist before exposing MCP ZAP Server outside a single-user development setup.
 
+For a first private AWS evaluation, follow [AWS EC2 with Docker Compose](../aws-ec2-compose/). It includes the single-instance example, verification and cleanup; review this checklist before expanding that setup.
+
 ## 1. Image and Release Control
 
 - [ ] Pin `zaproxy/zap-stable` to a full release tag or digest.

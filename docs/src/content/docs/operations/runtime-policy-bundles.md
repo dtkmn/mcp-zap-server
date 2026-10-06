@@ -104,7 +104,8 @@ A bundle is a JSON document with this shape:
             "zap_attack_status",
             "zap_passive_scan_wait",
             "zap_passive_scan_status",
-            "zap_report_read"
+            "zap_report_read",
+            "zap_report_read_chunk"
           ],
           "timeWindows": [
             {
@@ -125,10 +126,14 @@ Rules are evaluated in `first-match` order. Put explicit deny rules before broad
 Host-free requests do not match rules that require `hosts`.
 For guided lifecycle calls such as operation status, passive wait/status, or
 report readback, use a separate host-free rule unless the runtime can recover a
-target from signed operation/report state. A host-free `zap_report_read` rule is
+target from signed operation/report state. A host-free report preview or chunk rule is
 not sandbox-host scoped; it authorizes report readback by path, with safety
 coming from tool scope, time windows, and `ReportService` report/workspace
 artifact confinement.
+
+`zap_report_read_chunk` is unreleased and uses `zap:report:read`, like the
+existing preview. The examples include it for servers that expose paged reads;
+check the running server's tool catalog before calling it.
 
 The repository ships example bundles at:
 

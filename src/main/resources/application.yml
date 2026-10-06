@@ -213,7 +213,7 @@ zap:
       max-retained-imports: ${ZAP_OPENAPI_CONTENT_MAX_RETAINED_IMPORTS:64}
       retention-minutes: ${ZAP_OPENAPI_CONTENT_RETENTION_MINUTES:60}
   
-  # ZAP Initialization Settings (applied at startup via Network API)
+  # ZAP Network API defaults reconciled at startup, readiness and outbound starts.
   initialization:
     userAgent: ${ZAP_USER_AGENT:Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36}
     connectionTimeoutInSecs: ${ZAP_INIT_CONNECTION_TIMEOUT:${ZAP_CONNECTION_TIMEOUT:300}}

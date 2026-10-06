@@ -506,6 +506,9 @@ class ZapEngineBoundaryAccessTest {
     @Test
     void runtimeAdapterReadsVersionAndAppliesNetworkDefaults() throws Exception {
         when(core.version()).thenReturn(element("version", "2.17.0"));
+        when(network.getDefaultUserAgent()).thenReturn(element("defaultUserAgent", "ZAP"));
+        when(network.getConnectionTimeout()).thenReturn(element("connectionTimeout", "20"));
+        when(network.getDnsTtlSuccessfulQueries()).thenReturn(element("dnsTtlSuccessfulQueries", "0"));
 
         String version = runtimeAccess.readVersion();
         runtimeAccess.applyNetworkDefaults(new NetworkDefaults("MCP ZAP Server", 30, 60));

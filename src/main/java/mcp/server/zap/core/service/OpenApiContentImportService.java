@@ -29,6 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.Semaphore;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.OpenApiContentImportProperties;
+import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -149,6 +150,10 @@ public class OpenApiContentImportService {
                     throw new IllegalStateException("Missing import response");
                 }
             } catch (RuntimeException e) {
+                if (e instanceof ZapApiException apiFailure && !apiFailure.mayHaveDispatched()) {
+                    completed = true;
+                    throw new IllegalStateException("ZAP network configuration is not ready. Import did not start; retry when the MCP server is healthy");
+                }
                 String code = engineErrorCode(e);
                 if ("does_not_exist".equals(code)) {
                     completed = true;

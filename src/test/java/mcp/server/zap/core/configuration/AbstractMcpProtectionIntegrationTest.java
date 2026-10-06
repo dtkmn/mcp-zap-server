@@ -14,6 +14,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.gen.Ascan;
+import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Network;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -106,10 +107,20 @@ public abstract class AbstractMcpProtectionIntegrationTest {
     static class MockZapConfig {
         @Bean
         @Primary
-        ClientApi mockZapClientApi() throws Exception {
+        ClientApi mockZapClientApi(ZapInitializationProperties initializationProperties) throws Exception {
             ClientApi clientApi = new ClientApi("localhost", 0);
 
+            Core core = mock(Core.class);
+            when(core.version()).thenReturn(new ApiResponseElement("version", "2.17.0"));
+            clientApi.core = core;
+
             Network network = mock(Network.class);
+            when(network.getDefaultUserAgent()).thenReturn(new ApiResponseElement(
+                    "defaultUserAgent", initializationProperties.getUserAgent()));
+            when(network.getConnectionTimeout()).thenReturn(new ApiResponseElement(
+                    "connectionTimeout", String.valueOf(initializationProperties.getConnectionTimeoutInSecs())));
+            when(network.getDnsTtlSuccessfulQueries()).thenReturn(new ApiResponseElement(
+                    "dnsTtlSuccessfulQueries", String.valueOf(initializationProperties.getDnsTtlSuccessfulQueries())));
             clientApi.network = network;
 
             Ascan ascan = mock(Ascan.class);

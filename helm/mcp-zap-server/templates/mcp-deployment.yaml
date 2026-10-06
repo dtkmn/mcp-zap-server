@@ -1,6 +1,10 @@
 {{- if .Values.mcp.enabled }}
 {{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp }}
 {{- $workspaceClaim := default (printf "%s-zap-pvc" (include "mcp-zap-server.fullname" .)) .Values.zap.persistence.existingClaim }}
+{{- $automationDirectory := "" }}
+{{- if $sharedWorkspace }}
+{{- $automationDirectory = printf "%s/%s" (trimSuffix "/" .Values.zap.persistence.mountPath) .Values.zap.persistence.automationSubdirectory }}
+{{- end }}
 {{- $affinity := include "mcp-zap-server.workspaceAffinity" (dict "root" . "affinity" .Values.mcp.affinity) | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
@@ -81,9 +85,9 @@ spec:
         - name: ZAP_REPORT_DIRECTORY
           value: {{ .Values.zap.persistence.mountPath | quote }}
         - name: ZAP_AUTOMATION_LOCAL_DIRECTORY
-          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+          value: {{ $automationDirectory | quote }}
         - name: ZAP_AUTOMATION_ZAP_DIRECTORY
-          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+          value: {{ $automationDirectory | quote }}
         {{- end }}
         - name: MCP_SECURITY_MODE
           value: "{{ .Values.mcp.security.mode }}"

@@ -64,6 +64,9 @@ zap:
     accessMode: ReadWriteOnce
     size: 10Gi
     mountPath: /zap/wrk
+    # Relative to the shared mount. For one default API-key client, use
+    # workspaces/default-client/automation to allow automation report readback.
+    automationSubdirectory: automation
   
   # Liveness and readiness probes
   livenessProbe:

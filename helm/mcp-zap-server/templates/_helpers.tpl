@@ -181,7 +181,7 @@ Other JSON configuration, including bootstrap authentication profiles, remains s
 {{- fail (printf "SPRING_APPLICATION_JSON must not override %s; configure chart-owned security through mcp.security" $property) -}}
 {{- end -}}
 {{- if and $.sharedWorkspace (has $normalized (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
-{{- fail (printf "SPRING_APPLICATION_JSON must not override shared workspace property %s; use zap.persistence.mountPath" $property) -}}
+{{- fail (printf "SPRING_APPLICATION_JSON must not override shared workspace property %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" $property) -}}
 {{- end -}}
 {{- if kindIs "map" $value -}}
 {{- include "mcp-zap-server.validateSecurityJson" (dict "values" $value "prefix" (printf "%s." $property) "sharedWorkspace" $.sharedWorkspace) -}}
@@ -245,6 +245,13 @@ Validate security-sensitive Helm values before rendering resources.
 {{- if or (not (hasPrefix "/" $mountPath)) (eq $mountPath "/") (regexMatch "(^|/)[.][.]?(/|$)" $mountPath) -}}
 {{- fail "zap.persistence.mountPath must be an absolute non-root directory without dot segments" -}}
 {{- end -}}
+{{- $automationSubdirectory := .Values.zap.persistence.automationSubdirectory -}}
+{{- if not (kindIs "string" $automationSubdirectory) -}}
+{{- fail "zap.persistence.automationSubdirectory must be a nonempty portable relative directory without dot segments" -}}
+{{- end -}}
+{{- if or (not (regexMatch "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$" $automationSubdirectory)) (regexMatch "(^|/)[.][.]?(/|$)" $automationSubdirectory) -}}
+{{- fail "zap.persistence.automationSubdirectory must be a nonempty portable relative directory without dot segments" -}}
+{{- end -}}
 {{- end -}}
 
 {{- if .Values.mcp.enabled -}}
@@ -254,7 +261,7 @@ Validate security-sensitive Helm values before rendering resources.
 {{- fail (printf "mcp.env must not override chart-owned security variable %s; use mcp.security" .name) -}}
 {{- end -}}
 {{- if and $sharedWorkspace (has $name (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
-{{- fail (printf "mcp.env must not override shared workspace variable %s; use zap.persistence.mountPath" .name) -}}
+{{- fail (printf "mcp.env must not override shared workspace variable %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" .name) -}}
 {{- end -}}
 {{- if eq $name "springapplicationjson" -}}
 {{- if not (hasKey . "value") -}}
@@ -277,7 +284,7 @@ Validate security-sensitive Helm values before rendering resources.
 {{- fail (printf "JVM options must not override chart-owned security property %s; use mcp.security or validated SPRING_APPLICATION_JSON" $property) -}}
 {{- end -}}
 {{- if and $sharedWorkspace (has $normalized (list "zapreportdirectory" "zapautomationlocaldirectory" "zapautomationzapdirectory")) -}}
-{{- fail (printf "JVM options must not override shared workspace property %s; use zap.persistence.mountPath" $property) -}}
+{{- fail (printf "JVM options must not override shared workspace property %s; use zap.persistence.mountPath and zap.persistence.automationSubdirectory" $property) -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

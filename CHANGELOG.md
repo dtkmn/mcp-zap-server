@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add `zap_report_read_chunk` on both MCP surfaces for complete paged UTF-8 report retrieval, Unicode-safe offsets and SHA-256 verification between pages. It uses the existing `zap:report:read` permission.
 - Add independent `ZAP_SPIDER_MAX_CHILDREN` configuration and Compose/Helm pass-through, defaulting to 10 alongside the depth limit; zero remains unlimited.
+- Add `zap.persistence.automationSubdirectory` to configure Helm automation files inside a client's report workspace while preserving the existing default directory.
 
 ### Fixed
 

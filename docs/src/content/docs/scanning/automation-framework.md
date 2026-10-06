@@ -64,11 +64,23 @@ caller's report workspace. Configure the two paths explicitly there if you need
 `zap_report_read` access to automation reports. If the containers use different
 mount paths, each setting must name its own view of the same host directory.
 
-The Helm chart's shared-workspace configuration derives its automation directory
-as `<shared-mount>/automation` and rejects environment overrides of those paths.
-It currently has no setting for a workspace-aligned automation directory, so
-adding the two variables to `mcp.env` does not resolve report readback there.
-The Compose configuration change does not change that chart behavior.
+The Helm chart keeps `<shared-mount>/automation` as its default. In the updated
+chart, use `zap.persistence.automationSubdirectory` to place automation reports
+inside the caller's report workspace. For one default API-key client:
+
+```yaml
+zap:
+  persistence:
+    automationSubdirectory: workspaces/default-client/automation
+```
+
+Both automation paths then resolve to
+`/zap/wrk/workspaces/default-client/automation` with the default mount. Match the
+workspace segment to the actual registered client as described below. The value
+must be a nonempty relative directory without `.` or `..` segments. The chart
+continues to reject environment overrides of the shared paths; configure the
+typed storage values instead. This setting is not in the `v0.14.0` tagged chart;
+the server image already supports the resulting directory settings.
 
 The Compose-derived path assumes one API-key client whose ID starts with a
 letter or digit, uses only letters, digits, dots, underscores and hyphens, and

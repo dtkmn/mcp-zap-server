@@ -42,13 +42,21 @@
             "zap_hosts",
             "zap_sites",
             "zap_urls",
-            "zap_view_templates",
-            "zap_report_read"
+            "zap_view_templates"
           ],
           "hosts": [
             "*.review.example.com",
             "juice-shop"
           ]
+        }
+      },
+      {
+        "id": "allow-workspace-report-reads",
+        "description": "Allow bounded report previews and pages within the caller's report workspace; these calls do not carry a target host.",
+        "decision": "allow",
+        "reason": "Report reads enforce the caller's artifact-directory boundary.",
+        "match": {
+          "tools": ["zap_report_read", "zap_report_read_chunk"]
         }
       },
       {

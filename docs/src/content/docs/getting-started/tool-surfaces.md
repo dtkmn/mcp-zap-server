@@ -65,6 +65,7 @@ Guided tools:
 - `zap_findings_details`
 - `zap_report_generate`
 - `zap_report_read`
+- `zap_report_read_chunk` (unreleased; complete paged report retrieval)
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
 - `zap_scan_history_list`
@@ -131,7 +132,9 @@ Pages covering both guided and expert workflows:
 - [Findings and Reports](../../scanning/findings-and-reports/)
 
 Use `expert` only for the raw tools and additional controls marked as expert
-on those pages. `zap_report_read` is available on both surfaces.
+on those pages. Report previews are available on both surfaces. The unreleased
+`zap_report_read_chunk` also belongs to both surfaces and uses the existing
+`zap:report:read` permission; `v0.14.0` does not expose it.
 
 Pages that require `expert`:
 

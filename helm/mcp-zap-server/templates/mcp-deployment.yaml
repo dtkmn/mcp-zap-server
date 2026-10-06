@@ -1,6 +1,10 @@
 {{- if .Values.mcp.enabled }}
 {{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp }}
 {{- $workspaceClaim := default (printf "%s-zap-pvc" (include "mcp-zap-server.fullname" .)) .Values.zap.persistence.existingClaim }}
+{{- $automationDirectory := "" }}
+{{- if $sharedWorkspace }}
+{{- $automationDirectory = printf "%s/%s" (trimSuffix "/" .Values.zap.persistence.mountPath) .Values.zap.persistence.automationSubdirectory }}
+{{- end }}
 {{- $affinity := include "mcp-zap-server.workspaceAffinity" (dict "root" . "affinity" .Values.mcp.affinity) | fromYaml }}
 apiVersion: apps/v1
 kind: Deployment
@@ -47,6 +51,9 @@ spec:
       terminationGracePeriodSeconds: {{ .Values.mcp.terminationGracePeriodSeconds }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if $sharedWorkspace }}
+      {{- include "mcp-zap-server.workspaceInitialization" . | nindent 6 }}
+      {{- end }}
       containers:
       - name: mcp-server
         securityContext:
@@ -81,9 +88,17 @@ spec:
         - name: ZAP_REPORT_DIRECTORY
           value: {{ .Values.zap.persistence.mountPath | quote }}
         - name: ZAP_AUTOMATION_LOCAL_DIRECTORY
-          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+          value: {{ $automationDirectory | quote }}
         - name: ZAP_AUTOMATION_ZAP_DIRECTORY
-          value: {{ printf "%s/automation" (trimSuffix "/" .Values.zap.persistence.mountPath) | quote }}
+          value: {{ $automationDirectory | quote }}
+        {{- end }}
+        {{- if .Values.zap.persistence.contentImport.enabled }}
+        - name: ZAP_OPENAPI_CONTENT_ENABLED
+          value: "true"
+        - name: ZAP_OPENAPI_CONTENT_LOCAL_DIRECTORY
+          value: {{ .Values.zap.persistence.contentImport.mountPath | quote }}
+        - name: ZAP_OPENAPI_CONTENT_ZAP_DIRECTORY
+          value: {{ .Values.zap.persistence.contentImport.mountPath | quote }}
         {{- end }}
         - name: MCP_SECURITY_MODE
           value: "{{ .Values.mcp.security.mode }}"
@@ -155,6 +170,8 @@ spec:
           value: "{{ .Values.mcp.scan.limits.spiderThreadCount }}"
         - name: ZAP_SPIDER_MAX_DEPTH
           value: "{{ .Values.mcp.scan.limits.spiderMaxDepth }}"
+        - name: ZAP_SPIDER_MAX_CHILDREN
+          value: "{{ .Values.mcp.scan.limits.spiderMaxChildren }}"
         - name: ZAP_ALLOW_LOCALHOST
           value: "{{ .Values.mcp.scan.url.allowLocalhost }}"
         - name: ZAP_ALLOW_PRIVATE_NETWORKS
@@ -211,6 +228,14 @@ spec:
         volumeMounts:
         - name: zap-data
           mountPath: {{ .Values.zap.persistence.mountPath | quote }}
+          {{- with .Values.zap.persistence.workspaceSubPath }}
+          subPath: {{ . | quote }}
+          {{- end }}
+        {{- if .Values.zap.persistence.contentImport.enabled }}
+        - name: zap-data
+          mountPath: {{ .Values.zap.persistence.contentImport.mountPath | quote }}
+          subPath: {{ .Values.zap.persistence.contentImport.subPath | quote }}
+        {{- end }}
         {{- end }}
       {{- if $sharedWorkspace }}
       volumes:

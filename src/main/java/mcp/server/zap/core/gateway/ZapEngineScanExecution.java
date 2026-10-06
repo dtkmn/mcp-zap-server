@@ -32,15 +32,14 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     @Override
     public String startSpiderScan(SpiderScanRequest request) {
         try {
+            configureSpider(request.maxDepth(), request.threadCount(), request.maxDurationMinutes());
             accessTargetWithRetry(request.targetUrl());
-            zap.spider.setOptionThreadCount(request.threadCount());
-            zap.spider.setOptionMaxDuration(request.maxDurationMinutes());
 
             ApiResponse response;
             try {
                 response = zap.spider.scan(
                         request.targetUrl(),
-                        String.valueOf(request.maxDepth()),
+                        String.valueOf(request.maxChildren()),
                         "true",
                         "",
                         "false"
@@ -75,8 +74,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
     @Override
     public String startSpiderScanAsUser(AuthenticatedSpiderScanRequest request) {
         try {
-            zap.spider.setOptionThreadCount(request.threadCount());
-            zap.spider.setOptionMaxDuration(request.maxDurationMinutes());
+            configureSpider(request.maxDepth(), request.threadCount(), request.maxDurationMinutes());
 
             ApiResponse response;
             try {
@@ -104,6 +102,12 @@ public class ZapEngineScanExecution implements EngineScanExecution {
             throw new ZapApiException("Error launching spider-as-user for URL "
                     + request.targetUrl() + ": " + e.getMessage(), e);
         }
+    }
+
+    private void configureSpider(int maxDepth, int threadCount, int maxDurationMinutes) throws ClientApiException {
+        zap.spider.setOptionMaxDepth(maxDepth);
+        zap.spider.setOptionThreadCount(threadCount);
+        zap.spider.setOptionMaxDuration(maxDurationMinutes);
     }
 
     @Override

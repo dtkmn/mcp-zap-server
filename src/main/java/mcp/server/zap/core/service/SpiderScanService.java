@@ -66,7 +66,7 @@ public class SpiderScanService {
             String recurse,
             String subtreeOnly
     ) {
-        String effectiveMaxChildren = hasText(maxChildren) ? maxChildren.trim() : String.valueOf(scanLimitProperties.getSpiderMaxDepth());
+        String effectiveMaxChildren = resolveMaxChildren(maxChildren);
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectiveSubtreeOnly = hasText(subtreeOnly) ? subtreeOnly.trim() : "false";
         String scanId = startSpiderScanAsUserJob(contextId, userId, targetUrl, effectiveMaxChildren, effectiveRecurse, effectiveSubtreeOnly);
@@ -118,7 +118,8 @@ public class SpiderScanService {
                 targetUrl,
                 scanLimitProperties.getSpiderMaxDepth(),
                 scanLimitProperties.getSpiderThreadCount(),
-                scanLimitProperties.getMaxSpiderScanDurationInMins()
+                scanLimitProperties.getMaxSpiderScanDurationInMins(),
+                scanLimitProperties.getSpiderMaxChildren()
         ));
     }
 
@@ -135,7 +136,7 @@ public class SpiderScanService {
         String normalizedUserId = requireText(userId, "userId");
         urlValidationService.validateUrl(targetUrl);
 
-        String effectiveMaxChildren = hasText(maxChildren) ? maxChildren.trim() : String.valueOf(scanLimitProperties.getSpiderMaxDepth());
+        String effectiveMaxChildren = resolveMaxChildren(maxChildren);
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectiveSubtreeOnly = hasText(subtreeOnly) ? subtreeOnly.trim() : "false";
 
@@ -147,8 +148,24 @@ public class SpiderScanService {
                 effectiveRecurse,
                 effectiveSubtreeOnly,
                 scanLimitProperties.getSpiderThreadCount(),
-                scanLimitProperties.getMaxSpiderScanDurationInMins()
+                scanLimitProperties.getMaxSpiderScanDurationInMins(),
+                scanLimitProperties.getSpiderMaxDepth()
         ));
+    }
+
+    private String resolveMaxChildren(String maxChildren) {
+        int limit;
+        try {
+            limit = hasText(maxChildren)
+                    ? Integer.parseInt(maxChildren.trim())
+                    : scanLimitProperties.getSpiderMaxChildren();
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("maxChildren must be zero (unlimited) or a positive integer", e);
+        }
+        if (limit < 0) {
+            throw new IllegalArgumentException("maxChildren must be zero (unlimited) or a positive integer");
+        }
+        return Integer.toString(limit);
     }
 
     /**

@@ -1,0 +1,37 @@
+env:
+  contexts:
+    - name: smoke-target
+      urls:
+        - http://smoke-target:8080
+  parameters:
+    failOnError: true
+    failOnWarning: true
+    continueOnFailure: false
+    progressToStdout: false
+
+jobs:
+  - type: requestor
+    requests:
+      - name: smoke-products
+        url: http://smoke-target:8080/products?example=automation
+        method: GET
+        responseCode: 200
+  - type: spider
+    parameters:
+      context: smoke-target
+      url: http://smoke-target:8080
+      maxDuration: 1
+      maxDepth: 2
+      maxChildren: 10
+      threadCount: 1
+  - type: passiveScan-wait
+    parameters:
+      maxDuration: 1
+  - type: report
+    parameters:
+      template: traditional-json-plus
+      reportFile: example-automation-report
+      reportTitle: EC2 Example Automation Report
+      displayReport: false
+    sites:
+      - smoke-target

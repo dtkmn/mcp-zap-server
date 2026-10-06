@@ -1,0 +1,99 @@
+name: mcp-zap-ec2
+
+services:
+  # An owned, deliberately minimal scan target. It has no host port or Internet access.
+  smoke-target:
+    image: python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+    platform: linux/amd64
+    user: "1000:1000"
+    command: ["python3", "-B", "/fixture/smoke-api.py"]
+    volumes:
+      - ./smoke-api.py:/fixture/smoke-api.py:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    restart: unless-stopped
+    networks: [isolated]
+
+  zap:
+    image: zaproxy/zap-stable:2.17.0@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef
+    platform: linux/amd64
+    command:
+      - zap.sh
+      - -Xmx2g
+      - -daemon
+      - -host
+      - 0.0.0.0
+      - -port
+      - "8090"
+      - -config
+      - api.key=${ZAP_API_KEY:?Set a separate random ZAP_API_KEY in .env}
+      - -config
+      - api.disablekey=false
+      - -config
+      - 'api.addrs.addr.name=^(zap|localhost|127[.]0[.]0[.]1|172[.]30[.]250[.][0-9]+)$'
+      - -config
+      - api.addrs.addr.regex=true
+    environment:
+      ZAP_API_KEY: ${ZAP_API_KEY:?Set a separate random ZAP_API_KEY in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS \"http://127.0.0.1:8090/JSON/core/view/version/?apikey=$$ZAP_API_KEY\" >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    volumes:
+      - ./workspace:/zap/wrk
+    mem_limit: 4g
+    restart: unless-stopped
+    networks: [isolated]
+
+  mcp-server:
+    image: ghcr.io/dtkmn/mcp-zap-server:v0.14.0@sha256:2198f1b37d595cb58b2a65e797cbbd25b592d9fbf3190deb0355afff0a92ad9e
+    platform: linux/amd64
+    depends_on:
+      zap:
+        condition: service_healthy
+    environment:
+      ZAP_API_URL: zap
+      ZAP_API_PORT: "8090"
+      ZAP_API_KEY: ${ZAP_API_KEY:?Set a separate random ZAP_API_KEY in .env}
+      MCP_API_KEY: ${MCP_API_KEY:?Set a separate random MCP_API_KEY in .env}
+      MCP_CLIENT_ID: ec2-operator
+      MCP_CLIENT_DESCRIPTION: Private EC2 operator
+      MCP_SERVER_TOOLS_SURFACE: expert
+      MCP_SECURITY_MODE: api-key
+      MCP_SECURITY_ENABLED: "true"
+      MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: "false"
+      JWT_ENABLED: "false"
+      ZAP_URL_VALIDATION_ENABLED: "true"
+      ZAP_ALLOW_LOCALHOST: "false"
+      ZAP_ALLOW_PRIVATE_NETWORKS: "true"
+      ZAP_URL_WHITELIST: smoke-target
+      ZAP_MAX_CONCURRENT_ACTIVE_SCANS: "1"
+      ZAP_MAX_CONCURRENT_SPIDER_SCANS: "1"
+      ZAP_MAX_ACTIVE_SCAN_DURATION: "2"
+      ZAP_MAX_SPIDER_SCAN_DURATION: "1"
+      ZAP_SPIDER_MAX_DEPTH: ${ZAP_SPIDER_MAX_DEPTH:-10}
+      ZAP_SPIDER_MAX_CHILDREN: ${ZAP_SPIDER_MAX_CHILDREN:-10}
+      # Both containers mount the same host workspace. Keep automation artifacts
+      # inside the authenticated caller's report-reading workspace.
+      ZAP_AUTOMATION_LOCAL_DIRECTORY: /zap/wrk/workspaces/ec2-operator/automation
+      ZAP_AUTOMATION_ZAP_DIRECTORY: /zap/wrk/workspaces/ec2-operator/automation
+    volumes:
+      - ./workspace:/zap/wrk
+    mem_limit: 1g
+    restart: unless-stopped
+    networks: [isolated]
+
+# SSM forwards directly to the observed MCP container IP; no ports are published.
+networks:
+  isolated:
+    internal: true
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.name: br-mcpzap
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24

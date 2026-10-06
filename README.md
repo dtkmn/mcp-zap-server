@@ -91,6 +91,13 @@ report, and read it back through MCP. Do not run an active scan.
 Expect a completed crawl, a findings summary, and a report the client can
 read. Finding counts vary; a connection or scan error is not a clean result.
 
+The current unreleased code adds complete paged report retrieval through
+`zap_report_read_chunk`, target-scoped report sanitization and independent HTTP
+crawl depth/child limits. These corrections are not in the `v0.14.0` image. See
+[Findings and Reports](./docs/src/content/docs/scanning/findings-and-reports.md)
+and [HTTP crawl limits](./docs/src/content/docs/scanning/scan-execution-modes.md#http-crawl-limits-unreleased-correction)
+for contracts and version requirements.
+
 The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
 
 Client setup:
@@ -166,6 +173,8 @@ The default posture is intentionally conservative:
 - Target authentication is optional and profiles default to an empty list. When enabled, guided auth binds an exact server-side credential reference and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
 - Public auth exchange endpoints are rate-limited.
 - MCP request bodies have a hard early size cap.
+
+For a first private AWS deployment without Kubernetes, use [AWS EC2 with Docker Compose](./docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md) and its [standalone example](./examples/aws-ec2/).
 
 Production and shared deployments should review:
 

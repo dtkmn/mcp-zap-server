@@ -3,6 +3,7 @@ package mcp.server.zap.core.gateway;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
 import org.springframework.stereotype.Component;
+import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
@@ -32,35 +33,42 @@ public class ZapEngineRuntimeAccess implements EngineRuntimeAccess {
 
     @Override
     public void applyNetworkDefaults(NetworkDefaults defaults) {
-        setDefaultUserAgent(defaults.userAgent());
-        setConnectionTimeout(defaults.connectionTimeoutInSecs());
+        try {
+            if (!defaults.userAgent().equals(valueOf(zap.network.getDefaultUserAgent()))) {
+                zap.network.setDefaultUserAgent(defaults.userAgent());
+                log.info("Configured ZAP default user agent");
+            }
+            String connectionTimeout = String.valueOf(defaults.connectionTimeoutInSecs());
+            if (!connectionTimeout.equals(valueOf(zap.network.getConnectionTimeout()))) {
+                zap.network.setConnectionTimeout(connectionTimeout);
+                log.info("Configured ZAP target connection timeout to {} seconds", defaults.connectionTimeoutInSecs());
+            }
+        } catch (ClientApiException e) {
+            throw new ZapApiException("ZAP required network configuration failed", e);
+        }
         setDnsTtlSuccessfulQueries(defaults.dnsTtlSuccessfulQueries());
     }
 
-    private void setDefaultUserAgent(String userAgent) {
-        try {
-            zap.network.setDefaultUserAgent(userAgent);
-            log.info("Set User-Agent: {}", userAgent);
-        } catch (ClientApiException e) {
-            log.warn("Could not set User-Agent: {}", e.getMessage());
+    private String valueOf(ApiResponse response) throws ClientApiException {
+        if (response instanceof ApiResponseElement element && element.getValue() != null) {
+            return element.getValue();
         }
-    }
-
-    private void setConnectionTimeout(int connectionTimeoutInSecs) {
-        try {
-            zap.network.setConnectionTimeout(String.valueOf(connectionTimeoutInSecs));
-            log.info("Set connection timeout to {} seconds", connectionTimeoutInSecs);
-        } catch (ClientApiException e) {
-            log.warn("Could not set connection timeout: {}", e.getMessage());
-        }
+        throw new ClientApiException("ZAP network setting did not return a value");
     }
 
     private void setDnsTtlSuccessfulQueries(int dnsTtlSuccessfulQueries) {
         try {
-            zap.network.setDnsTtlSuccessfulQueries(String.valueOf(dnsTtlSuccessfulQueries));
-            log.info("Set DNS TTL for successful queries to {} seconds", dnsTtlSuccessfulQueries);
+            String dnsTtl = String.valueOf(dnsTtlSuccessfulQueries);
+            if (!dnsTtl.equals(valueOf(zap.network.getDnsTtlSuccessfulQueries()))) {
+                zap.network.setDnsTtlSuccessfulQueries(dnsTtl);
+                log.info("Configured ZAP DNS TTL for successful queries to {} seconds", dnsTtlSuccessfulQueries);
+            }
         } catch (ClientApiException e) {
-            log.debug("Could not set DNS TTL: {}", e.getMessage());
+            if ("bad_view".equals(e.getCode()) || "bad_action".equals(e.getCode())) {
+                log.debug("ZAP does not support the optional DNS TTL setting");
+                return;
+            }
+            throw new ZapApiException("ZAP DNS network configuration failed", e);
         }
     }
 }

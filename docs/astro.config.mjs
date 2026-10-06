@@ -81,6 +81,7 @@ export default defineConfig({
 						{ slug: 'operations/runtime-policy-bundles' },
 						{ slug: 'operations/observability' },
 						{ slug: 'operations/structured-logging' },
+						{ slug: 'operations/aws-ec2-compose' },
 						{ slug: 'operations/production-checklist' },
 						{ slug: 'operations/local-ha-compose' },
 						{ slug: 'operations/queue-coordinator-leader-election' },

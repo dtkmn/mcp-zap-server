@@ -77,7 +77,8 @@
             "zap_attack_status",
             "zap_passive_scan_wait",
             "zap_passive_scan_status",
-            "zap_report_read"
+            "zap_report_read",
+            "zap_report_read_chunk"
           ],
           "timeWindows": [
             {

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Configuration properties for ZAP initialization settings.
- * These settings are applied programmatically at startup via the Network API.
+ * Reconciled through the Network API at startup, readiness, and outbound operation starts.
  */
 @Data
 @Component

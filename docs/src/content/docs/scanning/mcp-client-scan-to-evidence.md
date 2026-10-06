@@ -224,6 +224,19 @@ The response includes the report path and next actions. Call `zap_report_read`
 with that path to review the generated artifact through MCP before attaching it
 to internal or customer-facing evidence.
 
+The preview can truncate. On a server exposing `zap_report_read_chunk`, retrieve
+pages from offset `0`, append each `content` exactly, follow `nextOffset`, and
+send the first `artifactSha256` as `expectedSha256` on later calls. Stop only
+when `endOfFile` is true. These paged reads and scoped-report privacy protection
+are unreleased; `v0.14.0` supports only the bounded preview. See
+[complete report retrieval](../findings-and-reports/#preview-or-complete-retrieval)
+for limits and the JSON contract. On older versions, retrieve an oversized
+artifact through operator-controlled file access before treating it as complete.
+
+Supply `baseUrl` for a customer-scoped report. Omitting it requests the full ZAP
+session. Target scope does not establish ownership of results from one scan or
+isolate multiple clients using the same target.
+
 ### 9. Create Internal Evidence
 
 Call `zap_scan_history_release_evidence`.

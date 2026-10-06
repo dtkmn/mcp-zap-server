@@ -110,6 +110,7 @@ public class ToolScopeRegistry {
         register(rules, "zap_generate_report", McpToolSurface.EXPERT, "zap:report:generate");
         register(rules, "zap_get_findings_summary", McpToolSurface.EXPERT, "zap:alerts:read");
         register(rules, "zap_report_read", McpToolSurface.GUIDED, "zap:report:read");
+        register(rules, "zap_report_read_chunk", McpToolSurface.GUIDED, "zap:report:read");
         register(rules, "zap_automation_plan_run", McpToolSurface.EXPERT, List.of(AUTOMATION_EXECUTION_CAPABILITY), "zap:automation:run");
         register(rules, "zap_automation_plan_status", McpToolSurface.EXPERT, "zap:automation:read");
         register(rules, "zap_automation_plan_artifacts", McpToolSurface.EXPERT, "zap:automation:read");

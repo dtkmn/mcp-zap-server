@@ -48,7 +48,12 @@ public class ScanLimitProperties {
     private int spiderThreadCount = 5;
 
     /**
-     * Maximum spider depth.
+     * Maximum depth for HTTP and Client Spider crawls. 0 means unlimited depth.
      */
     private int spiderMaxDepth = 10;
+
+    /**
+     * Maximum children per node for HTTP Spider crawls. 0 means no child limit.
+     */
+    private int spiderMaxChildren = 10;
 }

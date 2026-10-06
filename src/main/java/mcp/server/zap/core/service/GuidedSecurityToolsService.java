@@ -198,14 +198,16 @@ public class GuidedSecurityToolsService {
             description = "Generate a human-shareable report artifact using guided defaults. Use this after passive scan backlog drains when you want an export or handoff artifact; use findings summary/details for interactive triage."
     )
     public String generateGuidedReport(
-            @ToolParam(required = false, description = "Optional base URL filter to include only one host or path in the report") String baseUrl,
+            @ToolParam(required = false, description = "Optional absolute HTTP(S) origin or path prefix. Supplying it publishes a target-scoped report; omission explicitly includes the full ZAP session.") String baseUrl,
             @ToolParam(required = false, description = "Optional report format: html for human reading or json for machine processing") String format,
-            @ToolParam(required = false, description = "Optional report theme: light or dark") String theme
+            @ToolParam(required = false, description = "Optional light/dark theme for full-session HTML. Target-scoped HTML uses the standard template's default appearance; JSON has no theme.") String theme
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.REPORT_GENERATE, "report generation");
         String normalizedFormat = normalizeReportFormat(format);
         String normalizedTheme = hasText(theme) ? theme.trim() : "light";
         String normalizedBaseUrl = trimToEmpty(baseUrl);
+        String displayedTheme = "json".equals(normalizedFormat) ? "not applicable"
+                : hasText(normalizedBaseUrl) ? "engine default" : normalizedTheme;
         TargetDescriptor target = gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB);
         String reportPath = reportService.generateReport(
                 reportTemplateFor(normalizedFormat),
@@ -216,7 +218,7 @@ public class GuidedSecurityToolsService {
         return new StringBuilder()
                 .append("Guided report generated.\n")
                 .append("Format: ").append(normalizedFormat).append('\n')
-                .append("Theme: ").append(normalizedTheme).append('\n')
+                .append("Theme: ").append(displayedTheme).append('\n')
                 .append("Scope: ").append(targetScope(artifact.target())).append('\n')
                 .append("Path: ").append(artifact.location()).append('\n')
                 .append(reportNextActions(targetScope(artifact.target())))
@@ -225,7 +227,7 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_report_read",
-            description = "Read a generated report artifact back through MCP after zap_report_generate, without manual filesystem access."
+            description = "Preview a generated report artifact through MCP after zap_report_generate. If truncated, use zap_report_read_chunk to retrieve the complete artifact in bounded pages."
     )
     public String readGuidedReport(
             @ToolParam(description = "Report path returned by zap_report_generate") String reportPath,
@@ -238,10 +240,24 @@ public class GuidedSecurityToolsService {
                 .append("Path: ").append(normalizedReportPath).append('\n')
                 .append("Use: review the generated artifact before attaching it to internal or customer-facing evidence.\n")
                 .append(NEXT_ACTIONS_HEADER).append('\n')
+                .append("- Complete report: if truncated, call zap_report_read_chunk from offset 0, then follow nextOffset with the returned artifactSha256 until endOfFile is true.\n")
                 .append("- Internal evidence: call zap_scan_history_release_evidence for the same target or evidence window.\n")
                 .append("- Customer summary: call zap_scan_history_customer_handoff only after reviewing report content and release-evidence warnings.\n\n")
                 .append(report)
                 .toString();
+    }
+
+    @Tool(
+            name = "zap_report_read_chunk",
+            description = "Retrieve a generated UTF-8 report in bounded JSON pages. Append content in order, follow nextOffset until endOfFile=true, and supply the first page's artifactSha256 as expectedSha256 on later pages. Offsets and maxChars count Unicode code points. Artifacts are limited to 50 MiB; the SHA-256 identifies the full original UTF-8 file."
+    )
+    public ReportService.ReportChunk readGuidedReportChunk(
+            @ToolParam(description = "Report path returned by zap_report_generate") String reportPath,
+            @ToolParam(required = false, description = "Starting Unicode code point offset (default: 0)") Long offset,
+            @ToolParam(required = false, description = "Maximum Unicode code points in this page (default: 20000, maximum: 200000)") Integer maxChars,
+            @ToolParam(required = false, description = "Full artifact SHA-256 from the first page; subsequent pages reject a changed report") String expectedSha256
+    ) {
+        return reportService.readReportChunk(requireText(reportPath, "reportPath"), offset, maxChars, expectedSha256);
     }
 
     private String importDefinition(String definitionType,
@@ -340,6 +356,7 @@ public class GuidedSecurityToolsService {
         return new StringBuilder(NEXT_ACTIONS_HEADER)
                 .append('\n')
                 .append("- Report readback: call zap_report_read with the Path above before creating evidence or sharing the artifact.\n")
+                .append("- Large report: use zap_report_read_chunk when the preview is truncated; follow nextOffset with the first artifactSha256.\n")
                 .append("- Internal evidence: call zap_scan_history_release_evidence").append(targetAdvice).append(".\n")
                 .append("- Customer summary: call zap_scan_history_customer_handoff after reviewing release-evidence warnings.")
                 .toString();

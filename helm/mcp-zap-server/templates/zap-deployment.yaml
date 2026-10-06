@@ -37,6 +37,9 @@ spec:
       serviceAccountName: {{ include "mcp-zap-server.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.zap.persistence.enabled }}
+      {{- include "mcp-zap-server.workspaceInitialization" . | nindent 6 }}
+      {{- end }}
       containers:
       - name: zap
         securityContext:
@@ -99,6 +102,15 @@ spec:
         volumeMounts:
         - name: zap-data
           mountPath: {{ .Values.zap.persistence.mountPath | quote }}
+          {{- with .Values.zap.persistence.workspaceSubPath }}
+          subPath: {{ . | quote }}
+          {{- end }}
+        {{- if .Values.zap.persistence.contentImport.enabled }}
+        - name: zap-data
+          mountPath: {{ .Values.zap.persistence.contentImport.mountPath | quote }}
+          subPath: {{ .Values.zap.persistence.contentImport.subPath | quote }}
+          readOnly: true
+        {{- end }}
         {{- end }}
       {{- if .Values.zap.persistence.enabled }}
       volumes:

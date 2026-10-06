@@ -3,20 +3,19 @@ title: "Dependency Security Status"
 description: "Known upstream dependency findings, affected deployment layers, and the review process for MCP ZAP Server."
 ---
 
-Last reviewed: **3 October 2026**, against the `v0.14.0` preparation commit
+Runtime and Snyk baseline: **3 October 2026**, against the `v0.14.0` preparation commit
 `8cbcd1a455e2307f029537d99a6df34bd9f9146d` and its main-branch scan results.
-The six upstream findings in the table below remain open in that scan; this
-dated review does not establish that every affected native operation is
+The six upstream findings in the table below were open in that scan; this
+dated baseline does not establish that every affected native operation is
 unreachable. The build-tool alignment section was updated on **4 October 2026**
-for the next release.
+for the next release. The documentation dependency update below was reviewed on
+**6 October 2026**; it does not establish closure of the historical Snyk alerts.
 
 The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up for each row.
-The next review is due **17 October 2026 UTC**, or sooner when a relevant fix or
-deployment change becomes available. The current engineering recommendation is
-to retain the pinned runtime and static documentation stack while awaiting
-compatible fixes, with these findings visible in the release decision.
+The next review of the remaining findings is due **17 October 2026 UTC**, or
+sooner when a relevant fix or deployment change becomes available.
 
-## Open upstream findings
+## Findings from the 3 October scan
 
 These six high-severity findings were reported by the
 [main Snyk run](https://github.com/dtkmn/mcp-zap-server/actions/runs/37114638325).
@@ -29,8 +28,8 @@ this run does not establish an ARM64 vulnerability assessment.
 | Debian 13 `gcc-14` source packages, `14.2.0-19` | [CVE-2026-102010](https://security-tracker.debian.org/tracker/CVE-2026-102010) | Inherited runtime `libstdc++` binary-heap `erase_if` issue. No application-to-vulnerable-operation path demonstrated; Debian lists no fixed package. Retain separately from the allocation issue. |
 | Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Native compression library in the runtime image. Application reachability remains unproven; Debian lists it as vulnerable without a fixed package. Await a compatible patched base image. |
 | Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-93990](https://security-tracker.debian.org/tracker/CVE-2026-93990) | Native XML library inherited through the base image. Java XML parsing does not establish a path to this library. Fixed packages are listed for other Debian releases, but no Debian 13 fix is listed. Await a compatible patched base image. |
-| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93748](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Astro build dependency; absent from the MCP Java runtime image. No remote optimized-image use found in current docs. No patched library version is listed. The named npm exception expires on 17 October 2026 UTC. |
-| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93750](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate cache finding in the same docs dependency. The current static-site exposure assessment also applies, but it remains a separate finding with no patched version listed and no npm exception added for it. |
+| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93748](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Astro build dependency; absent from the MCP Java runtime image. The current docs lockfile resolves `4.3.0`, outside the npm advisory's affected range through `4.2.0`; the obsolete npm exception has been removed. Closure of the historical Snyk alert has not been established. |
+| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93750](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate cache finding in the same docs dependency. On 6 October, Snyk still lists all versions as affected and no fixed version. Keep this finding visible; selecting `4.3.0` or passing npm audit does not establish its remediation or Snyk alert closure. |
 
 ## Deployment boundaries
 
@@ -61,16 +60,31 @@ actual findings before deciding on a release. The main application and bundled
 Java dependencies reported no findings at the configured **high** threshold in
 this run, which is not a zero-vulnerability guarantee.
 
-The docs audit uses a named
-[GHSA-ch52-4w7c-c8xp exception](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/audit-ci.jsonc)
-with an owner, rationale and UTC expiry. It accepts the specified risk rather
-than fixing it. It does not suppress every advisory for `http-cache-semantics`,
-and this review adds no Snyk ignores or broader npm exceptions. If npm later
-reports a separate advisory for CVE-2026-93750, it requires its own review.
-The docs audit will block when the existing exception expires if its finding
-persists; any renewal requires a fresh assessment and explicit new review date.
-Check that an actual, nonempty audit report was produced; absent output is not
-successful scan evidence.
+## Documentation dependency update — 6 October 2026
+
+The current docs lockfile resolves `http-cache-semantics` to `4.3.0`, outside
+the affected range through `4.2.0` in
+[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp).
+A fresh npm report no longer flags that advisory, so its temporary exception
+has been removed from
+[`audit-ci.jsonc`](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/audit-ci.jsonc).
+The allowlist is empty. The separate Snyk cache finding remains as described in
+the historical findings table.
+
+The newly reported
+[GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf)
+affects `postcss-selector-parser` versions below `7.1.6`. The existing docs
+dependency overrides now select `^7.1.6`, and the updated lockfile resolves
+`7.1.6`. A clean local installation, the CI audit command, the content check
+and the site build passed. The complete npm report contained zero reported
+vulnerabilities, and the generated CSS was unchanged from the previous build.
+These local results do not establish a passing GitHub run or resolve the
+separate Snyk findings. No Snyk ignores or new npm exceptions were added.
+
+The docs audit continues to block unaccepted findings of moderate severity or
+higher. Future exceptions require a named advisory, owner, rationale and UTC
+expiry. Review each newly reported advisory separately and confirm that a
+complete audit report was produced.
 
 ## Build tooling and coverage follow-up
 
@@ -113,7 +127,7 @@ image for each supported architecture; a clean build or an AMD64 scan alone does
 not establish ARM64 results. For docs changes, run the content check, site build
 and dependency audit against the updated lockfile.
 
-Remove the npm exception after its affected dependency path is resolved and a
+Remove an npm exception after its affected dependency path is resolved and a
 fresh, complete audit report no longer needs it. Keep each risk record until its
 finding is resolved or its changed disposition is supported by new evidence.
 If no compatible fix is available by the review date, reassess exposure and

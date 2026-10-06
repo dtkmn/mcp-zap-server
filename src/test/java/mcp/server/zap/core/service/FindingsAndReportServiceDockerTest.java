@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
 import mcp.server.zap.core.gateway.ZapEngineReportAccess;
+import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import org.junit.jupiter.api.Tag;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,6 +23,8 @@ import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,7 +50,7 @@ class FindingsAndReportServiceDockerTest {
     static final GenericContainer<?> TARGET =
             new GenericContainer<>(DockerImageName.parse("nginx:1.27-alpine"))
                     .withNetwork(NETWORK)
-                    .withNetworkAliases("findings-target")
+                    .withNetworkAliases("findings-target", "findings-other-target")
                     .withExposedPorts(80)
                     .waitingFor(Wait.forHttp("/"));
 
@@ -139,6 +142,68 @@ class FindingsAndReportServiceDockerTest {
 
         assertTrue(reportContents.contains("Report artifact"));
         assertTrue(reportContents.contains("Codex Test Alert"));
+    }
+
+    @Test
+    void targetReportsOmitOtherSiteAndSessionMetadataAgainstRealZap() throws Exception {
+        String selected = "http://findings-target/";
+        String other = "http://findings-other-target/";
+        clientApi.stats.setOptionInMemoryEnabled(true);
+        addFixtureAlert(selected, "Selected Target Fixture Alert");
+        addFixtureAlert(other, "Other Target Private Fixture Alert");
+
+        // Positive control: native JSON-plus adds insights from the whole ZAP session,
+        // even when its alert site filter selects only the first local fixture origin.
+        String nativePath = reportAccess.generateReport(new ReportGenerationRequest(
+                "Native scope control", "traditional-json-plus", "", "", "", selected,
+                "", "", "", "native-scope-control", "", REPORT_DIR.toString(), "false"));
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode nativeReport = json.readTree(Path.of(nativePath));
+        assertTrue(nativeReport.path("insights").valueStream()
+                .anyMatch(insight -> other.substring(0, other.length() - 1).equals(insight.path("site").asString())),
+                "The native control should contain the unrelated site's engine insights");
+
+        String scopedPath = reportService.generateReport("traditional-json-plus", "light", "HTTP://FINDINGS-TARGET:80");
+        JsonNode report = json.readTree(Path.of(scopedPath));
+        assertEquals(Set.of("@programName", "@version", "@generated", "created", "site"),
+                Set.copyOf(report.propertyNames()));
+        assertEquals(1, report.path("site").size());
+        assertEquals(selected, report.path("site").get(0).path("@name").asString());
+        String serialized = json.writeValueAsString(report);
+        assertTrue(serialized.contains("Selected Target Fixture Alert"));
+        assertFalse(serialized.contains("Other Target Private Fixture Alert"));
+        assertFalse(serialized.contains("findings-other-target"));
+        JsonNode selectedInstance = report.path("site").get(0).path("alerts").valueStream()
+                .filter(alert -> "Selected Target Fixture Alert".equals(alert.path("name").asString()))
+                .findFirst().orElseThrow().path("instances").get(0);
+        assertTrue(selectedInstance.path("request-header").asString().contains("findings-target"));
+        assertFalse(selectedInstance.path("response-body").asString().isBlank());
+
+        for (String template : List.of("traditional-html-plus", "traditional-md")) {
+            String text = Files.readString(Path.of(reportService.generateReport(template, "light", selected)));
+            assertTrue(text.contains("Selected Target Fixture Alert"));
+            assertFalse(text.contains("Other Target Private Fixture Alert"));
+            assertFalse(text.contains("findings-other-target"));
+            assertFalse(text.contains("Number of Sites tree nodes actively scanned"));
+        }
+        try (var staging = Files.list(REPORT_DIR.resolve(".report-staging"))) {
+            assertEquals(0, staging.count());
+        }
+
+        JsonNode combined = json.readTree(Path.of(reportService.generateReport(
+                "traditional-json", "", selected + "," + other)));
+        assertEquals(Set.of(selected, other), combined.path("site").valueStream()
+                .map(site -> site.path("@name").asString()).collect(java.util.stream.Collectors.toSet()));
+        String combinedText = json.writeValueAsString(combined);
+        assertTrue(combinedText.contains("Selected Target Fixture Alert"));
+        assertTrue(combinedText.contains("Other Target Private Fixture Alert"));
+    }
+
+    private static void addFixtureAlert(String url, String name) throws Exception {
+        clientApi.core.accessUrl(url, "false");
+        clientApi.alert.addAlert(awaitFirstMessageId(url), name, "2", "2",
+                "Synthetic local report scope fixture", "", "", "", "Apply fixture fix",
+                "", "fixture evidence", "89", "19");
     }
 
     private static String awaitFirstMessageId(String baseUrl) throws Exception {

@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,22 +60,66 @@ class ZapEngineScanExecutionTest {
     }
 
     @Test
-    void startsSpiderScanBehindGatewayExecutionBoundary() throws Exception {
-        when(spider.scan("http://example.com", "7", "true", "", "false"))
+    void mapsDepthAndChildrenIndependentlyThroughTheRealClientApi() throws Exception {
+        clientApi.spider = new Spider(clientApi);
+        Map<String, String> launchParameters = Map.of(
+                "url", "http://example.com", "maxChildren", "2", "recurse", "true",
+                "contextName", "", "subtreeOnly", "false");
+        when(clientApi.callApi("spider", "action", "scan", launchParameters))
                 .thenReturn(new ApiResponseElement("scan", "55"));
 
-        String scanId = execution.startSpiderScan(new SpiderScanRequest(
-                "http://example.com",
-                7,
-                3,
-                12
-        ));
+        String scanId = execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12, 2));
 
         assertThat(scanId).isEqualTo("55");
-        verify(core).accessUrl("http://example.com", "true");
-        verify(spider).setOptionThreadCount(3);
-        verify(spider).setOptionMaxDuration(12);
-        verify(spider).scan("http://example.com", "7", "true", "", "false");
+        var ordered = inOrder(clientApi, core);
+        ordered.verify(clientApi).callApi("spider", "action", "setOptionMaxDepth",
+                Map.of("Integer", "7"));
+        ordered.verify(clientApi).callApi("spider", "action", "setOptionThreadCount", Map.of("Integer", "3"));
+        ordered.verify(clientApi).callApi("spider", "action", "setOptionMaxDuration", Map.of("Integer", "12"));
+        ordered.verify(core).accessUrl("http://example.com", "true");
+        ordered.verify(clientApi).callApi("spider", "action", "scan", launchParameters);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "2"})
+    void configuresDepthForAuthenticatedCrawlsWithoutChangingExplicitChildren(String maxChildren) throws Exception {
+        clientApi.spider = new Spider(clientApi);
+        Map<String, String> launchParameters = Map.of(
+                "contextId", "1", "userId", "2", "url", "http://example.com",
+                "maxChildren", maxChildren, "recurse", "false", "subtreeOnly", "true");
+        when(clientApi.callApi("spider", "action", "scanAsUser", launchParameters))
+                .thenReturn(new ApiResponseElement("scan", "56"));
+
+        String scanId = execution.startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
+                "1", "2", "http://example.com", maxChildren, "false", "true", 3, 12, 7));
+
+        assertThat(scanId).isEqualTo("56");
+        var ordered = inOrder(clientApi);
+        ordered.verify(clientApi).callApi("spider", "action", "setOptionMaxDepth", Map.of("Integer", "7"));
+        ordered.verify(clientApi).callApi("spider", "action", "scanAsUser", launchParameters);
+        verifyNoInteractions(core);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void depthConfigurationFailurePreventsTargetAccessAndCrawlLaunch(boolean authenticated) throws Exception {
+        clientApi.spider = new Spider(clientApi);
+        ClientApiException failure = new ClientApiException("Bad Action", "bad_action", null);
+        when(clientApi.callApi("spider", "action", "setOptionMaxDepth", Map.of("Integer", "7")))
+                .thenThrow(failure);
+
+        assertThatThrownBy(() -> {
+            if (authenticated) {
+                execution.startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
+                        "1", "2", "http://example.com", "2", "true", "false", 3, 12, 7));
+            } else {
+                execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12, 2));
+            }
+        }).isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+
+        verify(clientApi).callApi("spider", "action", "setOptionMaxDepth", Map.of("Integer", "7"));
+        verifyNoMoreInteractions(clientApi);
+        verifyNoInteractions(core);
     }
 
     @Test
@@ -312,7 +357,7 @@ class ZapEngineScanExecutionTest {
         when(clientSpider.scan("firefox-headless", "http://example.com", null, null, null,
                 "7", null, "1", null)).thenThrow(failure);
 
-        assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
+        assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12, 7)))
                 .isExactlyInstanceOf(expected).hasCause(failure);
         assertThatThrownBy(() -> execution.startSpiderScanAsUser(
                 new AuthenticatedSpiderScanRequest("1", "2", "http://example.com", "7", "true", "false", 3, 12)))

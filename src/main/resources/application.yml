@@ -129,6 +129,7 @@ zap:
       hostPerScan: ${ZAP_HOST_PER_SCAN:5}
       spiderThreadCount: ${ZAP_SPIDER_THREAD_COUNT:5}
       spiderMaxDepth: ${ZAP_SPIDER_MAX_DEPTH:10}
+      spiderMaxChildren: ${ZAP_SPIDER_MAX_CHILDREN:10}
     
     # Active Scan Configuration
     active:

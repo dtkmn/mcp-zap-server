@@ -9,6 +9,7 @@ import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.extension.api.protection.ReportArtifactBoundary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -22,12 +23,14 @@ import static org.mockito.Mockito.when;
 public class ReportServiceTest {
     private EngineReportAccess reportAccess;
     private ReportService service;
+    @TempDir
+    Path testDirectory;
 
     @BeforeEach
     void setup() {
         reportAccess = mock(EngineReportAccess.class);
         service = new ReportService(reportAccess);
-        ReflectionTestUtils.setField(service, "reportDirectory", "/tmp");
+        ReflectionTestUtils.setField(service, "reportDirectory", testDirectory.toString());
     }
 
     @Test
@@ -42,9 +45,9 @@ public class ReportServiceTest {
     @Test
     void generateReportReturnsPath() {
         when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
-                .thenReturn("/tmp/report.html");
+                .thenReturn("report.html");
 
-        String result = service.generateReport("modern", "light", "site");
+        String result = service.generateReport("modern", "light", "");
 
         assertTrue(result.endsWith("report.html"));
     }
@@ -52,9 +55,9 @@ public class ReportServiceTest {
     @Test
     void generateReportOmitsThemeForJsonTemplates() {
         when(reportAccess.generateReport(org.mockito.ArgumentMatchers.any()))
-                .thenReturn("/tmp/report.json");
+                .thenReturn("report.json");
 
-        String result = service.generateReport("traditional-json-plus", "light", "site");
+        String result = service.generateReport("traditional-json-plus", "light", "");
 
         assertTrue(result.endsWith("report.json"));
         ArgumentCaptor<ReportGenerationRequest> captor = ArgumentCaptor.forClass(ReportGenerationRequest.class);
@@ -89,7 +92,7 @@ public class ReportServiceTest {
                     return reportPath.toString();
                 });
 
-        String result = service.generateReport("traditional-json-plus", "light", "site");
+        String result = service.generateReport("traditional-json-plus", "light", "");
 
         assertTrue(result.startsWith(scopedRoot.toString()));
         assertTrue(Files.exists(Path.of(result)));
@@ -115,7 +118,7 @@ public class ReportServiceTest {
         });
 
         assertThrowsExactly(IllegalArgumentException.class,
-                () -> service.generateReport("traditional-json-plus", "light", "site"));
+                () -> service.generateReport("traditional-json-plus", "light", ""));
     }
 
     @Test
@@ -173,7 +176,7 @@ public class ReportServiceTest {
                     return reportPath.toString();
                 });
 
-        String result = service.generateReport("traditional-json-plus", "light", "site");
+        String result = service.generateReport("traditional-json-plus", "light", "");
 
         assertEquals(rootPermissions, Files.getPosixFilePermissions(workspaceParent));
         assertEquals(rootPermissions, Files.getPosixFilePermissions(workspaceDirectory));

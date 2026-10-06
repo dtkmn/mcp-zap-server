@@ -146,8 +146,9 @@ class McpToolAuthorizationJwtIntegrationTest {
                 .jsonPath("$.requiredScopes[0]").isEqualTo("mcp:tools:list");
     }
 
-    @Test
-    void toolCallReturns403WhenJwtLacksToolScope() throws Exception {
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"zap_report_read", "zap_report_read_chunk"})
+    void toolCallReturns403WhenJwtLacksToolScope(String toolName) throws Exception {
         String token = issueAccessToken("lister-api-key");
         String sessionId = initializeSession(token);
         String request = OBJECT_MAPPER.writeValueAsString(Map.of(
@@ -155,7 +156,7 @@ class McpToolAuthorizationJwtIntegrationTest {
                 "method", "tools/call",
                 "id", 1,
                 "params", Map.of(
-                        "name", "zap_report_read",
+                        "name", toolName,
                         "arguments", Map.of("reportPath", reportFile.toString(), "maxChars", 1000)
                 )
         ));
@@ -174,7 +175,7 @@ class McpToolAuthorizationJwtIntegrationTest {
                         .contains("Bearer", "error=\"insufficient_scope\"", "scope=\"zap:report:read\""))
                 .expectBody()
                 .jsonPath("$.error").isEqualTo("insufficient_scope")
-                .jsonPath("$.tool").isEqualTo("zap_report_read")
+                .jsonPath("$.tool").isEqualTo(toolName)
                 .jsonPath("$.requiredScopes[0]").isEqualTo("zap:report:read");
     }
 
@@ -275,5 +276,44 @@ class McpToolAuthorizationJwtIntegrationTest {
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(body -> assertThat(body).contains("jwt integration report"));
+    }
+
+    @Test
+    void authorizedJwtRetrievesReportPagesToEndOfFile() throws Exception {
+        String token = issueAccessToken("reporter-api-key");
+        String sessionId = initializeSession(token);
+        JsonNode first = readReportPage(token, sessionId,
+                Map.of("reportPath", reportFile.toString(), "maxChars", 4));
+        assertThat(first.path("content").asString()).isEqualTo("jwt ");
+        assertThat(first.path("endOfFile").asBoolean()).isFalse();
+
+        JsonNode last = readReportPage(token, sessionId, Map.of(
+                "reportPath", reportFile.toString(),
+                "offset", first.path("nextOffset").asLong(),
+                "expectedSha256", first.path("artifactSha256").asString()));
+        assertThat(last.path("endOfFile").asBoolean()).isTrue();
+        assertThat(last.has("nextOffset")).isTrue();
+        assertThat(last.path("nextOffset").isNull()).isTrue();
+        assertThat(first.path("content").asString() + last.path("content").asString())
+                .isEqualTo(Files.readString(reportFile));
+    }
+
+    private JsonNode readReportPage(String token, String sessionId, Map<String, Object> arguments) throws Exception {
+        String request = OBJECT_MAPPER.writeValueAsString(Map.of(
+                "jsonrpc", "2.0", "method", "tools/call", "id", 2,
+                "params", Map.of("name", "zap_report_read_chunk", "arguments", arguments)));
+        String body = client().post().uri("/mcp")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("Mcp-Session-Id", sessionId)
+                .header("MCP-Protocol-Version", "2025-03-26")
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange()
+                .expectStatus().isOk().expectBody(String.class).returnResult().getResponseBody();
+        assertThat(body).isNotNull();
+        String json = body.lines().filter(line -> line.startsWith("data:"))
+                .map(line -> line.substring(5).stripLeading()).findFirst().orElse(body);
+        JsonNode result = OBJECT_MAPPER.readTree(json).path("result");
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        return OBJECT_MAPPER.readTree(result.path("content").get(0).path("text").asString());
     }
 }

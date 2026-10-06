@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `zap_report_read_chunk` on both MCP surfaces for complete paged UTF-8 report retrieval, Unicode-safe offsets and SHA-256 verification between pages. It uses the existing `zap:report:read` permission.
+- Add independent `ZAP_SPIDER_MAX_CHILDREN` configuration and Compose/Helm pass-through, defaulting to 10 alongside the depth limit; zero remains unlimited.
+
+### Fixed
+
+- Apply the actual ZAP depth setting before HTTP crawls instead of passing depth into the child-count parameter, including authenticated crawl defaults.
+- Publish target-scoped MCP reports without shared-session insights, statistics, sequence data or automation diagnostics. Scoped JSON is filtered before publication; scoped HTML uses the standard template, and unsupported scoped templates are rejected.
+- Bound report-read memory and artifact size, reject unsafe workspace link paths and protect report generation staging files from MCP readback. Existing report previews remain available.
+
 ### Changed
 
 - Align Spring Boot and CycloneDX build-tool Jackson dependencies to `3.1.7` and `2.22.3` through separate Gradle buildscript BOMs. Application runtime Jackson remains `3.2.3`; plugin versions and Gateway Core/WebFlux dependencies are unchanged.

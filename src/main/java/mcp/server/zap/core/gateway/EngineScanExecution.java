@@ -41,8 +41,18 @@ public interface EngineScanExecution {
             String targetUrl,
             int maxDepth,
             int threadCount,
-            int maxDurationMinutes
+            int maxDurationMinutes,
+            int maxChildren
     ) {
+        public SpiderScanRequest {
+            if (maxDepth < 0 || maxChildren < 0) {
+                throw new IllegalArgumentException("Spider depth and child limits must be zero (unlimited) or greater");
+            }
+        }
+
+        public SpiderScanRequest(String targetUrl, int maxDepth, int threadCount, int maxDurationMinutes) {
+            this(targetUrl, maxDepth, threadCount, maxDurationMinutes, 10);
+        }
     }
 
     record AuthenticatedSpiderScanRequest(
@@ -53,8 +63,21 @@ public interface EngineScanExecution {
             String recurse,
             String subtreeOnly,
             int threadCount,
-            int maxDurationMinutes
+            int maxDurationMinutes,
+            int maxDepth
     ) {
+        public AuthenticatedSpiderScanRequest {
+            if (maxDepth < 0) {
+                throw new IllegalArgumentException("Spider depth must be zero (unlimited) or greater");
+            }
+        }
+
+        public AuthenticatedSpiderScanRequest(String contextId, String userId, String targetUrl,
+                                              String maxChildren, String recurse, String subtreeOnly,
+                                              int threadCount, int maxDurationMinutes) {
+            this(contextId, userId, targetUrl, maxChildren, recurse, subtreeOnly,
+                    threadCount, maxDurationMinutes, 10);
+        }
     }
 
     record ClientSpiderScanRequest(

@@ -219,7 +219,8 @@ mcp:
       # ZAP target timeout applied at startup (ZAP_CONNECTION_TIMEOUT).
       connectionTimeoutInSecs: 60
       spiderThreadCount: 5
-      spiderMaxDepth: 10
+      spiderMaxDepth: 10  # HTTP and Client Spider depth; 0 means unlimited
+      spiderMaxChildren: 10  # HTTP Spider children per node; 0 means unlimited
     
     url:
       validationEnabled: true

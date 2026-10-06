@@ -97,6 +97,28 @@ NetworkPolicy allows ZAP DNS traffic only. Before scanning, configure the
 authorized target CIDRs and ports under `networkPolicy.zap.egress.extraEgress`;
 private targets also need the matching URL-validation settings.
 
+### HTTP Crawl Limits
+
+Configure depth and children per page independently:
+
+```yaml
+mcp:
+  scan:
+    limits:
+      spiderMaxDepth: 10
+      spiderMaxChildren: 10
+```
+
+Both default to `10`; `0` means unlimited. These values apply to HTTP crawls,
+including queued and authenticated crawls. Client Spider uses its own depth
+option, while Automation Framework plans configure their own job limits.
+
+The HTTP depth correction and independent child setting require an MCP image
+containing the **unreleased correction**. The `v0.14.0` image maps HTTP depth to
+child count and does not recognize the new child setting. Helm values alone
+cannot correct that image. Keep depth settings consistent across MCP replicas
+sharing one ZAP engine. See the [crawl limits reference](../../docs/src/content/docs/scanning/scan-execution-modes.md#http-crawl-limits-unreleased-correction).
+
 ### JWT Deployment
 
 After provisioning the same Secret, enable JWT explicitly:

@@ -155,6 +155,8 @@ spec:
           value: "{{ .Values.mcp.scan.limits.spiderThreadCount }}"
         - name: ZAP_SPIDER_MAX_DEPTH
           value: "{{ .Values.mcp.scan.limits.spiderMaxDepth }}"
+        - name: ZAP_SPIDER_MAX_CHILDREN
+          value: "{{ .Values.mcp.scan.limits.spiderMaxChildren }}"
         - name: ZAP_ALLOW_LOCALHOST
           value: "{{ .Values.mcp.scan.url.allowLocalhost }}"
         - name: ZAP_ALLOW_PRIVATE_NETWORKS

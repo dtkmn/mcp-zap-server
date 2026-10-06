@@ -168,11 +168,46 @@ docker compose -f docker-compose.yml -f docker-compose.openapi-content.yml up -d
 
 The override binds the pre-existing host `content-imports` directory at
 `/zap/imports` in both containers, read-only in ZAP. It does not create a missing
-host directory. For another MCP/ZAP deployment or Helm, provision an equivalent
+host directory. For another MCP/ZAP deployment, provision an equivalent
 dedicated local shared mount with the same single-instance and permission
 contract, and configure both absolute paths explicitly. They can
 differ, for example MCP `/srv/mcp-imports` and ZAP `/zap/imports`, but must map the
 same files. A local write is not an upload to an unrelated remote ZAP filesystem.
+
+For **Helm**, the unreleased chart can provision sibling directories on the shared
+PVC and mount staging read-only in ZAP:
+
+```yaml
+zap:
+  persistence:
+    workspaceSubPath: workspace
+    contentImport:
+      enabled: true
+      subPath: content-imports
+      mountPath: /zap/imports
+mcp:
+  replicaCount: 1
+  deploymentStrategy:
+    type: Recreate
+  autoscaling:
+    enabled: false
+```
+
+Use chart-managed MCP and ZAP with persistence and `shareWithMcp` enabled, a local
+POSIX filesystem providing OS file locking, and the default UID/GID/fsGroup
+`1000` with `fsGroupChangePolicy: OnRootMismatch`. The nonroot init container
+creates staging with mode `0750` and rejects symlinks or incompatible ownership.
+The chart configures content enablement and both directory paths automatically.
+Keep one MCP writer; `Recreate` avoids overlapping writers during upgrades and
+briefly interrupts MCP service. This preset does not establish EFS/NFS or
+multi-writer support. Select an image containing the content-import feature;
+the default `v0.14.0` image does not include it.
+
+**Existing PVC users must migrate first:** setting `workspaceSubPath` changes the
+visible report/automation directory and does not move files. Quiesce all writers,
+verify a backup and move the required workspace files before changing the layout.
+See the [Helm storage and migration guide](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#openapi-content-import-storage)
+for the complete configuration and verification steps.
 
 #### Complete Content Call
 
@@ -211,6 +246,10 @@ removes staging and reports a sanitized failure. An unreadable file points to a
 shared-mount, path-mapping or reader-permission problem; a parameter rejection can
 also indicate a target-override problem. Other engine exceptions, including an
 API timeout, leave completion **uncertain**.
+If ZAP's required network settings cannot be applied before dispatch, the import
+reports **did not start** and removes its staged definition; retry after MCP
+becomes healthy. This known pre-dispatch failure is distinct from an uncertain
+import after the engine request was sent.
 The definition is retained for the configured retention period, **60 minutes** by
 default. Cleanup skips active imports and reclaims expired crash leftovers. Check
 ZAP before retrying an uncertain import to avoid repeating changes. Retention

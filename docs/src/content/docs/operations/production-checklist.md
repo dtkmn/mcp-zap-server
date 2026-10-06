@@ -6,6 +6,7 @@ description: "Use this checklist before exposing MCP ZAP Server outside a single
 Use this checklist before exposing MCP ZAP Server outside a single-user development setup.
 
 For a first private AWS evaluation, follow [AWS EC2 with Docker Compose](../aws-ec2-compose/). It includes the single-instance example, verification and cleanup; review this checklist before expanding that setup.
+For Kubernetes, follow the [private EKS deployment guidance](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#first-private-eks-deployment) and review the chart's storage and egress requirements.
 
 ## 1. Image and Release Control
 
@@ -20,6 +21,8 @@ For a first private AWS evaluation, follow [AWS EC2 with Docker Compose](../aws-
 - [ ] Use HTTPS for non-local MCP access, including internal load balancers; verify the certificate and hostname.
 - [ ] Expose the MCP server through a controlled TLS ingress or an encrypted private access path.
 - [ ] Add network rules so only trusted clients can reach `/mcp`.
+- [ ] Verify an enforcing CNI in Kubernetes, and test both allowed MCP access and blocked ZAP API access from a separate workload. Review additive policies and the actual VPC/pod/service/node address ranges.
+- [ ] Configure authorized scan-target egress separately from MCP ingress. Account for required ZAP add-on and background update/version requests; inspect the active passive rule when completion stalls. See the [Helm egress guidance](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#zap-web-egress-and-background-requests).
 
 ## 3. Authentication and Secrets
 
@@ -48,6 +51,7 @@ For a first private AWS evaluation, follow [AWS EC2 with Docker Compose](../aws-
 - [ ] Persist `/zap/wrk`.
 - [ ] Verify both MCP and ZAP see the same report and automation files. Helm shares the PVC by default; RWO co-locates both pods, while multiple MCP replicas require RWX.
 - [ ] For Helm, provision any `zap.persistence.existingClaim` and verify its real access mode and UID/GID permissions.
+- [ ] If enabling OpenAPI content staging, use the [single-writer storage configuration](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#openapi-content-import-storage), separate staging from report/automation mounts, and use `Recreate` for MCP. Migrate and verify existing files before changing `workspaceSubPath`; do not assume EFS/NFS or multiple writers are supported.
 - [ ] Before moving an older chart-managed workspace to `existingClaim` or RWX, identify its actual live PVC and verify `helm.sh/resource-policy=keep` before changing ownership. Quiesce all writers, verify a consistent backup/restore, migrate required files with the destination's real UID/GID permissions, and validate both workloads before retiring the old volume; follow the [Helm workspace preservation procedure](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#preserve-the-workspace-before-changing-claims).
 - [ ] Prove backup/restore and review PVC retention, namespace deletion and uninstall consequences.
 
@@ -65,6 +69,7 @@ For a first private AWS evaluation, follow [AWS EC2 with Docker Compose](../aws-
 ## 7. Observability and Operations
 
 - [ ] Monitor `/actuator/health`, queue depth, scan durations, and ZAP availability.
+- [ ] With the unreleased startup fix, confirm readiness only becomes healthy after ZAP's mandatory outbound settings are applied. Test ZAP starting after MCP and restarting without an MCP restart; preserve independent MCP process liveness.
 - [ ] Keep `/actuator/metrics`, `/actuator/prometheus`, and `/actuator/auditevents` on private or authenticated access paths only.
 - [ ] Monitor `mcp.zap.http.requests`, `mcp.zap.auth.events`, `mcp.zap.authorization.decisions`, `mcp.zap.tool.executions`, `mcp.zap.queue.jobs`, and `mcp.zap.audit.events`.
 - [ ] Monitor `mcp.protection.rate_limited`, `mcp.protection.workspace_quota_rejections`, and `mcp.protection.backpressure_rejections`.

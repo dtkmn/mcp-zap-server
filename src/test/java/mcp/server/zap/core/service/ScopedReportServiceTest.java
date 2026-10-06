@@ -199,10 +199,7 @@ class ScopedReportServiceTest {
 
     @Test
     void broadBoundaryCannotReadRawGenerationStaging() throws Exception {
-        service.setReportArtifactBoundary(new ReportArtifactBoundary() {
-            public Path resolveWriteDirectory(Path defaultDirectory) { return defaultDirectory; }
-            public Path resolveReadDirectory(Path defaultDirectory) { return defaultDirectory; }
-        });
+        service.setReportArtifactBoundary(new ReportArtifactBoundary() {});
         when(engine.generateReport(any())).thenAnswer(invocation -> {
             ReportGenerationRequest request = invocation.getArgument(0);
             Path raw = Path.of(request.reportDirectory()).resolve(request.reportFileName() + ".json");

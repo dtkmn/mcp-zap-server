@@ -62,6 +62,11 @@ Your operator permissions and the instance's role have different purposes:
   Record which resources you create so cleanup can distinguish them from shared
   resources.
 
+For the CloudFormation path below, your operator also needs permission to
+create/read/delete the stack and its EC2, security group and dedicated IAM
+role/profile resources, and read the public AMI parameter. `CAPABILITY_IAM`
+acknowledges IAM resource creation; it does not grant those permissions.
+
 EC2 compute, EBS storage, public IPv4 and data transfer can incur charges. Check
 [current EC2 pricing](https://aws.amazon.com/ec2/pricing/on-demand/),
 [EBS pricing](https://aws.amazon.com/ebs/pricing/) and
@@ -69,6 +74,66 @@ EC2 compute, EBS storage, public IPv4 and data transfer can incur charges. Check
 cleanup time. Stopping an instance does not remove its billable disk.
 
 ## 2. Launch a dedicated EC2 instance
+
+### CloudFormation starter
+
+The public [CloudFormation template](https://github.com/dtkmn/mcp-zap-server/blob/main/examples/aws-ec2/cloudformation.yaml)
+creates one EC2 instance, a dedicated security group with no inbound rules,
+and a dedicated SSM role/profile in your **existing** VPC and public subnet.
+It uses an encrypted 40 GiB `gp3` root disk, IMDSv2 with hop limit `1`, and no
+SSH key pair. It assigns a public IPv4 address for host outbound connectivity;
+MCP and ZAP remain accessible through Session Manager after installation.
+The instance role contains only `AmazonSSMManagedInstanceCore`.
+
+The template defaults to `m7i.xlarge`; `c7i.2xlarge` and `m7i.2xlarge` are also
+selectable. Check price, regional availability and your EC2 quota before launch.
+The standard x86_64 AL2023 AMI resolves from AWS's public SSM parameter at stack
+creation/update; record the `ImageId` output if you need to reproduce the host.
+See AWS's [AL2023 CloudFormation example](https://docs.aws.amazon.com/linux/al2023/ug/ec2.html).
+
+From a local repository checkout, replace the VPC and subnet placeholders with
+your own IDs. The subnet must belong to that VPC and have a route to an internet
+gateway; VPC DNS and outbound network rules must allow SSM, packages and image
+pulls. Choose a new stack name:
+
+```bash
+MCP_EC2_REGION=us-east-1
+MCP_EC2_STACK=mcp-zap-evaluation
+MCP_EC2_VPC_ID=vpc-REPLACE
+MCP_EC2_SUBNET_ID=subnet-REPLACE
+
+aws cloudformation create-stack \
+  --region "$MCP_EC2_REGION" \
+  --stack-name "$MCP_EC2_STACK" \
+  --template-body file://examples/aws-ec2/cloudformation.yaml \
+  --capabilities CAPABILITY_IAM \
+  --parameters \
+    "ParameterKey=VpcId,ParameterValue=$MCP_EC2_VPC_ID" \
+    "ParameterKey=SubnetId,ParameterValue=$MCP_EC2_SUBNET_ID" \
+    ParameterKey=InstanceType,ParameterValue=m7i.xlarge
+
+aws cloudformation wait stack-create-complete \
+  --region "$MCP_EC2_REGION" --stack-name "$MCP_EC2_STACK"
+aws cloudformation describe-stacks \
+  --region "$MCP_EC2_REGION" --stack-name "$MCP_EC2_STACK" \
+  --query 'Stacks[0].Outputs' --output table
+```
+
+You can also upload the template through the CloudFormation console and select
+the same parameters. `CREATE_COMPLETE` confirms infrastructure creation; it
+does not confirm Session Manager availability or install/start MCP, ZAP or
+Docker. Continue with the connection checks below and steps 3–8. No application
+API keys, containers, VPC, NAT gateway, load balancer, database or backup are created by
+the template. Image selection still requires the published **v0.15.0** digest
+in step 4; infrastructure provisioning does not publish that release.
+
+This is a disposable host starter. Its workspace and configuration live on the
+root disk. Stack deletion, instance termination or an update that replaces the
+instance can delete them; save required reports first. The template has no
+automatic spending cap or timed shutdown. Delete the stack after evaluation
+using step 10, rather than leaving a stopped instance and billable storage.
+
+### Manual console alternative
 
 Use the EC2 console with these settings:
 
@@ -409,8 +474,25 @@ containers/network:
 docker compose down
 ```
 
-End your forwarding and shell sessions. In the EC2 console, **terminate** the
-dedicated instance when the evaluation is finished. Verify:
+End your forwarding and shell sessions. If you used CloudFormation, delete
+the stack and wait for deletion to finish, using the region and stack name you
+recorded in step 2:
+
+```bash
+aws cloudformation delete-stack \
+  --region "$MCP_EC2_REGION" --stack-name "$MCP_EC2_STACK"
+aws cloudformation wait stack-delete-complete \
+  --region "$MCP_EC2_REGION" --stack-name "$MCP_EC2_STACK"
+```
+
+This removes the template's instance, root disk, network interface, security
+group and IAM role/profile. It preserves the supplied VPC/subnet. If deletion
+fails, inspect the stack events and finish cleanup; a failed delete is not a
+cleaned-up evaluation.
+
+For a manually created instance, **terminate** it in the EC2 console when the
+evaluation is finished and remove its dedicated resources. For either path,
+verify:
 
 - the instance is terminated
 - its root disk was deleted, and no disk created for this example remains

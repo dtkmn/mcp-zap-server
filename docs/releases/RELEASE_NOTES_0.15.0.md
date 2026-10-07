@@ -11,6 +11,8 @@ referenced images are available.
 This version adds client-supplied OpenAPI content import and complete paged report
 retrieval. It also corrects HTTP crawl limits, reduces shared-session information
 in target-scoped reports and reapplies required ZAP settings after engine recovery.
+Webhook diagnostics now omit destination secrets, passive waits have server limits,
+and durable queue repair preserves concurrent scan ownership updates.
 
 ## New and Corrected Behavior
 
@@ -104,6 +106,34 @@ stop and local report reads remain separate. The guard does not make in-flight
 scans durable through engine restarts. Helm separates liveness from readiness.
 See the
 [Helm monitoring guidance](../../helm/mcp-zap-server/README.md#monitoring).
+
+### Remove destination secrets from webhook diagnostics
+
+Webhook delivery diagnostics retain only the HTTP(S) origin. Credentials, paths,
+queries and fragments are omitted, and transport failures record an error category
+without the raw exception message. Actual requests still use the original URL,
+bearer authentication and HMAC signature. See the
+[webhook callback guide](../integrations/WEBHOOK_CALLBACKS.md).
+
+### Bound passive scan waits
+
+`zap_passive_scan_wait` now accepts `timeoutSeconds` from **1–300** and
+`pollIntervalMs` from **1–10,000**. Defaults remain **60 seconds** and
+**1,000 milliseconds**; clients using values outside these ranges must update them.
+The deadline covers polling and slow engine status reads. If no status read finishes
+before the deadline, completion is reported as **unknown**.
+
+Each MCP server instance admits at most **four concurrent waits**, with no queued
+backlog; excess calls return a capacity error. An engine request already in flight
+may continue until its configured network timeout and retain one of those slots.
+See the [passive scan guide](../src/content/docs/scanning/passive-scan.md).
+
+### Preserve scan ownership during durable queue repair
+
+PostgreSQL-backed queue repair reads current state inside the locked transaction,
+preventing an older snapshot from overwriting a peer's accepted scan or cancellation
+update. Queue refresh also preserves lease renewal for ongoing engine starts and
+status checks. No new database migration is required.
 
 ## Deployment and Upgrade Requirements
 

@@ -7,6 +7,7 @@ import argparse
 import email.utils
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import sys
@@ -210,27 +211,35 @@ def compute_backoff_seconds(policy: RetryPolicy, current_attempt: int, retry_aft
 
 
 def redact_webhook_url(webhook_url: str) -> str:
-    parsed = urllib.parse.urlsplit(webhook_url)
-    netloc = parsed.hostname or ""
-    if parsed.port:
-        netloc = f"{netloc}:{parsed.port}"
-    return urllib.parse.urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+    try:
+        parsed = urllib.parse.urlsplit(webhook_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return "[redacted destination]"
+        host = parsed.hostname
+        if ":" in host:
+            host = f"[{host}]"
+        if parsed.port is not None:
+            host = f"{host}:{parsed.port}"
+        return urllib.parse.urlunsplit((parsed.scheme, host, "", "", ""))
+    except ValueError:
+        return "[redacted destination]"
 
 
 def send_request(webhook_url: str,
                  payload_bytes: bytes,
                  headers: dict[str, str],
                  timeout_seconds: float) -> tuple[int | None, str, dict[str, str], str | None]:
-    request = urllib.request.Request(webhook_url, data=payload_bytes, headers=headers, method="POST")
     try:
+        request = urllib.request.Request(webhook_url, data=payload_bytes, headers=headers, method="POST")
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = response.read().decode("utf-8", errors="replace")
             return response.getcode(), body, dict(response.headers.items()), None
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         return exc.code, body, dict(exc.headers.items()), None
-    except urllib.error.URLError as exc:
-        return None, "", {}, str(exc)
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        # Transport reasons can echo URLs or headers. Persist only a safe category and origin.
+        return None, "", {}, f"{type(exc).__name__} contacting {redact_webhook_url(webhook_url)}"
 
 
 def deliver_with_retries(webhook_url: str,

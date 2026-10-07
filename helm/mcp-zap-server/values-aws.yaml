@@ -3,8 +3,11 @@
 # Copy this file and replace placeholders before production use.
 # Set a working EBS CSI RWO StorageClass below, and verify CNI NetworkPolicy
 # enforcement. Target/add-on/background HTTP egress remains opt-in; see README.
+# Review the VPC CNI's standard/strict startup behavior and system-pod policies.
+# Kubernetes NetworkPolicy does not isolate pods from their hosting node;
+# verify node-service protection separately. See README's EKS/network guidance.
 # OpenAPI content import also needs the README's sibling-storage/Recreate block
-# and an MCP image containing that unreleased feature.
+# and MCP v0.15.0 or later.
 
 global:
   environment: prod

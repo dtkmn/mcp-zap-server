@@ -50,7 +50,7 @@ services:
     networks: [isolated]
 
   mcp-server:
-    image: ghcr.io/dtkmn/mcp-zap-server:v0.14.0@sha256:2198f1b37d595cb58b2a65e797cbbd25b592d9fbf3190deb0355afff0a92ad9e
+    image: ${MCP_ZAP_IMAGE:?Set MCP_ZAP_IMAGE to the verified v0.15.0 release digest in .env}
     platform: linux/amd64
     depends_on:
       zap:

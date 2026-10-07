@@ -109,7 +109,7 @@ class ScanJobClaimManagerTest {
     }
 
     @Test
-    void expiredInFlightClaimsAreDroppedBeforeRedispatch() {
+    void expiredClaimCanBeRedispatchedAfterInFlightTargetReleased() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJob job = new ScanJob(
                 "job-expired",
@@ -126,10 +126,8 @@ class ScanJobClaimManagerTest {
         ScanJobClaimToken firstToken = firstPlan.startTargets().getFirst().claimToken();
 
         Instant redispatchAt = Instant.parse("2026-05-06T00:00:30Z");
-        claimManager.retainValidInFlightClaims(
-                Map.of("job-expired", store.load("job-expired").orElseThrow()),
-                redispatchAt
-        );
+        // The dispatcher releases a finished, failed or timed-out target before retrying it.
+        claimManager.releaseStartTarget("job-expired");
         ScanJobWorkPlan redispatchPlan = claimManager.claimWork(
                 store.list(),
                 1,

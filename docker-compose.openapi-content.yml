@@ -1,4 +1,4 @@
-# Optional shared-filesystem staging for the Unreleased OpenAPI content mode.
+# Optional shared-filesystem staging for the v0.15.0 OpenAPI content mode.
 # Pre-provision the host directory and set ZAP_OPENAPI_CONTENT_ENABLED=true.
 # See docs/src/content/docs/scanning/api-schema-imports.md for permissions/limits.
 services:

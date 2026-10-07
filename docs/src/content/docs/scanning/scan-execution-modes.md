@@ -58,9 +58,12 @@ Upgrade all workers sharing a queue before submitting Client Spider jobs; older 
 
 After the crawl finishes, use `zap_passive_scan_wait` before reading findings. A Client Spider scan ID identifies the crawl; it does not make the shared ZAP findings store exclusive to that crawl.
 
-## HTTP Crawl Limits (Unreleased Correction)
+<a id="http-crawl-limits-unreleased-correction"></a>
 
-The corrected HTTP crawler applies `ZAP_SPIDER_MAX_DEPTH` to ZAP's actual depth
+## HTTP Crawl Limits
+
+The HTTP crawler correction, introduced in `v0.15.0`, applies
+`ZAP_SPIDER_MAX_DEPTH` to ZAP's actual depth
 setting and uses the independent `ZAP_SPIDER_MAX_CHILDREN` for children per page.
 Both default to **10**; **0** means unlimited. These limits apply to direct and
 queued HTTP crawls, including authenticated HTTP crawling. Explicit expert
@@ -69,8 +72,8 @@ own depth option; Automation Framework plans configure their own jobs.
 
 This correction is not included in `v0.14.0`: that version sends the HTTP depth
 value as a child-count limit. Setting the environment variable on that image
-does not establish an actual depth bound. Upgrade to an image containing the
-correction when available. ZAP's HTTP depth setting is engine-wide; keep limits
+does not establish an actual depth bound. Upgrade to `v0.15.0` to apply the
+corrected depth limit. ZAP's HTTP depth setting is engine-wide; keep limits
 consistent across MCP servers sharing an engine.
 
 ZAP checks the child limit against its evolving Sites tree. Sibling links

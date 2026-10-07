@@ -5,21 +5,24 @@ through AWS Session Manager, and verify scanning and report retrieval against an
 API supplied with the example. This path is useful when you have an AWS account
 and want to evaluate the server without creating a Kubernetes cluster.
 
-The [example configuration](../../../examples/aws-ec2/) uses published MCP ZAP
-Server **v0.14.0** and ZAP **2.17.0** images pinned by digest. The reference
-configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an encrypted 40 GiB disk.
+The [example configuration](../../../examples/aws-ec2/) targets MCP ZAP Server
+**v0.15.0** and ZAP **2.17.0**, with images pinned by digest. First confirm
+[release-image publication](https://github.com/dtkmn/mcp-zap-server/releases),
+then select the MCP digest in step 4; release preparation does not publish it.
+The reference configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an
+encrypted 40 GiB disk.
 These are a starting point for a small evaluation, not measured production
 capacity or a minimum requirement. Crawl, bounded active scan, report readback,
 OpenAPI import, automation, container restart and EC2 reboot have been exercised
 with this private deployment approach. Validate the supplied example on your own
 instance before relying on it.
 
-The upcoming HTTP depth correction, target-report metadata filtering and
-`zap_report_read_chunk` tool are **not included in the pinned `v0.14.0` image**.
-On that version, `ZAP_SPIDER_MAX_DEPTH` limits HTTP spider children rather than
-actual depth, and `ZAP_SPIDER_MAX_CHILDREN` is not recognized. Do not rely on
-those environment settings as a depth boundary until you upgrade to an image
-containing the correction. Automation plans have their own explicit job limits.
+MCP **v0.15.0** applies HTTP crawl depth and child limits independently, filters
+target-report metadata and exposes `zap_report_read_chunk` for complete report
+retrieval. The older `v0.14.0` image maps HTTP depth to child count and does not
+provide the child setting or chunk tool. Use the intended release image;
+configuration alone cannot add these fixes to an older image.
+Automation plans have their own explicit job limits.
 See [HTTP crawl limits](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/#http-crawl-limits-unreleased-correction).
 
 This walkthrough serves one trusted client. Its example blocks external scan
@@ -116,8 +119,8 @@ bash setup-host.sh
 ```
 
 Use a checkout containing this guide and `examples/aws-ec2`. The repository
-provides configuration; the example runs the pinned published images and does
-not build the Java application from the checkout.
+provides configuration; the example runs published images selected by digest
+and does not build the Java application from the checkout.
 
 The setup script checks Amazon Linux 2023/x86_64 and network-range conflicts,
 installs Docker and iptables, verifies a pinned Docker Compose download, prepares
@@ -132,6 +135,13 @@ and [Docker installation](https://docs.aws.amazon.com/AmazonECS/latest/developer
 
 ## 4. Configure credentials and shared storage
 
+Confirm that the `v0.15.0` release image workflow succeeded before proceeding.
+The snippet below pulls that tag, reads the GHCR digest returned by Docker,
+validates its format and saves the immutable image reference as `MCP_ZAP_IMAGE`.
+If publication or digest selection fails, it stops before writing credentials.
+Docker documents [image pulls and digest references](https://docs.docker.com/reference/cli/docker/image/pull/).
+Do not reuse an older image's digest with the new tag.
+
 Create two independent secrets: one MCP API key for your client and one ZAP API
 key for MCP-to-ZAP communication. For this example, use **64 random hexadecimal
 characters** per key (32 random bytes, using only `0-9` and `a-f`). Store them in
@@ -141,14 +151,24 @@ This format avoids shell, dotenv and URL delimiters in the example configuration
 On EC2, enter those keys at hidden prompts. Session Manager can record commands
 and terminal output, so do not put keys into command text or display them in a
 terminal editor. AWS recommends [non-echoing secret input](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-logging.html).
-The following Bash snippet disables tracing, validates the format, writes a
-private file and clears the temporary variables:
+The following Bash snippet disables tracing, validates the image and keys, and
+writes a mode `0600` file. Temporary variables are confined to its subshell:
 
 ```bash
-{
+(
   set +x
+  set -euo pipefail
   umask 077
-  install -m 0600 .env.example .env
+  MCP_EC2_TAG=ghcr.io/dtkmn/mcp-zap-server:v0.15.0
+  docker pull "$MCP_EC2_TAG"
+  MCP_EC2_DIGEST=$(docker image inspect "$MCP_EC2_TAG" \
+    --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+    | sed -n '/^ghcr[.]io\/dtkmn\/mcp-zap-server@sha256:/p')
+  if [[ ! $MCP_EC2_DIGEST =~ ^ghcr[.]io/dtkmn/mcp-zap-server@sha256:[0-9a-f]{64}$ ]]; then
+    printf 'Expected one GHCR digest for v0.15.0. Verify image publication before retrying.\n' >&2
+    exit 1
+  fi
+  MCP_EC2_IMAGE="$MCP_EC2_TAG@${MCP_EC2_DIGEST#*@}"
   printf 'MCP API key (64 hex characters): ' >&2
   IFS= read -r -s MCP_EC2_KEY </dev/tty
   printf '\nZAP API key (different 64 hex characters): ' >&2
@@ -156,18 +176,20 @@ private file and clears the temporary variables:
   printf '\n' >&2
   if [[ $MCP_EC2_KEY =~ ^[0-9a-f]{64}$ && $ZAP_EC2_KEY =~ ^[0-9a-f]{64}$ &&
         $MCP_EC2_KEY != "$ZAP_EC2_KEY" ]]; then
-    printf 'MCP_API_KEY=%s\nZAP_API_KEY=%s\n' "$MCP_EC2_KEY" "$ZAP_EC2_KEY" > .env
+    install -m 0600 /dev/null .env
+    printf 'MCP_ZAP_IMAGE=%s\nMCP_API_KEY=%s\nZAP_API_KEY=%s\nZAP_SPIDER_MAX_DEPTH=10\nZAP_SPIDER_MAX_CHILDREN=10\n' \
+      "$MCP_EC2_IMAGE" "$MCP_EC2_KEY" "$ZAP_EC2_KEY" > .env
   else
     printf 'Keys must be different and each contain exactly 64 lowercase hex characters. Retry before starting.\n' >&2
+    exit 1
   fi
-  unset MCP_EC2_KEY ZAP_EC2_KEY
-}
+)
 ```
 
 Keep `.env` private; never display it in session logs, commit it, or publish fully
-resolved Compose configuration. The example requires both keys and refuses
-missing values before containers start. Other secret-delivery systems can write
-the same mode `0600` file without printing the values.
+resolved Compose configuration. The example requires the selected image and both
+keys, and refuses missing values before containers start. Other secret-delivery
+systems can write the same mode `0600` file without printing the values.
 
 The example fixes the client identity to `ec2-operator`. It mounts the same
 `workspace` directory as `/zap/wrk` in both containers and uses:
@@ -303,13 +325,13 @@ with target **`http://smoke-target:8080`**:
    preview does not prove complete report retrieval. Save the path and complete
    report content locally for the recovery check.
 
-On a server exposing `zap_report_read_chunk`, retrieve all pages by following
+With `v0.15.0`, use `zap_report_read_chunk` to retrieve all pages by following
 `nextOffset` until `endOfFile` is true and pass the first page's `artifactSha256`
-as `expectedSha256` on later reads. Append each page's `content` exactly. See
+as `expectedSha256` on later reads. Append each page's `content` exactly and
+verify the assembled UTF-8 artifact's SHA-256 against `artifactSha256`. See
 [complete report retrieval](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/#preview-or-complete-retrieval).
-The pinned `v0.14.0` image supports previews only. If its preview is truncated,
-an operator must retrieve the complete file privately from the mounted workspace;
-do not treat the preview as the complete artifact or expose a public download port.
+Do not treat a truncated preview as the complete artifact or expose a public
+download port to work around it.
 
 The sample intentionally omits security headers so reports can contain findings.
 Those findings describe the sample API, not the MCP server's security.
@@ -407,6 +429,7 @@ Do not treat a stopped instance as completed cleanup.
 | Symptom | Check |
 | --- | --- |
 | Instance unavailable in Session Manager | Instance role, agent status, outbound route/DNS and operator permissions |
+| Missing MCP image or failed image pull | Wait for successful v0.15.0 release-image publication and configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
 | No automation tools | Inspect the actual surface; this example uses expert, while the main local Compose setup defaults to guided |

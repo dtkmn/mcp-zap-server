@@ -1113,19 +1113,28 @@ public class ScanJobQueueService {
         }
 
         ScanJobQueueState normalizedState = queueStateNormalizer.normalize(persistedJobs);
+        int repairedRunningJobs = 0;
+        if (normalizedState.normalized()) {
+            // The initial read only detects repair work. Re-read under the store's
+            // transaction lock so repair cannot overwrite a peer's accepted start or claim.
+            int[] repairCount = new int[1];
+            List<ScanJob> committedJobs = updateQueueState(currentState -> {
+                repairCount[0] = currentState.repairedRunningJobs();
+                return currentState;
+            });
+            normalizedState = queueStateNormalizer.normalize(committedJobs);
+            repairedRunningJobs = repairCount[0];
+        }
 
         queueLock.lock();
         try {
-            applyNormalizedStateLocked(normalizedState, true, Instant.now());
-            if (normalizedState.normalized()) {
-                syncScanJobStoreLocked();
-            }
+            applyNormalizedStateLocked(normalizedState, Instant.now());
         } finally {
             queueLock.unlock();
         }
 
-        if (normalizedState.repairedRunningJobs() > 0) {
-            log.warn("Repaired {} restored RUNNING jobs missing ZAP scan IDs", normalizedState.repairedRunningJobs());
+        if (repairedRunningJobs > 0) {
+            log.warn("Repaired {} restored RUNNING jobs missing ZAP scan IDs", repairedRunningJobs);
         }
         if (verbose) {
             log.info(
@@ -1235,23 +1244,15 @@ public class ScanJobQueueService {
         }
     }
 
-    private void applyNormalizedStateLocked(ScanJobQueueState state, boolean resetTransientState, Instant now) {
+    private void applyNormalizedStateLocked(ScanJobQueueState state, Instant now) {
         jobs.clear();
         jobs.putAll(state.jobs());
         queuedJobIds.clear();
         queuedJobIds.addAll(state.queuedJobIds());
         queueStateMetrics.refresh(state.jobs().values(), now);
 
-        if (resetTransientState) {
-            claimManager.resetInFlightClaims();
-            return;
-        }
-
-        claimManager.retainValidInFlightClaims(jobs, now);
-    }
-
-    private void syncScanJobStoreLocked() {
-        scanJobStore.upsertAll(queueStateNormalizer.storedJobsOf(jobs, queuedJobIds));
+        // This view can be older than live dispatch work. Only dispatch results
+        // release in-flight IDs; refreshing durable state must not discard them.
     }
 
     private List<ScanJob> updateQueueState(UnaryOperator<ScanJobQueueState> mutator) {
@@ -1266,7 +1267,7 @@ public class ScanJobQueueService {
     private void applyCommittedStoredJobs(List<ScanJob> committedJobs) {
         queueLock.lock();
         try {
-            applyNormalizedStateLocked(queueStateNormalizer.normalize(committedJobs), false, Instant.now());
+            applyNormalizedStateLocked(queueStateNormalizer.normalize(committedJobs), Instant.now());
         } finally {
             queueLock.unlock();
         }

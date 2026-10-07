@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0]
+
+These changes describe version `v0.15.0`; release preparation and a merge to
+`main` do not publish its release or images. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+release image workflow before deploying. Read the
+[upgrade notes](./docs/releases/RELEASE_NOTES_0.15.0.md) for storage, image and
+client changes.
+
 ### Added
 
+- Add opt-in client-supplied OpenAPI content import through guided `zap_target_import` with `definitionType=openapi` and `sourceKind=content`. Validate bounded, self-contained Swagger/OpenAPI JSON or YAML and an explicit destination-policy-approved `hostOverride` before staging on a dedicated shared filesystem and dispatching to ZAP. The feature is disabled by default; attachment contents must be supplied by the MCP client.
 - Add `zap_report_read_chunk` on both MCP surfaces for complete paged UTF-8 report retrieval, Unicode-safe offsets and SHA-256 verification between pages. It uses the existing `zap:report:read` permission.
 - Add independent `ZAP_SPIDER_MAX_CHILDREN` configuration and Compose/Helm pass-through, defaulting to 10 alongside the depth limit; zero remains unlimited.
 - Add `zap.persistence.automationSubdirectory` to configure Helm automation files inside a client's report workspace while preserving the existing default directory.
@@ -25,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Align Spring Boot and CycloneDX build-tool Jackson dependencies to `3.1.7` and `2.22.3` through separate Gradle buildscript BOMs. Application runtime Jackson remains `3.2.3`; plugin versions and Gateway Core/WebFlux dependencies are unchanged.
 - Document EKS storage/CNI prerequisites, explicit ZAP web egress and background passive-rule requests, content staging and existing-PVC migration.
+- Require an operator-supplied, digest-pinned `MCP_ZAP_IMAGE` in the EC2 Compose example. Obtain the matching public release digest after image publication; the example no longer silently starts the older `v0.14.0` image.
+- Align application, MCP server, Helm chart, MCP Registry package, local extension API proof metadata and current installation examples to `0.15.0` / `v0.15.0`. The extension API remains `experimental-local`; release images and Registry publication remain separate operations.
 
 ## [0.14.0]
 

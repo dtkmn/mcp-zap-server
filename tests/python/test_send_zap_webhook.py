@@ -1,7 +1,14 @@
 import importlib.util
+import contextlib
+import io
+import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest.mock import MagicMock, patch
+import urllib.error
 
 
 MODULE_PATH = Path(__file__).resolve().parents[2] / ".github" / "actions" / "zap-webhook-callback" / "send_zap_webhook.py"
@@ -70,6 +77,65 @@ class SendZapWebhookTest(unittest.TestCase):
     def test_parse_retry_after_supports_seconds(self):
         retry_after = MODULE.parse_retry_after({"Retry-After": "12"})
         self.assertEqual(retry_after, 12.0)
+
+    def test_failed_delivery_outputs_omit_destination_credentials(self):
+        for destination, origin in [
+            ("https://user:USER_SECRET@notify.example/hooks/PATH_SECRET?token=QUERY_SECRET#FRAGMENT_SECRET",
+             "https://notify.example"),
+            ("https://[::1]:8443/hooks/%50ATH_SECRET?token=QUERY_SECRET", "https://[::1]:8443"),
+            ("https://notify.example:INVALID_PORT/hooks/PATH_SECRET", "[redacted destination]"),
+        ]:
+            with self.subTest(destination=destination), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                metadata = root / "metadata.json"
+                metadata.write_text('{"gate_passed": true}', encoding="utf-8")
+                record = root / "delivery.json"
+                summary = root / "summary.md"
+                output = root / "outputs.txt"
+                stderr = io.StringIO()
+                argv = ["send_zap_webhook", "--webhook-url", destination,
+                        "--metadata-path", str(metadata), "--output-path", str(record),
+                        "--max-attempts", "1"]
+                with patch.object(sys, "argv", argv), patch.dict(os.environ, {
+                    "GITHUB_STEP_SUMMARY": str(summary), "GITHUB_OUTPUT": str(output),
+                }), patch.object(MODULE.urllib.request, "urlopen",
+                               side_effect=urllib.error.URLError(f"Failed to reach {destination}")), \
+                        contextlib.redirect_stderr(stderr):
+                    self.assertEqual(MODULE.main(), 1)
+
+                delivery = json.loads(record.read_text(encoding="utf-8"))
+                self.assertEqual(delivery["webhook_target"], origin)
+                self.assertFalse(delivery["delivered"])
+                diagnostics = record.read_text() + summary.read_text() + output.read_text() + stderr.getvalue()
+                for secret in ["USER_SECRET", "PATH_SECRET", "%50ATH_SECRET", "QUERY_SECRET", "FRAGMENT_SECRET"]:
+                    self.assertNotIn(secret, diagnostics)
+
+    def test_successful_delivery_preserves_destination_and_authentication(self):
+        destination = "https://notify.example/hooks/PATH_SECRET?token=QUERY_SECRET"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metadata = root / "metadata.json"
+            metadata.write_text('{"gate_passed": true}', encoding="utf-8")
+            record = root / "delivery.json"
+            response = MagicMock()
+            response.__enter__.return_value = response
+            response.getcode.return_value = 204
+            response.read.return_value = b""
+            response.headers = {}
+            with patch.object(sys, "argv", ["send_zap_webhook", "--webhook-url", destination,
+                                          "--metadata-path", str(metadata), "--output-path", str(record),
+                                          "--bearer-token", "HEADER_SECRET", "--secret", "SIGNING_SECRET"]), \
+                    patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": "", "GITHUB_OUTPUT": ""}), \
+                    patch.object(MODULE.urllib.request, "urlopen", return_value=response) as sender:
+                self.assertEqual(MODULE.main(), 0)
+            request = sender.call_args.args[0]
+            self.assertEqual(request.full_url, destination)
+            self.assertEqual(request.get_header("Authorization"), "Bearer HEADER_SECRET")
+            self.assertEqual(request.get_header("X-mcp-zap-signature-sha256"),
+                             MODULE.compute_signature("SIGNING_SECRET", request.data))
+            delivery = json.loads(record.read_text())
+            self.assertTrue(delivery["delivered"])
+            self.assertEqual(delivery["webhook_target"], "https://notify.example")
 
 
 if __name__ == "__main__":

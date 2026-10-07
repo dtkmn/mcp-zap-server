@@ -30,28 +30,6 @@ public class ScanJobClaimManager {
         this.metrics = metrics != null ? metrics : ScanJobClaimMetrics.noop();
     }
 
-    public synchronized void resetInFlightClaims() {
-        pollingJobIds.clear();
-        startingJobIds.clear();
-    }
-
-    public synchronized void retainValidInFlightClaims(Map<String, ScanJob> jobs, Instant now) {
-        pollingJobIds.removeIf(jobId -> {
-            ScanJob job = jobs.get(jobId);
-            return job == null
-                    || job.getStatus() != ScanJobStatus.RUNNING
-                    || !job.isClaimedBy(workerNodeId)
-                    || !job.hasLiveClaim(now);
-        });
-        startingJobIds.removeIf(jobId -> {
-            ScanJob job = jobs.get(jobId);
-            return job == null
-                    || job.getStatus() != ScanJobStatus.QUEUED
-                    || !job.isClaimedBy(workerNodeId)
-                    || !job.hasLiveClaim(now);
-        });
-    }
-
     public void renewInFlightClaims(Instant now, Instant claimUntil) {
         Set<String> inFlightJobIds;
         synchronized (this) {

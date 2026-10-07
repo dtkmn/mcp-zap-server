@@ -8,8 +8,9 @@ Runtime and Snyk baseline: **3 October 2026**, against the `v0.14.0` preparation
 The six upstream findings in the table below were open in that scan; this
 dated baseline does not establish that every affected native operation is
 unreachable. The build-tool alignment section was updated on **4 October 2026**
-for the next release. The documentation dependency update below was reviewed on
+for `v0.15.0`. The documentation dependency update below was reviewed on
 **6 October 2026**; it does not establish closure of the historical Snyk alerts.
+Preparing `v0.15.0` does not refresh this dated Snyk baseline.
 
 The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up for each row.
 The next review of the remaining findings is due **17 October 2026 UTC**, or
@@ -89,7 +90,7 @@ complete audit report was produced.
 ## Build tooling and coverage follow-up
 
 The application's Jackson `3.2.3` BOM does not align Gradle plugin classpaths.
-The **unreleased** build now uses two separate Gradle buildscript BOMs: Jackson
+The `v0.15.0` build uses two separate Gradle buildscript BOMs: Jackson
 `3.1.7` for Spring Boot tooling and Jackson `2.22.3` for CycloneDX tooling. These
 replace the previously resolved `3.1.5` and `2.22.1` families and meet the fixed
 version floors for the reviewed [core memory-growth](https://github.com/advisories/GHSA-7hhh-6rmp-j9qf),
@@ -110,6 +111,8 @@ Published `v0.14.0` does not contain this build-tool alignment. Verify the fresh
 GitHub dependency submission and targeted alert state before closing #275;
 local dependency resolution and a runtime scan alone do not establish alert
 closure. The follow-up retains the **17 October 2026 UTC** review deadline.
+See the [v0.15.0 release notes](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/RELEASE_NOTES_0.15.0.md)
+for the broader upgrade requirements and publication checks.
 
 Snyk also reported that one of two detected Gradle manifests did not return
 dependencies. The experimental standalone extension sample is a separate build

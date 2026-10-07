@@ -131,7 +131,7 @@ not sandbox-host scoped; it authorizes report readback by path, with safety
 coming from tool scope, time windows, and `ReportService` report/workspace
 artifact confinement.
 
-`zap_report_read_chunk` is unreleased and uses `zap:report:read`, like the
+`zap_report_read_chunk`, introduced in `v0.15.0`, uses `zap:report:read`, like the
 existing preview. The examples include it for servers that expose paged reads;
 check the running server's tool catalog before calling it.
 

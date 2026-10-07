@@ -153,7 +153,7 @@ When you set an output path, the helper writes a delivery record JSON file conta
 - whether delivery succeeded
 - how many attempts were made
 - the final HTTP status code when available
-- a redacted webhook target
+- the webhook destination origin (scheme, host and optional port), with URL credentials, path, query and fragment omitted
 - per-attempt retry details
 
 Recommended default:

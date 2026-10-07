@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Dedicated x86_64 Amazon Linux 2023 host for the MCP ZAP Server EC2 Compose
+  walkthrough (v0.15.0). Infrastructure only; install the example and configure
+  verified public image digests and credentials manually using the runbook.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing VPC with DNS support and an internet gateway.
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Existing public subnet in that VPC, with an internet gateway route.
+  InstanceType:
+    Type: String
+    Default: m7i.xlarge
+    AllowedValues:
+      - m7i.xlarge
+      - c7i.2xlarge
+      - m7i.2xlarge
+    Description: >-
+      x86_64 host size; m7i.xlarge is the guide's starting configuration,
+      not a measured capacity requirement. Check regional availability and cost.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: >-
+      SSM parameter for the standard x86_64 AL2023 image. Its value resolves at
+      stack creation/update; record the ImageId output for reproducibility.
+
+Rules:
+  SubnetBelongsToVpc:
+    Assertions:
+      - Assert:
+          Fn::Equals:
+            - Fn::ValueOf:
+                - SubnetId
+                - VpcId
+            - Ref: VpcId
+        AssertDescription: The selected subnet must belong to the selected VPC.
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-mcp-zap
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Private MCP ZAP evaluation host; Session Manager access only
+      VpcId: !Ref VpcId
+      SecurityGroupIngress: []
+      # Host egress supports SSM, package installation and public image pulls.
+      # setup-host.sh must separately restrict traffic from scanning containers.
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+          Description: Host outbound IPv4; container isolation is installed manually
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-mcp-zap
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+        HttpProtocolIpv6: disabled
+        InstanceMetadataTags: disabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 40
+            Encrypted: true
+            DeleteOnTermination: true
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          SubnetId: !Ref SubnetId
+          AssociatePublicIpAddress: true
+          DeleteOnTermination: true
+          GroupSet:
+            - !Ref SecurityGroup
+      PropagateTagsToVolumeOnCreation: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-mcp-zap
+
+Outputs:
+  InstanceId:
+    Description: EC2 host; continue the runbook after Session Manager is available.
+    Value: !Ref Instance
+  ImageId:
+    Description: Resolved AL2023 AMI used for this host.
+    Value: !Ref LatestAmiId
+  SecurityGroupId:
+    Description: Dedicated security group with no inbound rules.
+    Value: !Ref SecurityGroup
+  SessionCommand:
+    Description: Open a host shell using your operator's AWS CLI credentials.
+    Value: !Sub aws ssm start-session --region ${AWS::Region} --target ${Instance}
+  SetupGuide:
+    Description: Manual installation, verified image selection, checks and cleanup.
+    Value: https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md

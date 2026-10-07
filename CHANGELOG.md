@@ -30,6 +30,9 @@ client changes.
 - Publish target-scoped MCP reports without shared-session insights, statistics, sequence data or automation diagnostics. Scoped JSON is filtered before publication; scoped HTML uses the standard template, and unsupported scoped templates are rejected.
 - Bound report-read memory and artifact size, reject unsafe workspace link paths and protect report generation staging files from MCP readback. Existing report previews remain available.
 - Reconcile ZAP outbound defaults during health checks and outbound operation starts so delayed engine startup and engine restarts do not silently skip mandatory user-agent/timeout settings. Failed mandatory configuration leaves MCP unready; unsupported optional DNS TTL configuration remains compatible.
+- Redact webhook destination credentials, paths, queries and fragments from delivery diagnostics. Record transport failure categories without raw exception messages while preserving the original delivery URL and authentication.
+- Bound passive scan waits to 1–300 seconds, polling intervals to 1–10,000 milliseconds and four concurrent waits per MCP server instance. Apply the caller's deadline across polling and slow engine reads; report completion as unknown if no status read finishes before the deadline.
+- Repair durable scan queues using current transactionally locked state instead of an earlier snapshot. Preserve concurrent accepted-scan and cancellation updates, and keep lease renewal active for in-flight engine starts and polls when the queue refreshes.
 
 ### Changed
 

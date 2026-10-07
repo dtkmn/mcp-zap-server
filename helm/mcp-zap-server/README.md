@@ -494,6 +494,14 @@ disabling all network controls is not a remedy.
 
 ### First Private EKS Deployment
 
+If you need a new cluster, the optional
+[EKS infrastructure starter](../../examples/aws-eks/) provides CloudFormation
+and a walkthrough for a dedicated single-worker cluster in an existing VPC.
+It creates AWS infrastructure separately from this chart. A live single-worker
+trial verified bootstrap and authenticated crawl/report flows with a matched
+prerelease image/chart; follow the walkthrough's checks for your own environment
+and published application version.
+
 This guidance assumes an existing EKS cluster. Start from
 [values-aws.yaml](values-aws.yaml), keep both services private and select an
 explicit MCP image containing the features you need. For a standard EKS cluster

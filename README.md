@@ -187,6 +187,12 @@ The default posture is intentionally conservative:
 
 For a first private AWS deployment without Kubernetes, use [AWS EC2 with Docker Compose](./docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md) and its [standalone example](./examples/aws-ec2/).
 
+For Kubernetes, use the [EKS infrastructure starter](./examples/aws-eks/) to
+create a dedicated evaluation cluster in an existing VPC, then deploy with the
+existing Helm chart. A live single-worker trial verified bootstrap and the
+authenticated crawl/report flow with a matched prerelease image/chart; see the
+walkthrough for validation scope and published-image checks.
+
 Production and shared deployments should review:
 
 - [Security Modes](https://danieltse.org/mcp-zap-server/security-modes/)

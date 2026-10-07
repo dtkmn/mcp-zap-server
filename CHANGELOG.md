@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add an infrastructure-only CloudFormation starter for a dedicated single-worker EKS cluster in an existing VPC, with explicit operator access, managed networking/storage add-ons and an encrypted gp3 StorageClass. Its shared repository/website walkthrough covers Helm handoff, verification and retained-volume cleanup. A live single-worker evaluation with a matched prerelease application/chart verified bootstrap, encrypted storage, authenticated crawl/passive/report flows, report persistence after MCP replacement and settled network-policy paths.
+
 ## [0.15.0]
 
 These changes describe version `v0.15.0`; release preparation and a merge to

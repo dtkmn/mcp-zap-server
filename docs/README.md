@@ -78,6 +78,7 @@ directory; do not maintain a second copy of their bodies in the website tree.
 | --- | --- | --- |
 | Self-Serve First Run | [SELF_SERVE_FIRST_RUN.md](getting-started/SELF_SERVE_FIRST_RUN.md) | `/getting-started/self-serve-first-run/` |
 | AWS EC2 with Docker Compose | [AWS_EC2_COMPOSE_GUIDE.md](operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md) | `/operations/aws-ec2-compose/` |
+| AWS EKS Infrastructure Starter | [examples/aws-eks/README.md](../examples/aws-eks/README.md) | `/operations/aws-eks-infrastructure/` |
 | Production Simulation Runbook | [PRODUCTION_SIMULATION_RUNBOOK.md](operator/runbooks/PRODUCTION_SIMULATION_RUNBOOK.md) | `/operations/production-simulation-runbook/` |
 | Seeded API Gate Playbook | [SEEDED_API_GATE_PLAYBOOK.md](scanning/SEEDED_API_GATE_PLAYBOOK.md) | `/scanning/seeded-api-gate-playbook/` |
 | Extension API Release Policy | [EXTENSION_API_RELEASE_POLICY.md](extensions/EXTENSION_API_RELEASE_POLICY.md) | `/extensions/extension-api-release-policy/` |

@@ -26,6 +26,20 @@ const pages = [
     },
   },
   {
+    source: 'examples/aws-eks/README.md',
+    slug: 'operations/aws-eks-infrastructure',
+    title: 'AWS EKS Infrastructure Starter',
+    description: 'Prepare a dedicated EKS evaluation cluster, configure storage, and deploy MCP ZAP Server with Helm.',
+    links: {
+      'cloudformation.yaml': 'https://github.com/dtkmn/mcp-zap-server/blob/main/examples/aws-eks/cloudformation.yaml',
+      'storage-class.yaml': 'https://github.com/dtkmn/mcp-zap-server/blob/main/examples/aws-eks/storage-class.yaml',
+      '../../helm/mcp-zap-server/README.md#first-private-eks-deployment': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#first-private-eks-deployment',
+      '../../helm/mcp-zap-server/values-aws.yaml': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/values-aws.yaml',
+      '../aws-ec2/': 'https://github.com/dtkmn/mcp-zap-server/tree/main/examples/aws-ec2',
+      '../../docs/src/content/docs/operations/production-checklist.md': '/mcp-zap-server/operations/production-checklist/',
+    },
+  },
+  {
     source: 'docs/operator/runbooks/PRODUCTION_SIMULATION_RUNBOOK.md',
     slug: 'operations/production-simulation-runbook',
     title: 'Production Simulation Runbook',

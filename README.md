@@ -153,6 +153,11 @@ count, and health checks reapply mandatory outbound settings when ZAP starts
 late or its engine is replaced. Review the storage and configuration requirements
 before enabling content import or upgrading an existing deployment.
 
+It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and shared
+repository/website walkthrough. A live single-worker evaluation with a matched
+prerelease application/chart verified bootstrap, crawl/report flows and report
+persistence after MCP replacement; published-image validation remains separate.
+
 - [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
 - [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)

@@ -25,7 +25,7 @@ Guided findings and report tools:
 - `zap_findings_details`
 - `zap_report_generate`
 - `zap_report_read`
-- `zap_report_read_chunk` (unreleased)
+- `zap_report_read_chunk` (introduced in `v0.15.0`)
 
 Use these when:
 
@@ -120,15 +120,15 @@ snapshot readers may need an update before consuming version 2 exports.
 
 ## Report Artifacts
 
-The scoped-report protection and paged readback below are **unreleased** and are
-not included in `v0.14.0`. Check `tools/list` on your running server before using
-`zap_report_read_chunk`.
+The scoped-report protection and paged readback below are introduced in
+`v0.15.0`. They are not included in `v0.14.0`. Check `tools/list` on your running
+server before using `zap_report_read_chunk`.
 
 Available on both surfaces:
 
 - `zap_report_generate`
 - `zap_report_read`
-- `zap_report_read_chunk` (unreleased)
+- `zap_report_read_chunk` (introduced in `v0.15.0`)
 
 Additional expert controls:
 

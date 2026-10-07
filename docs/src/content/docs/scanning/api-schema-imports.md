@@ -84,11 +84,15 @@ Use this when:
 - you want ZAP to import REST paths directly
 - you need a host override for a schema copied from another environment
 
-### Client-Supplied OpenAPI Content — Unreleased
+<a id="client-supplied-openapi-content--unreleased"></a>
 
-Guided `zap_target_import` adds `sourceKind=content` for `definitionType=openapi`
-after `v0.14.0`. This feature is **Unreleased** and disabled by default. Use a
-build that includes it; check the release notes before choosing a published image.
+### Client-Supplied OpenAPI Content
+
+Guided `zap_target_import` supports `sourceKind=content` for
+`definitionType=openapi`, introduced in `v0.15.0` and disabled by default. Use
+the matching server image and deployment files; check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and verify
+that the release workflow has published the image before deploying it.
 
 `source` must contain the actual UTF-8 JSON/YAML definition text. If a file is
 attached to a chat, the AI client must read it and pass its contents to this tool.
@@ -174,7 +178,7 @@ contract, and configure both absolute paths explicitly. They can
 differ, for example MCP `/srv/mcp-imports` and ZAP `/zap/imports`, but must map the
 same files. A local write is not an upload to an unrelated remote ZAP filesystem.
 
-For **Helm**, the unreleased chart can provision sibling directories on the shared
+For **Helm**, the `v0.15.0` chart can provision sibling directories on the shared
 PVC and mount staging read-only in ZAP:
 
 ```yaml
@@ -200,8 +204,8 @@ creates staging with mode `0750` and rejects symlinks or incompatible ownership.
 The chart configures content enablement and both directory paths automatically.
 Keep one MCP writer; `Recreate` avoids overlapping writers during upgrades and
 briefly interrupts MCP service. This preset does not establish EFS/NFS or
-multi-writer support. Select an image containing the content-import feature;
-the default `v0.14.0` image does not include it.
+multi-writer support. Use a `v0.15.0` server image with this chart;
+the `v0.14.0` image does not include content import.
 
 **Existing PVC users must migrate first:** setting `workspaceSubPath` changes the
 visible report/automation directory and does not move files. Quiesce all writers,

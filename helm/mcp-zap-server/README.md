@@ -4,10 +4,17 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.14.0` defaults to MCP image `v0.14.0`. Use the chart from the same release
+Chart `0.15.0` defaults to MCP image `v0.15.0`. Use the chart from the same release
 as your image, and confirm that the corresponding release workflow has published
 the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 is the source for publication status. Release preparation does not publish images.
+
+Version `0.15.0` adds OpenAPI content import and complete report retrieval through
+`zap_report_read_chunk`, corrects HTTP crawl depth, and reapplies mandatory ZAP
+outbound settings after delayed startup or engine replacement. Content import
+requires the single-writer storage configuration below. Review the
+[0.15.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.15.0.md) before rollout.
+
 Version `0.14.0` removes the legacy API-key property, makes PostgreSQL JWT
 revocation fail closed, and corrects the empty-peer MCP ingress policy. Review
 custom authentication configuration, upgrade every JWT replica and cleanup
@@ -113,11 +120,10 @@ Both default to `10`; `0` means unlimited. These values apply to HTTP crawls,
 including queued and authenticated crawls. Client Spider uses its own depth
 option, while Automation Framework plans configure their own job limits.
 
-The HTTP depth correction and independent child setting require an MCP image
-containing the **unreleased correction**. The `v0.14.0` image maps HTTP depth to
-child count and does not recognize the new child setting. Helm values alone
-cannot correct that image. Keep depth settings consistent across MCP replicas
-sharing one ZAP engine. See the [crawl limits reference](../../docs/src/content/docs/scanning/scan-execution-modes.md#http-crawl-limits-unreleased-correction).
+MCP `v0.15.0` applies HTTP depth and child limits independently. The `v0.14.0`
+image maps HTTP depth to child count and does not recognize the child setting.
+Helm values alone cannot correct that older image. Keep depth settings consistent
+across MCP replicas sharing one ZAP engine. See the [crawl limits reference](../../docs/src/content/docs/scanning/scan-execution-modes.md#http-crawl-limits-unreleased-correction).
 
 ### JWT Deployment
 
@@ -210,7 +216,7 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `mcp.service.type` | Kubernetes service type | `ClusterIP` |
 | `mcp.autoscaling.enabled` | Enable horizontal pod autoscaler | `false` |
 | `mcp.autoscaling.maxReplicas` | Maximum replicas for autoscaling | `1` |
-| `mcp.security.allowPlaceholderApiKey` | Opt in to placeholder MCP API keys; in development/unreleased builds, requires nonempty active Spring profiles all among `local`, `dev`, and `test` | `false` |
+| `mcp.security.allowPlaceholderApiKey` | Opt in to placeholder MCP API keys; from `v0.15.0`, requires nonempty active Spring profiles all among `local`, `dev`, and `test` | `false` |
 | `mcp.streamableHttp.sessionAffinity.provider` | Sticky-session preset for multi-replica streamable MCP (`aws-nlb`, `ingress-nginx`, `service-client-ip`) | `""` |
 | `networkPolicy.mcp.enabled` | Enable MCP ingress and egress NetworkPolicy boundary | `true` |
 | `networkPolicy.mcp.egress.extraEgress` | Operator-approved MCP egress rules for Postgres, JWKS, or other dependencies | `[]` |
@@ -318,9 +324,8 @@ runtime installation. DNS-only egress does not permit downloads or scanning.
 
 ### OpenAPI Content Import Storage
 
-This chart support is **unreleased**. Select an MCP image built from source that
-includes the content-import feature; the chart's `v0.14.0` default image does not
-provide it. See the [API import guide](../../docs/src/content/docs/scanning/api-schema-imports.md)
+MCP `v0.15.0` and chart `0.15.0` support OpenAPI content import. The older
+`v0.14.0` image does not provide it. See the [API import guide](../../docs/src/content/docs/scanning/api-schema-imports.md)
 for accepted definitions, target validation and retention limits.
 
 For a **new** single-writer deployment using a local POSIX filesystem with OS
@@ -429,6 +434,15 @@ configuration. These rules require a cluster CNI that enforces Kubernetes
 NetworkPolicy; rendering or installing the chart alone does not establish
 network isolation.
 
+Kubernetes [NetworkPolicy semantics](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+allow traffic to and from the node hosting a pod. CIDR exclusions therefore do
+not establish isolation from that node's services; the kubelet can remain
+reachable even when other private destinations are blocked. Verify
+[kubelet authentication and authorization](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/)
+and the node's security configuration. If your threat model requires blocking
+hosting-node services, add and verify appropriate host or CNI-specific controls
+separately from this chart's NetworkPolicies.
+
 Use the AWS and GCP reference overlays as the starting point for ingress-controller namespace, CIDR, and data-store egress allowlists.
 
 ### ZAP Web Egress and Background Requests
@@ -480,9 +494,10 @@ disabling all network controls is not a remedy.
 
 ### First Private EKS Deployment
 
-Start from [values-aws.yaml](values-aws.yaml), keep both services private and
-select an explicit MCP image containing the features you need. For a standard
-EKS cluster using EC2 Linux workers, provision the
+This guidance assumes an existing EKS cluster. Start from
+[values-aws.yaml](values-aws.yaml), keep both services private and select an
+explicit MCP image containing the features you need. For a standard EKS cluster
+using EC2 Linux workers, provision the
 [EBS CSI driver and its IAM permissions](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html),
 and select a working RWO StorageClass with `WaitForFirstConsumer` binding. MCP and
 ZAP must fit on the same worker for the shared RWO claim; leave capacity for
@@ -495,6 +510,16 @@ private client CIDR, provision the referenced Secret, and add only the outbound
 rules required for the approved targets, add-ons and background requests. Use an
 encrypted tunnel or authenticated TLS ingress to access MCP. The chart does not
 create a cluster, IAM roles, storage drivers, VPC routes or a tunnel.
+
+Review the Amazon VPC CNI's
+[policy enforcement at pod startup](https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy-configure.html#cni-network-policy-configure-policy).
+In `standard` mode, new pods initially allow traffic until their policies are
+applied. In `strict` mode, they start with default deny; provide the necessary
+policies for system workloads such as CoreDNS and storage drivers, including
+their DNS and Kubernetes API access. This chart does not configure those system
+policies. Verify DNS, EBS CSI and application startup before scanning; a passing
+check after readiness does not establish that startup traffic was restricted.
+Keep network-policy enforcement enabled while diagnosing cluster bootstrap.
 
 Before expanding the deployment, verify allowed MCP access and blocked ZAP API
 access from a separate workload, then crawl a controlled target, wait for passive
@@ -723,7 +748,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml \
-  --set mcp.image.tag=v0.14.0
+  --set mcp.image.tag=v0.15.0
 ```
 
 ## Uninstalling
@@ -760,8 +785,8 @@ verify backup/restore and engine recovery separately.
 MCP liveness checks its TCP listener independently of ZAP. Readiness uses aggregate
 `/actuator/health`, so an engine outage stops normal traffic without itself forcing
 MCP restarts. TCP liveness does not prove every application operation is healthy.
-In builds containing the unreleased initialization fix, health probes also
-reconcile ZAP's configured user-agent, connection timeout and supported DNS TTL.
+From MCP `v0.15.0`, health probes also reconcile ZAP's configured user-agent,
+connection timeout and supported DNS TTL.
 MCP remains unready if mandatory settings cannot be applied, and retries after
 ZAP starts or restarts. Outbound scan, import, automation and authentication-test
 starts perform the same reconciliation, including requests on an existing MCP

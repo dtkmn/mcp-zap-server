@@ -26,7 +26,7 @@ To stage the API and build the standalone sample separately, use:
 ./gradlew -p examples/extensions/standalone-policy-metadata-extension build
 ```
 
-Local extension API dependency example (version `0.14.0`, resolved from a locally
+Local extension API dependency example (version `0.15.0`, resolved from a locally
 staged Maven repository): the sample reads the artifact from
 `build/extension-api-public-preview-publication`. The optional root build task
 passes the current project version explicitly. Outside this repository, pass

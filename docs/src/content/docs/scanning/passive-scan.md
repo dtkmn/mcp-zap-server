@@ -33,14 +33,18 @@ Use this when:
 
 Parameters:
 
-- `timeoutSeconds` default `60`
-- `pollIntervalMs` default `1000`
+- `timeoutSeconds` accepts `1`–`300` seconds; default `60`
+- `pollIntervalMs` accepts `1`–`10000` milliseconds; default `1000`
 
 Behavior:
 
 - polls the passive backlog until it reaches zero
 - returns early when the backlog is drained
 - times out deterministically if passive analysis is still running
+- returns by the accepted wait deadline, even if an engine status request is slow
+- allows at most four concurrent waits per server instance; excess waits return a capacity error
+- interrupts waiting work when the caller cancels; an engine request already in flight may finish at its configured network timeout
+- reports completion as `unknown` if the deadline expires before any engine status read finishes
 
 Use this when:
 

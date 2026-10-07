@@ -91,7 +91,7 @@ report, and read it back through MCP. Do not run an active scan.
 Expect a completed crawl, a findings summary, and a report the client can
 read. Finding counts vary; a connection or scan error is not a clean result.
 
-The current unreleased code adds complete paged report retrieval through
+Version `v0.15.0` adds complete paged report retrieval through
 `zap_report_read_chunk`, target-scoped report sanitization and independent HTTP
 crawl depth/child limits. These corrections are not in the `v0.14.0` image. See
 [Findings and Reports](./docs/src/content/docs/scanning/findings-and-reports.md)
@@ -138,13 +138,26 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
 
-## Version 0.14.0
+## Version 0.15.0
 
 See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
 for the latest published version and its publication date. Version-specific
 documentation describes that version's behavior; it does not announce image
 availability. Deploy only after the corresponding release workflow succeeds
 and the versioned image is available in your registry.
+
+Version `v0.15.0` introduces optional OpenAPI imports from client-supplied content
+and complete paged report retrieval. Target-scoped reports remove unrelated
+shared-session data, HTTP crawl depth is configured independently from child
+count, and health checks reapply mandatory outbound settings when ZAP starts
+late or its engine is replaced. Review the storage and configuration requirements
+before enabling content import or upgrading an existing deployment.
+
+- [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
+- [Release notes archive](./docs/releases/README.md)
+- [Changelog](./CHANGELOG.md)
+
+## Version 0.14.0
 
 **Version `v0.14.0`** hardens API-key configuration, JWT revocation and refresh,
 Automation Framework plans, OpenAPI target overrides, HTTP metrics, and Helm
@@ -156,8 +169,6 @@ have changed. Preparing or merging this version does not publish its release or
 container images.
 
 - [0.14.0 release notes and migration requirements](./docs/releases/RELEASE_NOTES_0.14.0.md)
-- [Release notes archive](./docs/releases/README.md)
-- [Changelog](./CHANGELOG.md)
 
 ## Security Defaults
 

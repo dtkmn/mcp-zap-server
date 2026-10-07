@@ -22,6 +22,7 @@ For Kubernetes, follow the [private EKS deployment guidance](https://github.com/
 - [ ] Expose the MCP server through a controlled TLS ingress or an encrypted private access path.
 - [ ] Add network rules so only trusted clients can reach `/mcp`.
 - [ ] Verify an enforcing CNI in Kubernetes, and test both allowed MCP access and blocked ZAP API access from a separate workload. Review additive policies and the actual VPC/pod/service/node address ranges.
+- [ ] Review hosting-node access separately: Kubernetes NetworkPolicy permits traffic to and from the node hosting a pod. Verify node-service authentication and add host or CNI-specific controls when that access must be blocked; see the [Helm network policy boundaries](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#network-policy).
 - [ ] Configure authorized scan-target egress separately from MCP ingress. Account for required ZAP add-on and background update/version requests; inspect the active passive rule when completion stalls. See the [Helm egress guidance](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#zap-web-egress-and-background-requests).
 
 ## 3. Authentication and Secrets
@@ -69,7 +70,7 @@ For Kubernetes, follow the [private EKS deployment guidance](https://github.com/
 ## 7. Observability and Operations
 
 - [ ] Monitor `/actuator/health`, queue depth, scan durations, and ZAP availability.
-- [ ] With the unreleased startup fix, confirm readiness only becomes healthy after ZAP's mandatory outbound settings are applied. Test ZAP starting after MCP and restarting without an MCP restart; preserve independent MCP process liveness.
+- [ ] With the startup recovery introduced in `v0.15.0`, confirm readiness only becomes healthy after ZAP's mandatory outbound settings are applied. Test ZAP starting after MCP and restarting without an MCP restart; preserve independent MCP process liveness.
 - [ ] Keep `/actuator/metrics`, `/actuator/prometheus`, and `/actuator/auditevents` on private or authenticated access paths only.
 - [ ] Monitor `mcp.zap.http.requests`, `mcp.zap.auth.events`, `mcp.zap.authorization.decisions`, `mcp.zap.tool.executions`, `mcp.zap.queue.jobs`, and `mcp.zap.audit.events`.
 - [ ] Monitor `mcp.protection.rate_limited`, `mcp.protection.workspace_quota_rejections`, and `mcp.protection.backpressure_rejections`.

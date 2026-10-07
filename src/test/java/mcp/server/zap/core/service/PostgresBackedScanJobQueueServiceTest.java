@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -30,10 +31,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -43,8 +47,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -133,6 +139,134 @@ class PostgresBackedScanJobQueueServiceTest {
         assertEquals(2, admittedSecond.getQueuePosition());
         assertEquals("job-1", admittedDuplicate.getId());
         assertEquals(2, store.list().size());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void queueRepairPreservesPeerStartAndCancellationCommittedAfterItsSnapshot(boolean cancelling) throws Exception {
+        PostgresScanJobStore peerStore = newStore();
+        ScanJob first = queuedJob("repair-first", ScanJobType.ACTIVE_SCAN, "http://example.com/first", "repair-first");
+        ScanJob next = queuedJob("repair-next", ScanJobType.ACTIVE_SCAN, "http://example.com/next", "repair-next");
+        first.assignQueuePosition(8);
+        next.assignQueuePosition(9);
+        peerStore.upsertAll(List.of(first, next));
+
+        CountDownLatch snapshotRead = new CountDownLatch(1);
+        CountDownLatch peerCommitted = new CountDownLatch(1);
+        PostgresScanJobStore repairStore = spy(newStore());
+        doAnswer(invocation -> {
+            List<ScanJob> snapshot = (List<ScanJob>) invocation.callRealMethod();
+            snapshotRead.countDown();
+            assertTrue(peerCommitted.await(5, TimeUnit.SECONDS));
+            return snapshot;
+        }).when(repairStore).list();
+
+        var executor = Executors.newSingleThreadExecutor();
+        ScanJobQueueService restored = null;
+        Future<ScanJobQueueService> repair = executor.submit(() -> new ScanJobQueueService(
+                activeScanService, spiderScanService, ajaxSpiderService, urlValidationService,
+                scanLimitProperties, 3, false, repairStore,
+                new TestQueueLeadershipCoordinator("repair-worker", new SharedLeadershipState("repair-worker"))));
+        try {
+            assertTrue(snapshotRead.await(5, TimeUnit.SECONDS));
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            Instant claimUntil = now.plusSeconds(60);
+            ScanJob claimed = peerStore.claimQueuedJobs("peer-worker", now, claimUntil, 1, 1).getFirst();
+            ScanJob accepted = peerStore.updateClaimedJob(first.getId(), ScanJobClaimToken.from(claimed), now, job -> {
+                job.markRunning("accepted-scan");
+                if (cancelling) {
+                    job.requestCancellation(now, now.plusSeconds(30));
+                }
+                return job;
+            }).orElseThrow();
+            peerCommitted.countDown();
+            restored = repair.get(5, TimeUnit.SECONDS);
+
+            ScanJob durable = peerStore.load(first.getId()).orElseThrow();
+            assertEquals(ScanJobStatus.RUNNING, durable.getStatus());
+            assertEquals("accepted-scan", durable.getZapScanId());
+            assertEquals(accepted.getClaimOwnerId(), durable.getClaimOwnerId());
+            assertEquals(accepted.getClaimFenceId(), durable.getClaimFenceId());
+            assertEquals(accepted.getClaimExpiresAt(), durable.getClaimExpiresAt());
+            assertEquals(accepted.getCancelRequestedAt(), durable.getCancelRequestedAt());
+            assertEquals(accepted.getCancelDeadlineAt(), durable.getCancelDeadlineAt());
+            assertEquals(cancelling, durable.isCancellationRequested());
+            assertEquals(1, peerStore.load(next.getId()).orElseThrow().getQueuePosition());
+            assertTrue(peerStore.claimQueuedJobs("third-worker", now, claimUntil, 1, 1).isEmpty());
+
+            restored.processQueueOnceForTesting();
+            assertEquals("accepted-scan", peerStore.load(first.getId()).orElseThrow().getZapScanId());
+            verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
+        } finally {
+            peerCommitted.countDown();
+            executor.shutdownNow();
+            if (restored != null) {
+                restored.shutdownExecutor();
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void staleLocalSnapshotCannotDiscardInFlightRenewal(boolean polling) throws Exception {
+        CountDownLatch snapshotRead = new CountDownLatch(1);
+        CountDownLatch releaseSnapshot = new CountDownLatch(1);
+        CountDownLatch engineEntered = new CountDownLatch(1);
+        CountDownLatch releaseEngine = new CountDownLatch(1);
+        CountDownLatch claimRenewed = new CountDownLatch(1);
+        AtomicBoolean pauseNextSnapshot = new AtomicBoolean();
+        PostgresScanJobStore store = spy(newStore());
+        doAnswer(invocation -> {
+            List<ScanJob> snapshot = (List<ScanJob>) invocation.callRealMethod();
+            if (pauseNextSnapshot.compareAndSet(true, false)) {
+                snapshotRead.countDown();
+                assertTrue(releaseSnapshot.await(5, TimeUnit.SECONDS));
+            }
+            return snapshot;
+        }).when(store).list();
+        doAnswer(invocation -> {
+            int renewed = (int) invocation.callRealMethod();
+            if (renewed > 0) claimRenewed.countDown();
+            return renewed;
+        }).when(store).renewClaims(anyString(), any(), any(), any());
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenAnswer(invocation -> {
+            engineEntered.countDown();
+            assertTrue(releaseEngine.await(5, TimeUnit.SECONDS));
+            return "in-flight-scan";
+        });
+        when(activeScanService.getActiveScanProgressPercent(anyString())).thenAnswer(invocation -> {
+            engineEntered.countDown();
+            assertTrue(releaseEngine.await(5, TimeUnit.SECONDS));
+            return 25;
+        });
+        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+                urlValidationService, scanLimitProperties, 3, false, store,
+                new TestQueueLeadershipCoordinator("local-worker", new SharedLeadershipState("local-worker")));
+        ScanJob job = queuedJob("local-in-flight", ScanJobType.ACTIVE_SCAN, "http://example.com/in-flight", "local-in-flight");
+        if (polling) job.markRunning("in-flight-scan");
+        else job.assignQueuePosition(1);
+        store.upsertAll(List.of(job));
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            pauseNextSnapshot.set(true);
+            Future<?> staleRefresh = executor.submit(queue::processQueueOnceForTesting);
+            assertTrue(snapshotRead.await(3, TimeUnit.SECONDS));
+            Future<?> dispatch = executor.submit(queue::processQueueOnceForTesting);
+            assertTrue(engineEntered.await(3, TimeUnit.SECONDS));
+            releaseSnapshot.countDown();
+            assertTrue(claimRenewed.await(3, TimeUnit.SECONDS), "Live engine work must remain eligible for claim renewal");
+            staleRefresh.get(3, TimeUnit.SECONDS);
+            releaseEngine.countDown();
+            dispatch.get(3, TimeUnit.SECONDS);
+            assertEquals("in-flight-scan", newStore().load(job.getId()).orElseThrow().getZapScanId());
+            if (polling) verify(activeScanService, times(1)).getActiveScanProgressPercent("in-flight-scan");
+            else verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        } finally {
+            releaseSnapshot.countDown();
+            releaseEngine.countDown();
+            executor.shutdownNow();
+            queue.shutdownExecutor();
+        }
     }
 
     @Test

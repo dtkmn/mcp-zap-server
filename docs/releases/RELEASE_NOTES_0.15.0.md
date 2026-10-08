@@ -8,8 +8,9 @@ publication status and dates, and confirm the corresponding
 succeeded before deploying its image. Publish Registry metadata only after its
 referenced images are available.
 
-This version adds client-supplied OpenAPI content import and complete paged report
-retrieval. It also corrects HTTP crawl limits, reduces shared-session information
+This version adds client-supplied OpenAPI content import, complete paged report
+retrieval and a CloudFormation starter for a dedicated EKS evaluation cluster.
+It also corrects HTTP crawl limits, reduces shared-session information
 in target-scoped reports and reapplies required ZAP settings after engine recovery.
 Webhook diagnostics now omit destination secrets, passive waits have server limits,
 and durable queue repair preserves concurrent scan ownership updates.
@@ -134,6 +135,25 @@ PostgreSQL-backed queue repair reads current state inside the locked transaction
 preventing an older snapshot from overwriting a peer's accepted scan or cancellation
 update. Queue refresh also preserves lease renewal for ongoing engine starts and
 status checks. No new database migration is required.
+
+### Bootstrap a dedicated EKS evaluation cluster
+
+The [EKS infrastructure starter](../../examples/aws-eks/) creates a standard
+IPv4 EKS cluster in an existing VPC, with one managed worker, explicit operator
+IAM access, a restricted Kubernetes API endpoint, five versioned managed add-ons
+and control-plane logs. A separate encrypted gp3 StorageClass uses deferred
+binding and retains application volumes for an explicit operator cleanup decision.
+CloudFormation owns the infrastructure; the existing Helm chart installs MCP
+and ZAP. The shared repository/website walkthrough covers prerequisites, add-on
+selection, credentials, storage, network rules, image verification and cleanup.
+
+A live evaluation on EKS **1.36** with one **m7i.xlarge** worker and a matched
+prerelease application/chart verified bootstrap, encrypted storage, authenticated
+crawl/passive/report flows, report persistence after MCP replacement and settled
+network-policy paths. Trial resources were removed and cleanup verified.
+Published-image validation remains separate. This single-worker evaluation does
+not establish HA, production capacity or startup isolation; optional import and
+automation flows were outside its scope.
 
 ## Deployment and Upgrade Requirements
 

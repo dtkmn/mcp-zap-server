@@ -18,6 +18,7 @@ client changes.
 
 ### Added
 
+- Add an infrastructure-only CloudFormation starter for a dedicated single-worker EKS cluster in an existing VPC, with explicit operator access, managed networking/storage add-ons and an encrypted gp3 StorageClass. Its shared repository/website walkthrough covers Helm handoff, verification and retained-volume cleanup. A live single-worker evaluation with a matched prerelease application/chart verified bootstrap, encrypted storage, authenticated crawl/passive/report flows, report persistence after MCP replacement and settled network-policy paths.
 - Add opt-in client-supplied OpenAPI content import through guided `zap_target_import` with `definitionType=openapi` and `sourceKind=content`. Validate bounded, self-contained Swagger/OpenAPI JSON or YAML and an explicit destination-policy-approved `hostOverride` before staging on a dedicated shared filesystem and dispatching to ZAP. The feature is disabled by default; attachment contents must be supplied by the MCP client.
 - Add `zap_report_read_chunk` on both MCP surfaces for complete paged UTF-8 report retrieval, Unicode-safe offsets and SHA-256 verification between pages. It uses the existing `zap:report:read` permission.
 - Add independent `ZAP_SPIDER_MAX_CHILDREN` configuration and Compose/Helm pass-through, defaulting to 10 alongside the depth limit; zero remains unlimited.

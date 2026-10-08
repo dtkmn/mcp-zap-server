@@ -82,6 +82,7 @@ export default defineConfig({
 						{ slug: 'operations/observability' },
 						{ slug: 'operations/structured-logging' },
 						{ slug: 'operations/aws-ec2-compose' },
+						{ slug: 'operations/aws-eks-infrastructure' },
 						{ slug: 'operations/production-checklist' },
 						{ slug: 'operations/local-ha-compose' },
 						{ slug: 'operations/queue-coordinator-leader-election' },

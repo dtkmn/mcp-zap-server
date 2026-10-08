@@ -1,0 +1,310 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Dedicated single-worker EKS infrastructure for the MCP ZAP Server evaluation
+  walkthrough. Uses an existing VPC; install storage configuration and the
+  application separately with kubectl and the existing Helm chart.
+
+Parameters:
+  ClusterName:
+    Type: String
+    Default: mcp-zap-evaluation
+    MinLength: 1
+    MaxLength: 100
+    AllowedPattern: '[A-Za-z0-9][A-Za-z0-9_-]*'
+    Description: Unique name for a new dedicated cluster, not an existing cluster.
+  KubernetesVersion:
+    Type: String
+    Default: '1.36'
+    AllowedPattern: '1\.[0-9]{2}'
+    Description: >-
+      Choose a version currently in standard support in the deployment Region.
+      The cluster automatically upgrades when standard support ends.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Existing IPv4 VPC with DNS support and DNS hostnames enabled.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >-
+      At least two existing subnets in different supported availability zones
+      of this VPC, with sufficient free addresses for EKS.
+  WorkerSubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: >-
+      One private subnet from SubnetIds, with existing outbound connectivity.
+      Keep workers in this zone so retained EBS workspaces remain attachable.
+  OperatorPrincipalArn:
+    Type: String
+    AllowedPattern: 'arn:[a-z0-9-]+:iam::[0-9]{12}:role/.+'
+    Description: >-
+      Permanent IAM role ARN for the operator; grants Kubernetes cluster-admin
+      access. Do not supply an STS assumed-role session ARN.
+  OperatorCidr:
+    Type: String
+    AllowedPattern: '((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/([1-9]|[12][0-9]|3[0-2])'
+    Description: >-
+      Operator public IPv4 CIDR allowed to reach the Kubernetes API. Prefer
+      the operator's current public address with /32; 0.0.0.0/0 is rejected.
+  InstanceType:
+    Type: String
+    Default: m7i.xlarge
+    AllowedValues:
+      - m7i.xlarge
+      - c7i.2xlarge
+      - m7i.2xlarge
+    Description: >-
+      x86_64 evaluation worker size, not a measured capacity guarantee.
+      Verify availability in WorkerSubnetId's zone and current pricing.
+  VpcCniVersion:
+    Type: String
+    MinLength: 1
+    Description: Compatible regional vpc-cni addon version supporting enableNetworkPolicy.
+  CoreDnsVersion:
+    Type: String
+    MinLength: 1
+    Description: Compatible regional coredns addon version.
+  KubeProxyVersion:
+    Type: String
+    MinLength: 1
+    Description: Compatible regional kube-proxy addon version.
+  PodIdentityAgentVersion:
+    Type: String
+    MinLength: 1
+    Description: Compatible regional eks-pod-identity-agent addon version.
+  EbsCsiVersion:
+    Type: String
+    MinLength: 1
+    Description: Compatible regional aws-ebs-csi-driver addon version supporting Pod Identity.
+
+Rules:
+  SubnetsBelongToVpc:
+    Assertions:
+      - Assert:
+          Fn::EachMemberEquals:
+            - Fn::ValueOf: [SubnetIds, VpcId]
+            - Ref: VpcId
+        AssertDescription: All cluster subnets must belong to the selected VPC.
+      - Assert:
+          Fn::Contains:
+            - Ref: SubnetIds
+            - Ref: WorkerSubnetId
+        AssertDescription: The worker subnet must be one of the cluster subnets.
+      - Assert:
+          Fn::Not:
+            - Fn::EachMemberEquals:
+                - Fn::ValueOf: [SubnetIds, AvailabilityZone]
+                - Fn::ValueOf: [WorkerSubnetId, AvailabilityZone]
+        AssertDescription: Cluster subnets must span at least two availability zones.
+
+Resources:
+  ClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEKSClusterPolicy
+
+  ClusterLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/eks/${ClusterName}/cluster
+      RetentionInDays: 14
+
+  Cluster:
+    Type: AWS::EKS::Cluster
+    DependsOn: ClusterLogGroup
+    Properties:
+      Name: !Ref ClusterName
+      Version: !Ref KubernetesVersion
+      RoleArn: !GetAtt ClusterRole.Arn
+      AccessConfig:
+        AuthenticationMode: API
+        BootstrapClusterCreatorAdminPermissions: false
+      UpgradePolicy:
+        SupportType: STANDARD
+      KubernetesNetworkConfig:
+        IpFamily: ipv4
+      ResourcesVpcConfig:
+        SubnetIds: !Ref SubnetIds
+        EndpointPrivateAccess: true
+        EndpointPublicAccess: true
+        PublicAccessCidrs:
+          - !Ref OperatorCidr
+      Logging:
+        ClusterLogging:
+          EnabledTypes:
+            - Type: api
+            - Type: audit
+            - Type: authenticator
+            - Type: controllerManager
+            - Type: scheduler
+
+  OperatorAccess:
+    Type: AWS::EKS::AccessEntry
+    Properties:
+      ClusterName: !Ref Cluster
+      PrincipalArn: !Ref OperatorPrincipalArn
+      Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: !Sub arn:${AWS::Partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          AccessScope:
+            Type: cluster
+
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly
+        # Stock CNI must work before nodes and the Pod Identity agent are ready.
+        # A dedicated CNI identity is a separate hardening step; see the guide.
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEKS_CNI_Policy
+
+  WorkerLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 1
+          InstanceMetadataTags: disabled
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeType: gp3
+              VolumeSize: 40
+              Encrypted: true
+              DeleteOnTermination: true
+
+  WorkerNodegroup:
+    Type: AWS::EKS::Nodegroup
+    Properties:
+      ClusterName: !Ref Cluster
+      NodeRole: !GetAtt WorkerRole.Arn
+      Subnets:
+        - !Ref WorkerSubnetId
+      AmiType: AL2023_x86_64_STANDARD
+      CapacityType: ON_DEMAND
+      InstanceTypes:
+        - !Ref InstanceType
+      ScalingConfig:
+        MinSize: 1
+        DesiredSize: 1
+        MaxSize: 1
+      LaunchTemplate:
+        Id: !Ref WorkerLaunchTemplate
+        Version: !GetAtt WorkerLaunchTemplate.LatestVersionNumber
+
+  # Retain EKS's stock networking during node bootstrap, then adopt it as
+  # managed addons before installing application workloads. Do not switch CNI
+  # to strict mode without first supplying policies for CoreDNS and system pods.
+  VpcCniAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: WorkerNodegroup
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: vpc-cni
+      AddonVersion: !Ref VpcCniVersion
+      ResolveConflicts: OVERWRITE
+      ConfigurationValues: '{"enableNetworkPolicy":"true","env":{"NETWORK_POLICY_ENFORCING_MODE":"standard"}}'
+
+  CoreDnsAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: VpcCniAddon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: coredns
+      AddonVersion: !Ref CoreDnsVersion
+      ResolveConflicts: OVERWRITE
+
+  KubeProxyAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: VpcCniAddon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: kube-proxy
+      AddonVersion: !Ref KubeProxyVersion
+      ResolveConflicts: OVERWRITE
+
+  PodIdentityAgentAddon:
+    Type: AWS::EKS::Addon
+    DependsOn: VpcCniAddon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: eks-pod-identity-agent
+      AddonVersion: !Ref PodIdentityAgentVersion
+      ResolveConflicts: OVERWRITE
+
+  EbsCsiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pods.eks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+            Condition:
+              StringEquals:
+                aws:RequestTag/eks-cluster-arn: !GetAtt Cluster.Arn
+                aws:RequestTag/kubernetes-namespace: kube-system
+                aws:RequestTag/kubernetes-service-account: ebs-csi-controller-sa
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonEBSCSIDriverPolicyV2
+
+  EbsCsiAddon:
+    Type: AWS::EKS::Addon
+    DependsOn:
+      - PodIdentityAgentAddon
+      - CoreDnsAddon
+      - KubeProxyAddon
+    Properties:
+      ClusterName: !Ref Cluster
+      AddonName: aws-ebs-csi-driver
+      AddonVersion: !Ref EbsCsiVersion
+      ResolveConflicts: OVERWRITE
+      PodIdentityAssociations:
+        - ServiceAccount: ebs-csi-controller-sa
+          RoleArn: !GetAtt EbsCsiRole.Arn
+
+Outputs:
+  ClusterName:
+    Description: Dedicated EKS cluster created by this stack.
+    Value: !Ref Cluster
+  NodegroupName:
+    Description: Single-AZ managed worker group; this starter is not highly available.
+    Value: !GetAtt WorkerNodegroup.NodegroupName
+  WorkerRoleArn:
+    Description: Node IAM role, including CNI bootstrap permissions.
+    Value: !GetAtt WorkerRole.Arn
+  EbsCsiRoleArn:
+    Description: Dedicated EBS CSI Pod Identity role.
+    Value: !GetAtt EbsCsiRole.Arn
+  ClusterSecurityGroupId:
+    Description: EKS-managed cluster security group; no app load balancer is created.
+    Value: !GetAtt Cluster.ClusterSecurityGroupId
+  WorkerSubnetId:
+    Description: Worker and dynamically provisioned report volume availability zone.
+    Value: !Ref WorkerSubnetId
+  UpdateKubeconfigCommand:
+    Description: Requires AWS describe-cluster permission and ability to assume the operator role.
+    Value: !Sub aws eks update-kubeconfig --region ${AWS::Region} --name ${Cluster} --role-arn ${OperatorPrincipalArn}
+  SetupGuide:
+    Description: Storage configuration, Helm handoff, verification and cleanup.
+    Value: https://github.com/dtkmn/mcp-zap-server/blob/main/examples/aws-eks/README.md

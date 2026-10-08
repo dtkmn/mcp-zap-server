@@ -153,6 +153,11 @@ count, and health checks reapply mandatory outbound settings when ZAP starts
 late or its engine is replaced. Review the storage and configuration requirements
 before enabling content import or upgrading an existing deployment.
 
+It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and shared
+repository/website walkthrough. A live single-worker evaluation with a matched
+prerelease application/chart verified bootstrap, crawl/report flows and report
+persistence after MCP replacement; published-image validation remains separate.
+
 - [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
 - [Release notes archive](./docs/releases/README.md)
 - [Changelog](./CHANGELOG.md)
@@ -186,6 +191,12 @@ The default posture is intentionally conservative:
 - MCP request bodies have a hard early size cap.
 
 For a first private AWS deployment without Kubernetes, use [AWS EC2 with Docker Compose](./docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md) and its [standalone example](./examples/aws-ec2/).
+
+For Kubernetes, use the [EKS infrastructure starter](./examples/aws-eks/) to
+create a dedicated evaluation cluster in an existing VPC, then deploy with the
+existing Helm chart. A live single-worker trial verified bootstrap and the
+authenticated crawl/report flow with a matched prerelease image/chart; see the
+walkthrough for validation scope and published-image checks.
 
 Production and shared deployments should review:
 

@@ -154,9 +154,11 @@ late or its engine is replaced. Review the storage and configuration requirement
 before enabling content import or upgrading an existing deployment.
 
 It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and shared
-repository/website walkthrough. A live single-worker evaluation with a matched
-prerelease application/chart verified bootstrap, crawl/report flows and report
-persistence after MCP replacement; published-image validation remains separate.
+repository/website walkthrough. A live single-worker evaluation using the
+published `v0.15.0` image and matching chart verified bootstrap, MCP access with
+JWT authentication, crawl/passive/report flows against an owned target, report
+persistence after MCP replacement and settled network-policy paths; see the
+walkthrough for validation scope.
 
 - [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
 - [Release notes archive](./docs/releases/README.md)
@@ -194,9 +196,10 @@ For a first private AWS deployment without Kubernetes, use [AWS EC2 with Docker 
 
 For Kubernetes, use the [EKS infrastructure starter](./examples/aws-eks/) to
 create a dedicated evaluation cluster in an existing VPC, then deploy with the
-existing Helm chart. A live single-worker trial verified bootstrap and the
-authenticated crawl/report flow with a matched prerelease image/chart; see the
-walkthrough for validation scope and published-image checks.
+existing Helm chart. A live single-worker trial using the published `v0.15.0`
+image and matching chart verified bootstrap, MCP access with JWT authentication
+and crawl/report flows against an owned target; see the walkthrough for
+validation scope and your own deployment checks.
 
 Production and shared deployments should review:
 

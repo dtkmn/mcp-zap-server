@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Update the EKS walkthrough after a scoped live validation of the published `v0.15.0` image and matching chart, including report persistence and settled network-policy paths.
+
 ## [0.15.0]
 
 These changes describe version `v0.15.0`; release preparation and a merge to

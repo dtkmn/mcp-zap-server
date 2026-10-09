@@ -7,6 +7,19 @@ const generatedRoot = join(repoRoot, 'docs/src/content/docs/generated');
 
 const pages = [
   {
+    source: 'docs/getting-started/MACOS_PACKAGE.md',
+    slug: 'getting-started/macos-package',
+    title: 'Headless macOS Preview',
+    description: 'Run the Apple Silicon preview, connect an MCP client, and manage local settings and reports.',
+    links: { 'CHATGPT_LOCAL_TUNNEL.md': '/mcp-zap-server/getting-started/chatgpt-local-tunnel/' },
+  },
+  {
+    source: 'docs/getting-started/CHATGPT_LOCAL_TUNNEL.md',
+    slug: 'getting-started/chatgpt-local-tunnel',
+    title: 'Private ChatGPT Connection',
+    description: 'Connect a local Mac server through Secure MCP Tunnel with authenticated local forwarding and explicit prerequisites.',
+  },
+  {
     source: 'docs/getting-started/SELF_SERVE_FIRST_RUN.md',
     slug: 'getting-started/self-serve-first-run',
     title: 'Self-Serve First Run',

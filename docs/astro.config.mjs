@@ -40,6 +40,8 @@ export default defineConfig({
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
 						{ slug: 'getting-started/self-serve-first-run' },
+						{ slug: 'getting-started/macos-package' },
+						{ slug: 'getting-started/chatgpt-local-tunnel' },
 						{ slug: 'getting-started/authentication-quick-start' },
 						{ slug: 'getting-started/mcp-client-authentication' },
 						{ slug: 'getting-started/form-login-target-authentication' },

@@ -10,7 +10,7 @@ const pages = [
     source: 'docs/getting-started/MACOS_PACKAGE.md',
     slug: 'getting-started/macos-package',
     title: 'Headless macOS Preview',
-    description: 'Run a local Apple Silicon preview with bundled Java and ZAP; understand the public distribution gates.',
+    description: 'Run the Apple Silicon preview, connect an MCP client, and manage local settings and reports.',
     links: { 'CHATGPT_LOCAL_TUNNEL.md': '/mcp-zap-server/getting-started/chatgpt-local-tunnel/' },
   },
   {

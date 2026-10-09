@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
 - Add private Codex TOML output through `client-config codex` and server runtime dependency notices checked against the packaged application inventory.
 - Build a checksum-linked source companion for the macOS preview, with pinned Java/ZAP source and build materials, supplemental component notices and documented library replacement. Publish binary and source archives together; browser-downloaded clean installation remains a separate check.
+- Build the four-file macOS preview set in GitHub Actions for relevant pull requests and manual runs. An owner-triggered run from `main` can attach files to an existing draft release after validating its version tag; release publication remains manual.
 - Add an optional private ChatGPT tunnel helper that keeps local API-key authentication enabled and stores credential references, plus a canonical connection guide. A bounded live ChatGPT web test verified HTTP crawling, passive completion, full report read-back, in-flight crawl stopping and tunnel-loss reporting; the guide records the tested configuration and remaining report-content and public-distribution limits.
 
 ### Changed
@@ -23,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - Update the EKS walkthrough after a scoped live validation of the published `v0.15.0` image and matching chart, including report persistence and settled network-policy paths.
-- Document direct Codex CLI HTTP/passive/report verification and same-version Mac package replacement/removal, including preserved credentials/settings/reports and remaining distribution requirements.
+- Document Mac installation, local client setup and data retention, with separate contributor build/release instructions and concise private ChatGPT setup guidance.
 
 ## [0.15.0]
 

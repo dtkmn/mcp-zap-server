@@ -1,0 +1,207 @@
+name: macOS Package
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - .github/workflows/macos-package.yml
+      - packaging/macos/**
+      - bin/self-serve-doctor.sh
+      - docs/getting-started/MACOS_PACKAGE.md
+      - docs/getting-started/CHATGPT_LOCAL_TUNNEL.md
+      - src/main/**
+      - build.gradle
+      - settings.gradle
+      - gradle.properties
+      - gradle/wrapper/**
+      - gradlew
+      - LICENSE
+  workflow_dispatch:
+    inputs:
+      draft_release_tag:
+        description: "Optional existing vMAJOR.MINOR.PATCH tag: build and attach to its existing draft release (main only)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-package-${{ inputs.draft_release_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Apple Silicon preview
+    runs-on: macos-15
+    timeout-minutes: 60
+    outputs:
+      package-base: ${{ steps.package.outputs.base }}
+      source-commit: ${{ steps.package.outputs.commit }}
+      draft-release-id: ${{ steps.package.outputs.release_id }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Validate requested release mode
+        env:
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DRAFT_RELEASE_TAG" ]; then
+            test "$GITHUB_REF" = refs/heads/main || {
+              echo "Draft attachment must be dispatched from main" >&2
+              exit 1
+            }
+            [[ "$DRAFT_RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+              echo "Use an existing strict vMAJOR.MINOR.PATCH tag with an optional prerelease suffix" >&2
+              exit 1
+            }
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.draft_release_tag || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve and verify package source
+        id: package
+        env:
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          project_version="$(sed -n "s/^version = '\([^']*\)'$/\1/p" build.gradle)"
+          [[ "$project_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+            echo "The project must declare one release version" >&2
+            exit 1
+          }
+          source_commit="$(git rev-parse HEAD)"
+          release_id=""
+          if [ -n "$DRAFT_RELEASE_TAG" ]; then
+            test "$DRAFT_RELEASE_TAG" = "v${project_version}" || {
+              echo "Draft tag must match the checked-out project version" >&2
+              exit 1
+            }
+            test "$(git rev-parse --verify "refs/tags/${DRAFT_RELEASE_TAG}^{commit}")" = "$source_commit"
+            git merge-base --is-ancestor "$source_commit" refs/remotes/origin/main || {
+              echo "Draft tag must reference a commit reachable from origin/main" >&2
+              exit 1
+            }
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${DRAFT_RELEASE_TAG}" \
+              --jq 'select(.draft == true and .immutable != true) | .id')"
+            [[ "$release_id" =~ ^[0-9]+$ ]] || {
+              echo "An existing mutable draft release is required; published releases cannot receive these files" >&2
+              exit 1
+            }
+          else
+            test "$source_commit" = "$GITHUB_SHA"
+          fi
+          printf 'version=%s\nbase=mcp-zap-server-%s-macos-arm64-preview\ncommit=%s\nrelease_id=%s\n' \
+            "$project_version" "$project_version" "$source_commit" "$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          java-version: "25"
+          distribution: temurin
+          cache: gradle
+
+      - name: Build executable server JAR
+        run: ./gradlew bootJar --no-daemon --stacktrace
+
+      - name: Build runnable and corresponding-source archives
+        env:
+          PROJECT_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          python3 packaging/macos/build-package.py \
+            --server-jar "build/libs/mcp-zap-server-${PROJECT_VERSION}.jar" \
+            --output-dir build/macos/actions
+
+      - name: Upload the four-file preview set
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ steps.package.outputs.base }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/macos/actions/${{ steps.package.outputs.base }}.tar.gz
+            build/macos/actions/${{ steps.package.outputs.base }}.tar.gz.sha256
+            build/macos/actions/${{ steps.package.outputs.base }}-sources.tar.gz
+            build/macos/actions/${{ steps.package.outputs.base }}-sources.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Summarize preview build
+        env:
+          SOURCE_COMMIT: ${{ steps.package.outputs.commit }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          {
+            printf '### Apple Silicon unsigned preview\n\n'
+            printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT"
+            printf '[Download the binary, matching source archive and checksums](%s).\n\n' "$ARTIFACT_URL"
+            printf 'Packaging checks passed. Clean-Mac browser installation and desktop runtime verification remain separate checks.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  attach-draft:
+    name: Attach preview set to existing draft
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.draft_release_tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # This job handles build outputs only; it does not execute repository code.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: release-assets
+
+      - name: Verify and attach all four files without publishing
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+          RELEASE_ID: ${{ needs.build.outputs.draft-release-id }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.source-commit }}
+          PACKAGE_BASE: ${{ needs.build.outputs.package-base }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ && "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          test "$PACKAGE_BASE" = "mcp-zap-server-${DRAFT_RELEASE_TAG#v}-macos-arm64-preview"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DRAFT_RELEASE_TAG}" --jq .sha)" = "$SOURCE_COMMIT" || {
+            echo "Tag changed after the build; refusing attachment" >&2
+            exit 1
+          }
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          jq -e --arg tag "$DRAFT_RELEASE_TAG" \
+            '.draft == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null || {
+            echo "The release must still be the same mutable draft" >&2
+            exit 1
+          }
+          files=("${PACKAGE_BASE}.tar.gz" "${PACKAGE_BASE}.tar.gz.sha256"
+                 "${PACKAGE_BASE}-sources.tar.gz" "${PACKAGE_BASE}-sources.tar.gz.sha256")
+          for file in "${files[@]}"; do
+            test -f "$file"
+            jq -e --arg name "$file" 'all(.assets[]; .name != $name)' <<< "$release" >/dev/null || {
+              echo "An asset named $file already exists; inspect the draft rather than overwriting it" >&2
+              exit 1
+            }
+          done
+          sha256sum --check "${PACKAGE_BASE}.tar.gz.sha256" "${PACKAGE_BASE}-sources.tar.gz.sha256"
+          for file in "${files[@]}"; do
+            gh api --method POST --header 'Content-Type: application/octet-stream' \
+              --input "$file" --silent \
+              "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${file}"
+          done
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          jq -e --arg tag "$DRAFT_RELEASE_TAG" \
+            '.draft == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null
+          for file in "${files[@]}"; do
+            jq -e --arg name "$file" --argjson size "$(stat -c %s "$file")" \
+              'any(.assets[]; .name == $name and .state == "uploaded" and .size == $size)' <<< "$release" >/dev/null
+          done
+          printf 'All four Mac preview files are attached to draft `%s`. Review and test the downloaded files before publishing the release.\n' \
+            "$DRAFT_RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

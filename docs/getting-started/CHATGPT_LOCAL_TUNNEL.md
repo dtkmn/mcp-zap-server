@@ -6,69 +6,15 @@ the tunnel client opens an outbound HTTPS connection to OpenAI. The package
 keeps API-key authentication enabled and supplies the local `X-API-Key` header
 through an environment reference.
 
-This is a private connection path for the Apple Silicon Mac preview. On
-2026-10-08, the packaged server completed a real private ChatGPT HTTP crawl,
-passive analysis, HTML report generation, and full report read-back through
-released tunnel client `0.0.16`. The connection needs internet access, an OpenAI
-Platform tunnel, and compatible account permissions. It does not provide a public plugin listing or
-an offline ChatGPT experience.
-
-Local checks with released client `0.0.16` covered profile creation and
-preservation, private file permissions, rejection of non-loopback endpoints,
-and secret references without saved key values. A synthetic MCP server behind
-the vendor's local test proxy received authenticated startup/discovery probes,
-tool discovery, and a tool call with response read-back. Those checks do not
-establish hosted tunnel access or ChatGPT behavior by themselves.
-
-## Verified boundary on 2026-10-08
-
-| Component | Tested configuration |
-| --- | --- |
-| Mac | Apple Silicon, macOS 27.0.1 |
-| Package | MCP ZAP Server 0.15.0 local preview, ZAP 2.17.0, Temurin JRE 25.0.4.1+1 |
-| Tunnel client | Full official client 0.0.16 |
-| ChatGPT | Web interface, developer mode, GPT-6 with Pro power |
-
-A dedicated non-admin runtime key and the explicit associated Platform
-organization reached hosted readiness. One private ChatGPT connection used
-**Tunnel** and **No authentication**, while the packaged local MCP endpoint
-continued to enforce `X-API-Key`. The conversation exposed 21 guided tools.
-An HTTP crawl of an owned loopback fixture completed, passive processing
-drained, and ChatGPT generated and read its HTML report through MCP. The full
-chunk read reported EOF and a SHA-256 matching the independently inspected
-37,239-byte local report. The default read's truncated preview was followed
-by a complete chunk read; a preview alone is insufficient evidence.
-
-The ChatGPT interface's expanded raw tool viewer exposed a progress envelope,
-not the underlying MCP arguments and response body. The completed conversation
-was therefore corroborated with independent local crawler state and report
-file evidence. Local requests with missing or incorrect MCP keys returned
-`401`.
-
-An outside-scope reserved hostname was refused before any tool call. This
-demonstrates the conversation's refusal, not a server-side target-policy test.
-ChatGPT also started an HTTP crawl against a deliberately slow owned fixture,
-requested its stop and checked status. Independent engine and request evidence
-confirmed interruption before natural completion. The status response reports
-completion but does not expose a separate cancellation reason; do not infer a
-successful full crawl from that completion flag alone.
-With the tunnel client stopped, one harmless passive-status call returned
-`UNAVAILABLE` and a connection timeout. ChatGPT reported the failure rather
-than inventing a scan result. This was a transport failure, not an authentication
-rejection.
-A clean package restart and tunnel reconnection preserved the original report.
-One subsequent full read in the same ChatGPT conversation reached EOF with
-the same artifact checksum, without regenerating the report or starting a scan.
-Report transport and complete file retrieval were verified; report finding
-count parity was not. Root-URL filtering excludes some findings from the HTML
-report and is tracked in [issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294).
-This test does not establish browser/AJAX crawling, active scanning, public
-distribution, unattended operation, or clean-machine installation.
+This private connection requires internet access, an OpenAI Platform tunnel,
+and compatible account permissions. It does not provide a public plugin listing
+or offline ChatGPT use. This walkthrough covers HTTP crawling, passive analysis,
+and HTML report generation and retrieval for authorized targets.
 
 ## Prerequisites
 
-- Start the intact Mac package with `./bin/mcp-zap start`, then pass
-  `./bin/mcp-zap doctor`. Keep the bundled services running.
+- Start the intact Mac package with `./bin/mcp-zap start`. Startup checks
+  authenticated readiness; keep the bundled services running.
 - Install the full official OpenAI client with
   `brew install openai/tools/tunnel-client`, then check `tunnel-client --version`
   and `tunnel-client help quickstart`. The runtime-only binaries do not include
@@ -132,13 +78,13 @@ discovery probes. The launcher supplies the local key from its private
 client, and the local MCP key authenticates its connection to the server.
 
 The optional `./bin/mcp-zap tunnel doctor` invokes the vendor's diagnostic check.
-It does not verify OpenAI tunnel
-permissions or prove a ChatGPT connection. In client `0.0.16`, its HTTP/OAuth
-diagnostic probes do not apply configured MCP headers, so an API-key-protected
+It does not verify OpenAI tunnel permissions or a ChatGPT connection. In client
+`0.0.16`, its HTTP/OAuth diagnostic probes do not apply configured MCP headers,
+so an API-key-protected
 server can produce an OAuth metadata failure even with the correct runtime
 configuration. Keep local API-key authentication enabled. Use the package
-doctor for authenticated local MCP checks, then use the running tunnel's
-readiness and actual ChatGPT calls to resolve the remaining boundary.
+doctor for local MCP diagnostics, then check the running tunnel's readiness
+and make a harmless status call in ChatGPT.
 
 ## Add the private connection in ChatGPT
 
@@ -158,7 +104,7 @@ uses this connector authentication choice. This setup gives allowed tunnel
 callers the configured local MCP identity; it does not establish separate
 customer identities or isolation.
 
-## Prove the connection
+## Check the connection
 
 First ask ChatGPT to list the available tools from your selected plugin. Then
 use a target you own or are authorized to scan and that native ZAP can reach.
@@ -176,22 +122,16 @@ report for this target, and read the report back through MCP. Do not start an
 active scan.
 ```
 
-Record the package and tunnel-client versions, ChatGPT connection mode, selected
-tool names, actual tool inputs/results, completion state, and report read-back.
-Remove credentials and private target details before sharing evidence. Finding
-counts vary. Discovery alone does not prove the crawl, passive drain, report,
-or report read-back succeeded.
+Follow the tool results until the crawl and passive analysis finish. A truncated
+report preview is incomplete; use `zap_report_read_chunk` until EOF for the full
+report. Complete retrieval does not ensure that its finding counts match the
+target's full alert set: root-URL filtering can exclude findings from HTML
+reports ([issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294)).
 
 The native preview's target protections may reject localhost or private-network
 demo targets by default. Use its local settings to allow only your intended
 authorized target, then restart the bundled services. This HTTP preview does
-not establish browser or AJAX crawling support.
-
-Also verify failures: a request to the local `/mcp` endpoint without a valid API
-key must be rejected; an invalid or unauthorized target must not become a scan;
-and ChatGPT calls must fail while the tunnel client is stopped. Do not change
-the server to unauthenticated mode to make these checks pass. Never test key
-failure by revoking a shared key that other applications still use.
+not establish browser/AJAX crawling or active-scan support.
 
 ## Errors, data, and disconnecting
 
@@ -202,9 +142,7 @@ failure by revoking a shared key that other applications still use.
 - `401`/`403` from OpenAI: verify the runtime key, its organization, and Tunnels
   **Read + Use** for the selected tunnel. A successful vendor doctor does not
   rule out this error. Set `CONTROL_PLANE_ORGANIZATION_ID` to the intended
-  associated organization. A `401` alone does not identify an invalid key,
-  organization mismatch, or other access restriction; changing the organization
-  setting is not proof that it caused an earlier failure.
+  associated organization. A `401` alone does not identify which setting failed.
 - Tunnel absent in ChatGPT: check the target workspace association and the
   account's permissions. Platform access and ChatGPT access are separate.
 - Connection refused or degraded readiness: run the package doctor, confirm
@@ -231,9 +169,12 @@ contains before asking ChatGPT to read it. Disconnecting does not erase an
 existing conversation or its prior outputs. The helper disables raw HTTP
 logging; inspect and redact any diagnostic exports before sharing them.
 
-This path tests a private custom MCP connection. Public plugin submission needs
-its own stable public HTTPS endpoint, authentication, operating controls, and
-submission approval.
+This guide describes a private custom MCP connection. Public **remote MCP**
+submissions require a production HTTPS MCP endpoint; this tunnel does not
+replace it. A **skills-only** plugin is a separate ZIP submission without a
+bundled MCP connection. Its onboarding can guide local Codex users to set up
+the separate Mac package without a hosted scanner endpoint. Both routes remain
+subject to OpenAI review. See the [submission requirements](https://developers.openai.com/plugins/deploy/submission-errors#zip-upload-errors-and-warnings).
 
 ## Configuration sources
 
@@ -243,4 +184,3 @@ submission approval.
 - [Vendor profile and header configuration](https://github.com/openai/tunnel-client/blob/master/docs/configuration.md)
 - [Vendor tunnel permissions](https://github.com/openai/tunnel-client/blob/master/docs/permissions.md)
 - [Client 0.0.16 doctor implementation](https://github.com/openai/tunnel-client/blob/v0.0.16/cmd/client/doctor_command.go)
-- [Client 0.0.16 organization header handling](https://github.com/openai/tunnel-client/blob/v0.0.16/pkg/controlplane/internal/roundtripper.go#L102)

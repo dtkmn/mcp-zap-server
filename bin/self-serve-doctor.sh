@@ -108,10 +108,13 @@ post_json() {
   local body_file="$4"
   shift 4
   local -a args
+  local config_file header http_code result
 
   args=(
     curl
     -sS
+    --connect-timeout 5
+    --max-time 30
     -D "${headers_file}"
     -o "${body_file}"
     -w "%{http_code}"
@@ -119,13 +122,26 @@ post_json() {
     -H "Content-Type: application/json"
   )
 
+  config_file="$(mktemp)"
   while [[ $# -gt 0 ]]; do
-    args+=(-H "$1")
+    header="$1"
+    if [[ "${header}" == *$'\n'* || "${header}" == *$'\r'* ]]; then
+      rm -f "${config_file}"
+      fail "Invalid HTTP header value."
+      return 1
+    fi
+    header="${header//\\/\\\\}"
+    header="${header//\"/\\\"}"
+    printf 'header = "%s"\n' "${header}" >> "${config_file}"
     shift
   done
 
-  args+=("${url}" -d "${payload}")
-  "${args[@]}"
+  args+=(--config "${config_file}" "${url}" -d "${payload}")
+  result=0
+  http_code="$("${args[@]}")" || result=$?
+  rm -f "${config_file}"
+  printf '%s' "${http_code}"
+  return "${result}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -264,7 +280,7 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
 fi
 
 mcp_reachable=0
-if curl -fsS "${HEALTH_URL}" | grep -q '"status":"UP"'; then
+if curl -fsS --connect-timeout 5 --max-time 10 "${HEALTH_URL}" | grep -q '"status":"UP"'; then
   pass "MCP health endpoint is UP at ${HEALTH_URL}"
   mcp_reachable=1
 else
@@ -272,7 +288,7 @@ else
 fi
 
 if [[ "${SKIP_ZAP}" -eq 0 ]]; then
-  if curl -fsS "${ZAP_URL}" >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 5 --max-time 10 "${ZAP_URL}" >/dev/null 2>&1; then
     pass "ZAP is reachable at ${ZAP_URL}"
   else
     fail "ZAP is not reachable at ${ZAP_URL}."
@@ -305,8 +321,7 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
       fail "MCP initialize response did not include a protocolVersion."
     fi
   else
-    response_body="$(cat "${body_file}")"
-    fail "MCP initialize failed with HTTP ${http_code}. Response: ${response_body}"
+    fail "MCP initialize failed with HTTP ${http_code}. Inspect server logs privately."
   fi
 
   if [[ -n "${session_id}" ]]; then
@@ -333,8 +348,7 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
         require_tool_in_list "${tool}" "${list_body_file}"
       done
     else
-      response_body="$(cat "${list_body_file}")"
-      fail "tools/list failed with HTTP ${http_code}. Response: ${response_body}"
+      fail "tools/list failed with HTTP ${http_code}. Inspect server logs privately."
     fi
 
     if [[ "${SKIP_TOOL_CALL}" -eq 0 ]]; then
@@ -346,8 +360,7 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
       if [[ "${http_code}" == "200" ]] && ! grep -q '"error"' "${tool_body_file}" && ! grep -q 'NullPointerException' "${tool_body_file}"; then
         pass "zap_passive_scan_status succeeded as a harmless tool probe"
       else
-        response_body="$(cat "${tool_body_file}")"
-        fail "zap_passive_scan_status failed with HTTP ${http_code}. Response: ${response_body}"
+        fail "zap_passive_scan_status failed with HTTP ${http_code}. Inspect server logs privately."
       fi
     fi
   fi
@@ -358,12 +371,12 @@ if [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit 1
 fi
 
-cat <<'EOF'
+cat <<EOF
 
 Self-serve API-key path looks healthy.
 
 Next steps:
-- Connect your MCP client to http://localhost:7456/mcp using X-API-Key from MCP_API_KEY in .env.
+- Connect your MCP client to ${SERVER_URL} using X-API-Key from MCP_API_KEY in your private configuration.
 - Cursor: start from examples/cursor/mcp.json; see the client guide if GUI-launched Cursor does not inherit your shell environment.
 - Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
 - First-run guide: docs/getting-started/SELF_SERVE_FIRST_RUN.md

@@ -28,6 +28,12 @@ Use it when you want:
 
 Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap-server/)
 
+An experimental [headless Apple Silicon package](./docs/getting-started/MACOS_PACKAGE.md)
+bundles Java and ZAP for HTTP workflows. It is a maintainer-built local preview;
+public signing/notarization and fresh-Mac installation remain separate gates.
+The [private ChatGPT connection guide](./docs/getting-started/CHATGPT_LOCAL_TUNNEL.md)
+explains Secure MCP Tunnel prerequisites and the current verification boundary.
+
 Watch the demo: [browser demo](https://danieltse.org/mcp-zap-server/demo.html) or [YouTube](https://www.youtube.com/watch?v=9_9VqsL0lNw)
 
 <a href="https://www.youtube.com/watch?v=9_9VqsL0lNw" target="_blank" rel="noopener noreferrer">

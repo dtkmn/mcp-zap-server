@@ -1,0 +1,580 @@
+{
+  "reviewed_binary_inputs": {
+    "java": "5b02bcc908da092e7e00b9772d4f9bbb87f44a60b7c90f7cf5a91a1d98f37e1b",
+    "zap": "94c8f767b1c2e94f0db66b3ae56514d5e3f5a728ee1b6c798e0c8fe2d61fbff0"
+  },
+  "server_libraries": [
+    {
+      "jar": "logback-core-1.6.4.jar",
+      "sha256": "1b67779e224455ae7e00bd4ccadaf05c38531927ea4363f66412359373f2e9d7"
+    },
+    {
+      "jar": "logback-classic-1.6.4.jar",
+      "sha256": "16ccdfd1847eca169d5651c5f799ea990472350e0c38f68fd6bc47d705ef4a0a"
+    },
+    {
+      "jar": "aspectjweaver-1.9.25.1.jar",
+      "sha256": "4fe86fdc18faea571f29129c70eaad5d121363504a06d7907be88f6c60ba3116"
+    },
+    {
+      "jar": "jakarta.annotation-api-3.0.0.jar",
+      "sha256": "b01f55552284cfb149411e64eabca75e942d26d2e1786b32914250e4330afaa2"
+    }
+  ],
+  "retained_zap_archives": [
+    "lib/commons-beanutils-1.11.0.jar",
+    "lib/commons-codec-1.20.0.jar",
+    "lib/commons-collections-3.2.2.jar",
+    "lib/commons-configuration-1.10.jar",
+    "lib/commons-csv-1.14.1.jar",
+    "lib/commons-httpclient-3.1.jar",
+    "lib/commons-io-2.21.0.jar",
+    "lib/commons-lang-2.6.jar",
+    "lib/commons-lang3-3.19.0.jar",
+    "lib/commons-logging-1.3.5.jar",
+    "lib/commons-text-1.14.0.jar",
+    "lib/ezmorph-1.0.6.jar",
+    "lib/flatlaf-3.7.jar",
+    "lib/flatlaf-swingx-3.7.jar",
+    "lib/harlib-1.1.3.jar",
+    "lib/hsqldb-2.7.4.jar",
+    "lib/jackson-core-asl-1.9.13.jar",
+    "lib/java-semver-0.10.2.jar",
+    "lib/javahelp-2.0.05.jar",
+    "lib/jericho-html-3.4.jar",
+    "lib/jfreechart-1.5.6.jar",
+    "lib/jgrapht-core-0.9.2.jar",
+    "lib/json-lib-2.4-jdk15.jar",
+    "lib/log4j-1.2-api-2.25.2.jar",
+    "lib/log4j-api-2.25.2.jar",
+    "lib/log4j-core-2.25.2.jar",
+    "lib/log4j-jul-2.25.2.jar",
+    "lib/rsyntaxtextarea-3.6.0.jar",
+    "lib/swingx-all-1.6.5-1.jar",
+    "lib/xom-1.3.9.jar",
+    "plugin/alertFilters-release-26.zap",
+    "plugin/ascanrules-release-78.zap",
+    "plugin/automation-beta-0.58.0.zap",
+    "plugin/bruteforce-beta-20.zap",
+    "plugin/callhome-release-0.20.0.zap",
+    "plugin/commonlib-release-1.39.0.zap",
+    "plugin/database-alpha-0.9.0.zap",
+    "plugin/diff-beta-18.zap",
+    "plugin/directorylistv1-release-9.zap",
+    "plugin/encoder-release-1.8.0.zap",
+    "plugin/formhandler-beta-6.8.0.zap",
+    "plugin/fuzz-beta-13.16.0.zap",
+    "plugin/gettingStarted-release-20.zap",
+    "plugin/graaljs-alpha-0.12.0.zap",
+    "plugin/graphql-alpha-0.29.0.zap",
+    "plugin/help-release-22.zap",
+    "plugin/insights-alpha-0.0.1.zap",
+    "plugin/invoke-beta-17.zap",
+    "plugin/network-beta-0.25.0.zap",
+    "plugin/oast-beta-0.24.0.zap",
+    "plugin/onlineMenu-release-15.zap",
+    "plugin/openapi-beta-48.zap",
+    "plugin/postman-alpha-0.9.0.zap",
+    "plugin/pscan-alpha-0.6.0.zap",
+    "plugin/pscanrules-release-70.zap",
+    "plugin/quickstart-release-53.zap",
+    "plugin/replacer-release-21.zap",
+    "plugin/reports-release-0.43.0.zap",
+    "plugin/requester-beta-7.9.0.zap",
+    "plugin/retest-alpha-0.11.0.zap",
+    "plugin/retire-release-0.52.0.zap",
+    "plugin/reveal-release-10.zap",
+    "plugin/scanpolicies-alpha-0.7.0.zap",
+    "plugin/scripts-release-45.17.0.zap",
+    "plugin/soap-beta-29.zap",
+    "plugin/spider-release-0.18.0.zap",
+    "plugin/tips-beta-16.zap",
+    "plugin/websocket-release-35.zap",
+    "zap-2.17.0.jar"
+  ],
+  "sources": [
+    {
+      "id": "temurin-jdk-source",
+      "filename": "OpenJDK25U-jdk-sources_25.0.4.1_1.tar.gz",
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk-sources_25.0.4.1_1.tar.gz",
+      "sha256": "cb9e50d2eb3de72ffd28466d7c511b4039b4bc4bd8f0d276d1e4cf81e30fdf09",
+      "applies_to": [
+        "Eclipse Temurin 25.0.4.1+1 macOS aarch64 JRE"
+      ],
+      "license": "GPL-2.0-only WITH Classpath-exception-2.0; see embedded third-party notices",
+      "upstream": "https://github.com/adoptium/jdk25u/commit/520406d871955300957ef01e406ac2acd0f9b75c"
+    },
+    {
+      "id": "temurin-build-source",
+      "filename": "temurin-build-e6ba7dec3d07654074559310376a3ae89da5f4ac.tar.gz",
+      "url": "https://codeload.github.com/adoptium/temurin-build/tar.gz/e6ba7dec3d07654074559310376a3ae89da5f4ac",
+      "sha256": "b1340378b9ed62b32acfacd012dd069ec2b9d940fc39d3c73f32142d64e89713",
+      "applies_to": [
+        "Eclipse Temurin 25.0.4.1+1 build and installation scripts"
+      ],
+      "license": "Apache-2.0; Mozilla CA data: MPL-2.0; mk-ca-bundle.pl: curl",
+      "upstream": "https://github.com/adoptium/temurin-build/commit/e6ba7dec3d07654074559310376a3ae89da5f4ac"
+    },
+    {
+      "id": "temurin-macos-build-metadata",
+      "filename": "OpenJDK25U-jre_aarch64_mac_hotspot_25.0.4.1_1.tar.gz.json",
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jre_aarch64_mac_hotspot_25.0.4.1_1.tar.gz.json",
+      "sha256": "46f9d9b684ad0540ae653cc6c59530154aa4e2e5a88fefd1e10e0070ec697574",
+      "applies_to": [
+        "Eclipse Temurin 25.0.4.1+1 macOS aarch64 JRE compiler/configuration/build provenance"
+      ],
+      "license": "Upstream build metadata accompanying GPL-2.0-only WITH Classpath-exception-2.0 binary",
+      "upstream": "https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.4.1%2B1"
+    },
+    {
+      "id": "temurin-source-build-metadata",
+      "filename": "OpenJDK25U-jdk-sources_25.0.4.1_1.tar.gz.json",
+      "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk-sources_25.0.4.1_1.tar.gz.json",
+      "sha256": "f7ac847b08fd6a409d335fe279e0d5fc1c8824eec8c90e26b6b78d79eb3253e3",
+      "applies_to": [
+        "Architecture-independent Eclipse Temurin 25.0.4.1+1 source archive provenance (produced by Linux build job)"
+      ],
+      "license": "Upstream build metadata accompanying GPL-2.0-only WITH Classpath-exception-2.0 source archive",
+      "upstream": "https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.4.1%2B1"
+    },
+    {
+      "id": "logback-core",
+      "filename": "logback-core-1.6.4-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.6.4/logback-core-1.6.4-sources.jar",
+      "sha256": "57fbcfa4278ee5b53733a45b620f27dca753755f6affecde75e2e064a8727ebc",
+      "applies_to": [
+        "app/server.jar!/BOOT-INF/lib/logback-core-1.6.4.jar"
+      ],
+      "license": "EPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/ch/qos/logback/logback-core/1.6.4/logback-core-1.6.4-sources.jar"
+    },
+    {
+      "id": "logback-classic",
+      "filename": "logback-classic-1.6.4-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.6.4/logback-classic-1.6.4-sources.jar",
+      "sha256": "8bfff4be62348a0769087caa1004be1d93da6558845cf1ded199bbbf5ab43676",
+      "applies_to": [
+        "app/server.jar!/BOOT-INF/lib/logback-classic-1.6.4.jar"
+      ],
+      "license": "EPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/ch/qos/logback/logback-classic/1.6.4/logback-classic-1.6.4-sources.jar"
+    },
+    {
+      "id": "aspectjweaver",
+      "filename": "aspectjweaver-1.9.25.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.25.1/aspectjweaver-1.9.25.1-sources.jar",
+      "sha256": "06fbde6ef3a83791e70965432b5f1891e493e21cdbc37307c54575ee86752595",
+      "applies_to": [
+        "app/server.jar!/BOOT-INF/lib/aspectjweaver-1.9.25.1.jar"
+      ],
+      "license": "EPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.25.1/aspectjweaver-1.9.25.1-sources.jar"
+    },
+    {
+      "id": "jakarta.annotation-api",
+      "filename": "jakarta.annotation-api-3.0.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/3.0.0/jakarta.annotation-api-3.0.0-sources.jar",
+      "sha256": "142dfd2343429df2aac3e1cfacfacc21c8393112c0e0280d3628648d9b612470",
+      "applies_to": [
+        "app/server.jar!/BOOT-INF/lib/jakarta.annotation-api-3.0.0.jar"
+      ],
+      "license": "EPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/jakarta/annotation/jakarta.annotation-api/3.0.0/jakarta.annotation-api-3.0.0-sources.jar"
+    },
+    {
+      "id": "zap-core",
+      "filename": "zap-source.tar.gz",
+      "url": "https://codeload.github.com/zaproxy/zaproxy/tar.gz/refs/tags/v2.17.0",
+      "sha256": "66a45f6de04f594cb50672be00293c365255f8d238795bf9a3d69f6d0da592b2",
+      "applies_to": [
+        "zap/zap-2.17.0.jar"
+      ],
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/zaproxy/zaproxy/tree/v2.17.0",
+      "delivered_filename": "zap-source.tar.gz",
+      "notes": "Preserve upstream full source archive and build scripts."
+    },
+    {
+      "id": "javahelp",
+      "filename": "javahelp-source.tar.gz",
+      "url": "https://codeload.github.com/javaee/javahelp/tar.gz/refs/tags/2.0_05",
+      "sha256": "f72641b8b602c9f740ce0f4e8e3c41e68f2a1e24bd9c67b38ea69b8afce93c02",
+      "applies_to": [
+        "zap/lib/javahelp-2.0.05.jar"
+      ],
+      "license": "GPL-2.0-only WITH Classpath-exception-2.0",
+      "upstream": "https://github.com/javaee/javahelp/tree/2.0_05",
+      "delivered_filename": "javahelp-source.tar.gz",
+      "notes": "Keep the 2 JavaHelp images.jar files: they contain only image resources, no classes. They are source assets, not compiled libraries."
+    },
+    {
+      "id": "jfreechart",
+      "filename": "jfreechart-source.tar.gz",
+      "url": "https://codeload.github.com/jfree/jfreechart/tar.gz/refs/tags/v1.5.6",
+      "sha256": "27b2e4f29bc64d202970fb359cde2dd2dd0edf9bb9fbbe6585449dd2da2182d9",
+      "applies_to": [
+        "zap/lib/jfreechart-1.5.6.jar"
+      ],
+      "license": "LGPL-2.1-or-later",
+      "upstream": "https://github.com/jfree/jfreechart/tree/v1.5.6",
+      "delivered_filename": "jfreechart-source.tar.gz",
+      "notes": "Preserve upstream full source archive and build scripts."
+    },
+    {
+      "id": "jgrapht",
+      "filename": "jgrapht-source.tar.gz",
+      "url": "https://codeload.github.com/jgrapht/jgrapht/tar.gz/refs/tags/jgrapht-0.9.2",
+      "sha256": "b4092fb43bcea971314bd003f34d9f8e1c34200798288c8fdd043070bf2a4add",
+      "applies_to": [
+        "zap/lib/jgrapht-core-0.9.2.jar"
+      ],
+      "license": "LGPL-2.1-or-later (selected alternative)",
+      "upstream": "https://github.com/jgrapht/jgrapht/tree/jgrapht-0.9.2",
+      "delivered_filename": "jgrapht-0.9.2-source-only.tar.gz",
+      "rebuild": "Rebuild the shipped core with Maven using mvn -pl jgrapht-core -am package. The unshipped optional TouchGraph module is not required for jgrapht-core.",
+      "notes": "Retain every source/module/POM/license/README; omit the unshipped optional TGGraphLayout-UNKNOWN.jar.",
+      "upstream_root": "jgrapht-jgrapht-0.9.2",
+      "source_only": true
+    },
+    {
+      "id": "swingx",
+      "filename": "swingx-source.tar.gz",
+      "url": "https://codeload.github.com/RockManJoe64/swingx/tar.gz/3b24bb27a0844695679d5037b84b9efe95ba7bcd",
+      "sha256": "3580bab843f173b30580e5efd1a83f007d9cbeeafa08a48103acfe8135a10cc0",
+      "applies_to": [
+        "zap/lib/swingx-all-1.6.5-1.jar"
+      ],
+      "license": "LGPL-2.1-or-later; BSD portions",
+      "upstream": "https://github.com/RockManJoe64/swingx/tree/3b24bb27a0844695679d5037b84b9efe95ba7bcd",
+      "delivered_filename": "swingx-1.6.5-1-source-only.tar.gz",
+      "rebuild": "Use the preserved Maven project/POMs with Maven 3.x; the CRAP4J profile in swingx-core/pom.xml is commented out and is not required. Maven resolves JUnit and other build dependencies.",
+      "notes": "All 447 published library Java files match source snapshot after SVN keyword normalization; retain all modules, resources, docs, COPYING and build scripts. Omit the obsolete build-only Agitar/CRAP4J bundle and compiled dependency binaries.",
+      "upstream_root": "swingx-3b24bb27a0844695679d5037b84b9efe95ba7bcd",
+      "source_only": true,
+      "omit_directories": [
+        "lib/build-only/"
+      ]
+    },
+    {
+      "id": "xom",
+      "filename": "xom-source.tar.gz",
+      "url": "https://codeload.github.com/elharo/xom/tar.gz/refs/tags/v1.3.9",
+      "sha256": "88c01ba611d4adf0c9d21d111b8f8f82955b307e5ccca5d92f3a5b9689cdfefd",
+      "applies_to": [
+        "zap/lib/xom-1.3.9.jar"
+      ],
+      "license": "LGPL-2.1-only; BSD shaded Jaxen",
+      "upstream": "https://github.com/elharo/xom/tree/v1.3.9",
+      "delivered_filename": "xom-1.3.9-source-only.tar.gz",
+      "rebuild": "Use build.xml with Ant and a compatible JDK. Supply the identified normal build dependencies from their upstream projects/Maven coordinates; lib2/jaxen-1.1.6.jar can be rebuilt using the retained jaxen-1.1.6-src.zip. The README/build instructions and all licence files remain.",
+      "notes": "Retain jaxen-1.1.6-src.zip (actual shaded dependency source plus build scripts), XOM build.xml, all sources, resources, all lib/* licence documents, and website licence materials. Only compiled build dependency JARs are omitted; no source file removed.",
+      "upstream_root": "xom-1.3.9",
+      "source_only": true
+    },
+    {
+      "id": "zap-fuzz-13.16.0",
+      "filename": "extensions-fuzz-13.16.0.tar.gz",
+      "url": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/fuzz-v13.16.0",
+      "sha256": "c8cf72d2d5a56b371e013e361a9cf9446b078e569ff6f0e03487eecc4007fcc4",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; shaded JBroFuzz GPL-3.0-or-later",
+      "upstream": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/fuzz-v13.16.0",
+      "omit_files": [
+        "addOns/exim/lib/org.jwall.web.audit-0.2.15.jar",
+        "addOns/exim/lib/pkts-buffers-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-core-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-streams-3.0.11-tcp-streams-branch.jar",
+        "addOns/kotlin/src/test/resources/org/zaproxy/addon/kotlin/testclasspath/TestClassOne.class",
+        "addOns/spiderAjax/lib/crawljax-core-3.7.1.jar"
+      ],
+      "delivered_filename": "extensions-fuzz-13.16.0-sources.tar.gz",
+      "rebuild": "Use the preserved Gradle wrapper and build files to rebuild the fuzz add-on. Shared project sources remain; the omitted optional Exim, AJAX Spider, Kotlin test and Client Side Integration assets are outside this build scope. Development tools and dependencies are not bundled; a reproducible rebuild has not been verified.",
+      "notes": "Preserve all source/build/licence files and the Apache-licensed Gradle wrapper; omit only the explicit unrelated binary paths."
+    },
+    {
+      "id": "zap-reports-0.43.0",
+      "filename": "extensions-reports-0.43.0.tar.gz",
+      "url": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/reports-v0.43.0",
+      "sha256": "d9003e4f709c16ee367f02852160a5ebc12538d3923c225a6204b2840fe0deac",
+      "applies_to": [
+        "zap/plugin/reports-release-0.43.0.zap"
+      ],
+      "license": "Apache-2.0; shaded Flying Saucer LGPL-2.1-or-later",
+      "upstream": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/reports-v0.43.0",
+      "omit_files": [
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/assets/fonts/Roboto-Bold.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/assets/fonts/Roboto-Regular.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/f80816a5455d171f948d.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/fc2b5060f7accec5cf74.ttf",
+        "addOns/exim/lib/org.jwall.web.audit-0.2.15.jar",
+        "addOns/exim/lib/pkts-buffers-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-core-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-streams-3.0.11-tcp-streams-branch.jar",
+        "addOns/kotlin/src/test/resources/org/zaproxy/addon/kotlin/testclasspath/TestClassOne.class",
+        "addOns/spiderAjax/lib/crawljax-core-3.7.1.jar"
+      ],
+      "delivered_filename": "extensions-reports-0.43.0-sources.tar.gz",
+      "rebuild": "Use the preserved Gradle wrapper and build files to rebuild the reports add-on. Shared project sources remain; the omitted optional Exim, AJAX Spider, Kotlin test and Client Side Integration assets are outside this build scope. Development tools and dependencies are not bundled; a reproducible rebuild has not been verified.",
+      "notes": "Preserve all source/build/licence files and the Apache-licensed Gradle wrapper; omit only the explicit unrelated binary paths."
+    },
+    {
+      "id": "zap-bruteforce-20",
+      "filename": "extensions-bruteforce-20.tar.gz",
+      "url": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/bruteforce-v20",
+      "sha256": "20465b90cde632c4e7d219f7381d3b5e325d13f4e8a1f3e9c82eeb5f27b054ac",
+      "applies_to": [
+        "zap/plugin/bruteforce-beta-20.zap"
+      ],
+      "license": "Apache-2.0; modified DirBuster LGPL-2.1-or-later",
+      "upstream": "https://codeload.github.com/zaproxy/zap-extensions/tar.gz/refs/tags/bruteforce-v20",
+      "omit_files": [
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/assets/fonts/Roboto-Bold.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/assets/fonts/Roboto-Regular.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/f80816a5455d171f948d.ttf",
+        "addOns/client/src/main/zapHomeFiles/selenium/extensions/zap_browser_extension/fc2b5060f7accec5cf74.ttf",
+        "addOns/exim/lib/org.jwall.web.audit-0.2.15.jar",
+        "addOns/exim/lib/pkts-buffers-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-core-3.0.11-tcp-streams-branch.jar",
+        "addOns/exim/lib/pkts-streams-3.0.11-tcp-streams-branch.jar",
+        "addOns/kotlin/src/test/resources/org/zaproxy/addon/kotlin/testclasspath/TestClassOne.class",
+        "addOns/spiderAjax/lib/crawljax-core-3.7.1.jar"
+      ],
+      "delivered_filename": "extensions-bruteforce-20-sources.tar.gz",
+      "rebuild": "Use the preserved Gradle wrapper and build files to rebuild the bruteforce add-on. Shared project sources remain; the omitted optional Exim, AJAX Spider, Kotlin test and Client Side Integration assets are outside this build scope. Development tools and dependencies are not bundled; a reproducible rebuild has not been verified.",
+      "notes": "Preserve all source/build/licence files and the Apache-licensed Gradle wrapper; omit only the explicit unrelated binary paths."
+    },
+    {
+      "id": "flying-saucer-9.13.3",
+      "filename": "flying-saucer-9.13.3.tar.gz",
+      "url": "https://codeload.github.com/flyingsaucerproject/flyingsaucer/tar.gz/refs/tags/v9.13.3",
+      "sha256": "b550dea2440dcc8ade552089d6fdf23deda279f3af548c1afff94fe8d01c945b",
+      "applies_to": [
+        "zap/plugin/reports-release-0.43.0.zap"
+      ],
+      "license": "LGPL-2.1-or-later",
+      "upstream": "https://codeload.github.com/flyingsaucerproject/flyingsaucer/tar.gz/refs/tags/v9.13.3"
+    },
+    {
+      "id": "org.owasp.jbrofuzz-jbrofuzz-core-2.5.1-sources",
+      "filename": "jbrofuzz-core-2.5.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-core/2.5.1/jbrofuzz-core-2.5.1-sources.jar",
+      "sha256": "28a570f18bf2c42b616e36da919923060a94f3cd16ada11575034d077659ab87",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "GPL-3.0-or-later; POM GPLv3",
+      "upstream": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-core/2.5.1/jbrofuzz-core-2.5.1-sources.jar"
+    },
+    {
+      "id": "org.owasp.jbrofuzz-jbrofuzz-core-2.5.1-pom",
+      "filename": "jbrofuzz-core-2.5.1.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-core/2.5.1/jbrofuzz-core-2.5.1.pom",
+      "sha256": "c71d12d447492d3a3bb6b23f0234f1d5d1f6b0fe9a44e9e7ceec03db28bafb24",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "GPL-3.0-or-later; POM GPLv3",
+      "upstream": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-core/2.5.1/jbrofuzz-core-2.5.1.pom"
+    },
+    {
+      "id": "org.mozilla-rhino-1.8.1-sources",
+      "filename": "rhino-1.8.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.8.1/rhino-1.8.1-sources.jar",
+      "sha256": "2303a0e5aa222faae0b95865c25442da89ec14c0fc81ac1608f2a6095e3d2459",
+      "applies_to": [
+        "zap/plugin/ascanrules-release-78.zap"
+      ],
+      "license": "MPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.8.1/rhino-1.8.1-sources.jar"
+    },
+    {
+      "id": "org.mozilla-rhino-1.8.1-pom",
+      "filename": "rhino-1.8.1.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.8.1/rhino-1.8.1.pom",
+      "sha256": "d2004c8eabce80829d8bbf570a2bde71a849868d2974085e9eb558b68b458a62",
+      "applies_to": [
+        "zap/plugin/ascanrules-release-78.zap"
+      ],
+      "license": "MPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.8.1/rhino-1.8.1.pom"
+    },
+    {
+      "id": "org.mozilla-rhino-1.7.7.2-sources",
+      "filename": "rhino-1.7.7.2-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.7.2/rhino-1.7.7.2-sources.jar",
+      "sha256": "5b772ae8cb721a769b8b65d49e7c856f0030a9728cb0f8628244faf995847707",
+      "applies_to": [
+        "zap/plugin/openapi-beta-48.zap"
+      ],
+      "license": "MPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.7.2/rhino-1.7.7.2-sources.jar"
+    },
+    {
+      "id": "org.mozilla-rhino-1.7.7.2-pom",
+      "filename": "rhino-1.7.7.2.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.7.2/rhino-1.7.7.2.pom",
+      "sha256": "0769068987c18953e51d419e062f40956f1e82f3a2a140fea884d7c5e6fa947f",
+      "applies_to": [
+        "zap/plugin/openapi-beta-48.zap"
+      ],
+      "license": "MPL-2.0",
+      "upstream": "https://repo.maven.apache.org/maven2/org/mozilla/rhino/1.7.7.2/rhino-1.7.7.2.pom"
+    },
+    {
+      "id": "com.github.librepdf-openpdf-2.0.5-sources",
+      "filename": "openpdf-2.0.5-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/github/librepdf/openpdf/2.0.5/openpdf-2.0.5-sources.jar",
+      "sha256": "bc51243864e7e2b1d76214ac3eaa8862304746c3b346fe22c3ecb9b92d062dbb",
+      "applies_to": [
+        "zap/plugin/reports-release-0.43.0.zap"
+      ],
+      "license": "MPL-2.0 (selected from MPL-2.0 OR LGPL-2.1-or-later)",
+      "upstream": "https://repo.maven.apache.org/maven2/com/github/librepdf/openpdf/2.0.5/openpdf-2.0.5-sources.jar"
+    },
+    {
+      "id": "com.github.librepdf-openpdf-2.0.5-pom",
+      "filename": "openpdf-2.0.5.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/github/librepdf/openpdf/2.0.5/openpdf-2.0.5.pom",
+      "sha256": "6463df569378da510366bd040b84ad92914da20354f383ce16d8fd1012823d3c",
+      "applies_to": [
+        "zap/plugin/reports-release-0.43.0.zap"
+      ],
+      "license": "MPL-2.0 (selected from MPL-2.0 OR LGPL-2.1-or-later)",
+      "upstream": "https://repo.maven.apache.org/maven2/com/github/librepdf/openpdf/2.0.5/openpdf-2.0.5.pom"
+    },
+    {
+      "id": "javax.transaction-javax.transaction-api-1.3-sources",
+      "filename": "javax.transaction-api-1.3-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/javax/transaction/javax.transaction-api/1.3/javax.transaction-api-1.3-sources.jar",
+      "sha256": "a457c8a2b9cf924b44e0c299bcba349bc908ae8529d1dacd4af1061c4ceab29d",
+      "applies_to": [
+        "zap/plugin/database-alpha-0.9.0.zap"
+      ],
+      "license": "CDDL-1.0 (selected from CDDL/GPL2+Classpath)",
+      "upstream": "https://repo.maven.apache.org/maven2/javax/transaction/javax.transaction-api/1.3/javax.transaction-api-1.3-sources.jar"
+    },
+    {
+      "id": "javax.transaction-javax.transaction-api-1.3-pom",
+      "filename": "javax.transaction-api-1.3.pom",
+      "url": "https://repo.maven.apache.org/maven2/javax/transaction/javax.transaction-api/1.3/javax.transaction-api-1.3.pom",
+      "sha256": "83f9f1c9f5af25e2cc8b0fb436682362b1356756c59b64f51778638f60c81b0b",
+      "applies_to": [
+        "zap/plugin/database-alpha-0.9.0.zap"
+      ],
+      "license": "CDDL-1.0 (selected from CDDL/GPL2+Classpath)",
+      "upstream": "https://repo.maven.apache.org/maven2/javax/transaction/javax.transaction-api/1.3/javax.transaction-api-1.3.pom"
+    },
+    {
+      "id": "com.sun.mail-mailapi-1.6.2-sources",
+      "filename": "mailapi-1.6.2-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/sun/mail/mailapi/1.6.2/mailapi-1.6.2-sources.jar",
+      "sha256": "33e03e76cf7857fa003d2086384236f92d8ecacb81408046942f0d483f3be1a3",
+      "applies_to": [
+        "zap/plugin/openapi-beta-48.zap"
+      ],
+      "license": "CDDL-1.1 (selected from CDDL/GPL2+Classpath)",
+      "upstream": "https://repo.maven.apache.org/maven2/com/sun/mail/mailapi/1.6.2/mailapi-1.6.2-sources.jar"
+    },
+    {
+      "id": "com.sun.mail-mailapi-1.6.2-pom",
+      "filename": "mailapi-1.6.2.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/sun/mail/mailapi/1.6.2/mailapi-1.6.2.pom",
+      "sha256": "3cf895c275cdd4d966985b70198c1501a4e5fd4a9f6d818388624a9b6e2808c0",
+      "applies_to": [
+        "zap/plugin/openapi-beta-48.zap"
+      ],
+      "license": "CDDL-1.1 (selected from CDDL/GPL2+Classpath)",
+      "upstream": "https://repo.maven.apache.org/maven2/com/sun/mail/mailapi/1.6.2/mailapi-1.6.2.pom"
+    },
+    {
+      "id": "org.owasp.jbrofuzz-jbrofuzz-parent-2.5.1-pom",
+      "filename": "jbrofuzz-parent-2.5.1.pom",
+      "url": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-parent/2.5.1/jbrofuzz-parent-2.5.1.pom",
+      "sha256": "6b97e309aa1c8c12502d11fa64323429e05d4df29566c8890074ba2f10b5b7ac",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "GPL-3.0-or-later; POM GPLv3",
+      "upstream": "https://repo.maven.apache.org/maven2/org/owasp/jbrofuzz/jbrofuzz-parent/2.5.1/jbrofuzz-parent-2.5.1.pom"
+    },
+    {
+      "id": "com.sun.mail-all-1.6.2-pom",
+      "filename": "all-1.6.2.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/sun/mail/all/1.6.2/all-1.6.2.pom",
+      "sha256": "4b7e83aa9b77d65e007e97cb50f9b89cdb754faaf16411e5fd94d1e3dab76eb3",
+      "applies_to": [
+        "zap/plugin/openapi-beta-48.zap"
+      ],
+      "license": "CDDL-1.1 (selected)",
+      "upstream": "https://repo.maven.apache.org/maven2/com/sun/mail/all/1.6.2/all-1.6.2.pom"
+    },
+    {
+      "id": "com.natpryce-snodge-2.1.2.2-sources",
+      "filename": "snodge-2.1.2.2-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/natpryce/snodge/2.1.2.2/snodge-2.1.2.2-sources.jar",
+      "sha256": "496c822ce54175a8cc8afc7463bd542d079419d87a983b0d2e945c8c57ab0225",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/natpryce/snodge/2.1.2.2/snodge-2.1.2.2-sources.jar"
+    },
+    {
+      "id": "com.natpryce-snodge-2.1.2.2-pom",
+      "filename": "snodge-2.1.2.2.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/natpryce/snodge/2.1.2.2/snodge-2.1.2.2.pom",
+      "sha256": "25318db324cef3aba5f7ffa32d970d5320609226a312167b7fe137c328dd07ed",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/natpryce/snodge/2.1.2.2/snodge-2.1.2.2.pom"
+    },
+    {
+      "id": "com.google.code.gson-gson-2.3.1-sources",
+      "filename": "gson-2.3.1-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.3.1/gson-2.3.1-sources.jar",
+      "sha256": "2f2bfe44fad034b526caeb600f3cfca056a143c6c9fbd239f5cbcae4e862b8fa",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.3.1/gson-2.3.1-sources.jar"
+    },
+    {
+      "id": "com.google.code.gson-gson-2.3.1-pom",
+      "filename": "gson-2.3.1.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.3.1/gson-2.3.1.pom",
+      "sha256": "82faa21aafe8411a96c1bbd22a30e2d639e5f4fc4716b796bb70dbc379f739e7",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/google/code/gson/gson/2.3.1/gson-2.3.1.pom"
+    },
+    {
+      "id": "com.github.curious-odd-man-rgxgen-2.0-sources",
+      "filename": "rgxgen-2.0-sources.jar",
+      "url": "https://repo.maven.apache.org/maven2/com/github/curious-odd-man/rgxgen/2.0/rgxgen-2.0-sources.jar",
+      "sha256": "6020e6a461d6aace3d0ccfe6031b2e849f8c4cf32b2e74e7da3da319f99257c9",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/github/curious-odd-man/rgxgen/2.0/rgxgen-2.0-sources.jar"
+    },
+    {
+      "id": "com.github.curious-odd-man-rgxgen-2.0-pom",
+      "filename": "rgxgen-2.0.pom",
+      "url": "https://repo.maven.apache.org/maven2/com/github/curious-odd-man/rgxgen/2.0/rgxgen-2.0.pom",
+      "sha256": "05618bfb2f0eba7155fb617575854430c682e0af6ba6e6fbe5c111b2f794ad0f",
+      "applies_to": [
+        "zap/plugin/fuzz-beta-13.16.0.zap"
+      ],
+      "license": "Apache-2.0; corresponding source for permissive code merged with GPLJBroFuzz fuzzer",
+      "upstream": "https://repo.maven.apache.org/maven2/com/github/curious-odd-man/rgxgen/2.0/rgxgen-2.0.pom"
+    }
+  ]
+}

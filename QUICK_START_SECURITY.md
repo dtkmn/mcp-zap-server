@@ -1,273 +1,91 @@
 # Quick Start Security Guide
 
-Use this guide to set up an isolated local `mcp-zap-server` lab.
-
-If you are deploying for a shared team or public targets, stop here after local validation and read the full docs site plus the production checklist.
+This is the security companion to [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md).
+Use that guide for installation and recovery; review the controls below before
+changing who can access the server or what ZAP can reach.
 
 ## Fastest Local Path
 
-### 1. Clone and enter the repo
-
-```bash
-git clone https://github.com/dtkmn/mcp-zap-server.git
-cd mcp-zap-server
-```
-
-### 2. Generate local credentials and prepare the workspace
-
-```bash
-./bin/bootstrap-local.sh
-```
-
-The bootstrap creates `.env`, generates separate ZAP and MCP API keys, creates
-the workspace, disables JWT, and enables private-network scanning for the bundled
-demo targets. It refuses to overwrite an existing `.env`; preserve your existing
-settings when reusing a checkout. Keep `.env` out of version control.
-
-For a manually configured workspace, use `./zap-workplace` or a literal absolute
-path in `.env`. Compose does not execute shell expressions such as `$(pwd)` there.
-
-### 3. Start the default stack
-
-```bash
-./dev.sh
-```
-
-This starts:
-
-- ZAP
-- the MCP server on `http://localhost:7456/mcp`
-- local demo targets such as Juice Shop
-
-Use your own MCP client; the stack does not include a chat interface.
-
-The default Compose stack binds published ports to `127.0.0.1`. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
-
-### 4. Verify the MCP connection
-
-```bash
-./bin/self-serve-doctor.sh
-```
-
-The doctor checks authentication, MCP initialization, tool discovery, and a
-harmless tool call. You can also check basic service health:
-
-```bash
-curl http://localhost:7456/actuator/health
-```
-
-Expected shape:
-
-```json
-{"status":"UP"}
-```
+Follow [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md) to
+start the local stack, connect a client, and generate a demo report. The startup
+command checks container health and authenticated MCP access before reporting
+ready.
 
 ## Local Security Reality
 
-The default local Compose stack is intentionally convenient, not hardened:
+The default local stack uses API-key authentication and publishes host ports
+on loopback. Bootstrap generates separate MCP and ZAP keys and enables
+localhost/private-network targets for the bundled demos. Those target settings
+are for an isolated lab and need review before shared deployment.
 
-- MCP auth defaults to `api-key`
-- configure your MCP client to send `MCP_API_KEY` in the `X-API-Key` header
-- published host ports bind to loopback by default
-- the bootstrap enables localhost and private-network targets for the bundled demos
-
-That is acceptable for an isolated laptop lab. It is not a production posture.
-
-For production-like settings, tighten these in `.env`:
-
-```bash
-ZAP_ALLOW_LOCALHOST=false
-ZAP_ALLOW_PRIVATE_NETWORKS=false
-ZAP_URL_WHITELIST=example.com,*.example.com
-```
+- Keep `.env`, keys, bearer tokens, and client configs containing credentials
+  out of version control and shared logs.
+- Keep loopback binding unless you deliberately expose the stack behind
+  trusted network controls. Authentication alone does not provide HTTPS.
+- Only scan systems you own or are explicitly authorized to test. An allowed
+  URL is a network-policy decision, not evidence of permission to scan it.
+- MCP API keys or JWT authenticate the client to this server. Optional target
+  login credentials authenticate ZAP to a website; keep those credentials
+  server-side and out of MCP prompts and client settings.
 
 ## Client Setup
 
-Use the [client compatibility and setup guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
-to choose a client. The server requires Streamable HTTP and, for the default
-API-key setup, a custom `X-API-Key` request header.
-
-### Cursor
-
-Example `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (user-wide):
-
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "url": "http://localhost:7456/mcp",
-      "headers": {
-        "X-API-Key": "${env:MCP_API_KEY}"
-      }
-    }
-  }
-}
-```
-
-Set `MCP_API_KEY` in Cursor's environment. If GUI-launched Cursor does not
-inherit that environment, use the value from `.env` in the `X-API-Key` header
-and restart Cursor. Keep any config containing a real key out of version control.
-
-Do not send your API key as `Authorization: Bearer ...` unless you are actually using a JWT access token.
-
-### First Scan
-
-Ask the connected client:
-
-```text
-Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
-and passive analysis to finish, show a findings summary, generate an HTML
-report, and read it back through MCP. Do not run an active scan.
-```
-
-Expect a completed crawl, a findings summary, and a readable report. Use
-`http://juice-shop:3000` for the scan; `http://localhost:3001` is only the
-browser preview. If setup fails, run `./bin/self-serve-doctor.sh` and use the
-client guide's troubleshooting steps.
+Use the [MCP client guide](docs/src/content/docs/getting-started/mcp-client-authentication.md)
+for Codex, Cursor, supported headers, and connection troubleshooting. API-key
+mode uses `X-API-Key`; `Authorization: Bearer` requires an issued JWT access token.
+For websites requiring login, use
+[Form-Login Target Authentication](docs/src/content/docs/getting-started/form-login-target-authentication.md).
 
 ## Manual MCP Check
 
-If you test `/mcp` with raw HTTP, remember this is streamable MCP. A bare `curl http://localhost:7456/mcp` is not a real protocol check.
-
-### Initialize the MCP session
-
-```bash
-SESSION_ID=$(curl -si \
-  -H "X-API-Key: your-mcp-api-key" \
-  -H "Accept: application/json,text/event-stream" \
-  -H "Content-Type: application/json" \
-  http://localhost:7456/mcp \
-  -d '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"curl-test","version":"1.0.0"}}}' \
-  | awk -F': ' '/Mcp-Session-Id/ {print $2}' | tr -d '\r')
-```
-
-### List tools
-
-```bash
-curl -H "X-API-Key: your-mcp-api-key" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -H "Accept: application/json,text/event-stream" \
-  -H "Content-Type: application/json" \
-  http://localhost:7456/mcp \
-  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
-```
+Use the doctor's connection checks from the first-run guide. For raw HTTP
+diagnostics, follow the [manual MCP session example](docs/src/content/docs/getting-started/mcp-client-authentication.md#test-the-endpoint-manually);
+a bare GET to `/mcp` does not verify protocol initialization or tool calls.
 
 ## JWT Quick Check
 
-Use JWT only when you actually need token expiry, refresh rotation, or shared production auth behavior.
-
-Generate a signing secret with `openssl rand -base64 32`, then put the generated
-value in `.env` and enable JWT:
-
-```bash
-MCP_SECURITY_MODE=jwt
-JWT_ENABLED=true
-JWT_SECRET=replace-with-generated-secret
-```
-
-Recreate the MCP service using the same Compose files as `./dev.sh`:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
-```
-
-Mint a token:
-
-```bash
-curl -s -X POST http://localhost:7456/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"apiKey":"your-mcp-api-key","clientId":"default-client"}'
-```
-
-If you manually use the returned access token against `/mcp`, you still need the same `initialize` and `Mcp-Session-Id` flow shown above.
-
-The supplied Compose file explicitly forwards JWT settings from `.env`. For a
-local `./gradlew bootRun`, supply them as exported process environment variables
-or Spring configuration instead; the application does not automatically load
-`.env`. See the [JWT quick start](docs/src/content/docs/getting-started/jwt-quick-start.md).
+Use JWT when the deployment manages issuance, expiry, refresh, and revocation.
+Follow [JWT Quick Start](docs/src/content/docs/getting-started/jwt-quick-start.md)
+and the [JWT Authentication guide](docs/src/content/docs/security-modes/jwt-authentication.md).
+The startup helpers' doctor verifies the API-key path; it does not validate
+JWT issuance or bearer-token readiness.
 
 ## Recommended Local Settings
 
-### Local development lab
+| Environment | Required review |
+| --- | --- |
+| Isolated local lab | Keep API-key auth and loopback binding; allow private targets only for the intended local test scope. |
+| Shared or cloud deployment | Keep authentication enabled, protect ingress with TLS and network controls, restrict target egress and `ZAP_URL_WHITELIST`, and review workspace access and scan isolation. |
+
+Use `none` only for explicit isolated development tests. Shared deployments
+need the [Production Readiness Checklist](docs/src/content/docs/operations/production-checklist.md);
+switching to JWT alone does not make a shared ZAP engine safe for unrelated users.
+
+## Apply Configuration Changes
+
+For the published-image stack, recreate the MCP service after changing its
+authentication settings:
 
 ```bash
-MCP_SECURITY_MODE=api-key
-MCP_SECURITY_ENABLED=true
-ZAP_ALLOW_LOCALHOST=true
-ZAP_ALLOW_PRIVATE_NETWORKS=true
-ZAP_URL_WHITELIST=
+docker compose up -d --no-build --force-recreate mcp-server
 ```
 
-### Shared internal environment
-
-```bash
-MCP_SECURITY_MODE=jwt
-JWT_ENABLED=true
-JWT_SECRET=replace-with-generated-secret
-ZAP_ALLOW_LOCALHOST=false
-ZAP_ALLOW_PRIVATE_NETWORKS=false
-ZAP_URL_WHITELIST=*.staging.yourcompany.com
-```
+Use the same Compose files that started the stack. Source development uses
+`docker-compose.dev.yml`; follow the
+[MCP authentication configuration guide](docs/src/content/docs/getting-started/authentication-quick-start.md#choose-a-mode)
+for that command and client credential updates. A container restart alone does
+not reload its environment.
 
 ## Common Mistakes
 
-### "401 Unauthorized"
-
-- wrong `MCP_API_KEY`
-- wrong auth mode
-- client forgot to send `X-API-Key` or bearer token
-
-### "Client connects but MCP calls fail"
-
-- you skipped the `initialize` step in manual testing
-- you did not send back `Mcp-Session-Id`
-
-### "URL host 'localhost' is not allowed"
-
-Set:
-
-```bash
-ZAP_ALLOW_LOCALHOST=true
-```
-
-but only for isolated local work.
-
-### "Container fails to start"
-
-Check that `LOCAL_ZAP_WORKPLACE_FOLDER` exists and is writable.
-
-## Useful Commands
-
-```bash
-# View logs
-docker compose logs -f mcp-server
-
-# Restart services
-docker compose -f docker-compose.yml -f docker-compose.dev.yml restart
-
-# Apply changed .env settings (restart alone does not reload them)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
-
-# Stop services
-docker compose down
-
-# Rebuild after code changes
-./dev.sh
-
-# Check service status
-docker compose ps
-```
+For authentication, session, or target-host failures, use the
+[client troubleshooting guide](docs/src/content/docs/getting-started/mcp-client-authentication.md#troubleshooting).
+For container startup or workspace failures, use the
+[first-run recovery guide](docs/getting-started/SELF_SERVE_FIRST_RUN.md).
+Do not disable authentication or broaden target access merely to suppress an error.
 
 ## Read Next
 
-- `README.md`
-- `SECURITY.md`
-- docs site local preview:
-
-```bash
-cd docs
-npm install
-npm run dev
-```
-
-- public docs site: <https://danieltse.org/mcp-zap-server/>
+- [Security Modes](docs/src/content/docs/security-modes/index.md)
+- [Production Readiness Checklist](docs/src/content/docs/operations/production-checklist.md)
+- [Security Policy](SECURITY.md)

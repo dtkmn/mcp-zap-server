@@ -40,8 +40,9 @@ docker compose \
   up -d --build --force-recreate --wait
 ```
 
-`./dev.sh` does not load the optional override. Do not use it while this profile
-is enabled, because it can recreate `mcp-server` without the profile.
+Neither `./dev.sh` nor `./bin/bootstrap-local.sh --start` loads the optional
+override. Do not use either while this profile is enabled, because it can
+recreate `mcp-server` without the profile.
 
 For the complete setup, Cursor prompt, success criteria, networking cases, and
 troubleshooting, read the

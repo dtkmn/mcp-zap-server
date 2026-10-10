@@ -192,8 +192,9 @@ docker compose \
 The override adds `host.docker.internal` support to both MCP Server and ZAP,
 mounts the non-secret profile, and mounts the password as a Compose secret.
 
-Do not run `./dev.sh` while this optional profile is enabled. That script does
-not load the override and can recreate `mcp-server` without the profile.
+Do not run `./dev.sh` or `./bin/bootstrap-local.sh --start` while this optional
+profile is enabled. Those scripts do not load the override and can recreate
+`mcp-server` without the profile.
 
 ## 5. Check The Wiring Without Printing Secrets
 

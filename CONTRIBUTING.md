@@ -37,11 +37,14 @@ Weak contributions usually look like:
 ### Local stack
 
 ```bash
-cp .env.example .env
-docker compose up -d
+./bin/bootstrap-local.sh
+./dev.sh
 ```
 
-See [README.md](./README.md) and [QUICK_START_SECURITY.md](./QUICK_START_SECURITY.md) for local setup and auth details.
+The bootstrap creates or preserves private local settings. `dev.sh` builds the
+checkout with `docker-compose.dev.yml`, waits for health, and runs the existing
+authenticated doctor before reporting ready. For the published-image install
+and client connection workflow, use [Self-Serve First Run](./docs/getting-started/SELF_SERVE_FIRST_RUN.md).
 
 For the shared governance wiring, use the
 [Core integration reference](https://danieltse.org/mcp-gateway-core/reference/zap-integration/).

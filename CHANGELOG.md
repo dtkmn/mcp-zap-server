@@ -22,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Start the local Docker quick start from a versioned published MCP image with `bootstrap-local.sh --start`, preserving existing settings and keys and reusing cached images on restart. Publish generated settings atomically, wait for container health and authenticated MCP checks before reporting readiness, and report the failing stage when MCP requests cannot complete. Keep source builds in the development override and reject failed MCP tool probes.
-- Stop local scanner plugin setup after failed startup or macOS trust denial, preserving existing client settings until authenticated readiness succeeds. Clarify the unsigned preview's trust requirements in the plugin listing and installation guide.
 - Launch the macOS preview services through the current user's macOS service manager so they survive terminal and agent-command completion. Explicit stop removes their registrations; login startup and automatic crash restarts remain disabled.
 - Bound the existing self-serve doctor's HTTP requests, keep its API key out of curl process arguments, and avoid dumping raw server error responses into diagnostics.
 - Exclude the optional ZAP Import/Export add-on from the HTTP Mac preview while its historical dependency source mapping remains unverified; its HAR, packet-capture and ModSecurity import/export features are unavailable in this distribution.

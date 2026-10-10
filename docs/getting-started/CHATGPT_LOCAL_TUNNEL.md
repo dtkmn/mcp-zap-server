@@ -124,9 +124,12 @@ active scan.
 
 Follow the tool results until the crawl and passive analysis finish. A truncated
 report preview is incomplete; use `zap_report_read_chunk` until EOF for the full
-report. Complete retrieval does not ensure that its finding counts match the
-target's full alert set: root-URL filtering can exclude findings from HTML
-reports ([issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294)).
+report. The root-origin filtering omission was fixed on `main` in
+[issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294), newer than
+`v0.15.0`; the `v0.15.0` preview remains affected. Report templates group alert
+families and instances, so their totals do not necessarily equal individual
+alert records returned by the findings API. Compare the underlying evidence
+when counts differ; complete retrieval alone does not establish report completeness.
 
 The native preview's target protections may reject localhost or private-network
 demo targets by default. Use its local settings to allow only your intended
@@ -147,15 +150,26 @@ not establish browser/AJAX crawling or active-scan support.
   account's permissions. Platform access and ChatGPT access are separate.
 - Connection refused or degraded readiness: run the package doctor, confirm
   the bundled services are running, and inspect the local tunnel client state.
-- Local MCP authentication failure: restart through the package launcher so the
-  helper receives the current local key. Do not paste keys into a prompt or
-  enable raw HTTP logging.
+- Local MCP authentication failure: restart the packaged services and tunnel
+  client through the package launcher so both receive the current local key.
+  Do not paste keys into a prompt or enable raw HTTP logging.
 - ChatGPT tools missing or stale: refresh the plugin after its server metadata
   changes, then inspect discovered tools and resolve any actual call error.
 
+This tunnel flow uses a static local `MCP_API_KEY`, without automatic expiry;
+JWT is not used for local forwarding. Use a fresh cryptographically random
+64-character lowercase hexadecimal replacement, different from `ZAP_API_KEY`.
+Update `MCP_API_KEY` privately in `credentials.env`, retaining owner-only
+read/write permissions (mode `600`). Restart the packaged services, then stop
+and restart every tunnel client through the helper so each loads the replacement.
+Editing the file alone does not update a running server or tunnel client.
+OpenAI runtime-key expiry/revocation and tunnel workspace access are separate
+from this local-key procedure.
+
 Stopping the foreground client with Ctrl-C closes this local transport. Stop
 the package with `./bin/mcp-zap stop` when you also want ZAP and MCP stopped;
-settings and reports are retained. For persistent access revocation, remove or
+settings and reports are retained. Stopping the tunnel disconnects it; it does
+not permanently revoke a credential. For persistent access revocation, remove or
 disable the private plugin and revoke the tunnel's workspace/user access in
 Platform as appropriate. Revoke a dedicated runtime key when necessary. If
 reusing a shared `OPENAI_API_KEY`, consider its other applications before

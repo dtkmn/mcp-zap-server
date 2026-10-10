@@ -1,0 +1,17 @@
+{
+  "architecture": "arm64",
+  "java": {
+    "version": "25.0.4.1+1-LTS",
+    "filename": "OpenJDK25U-jre_aarch64_mac_hotspot_25.0.4.1_1.tar.gz",
+    "url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jre_aarch64_mac_hotspot_25.0.4.1_1.tar.gz",
+    "sha256": "5b02bcc908da092e7e00b9772d4f9bbb87f44a60b7c90f7cf5a91a1d98f37e1b",
+    "source_release": "https://github.com/adoptium/temurin25-binaries/releases/tag/jdk-25.0.4.1%2B1"
+  },
+  "zap": {
+    "version": "2.17.0",
+    "filename": "ZAP_2.17.0_Crossplatform.zip",
+    "url": "https://github.com/zaproxy/zaproxy/releases/download/v2.17.0/ZAP_2.17.0_Crossplatform.zip",
+    "sha256": "94c8f767b1c2e94f0db66b3ae56514d5e3f5a728ee1b6c798e0c8fe2d61fbff0",
+    "source_release": "https://github.com/zaproxy/zaproxy/releases/tag/v2.17.0"
+  }
+}

@@ -59,13 +59,18 @@ their source Secret or `.env` changes.
   ```
 
 - Docker Compose: update `JWT_SECRET` in `.env`, then recreate the MCP service
-  using the same files that started it. For the README's `./dev.sh` stack:
+  using the same files that started it. For the README's published-image stack:
+
+  ```bash
+  docker compose up -d --no-build --force-recreate mcp-server
+  ```
+
+  For a source-development stack started with `./dev.sh`, include its override:
 
   ```bash
   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
   ```
 
-  Omit the development override if your stack uses only `docker-compose.yml`.
   `docker compose restart` alone does not reload `.env`.
 - Local JVM process: update the exported environment or Spring configuration
   and restart the process. The application does not automatically load `.env`.

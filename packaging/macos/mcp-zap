@@ -1,0 +1,357 @@
+#!/bin/bash
+set -euo pipefail
+umask 077
+
+PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+JAVA="${PACKAGE_DIR}/runtime/Contents/Home/bin/java"
+MCP_ZAP_DATA_DIR="${MCP_ZAP_DATA_DIR:-${HOME}/Library/Application Support/MCP ZAP Server}"
+STARTING=0
+LOCKED=0
+LAUNCH_DOMAIN="gui/$(id -u)"
+SERVICE_PREFIX=
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+Usage: ./bin/mcp-zap start|stop|status|doctor|client-config [codex]|tunnel
+
+Runs the bundled MCP server and ZAP on loopback. No Docker or system Java.
+Set MCP_ZAP_DATA_DIR to use a different absolute storage directory.
+Settings and reports survive stop and package replacement.
+client-config displays a credential: keep its output private.
+client-config codex prints a Codex TOML entry for private client settings.
+tunnel init TUNNEL_ID|doctor|run uses an independently installed OpenAI tunnel-client.
+EOF
+}
+
+[[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || die "This preview requires an Apple Silicon Mac."
+[[ "${MCP_ZAP_DATA_DIR}" == /* && "${MCP_ZAP_DATA_DIR}" != *$'\n'* ]] || die "MCP_ZAP_DATA_DIR must be an absolute path without newlines."
+COMMAND="${1:-help}"
+shift || true
+case "${COMMAND}" in help|--help|-h) usage; exit 0 ;; esac
+[[ -x "${JAVA}" && -f "${PACKAGE_DIR}/app/server.jar" ]] || die "Incomplete package; use an intact distribution archive."
+
+read_value() {
+  sed -n "s/^${1}=//p" "${2}" | tail -n 1
+}
+
+process_birth() { LC_ALL=C TZ=UTC ps -p "$1" -o lstart= 2>/dev/null; }
+
+owned_process() {
+  local file="$1" pid token born actual
+  [[ -f "${file}" && ! -L "${file}" ]] || return 1
+  pid="$(sed -n '1p' "${file}")"
+  token="$(sed -n '2p' "${file}")"
+  born="$(sed -n '3p' "${file}")"
+  [[ "${pid}" =~ ^[0-9]+$ && "${token}" =~ ^[a-f0-9]{32}$ && -n "${born}" ]] || return 1
+  [[ "$(process_birth "${pid}")" == "${born}" ]] || return 1
+  actual="$(ps -ww -p "${pid}" -o command= 2>/dev/null)" || return 1
+  [[ " ${actual} " == *" -Dmcp.zap.owner=${token} "* ]]
+}
+
+stop_process() {
+  local file="$1" pid attempt
+  if owned_process "${file}"; then
+    pid="$(sed -n '1p' "${file}")"
+    kill -TERM "${pid}" 2>/dev/null || true
+    for ((attempt=0; attempt<20; attempt++)); do
+      owned_process "${file}" || break
+      sleep 0.5
+    done
+    if owned_process "${file}"; then kill -KILL "${pid}" 2>/dev/null || true; fi
+  fi
+  [[ ! -L "${file}" ]] || die "Refusing linked process state."
+  rm -f "${file}"
+}
+
+stop_service() {
+  local service="$1" result=0
+  if /bin/launchctl bootout "${LAUNCH_DOMAIN}/${SERVICE_PREFIX}.${service}" 2>/dev/null; then
+    :
+  else
+    result=$?
+    # ESRCH means this installation has no registered job, including old packages.
+    [[ "${result}" != 3 ]] || result=0
+  fi
+  stop_process "${MCP_ZAP_DATA_DIR}/run/${service}.pid"
+  if [[ "${result}" != 0 ]]; then
+    printf 'Owned %s process stopped, but its service registration could not be removed. Retry stop from a logged-in desktop session.\n' "${service}" >&2
+    return 1
+  fi
+  rm -f "${MCP_ZAP_DATA_DIR}/run/${service}.plist"
+}
+
+cleanup() {
+  local result=$?
+  trap - EXIT INT TERM
+  if [[ "${STARTING}" == 1 ]]; then
+    stop_service mcp || true
+    stop_service zap || true
+  fi
+  if [[ "${LOCKED}" == 1 ]]; then
+    rm -f "${MCP_ZAP_DATA_DIR}/run/launcher.lock/owner"
+    rmdir "${MCP_ZAP_DATA_DIR}/run/launcher.lock" || true
+  fi
+  exit "${result}"
+}
+
+prepare_storage() {
+  local path
+  for path in "${MCP_ZAP_DATA_DIR}" "${MCP_ZAP_DATA_DIR}/run" "${MCP_ZAP_DATA_DIR}/logs" "${MCP_ZAP_DATA_DIR}/reports" "${MCP_ZAP_DATA_DIR}/zap-home"; do
+    [[ ! -L "${path}" ]] || die "Refusing linked application storage."
+    mkdir -p "${path}"
+    [[ -O "${path}" ]] || die "Application storage must belong to the current user."
+    chmod 700 "${path}"
+  done
+  for path in run/mcp.pid run/zap.pid run/mcp.plist run/zap.plist logs/mcp.log logs/zap.log; do
+    [[ ! -L "${MCP_ZAP_DATA_DIR}/${path}" ]] || die "Refusing linked process or log state."
+  done
+  MCP_ZAP_DATA_DIR="$(cd "${MCP_ZAP_DATA_DIR}" && pwd -P)"
+  SERVICE_PREFIX="org.mcp-zap-server.$(printf '%s' "${MCP_ZAP_DATA_DIR}" | shasum -a 256 | cut -c 1-32)"
+}
+
+lock() {
+  local path="${MCP_ZAP_DATA_DIR}/run/launcher.lock" pid born
+  [[ ! -L "${path}" ]] || die "Refusing linked launcher state."
+  if [[ -d "${path}" && -f "${path}/owner" ]]; then
+    pid="$(sed -n '1p' "${path}/owner")"
+    born="$(sed -n '2p' "${path}/owner")"
+    if [[ "${pid}" =~ ^[0-9]+$ && -n "${born}" && "$(process_birth "${pid}")" != "${born}" ]]; then
+      rm "${path}/owner"
+      rmdir "${path}"
+    fi
+  fi
+  mkdir "${path}" 2>/dev/null || die "Another launcher operation is in progress."
+  LOCKED=1
+  trap cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  printf '%s\n%s\n' "$$" "$(process_birth "$$")" > "${path}/owner"
+}
+
+initialize_settings() {
+  local credentials="${MCP_ZAP_DATA_DIR}/credentials.env" settings="${MCP_ZAP_DATA_DIR}/settings.conf"
+  [[ ! -L "${credentials}" && ! -L "${settings}" ]] || die "Refusing linked configuration files."
+  if [[ ! -f "${credentials}" ]]; then
+    printf 'MCP_API_KEY=%s\nZAP_API_KEY=%s\n' "$(openssl rand -hex 32)" "$(openssl rand -hex 32)" > "${credentials}"
+  fi
+  if [[ ! -f "${settings}" ]]; then
+    cat > "${settings}" <<'EOF'
+MCP_PORT=7456
+ZAP_PORT=8090
+MCP_HEAP_MB=512
+ZAP_HEAP_MB=2048
+START_TIMEOUT_SECONDS=180
+ZAP_ALLOW_LOCALHOST=false
+ZAP_ALLOW_PRIVATE_NETWORKS=false
+ZAP_URL_WHITELIST=
+EOF
+  fi
+  chmod 600 "${credentials}" "${settings}"
+}
+
+load_settings() {
+  local key value
+  [[ -f "${MCP_ZAP_DATA_DIR}/credentials.env" && -f "${MCP_ZAP_DATA_DIR}/settings.conf" ]] || die "No local installation state. Run start first."
+  [[ ! -L "${MCP_ZAP_DATA_DIR}/credentials.env" && ! -L "${MCP_ZAP_DATA_DIR}/settings.conf" ]] || die "Refusing linked configuration."
+  MCP_API_KEY="$(read_value MCP_API_KEY "${MCP_ZAP_DATA_DIR}/credentials.env")"
+  ZAP_API_KEY="$(read_value ZAP_API_KEY "${MCP_ZAP_DATA_DIR}/credentials.env")"
+  [[ "${MCP_API_KEY}" =~ ^[a-f0-9]{64}$ && "${ZAP_API_KEY}" =~ ^[a-f0-9]{64}$ && "${MCP_API_KEY}" != "${ZAP_API_KEY}" ]] || die "Invalid local credential file; restore two distinct generated keys."
+  for key in MCP_PORT ZAP_PORT MCP_HEAP_MB ZAP_HEAP_MB START_TIMEOUT_SECONDS ZAP_ALLOW_LOCALHOST ZAP_ALLOW_PRIVATE_NETWORKS ZAP_URL_WHITELIST; do
+    value="$(read_value "${key}" "${MCP_ZAP_DATA_DIR}/settings.conf")"
+    printf -v "${key}" '%s' "${value}"
+  done
+  for key in MCP_PORT ZAP_PORT; do
+    value="${!key}"
+    [[ "${value}" =~ ^[1-9][0-9]{3,4}$ && "${value}" -le 65535 ]] || die "${key} must be a port from 1024 through 65535."
+    [[ "${value}" -ge 1024 ]] || die "${key} must be an unprivileged port."
+  done
+  [[ "${MCP_PORT}" != "${ZAP_PORT}" ]] || die "MCP and ZAP need different ports."
+  for key in MCP_HEAP_MB ZAP_HEAP_MB; do
+    value="${!key}"
+    [[ "${value}" =~ ^[1-9][0-9]{2,4}$ && "${value}" -ge 256 && "${value}" -le 32768 ]] || die "${key} must be 256 through 32768 MB."
+  done
+  [[ "${START_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]{1,2}$ && "${START_TIMEOUT_SECONDS}" -le 900 ]] || die "START_TIMEOUT_SECONDS must be 10 through 900."
+  for key in ZAP_ALLOW_LOCALHOST ZAP_ALLOW_PRIVATE_NETWORKS; do
+    [[ "${!key}" == true || "${!key}" == false ]] || die "${key} must be true or false."
+  done
+  [[ "${ZAP_URL_WHITELIST}" =~ ^[a-zA-Z0-9.,:*_-]*$ ]] || die "Use comma-separated host patterns in ZAP_URL_WHITELIST."
+  MCP_ZAP_SERVER_URL="http://127.0.0.1:${MCP_PORT}/mcp"
+}
+
+run_service() {
+  local service="$1" token="$2" zap_jar
+  load_settings
+  unset OPENAI_API_KEY CONTROL_PLANE_API_KEY MCP_ZAP_TUNNEL_API_KEY
+  case "${service}" in
+    zap)
+      zap_jar=("${PACKAGE_DIR}"/zap/zap-*.jar)
+      [[ ${#zap_jar[@]} == 1 && -f "${zap_jar[0]}" ]] || die "Incomplete ZAP package."
+      [[ -f "${MCP_ZAP_DATA_DIR}/run/zap.properties" && ! -L "${MCP_ZAP_DATA_DIR}/run/zap.properties" ]] || die "Missing private ZAP configuration."
+      exec "${JAVA}" "-Dmcp.zap.owner=${token}" "-Duser.home=${MCP_ZAP_DATA_DIR}/zap-home" -Djava.awt.headless=true "-Xmx${ZAP_HEAP_MB}m" -jar "${zap_jar[0]}" \
+        -daemon -host 127.0.0.1 -port "${ZAP_PORT}" -dir "${MCP_ZAP_DATA_DIR}/zap-home" -configfile "${MCP_ZAP_DATA_DIR}/run/zap.properties" -loglevel WARN
+      ;;
+    mcp)
+      export MCP_API_KEY ZAP_API_KEY ZAP_ALLOW_LOCALHOST ZAP_ALLOW_PRIVATE_NETWORKS ZAP_URL_WHITELIST
+      export SERVER_ADDRESS=127.0.0.1 SERVER_PORT="${MCP_PORT}" ZAP_API_URL=127.0.0.1 ZAP_API_PORT="${ZAP_PORT}"
+      export MCP_SECURITY_MODE=api-key MCP_SECURITY_ENABLED=true JWT_ENABLED=false MCP_CLIENT_ID=macos-client
+      export SPRING_AI_MCP_SERVER_INSTRUCTIONS="Local HTTP preview: use crawl strategy=http. Browser and browser-login add-ons are excluded. Scan only authorized targets and start active scans only with explicit user approval."
+      export ZAP_REPORT_DIRECTORY="${MCP_ZAP_DATA_DIR}/reports"
+      export ZAP_AUTOMATION_LOCAL_DIRECTORY="${ZAP_REPORT_DIRECTORY}/workspaces/macos-client/automation"
+      export ZAP_AUTOMATION_ZAP_DIRECTORY="${ZAP_AUTOMATION_LOCAL_DIRECTORY}"
+      export LOGGING_LEVEL_ROOT=WARN LOGGING_LEVEL_MCP_SERVER_ZAP=WARN
+      exec "${JAVA}" "-Dmcp.zap.owner=${token}" "-Xmx${MCP_HEAP_MB}m" -Dspring.ai.mcp.server.type=sync -jar "${PACKAGE_DIR}/app/server.jar"
+      ;;
+  esac
+}
+
+start_service() {
+  local service="$1" token plist label pid
+  token="$(openssl rand -hex 16)"
+  plist="${MCP_ZAP_DATA_DIR}/run/${service}.plist"
+  label="${SERVICE_PREFIX}.${service}"
+  /usr/bin/plutil -create xml1 "${plist}"
+  /usr/bin/plutil -insert Label -string "${label}" "${plist}"
+  /usr/bin/plutil -insert ProgramArguments -array "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.0 -string /usr/bin/env "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.1 -string -i "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.2 -string PATH=/usr/bin:/bin:/usr/sbin:/sbin "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.3 -string "HOME=${HOME}" "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.4 -string "MCP_ZAP_DATA_DIR=${MCP_ZAP_DATA_DIR}" "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.5 -string /bin/bash "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.6 -string "${PACKAGE_DIR}/bin/mcp-zap" "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.7 -string __run-service "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.8 -string "${service}" "${plist}"
+  /usr/bin/plutil -insert ProgramArguments.9 -string "${token}" "${plist}"
+  /usr/bin/plutil -insert WorkingDirectory -string "${PACKAGE_DIR}" "${plist}"
+  /usr/bin/plutil -insert StandardInPath -string /dev/null "${plist}"
+  /usr/bin/plutil -insert StandardOutPath -string "${MCP_ZAP_DATA_DIR}/logs/${service}.log" "${plist}"
+  /usr/bin/plutil -insert StandardErrorPath -string "${MCP_ZAP_DATA_DIR}/logs/${service}.log" "${plist}"
+  /usr/bin/plutil -insert Umask -integer 63 "${plist}"
+  /usr/bin/plutil -insert ExitTimeOut -integer 10 "${plist}"
+  /usr/bin/plutil -insert RunAtLoad -bool false "${plist}"
+  /usr/bin/plutil -insert KeepAlive -bool false "${plist}"
+  chmod 600 "${plist}"
+  /bin/launchctl bootstrap "${LAUNCH_DOMAIN}" "${plist}" || die "Could not register ${service}. Start from a logged-in macOS desktop session."
+  pid="$(/bin/launchctl kickstart -p "${LAUNCH_DOMAIN}/${label}")" || die "Could not launch ${service}. Inspect its private log."
+  [[ "${pid}" =~ ^[0-9]+$ ]] || die "The service manager did not return a process identifier."
+  record_process "${MCP_ZAP_DATA_DIR}/run/${service}.pid" "${pid}" "${token}"
+}
+
+record_process() {
+  local file="$1" pid="$2" token="$3" born attempt
+  [[ ! -L "${file}" ]] || die "Refusing linked process state."
+  born="$(process_birth "${pid}")" || die "A bundled process exited during startup. Check local logs privately."
+  printf '%s\n%s\n%s\n' "${pid}" "${token}" "${born}" > "${file}"
+  # The service worker may briefly exist before it execs Java.
+  for ((attempt=0; attempt<30; attempt++)); do
+    owned_process "${file}" && return 0
+    sleep 0.1
+  done
+  if [[ "$(process_birth "${pid}")" == "${born}" && "$(ps -p "${pid}" -o ppid= | tr -d ' ')" == "$$" ]]; then
+    kill -TERM "${pid}" 2>/dev/null || true
+  fi
+  die "A spawned service did not enter the expected runtime. Inspect local logs privately."
+}
+
+doctor() {
+  owned_process "${MCP_ZAP_DATA_DIR}/run/zap.pid" && owned_process "${MCP_ZAP_DATA_DIR}/run/mcp.pid" || die "Bundled services are stopped or incomplete. Run start."
+  "${PACKAGE_DIR}/lib/self-serve-doctor.sh" --skip-docker --env-file "${MCP_ZAP_DATA_DIR}/credentials.env" \
+    --server-url "${MCP_ZAP_SERVER_URL}" --health-url "http://127.0.0.1:${MCP_PORT}/actuator/health" --zap-url "http://127.0.0.1:${ZAP_PORT}/"
+}
+
+case "${COMMAND}" in
+  __run-service)
+    [[ $# == 2 && ( "$1" == zap || "$1" == mcp ) && "$2" =~ ^[a-f0-9]{32}$ ]] || die "Invalid internal service invocation."
+    run_service "$1" "$2"
+    ;;
+  start)
+    [[ $# == 0 ]] || die "start takes no arguments; edit settings.conf for configuration."
+    prepare_storage
+    lock
+    initialize_settings
+    load_settings
+    if owned_process "${MCP_ZAP_DATA_DIR}/run/zap.pid" && owned_process "${MCP_ZAP_DATA_DIR}/run/mcp.pid"; then
+      doctor
+      exit 0
+    fi
+    if owned_process "${MCP_ZAP_DATA_DIR}/run/zap.pid" || owned_process "${MCP_ZAP_DATA_DIR}/run/mcp.pid"; then
+      die "Only one bundled service is running. Use stop, then start."
+    fi
+    /bin/launchctl print "${LAUNCH_DOMAIN}" >/dev/null 2>&1 || die "Start from a logged-in macOS desktop session."
+    # Remove stopped registrations left by a failed or interrupted earlier start.
+    stop_service mcp || die "Could not clear the previous MCP service. Run stop."
+    stop_service zap || die "Could not clear the previous ZAP service. Run stop."
+    for port in "${MCP_PORT}" "${ZAP_PORT}"; do
+      if lsof -n -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then die "Port ${port} is in use. Change settings.conf; other applications were not stopped."; fi
+    done
+    # ZAP accepts a properties config file; keep its key out of process arguments.
+    zap_config="${MCP_ZAP_DATA_DIR}/run/zap.properties"
+    [[ ! -L "${zap_config}" ]] || die "Refusing linked ZAP configuration."
+    cat > "${zap_config}" <<EOF
+api.key=${ZAP_API_KEY}
+api.disablekey=false
+api.nokeyforsafeops=false
+api.addrs.addr.name=^(127[.]0[.]0[.]1|zap)$
+api.addrs.addr.regex=true
+api.addrs.addr.enabled=true
+start.checkForUpdates=false
+start.downloadNewRelease=false
+start.checkAddonUpdates=false
+start.installAddonUpdates=false
+oast.callback.localaddr=127.0.0.1
+oast.callback.remoteaddr=127.0.0.1
+oast.callback.port=0
+EOF
+    STARTING=1
+    start_service zap
+    start_service mcp
+    deadline=$((SECONDS + START_TIMEOUT_SECONDS))
+    while (( SECONDS < deadline )); do
+      owned_process "${MCP_ZAP_DATA_DIR}/run/zap.pid" && owned_process "${MCP_ZAP_DATA_DIR}/run/mcp.pid" || die "A bundled service exited. Inspect logs privately under ${MCP_ZAP_DATA_DIR}/logs."
+      if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:${MCP_PORT}/actuator/health" 2>/dev/null | grep -q '"status":"UP"'; then
+        doctor
+        STARTING=0
+        printf '\nReady: %s\nSettings and reports: %s\n' "${MCP_ZAP_SERVER_URL}" "${MCP_ZAP_DATA_DIR}"
+        exit 0
+      fi
+      sleep 1
+    done
+    die "Startup timed out; owned processes were stopped. Inspect local logs privately under ${MCP_ZAP_DATA_DIR}/logs."
+    ;;
+  stop)
+    [[ $# == 0 ]] || die "stop takes no arguments."
+    [[ -d "${MCP_ZAP_DATA_DIR}" ]] || { echo "Stopped."; exit 0; }
+    prepare_storage
+    lock
+    stop_result=0
+    stop_service mcp || stop_result=1
+    stop_service zap || stop_result=1
+    [[ "${stop_result}" == 0 ]] || die "Owned processes were stopped; service registration cleanup needs a retry."
+    echo "Stopped owned services. Settings and reports retained."
+    ;;
+  status)
+    for service in zap mcp; do
+      if owned_process "${MCP_ZAP_DATA_DIR}/run/${service}.pid"; then printf '%s: running\n' "${service}"; else printf '%s: stopped\n' "${service}"; fi
+    done
+    ;;
+  doctor)
+    load_settings
+    doctor
+    ;;
+  client-config)
+    [[ $# -le 1 ]] || die "client-config accepts only an optional codex format."
+    load_settings
+    case "${1:-json}" in
+      json) printf '{"url":"%s","headers":{"X-API-Key":"%s"}}\n' "${MCP_ZAP_SERVER_URL}" "${MCP_API_KEY}" ;;
+      codex) printf '[mcp_servers.mcp-zap-server]\nurl = "%s"\nhttp_headers = { "X-API-Key" = "%s" }\n' "${MCP_ZAP_SERVER_URL}" "${MCP_API_KEY}" ;;
+      *) die "Unknown client configuration format. Use client-config or client-config codex." ;;
+    esac
+    ;;
+  tunnel)
+    load_settings
+    export MCP_ZAP_DATA_DIR MCP_API_KEY MCP_ZAP_SERVER_URL
+    exec "${PACKAGE_DIR}/lib/chatgpt-tunnel.sh" "$@"
+    ;;
+  *) usage; die "Unknown command: ${COMMAND}" ;;
+esac

@@ -36,8 +36,10 @@ may support.
 
 | Client / connection | Status | Scope |
 | --- | --- | --- |
-| Local Codex app or CLI with `X-API-Key` | Documented setup, end-to-end unverified here | Uses `~/.codex/config.toml` and Codex's documented Streamable HTTP header support. Verify discovery and the first scan below. |
+| Local Codex CLI with `X-API-Key` | Private HTTP workflow verified on 8 October 2026 | CLI 0.161.0 directly connected to the Apple Silicon Mac preview and completed controlled HTTP crawl/passive/report retrieval with independent checksum verification. The bounded test allowed seven workflow tools with automatic approval review. |
+| Local Codex desktop app with `X-API-Key` | Maintainer-reported HTTP workflow on 9 October 2026 | A second Mac (M4 Pro, macOS 27.0.1) completed the desktop HTTP/passive/report workflow. Screenshots show the connection and rendered report; Codex reported full MCP retrieval and checksum verification. Detailed tool traces were not independently reviewed, and the desktop version was not recorded. |
 | Local Cursor with `X-API-Key` | Previously validated setup | Previously documented local API-key setup at `~/.cursor/mcp.json`; client version and test date were not recorded. |
+| ChatGPT through Secure MCP Tunnel | Private HTTP workflow verified on 8 October 2026 | The [private Mac connection guide](../chatgpt-local-tunnel/) records the tested Apple Silicon preview, authenticated forwarding and full report read-back. Requires Platform tunnel permissions and ChatGPT developer-mode access. Browser workflows and public distribution remain unverified; report-content limits are documented in the guide. |
 | Other streamable HTTP clients with custom headers | Expected to work, conditional | Must reach `/mcp`, send the configured auth header, and manage MCP sessions. Use the client's own configuration format and verify tool calls. |
 | Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
 | Claude Desktop with this guide's local `localhost` setup | Unsupported onboarding path | Remote connectors run from Anthropic's infrastructure. The repository does not supply a local desktop bridge or a tested Claude connector setup. |
@@ -49,9 +51,10 @@ succeeded. Remove credentials before sharing configuration or logs.
 
 ## Codex
 
-First complete [Self-Serve First Run](../self-serve-first-run/), including
-`./bin/self-serve-doctor.sh`, with the server in API-key mode. This recipe uses
-a local Codex app or CLI on the same machine as the Docker stack. For a Codex
+First start either the Compose stack using [Self-Serve First Run](../self-serve-first-run/)
+and `./bin/self-serve-doctor.sh`, or the [Mac preview](../macos-package/)
+using `./bin/mcp-zap start` and `./bin/mcp-zap doctor`. This recipe uses
+a local Codex app or CLI on the same machine as the server. For a Codex
 host on another machine, replace `localhost` with an address reachable from
 that host.
 
@@ -70,7 +73,8 @@ env_http_headers = { "X-API-Key" = "MCP_API_KEY" }
 ```
 
 `MCP_API_KEY` here is the environment variable name. Its value must match the
-key in the server's `.env`; Codex does not automatically load that file.
+key in the Compose server's `.env` or the Mac package's private `credentials.env`;
+Codex does not automatically load those files.
 The key authenticates Codex to MCP ZAP Server, not ZAP to the target website.
 
 For the CLI, enter the key at a hidden prompt in the same terminal before
@@ -98,6 +102,10 @@ Replace the placeholder only in your private user configuration, then restart
 the app. Do not commit a file containing the key or paste it into a prompt.
 This API-key setup does not use `codex mcp login`, which starts an OAuth flow.
 
+The Mac preview can generate the static-header TOML entry with
+`./bin/mcp-zap client-config codex`. Merge its output only into your private
+configuration; it contains the key and already uses the configured local port.
+
 After restarting the client, ask in a local task:
 
 ```text
@@ -109,8 +117,17 @@ Expected result: tools such as `zap_crawl_start`, `zap_crawl_status`,
 authentication error. Then run the [first scan below](#first-scan-and-expected-result).
 If you receive `401`, check the key and whether the Codex process received
 the environment variable. If the connection is refused, check the stack and
-the `/mcp` address. This configuration follows Codex's documented support;
-a complete Codex-to-ZAP scan has not yet been validated for this repository.
+the `/mcp` address. A bounded direct CLI 0.161.0 test against the Mac preview
+completed HTTP crawl/passive analysis and full report read-back on 8 October 2026.
+The report checksum matched the local file. Separately, a maintainer reported
+the desktop HTTP/passive/report workflow working on a second Mac on 9 October 2026;
+the screenshots show the connection and rendered report, with complete retrieval
+and checksum verification reported by Codex. The desktop version was not recorded
+here, and detailed tool traces were not independently reviewed. These results do not establish
+browser workflows or report finding-count parity; the
+[Mac guide](../macos-package/) records the preview's remaining limits.
+If Codex asks for tool approval, approve only your authorized target and workflow.
+A client-side denied approval does not indicate an MCP authentication failure.
 
 ## Cursor
 
@@ -185,7 +202,7 @@ Never add the target website username or password to this file.
 With the local Compose demo stack running, ask your connected client:
 
 ```text
-Run only a guided crawl against http://juice-shop:3000.
+Run only a guided HTTP crawl against http://juice-shop:3000.
 Poll until the crawl completes, wait for passive analysis, and summarize
 findings for that target. Generate an HTML report scoped to that target and
 read it back through MCP. Follow the tools' Next Actions. Do not start an

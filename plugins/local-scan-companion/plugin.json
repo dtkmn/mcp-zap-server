@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "local-scan-companion",
+  "version": "0.1.0",
+  "description": "Guided setup for a separately installed local MCP ZAP Server package in Codex.",
+  "author": {
+    "name": "dtkmn",
+    "url": "https://github.com/dtkmn"
+  },
+  "homepage": "https://danieltse.org/mcp-zap-server/",
+  "repository": "https://github.com/dtkmn/mcp-zap-server",
+  "license": "Apache-2.0",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/setup-local-scanner/SKILL.md",
+      "interface": {
+        "displayName": "Local Scan Companion",
+        "shortDescription": "Set up a local ZAP scanner",
+        "longDescription": "A local Codex setup prototype for the Apple Silicon macOS MCP ZAP Server preview. Run setup to locate a maintainer-supplied package, start its bundled Java and ZAP, and configure a separate private MCP connection. Installing this plugin does not install the scanner or expose MCP tools. A public Mac download and public-directory approval are pending. Requires local command execution; web-only chats cannot access a Mac's loopback server. This independent project is not affiliated with or endorsed by ZAP or OpenAI.",
+        "developerName": "dtkmn",
+        "category": "Developer Tools",
+        "capabilities": [],
+        "websiteURL": "https://danieltse.org/mcp-zap-server/",
+        "supportURL": "https://github.com/dtkmn/mcp-zap-server/issues",
+        "defaultPrompt": "Help me set up the local scanner in Codex.",
+        "composerIcon": "./assets/icon.svg",
+        "logo": "./assets/icon.svg"
+      }
+    }
+  }
+}

@@ -42,15 +42,23 @@ passes JWT settings into the container, so enabling JWT takes effect on recreate
 
 ## Step 3: Apply The Configuration
 
-For the README's `./dev.sh` stack, recreate the MCP service with the same Compose
-files so the changed environment reaches the container:
+For the README's published-image stack started with
+`./bin/bootstrap-local.sh --start`, recreate the MCP service so the changed
+environment reaches the container:
+
+```bash
+docker compose up -d --no-build --force-recreate mcp-server
+```
+
+For a source-development stack started with `./dev.sh`, include its override:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
 
-If you originally started with only `docker-compose.yml`, omit the development
-override. `docker compose restart` alone does not reload `.env`.
+`docker compose restart` alone does not reload `.env`. The startup helpers'
+doctor checks the API-key connection, not JWT issuance or bearer tokens; use
+steps 4–6 below to verify JWT readiness.
 
 For a local JVM process, export the settings before starting it. `bootRun` does
 not automatically read `.env`; supply your ZAP connection and API keys as well:

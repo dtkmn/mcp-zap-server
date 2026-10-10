@@ -24,7 +24,7 @@ Checks the local self-serve API-key path end-to-end:
 - local .env / API key presence
 - Docker and Compose availability
 - MCP and ZAP reachability
-- MCP initialize + tools/list
+- MCP authentication rejection, initialize + tools/list
 - guided scan, report, and evidence tool visibility
 - one harmless tool call (zap_passive_scan_status)
 
@@ -108,10 +108,13 @@ post_json() {
   local body_file="$4"
   shift 4
   local -a args
+  local config_file header http_code result
 
   args=(
     curl
     -sS
+    --connect-timeout 5
+    --max-time 30
     -D "${headers_file}"
     -o "${body_file}"
     -w "%{http_code}"
@@ -119,13 +122,27 @@ post_json() {
     -H "Content-Type: application/json"
   )
 
+  config_file="${request_dir}/curl-headers"
+  : > "${config_file}"
   while [[ $# -gt 0 ]]; do
-    args+=(-H "$1")
+    header="$1"
+    if [[ "${header}" == *$'\n'* || "${header}" == *$'\r'* ]]; then
+      rm -f "${config_file}"
+      echo "Invalid HTTP header value." >&2
+      return 1
+    fi
+    header="${header//\\/\\\\}"
+    header="${header//\"/\\\"}"
+    printf 'header = "%s"\n' "${header}" >> "${config_file}"
     shift
   done
 
-  args+=("${url}" -d "${payload}")
-  "${args[@]}"
+  args+=(--config "${config_file}" "${url}" -d "${payload}")
+  result=0
+  http_code="$("${args[@]}")" || result=$?
+  rm -f "${config_file}"
+  printf '%s' "${http_code}"
+  return "${result}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -248,31 +265,33 @@ if [[ "${SKIP_DOCKER}" -eq 0 ]]; then
   fi
 
   if [[ ${#FAILURES[@]} -eq 0 ]]; then
-    running_services="$(docker compose ps --services --status running 2>/dev/null || true)"
+    running_services="$(docker compose --project-directory "$REPO_ROOT" --env-file "$ENV_FILE" \
+      -f "$REPO_ROOT/docker-compose.yml" ps --services --status running 2>/dev/null || true)"
     if grep -qx 'mcp-server' <<<"${running_services}"; then
       pass "Local mcp-server container is running"
     else
-      fail "Local mcp-server container is not running. Start it with ./dev.sh."
+      fail "Local mcp-server container is not running. Start it with ./bin/bootstrap-local.sh --start."
     fi
 
     if grep -qx 'zap' <<<"${running_services}"; then
       pass "Local zap container is running"
     else
-      fail "Local zap container is not running. Start it with ./dev.sh."
+      fail "Local zap container is not running. Start it with ./bin/bootstrap-local.sh --start."
     fi
   fi
 fi
 
 mcp_reachable=0
-if curl -fsS "${HEALTH_URL}" | grep -q '"status":"UP"'; then
+if health_body="$(curl -fsS --connect-timeout 5 --max-time 10 "${HEALTH_URL}")" \
+  && grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' <<<"${health_body}"; then
   pass "MCP health endpoint is UP at ${HEALTH_URL}"
   mcp_reachable=1
 else
-  fail "MCP health endpoint is not ready at ${HEALTH_URL}. Start the stack with ./dev.sh."
+  fail "MCP health endpoint is not ready at ${HEALTH_URL}. Start the stack with ./bin/bootstrap-local.sh --start."
 fi
 
 if [[ "${SKIP_ZAP}" -eq 0 ]]; then
-  if curl -fsS "${ZAP_URL}" >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 5 --max-time 10 "${ZAP_URL}" >/dev/null 2>&1; then
     pass "ZAP is reachable at ${ZAP_URL}"
   else
     fail "ZAP is not reachable at ${ZAP_URL}."
@@ -282,15 +301,24 @@ fi
 session_id=""
 negotiated_protocol_version=""
 if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
-  headers_file="$(mktemp)"
-  body_file="$(mktemp)"
-  trap 'rm -f "${headers_file:-}" "${body_file:-}" "${list_headers_file:-}" "${list_body_file:-}" "${tool_headers_file:-}" "${tool_body_file:-}"' EXIT
+  request_dir="$(mktemp -d)"
+  trap 'rm -rf "${request_dir}"' EXIT
+  headers_file="${request_dir}/headers"
+  body_file="${request_dir}/body"
 
   init_payload="{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"${MCP_PROTOCOL_VERSION}\",\"capabilities\":{\"roots\":{\"listChanged\":true},\"sampling\":{},\"elicitation\":{\"form\":{},\"url\":{}}},\"clientInfo\":{\"name\":\"self-serve-doctor\",\"version\":\"1.0.0\"}}}"
-  http_code="$(post_json "${SERVER_URL}" "${init_payload}" "${headers_file}" "${body_file}" "X-API-Key: ${MCP_API_KEY}")"
+  if ! http_code="$(post_json "${SERVER_URL}" "${init_payload}" "${headers_file}" "${body_file}")"; then
+    fail "MCP authentication check could not connect or complete its response. Check the endpoint and retry."
+  elif [[ "${http_code}" == "401" ]]; then
+    pass "MCP rejects requests without authentication"
+  else
+    fail "MCP request without authentication returned HTTP ${http_code}, expected 401. Check that MCP security is enabled."
+  fi
 
-  if [[ "${http_code}" == "200" ]]; then
-    session_id="$(awk -F': ' 'tolower($1)=="mcp-session-id" {gsub("\r", "", $2); print $2}' "${headers_file}")"
+  if ! http_code="$(post_json "${SERVER_URL}" "${init_payload}" "${headers_file}" "${body_file}" "X-API-Key: ${MCP_API_KEY}")"; then
+    fail "MCP initialize could not connect or complete its response. Check the endpoint and retry."
+  elif [[ "${http_code}" == "200" ]]; then
+    session_id="$(awk 'tolower($0) ~ /^mcp-session-id:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/[[:space:]]*$/, ""); print; exit}' "${headers_file}")"
     negotiated_protocol_version="$(grep -o '"protocolVersion"[[:space:]]*:[[:space:]]*"[^"]*"' "${body_file}" | head -n 1 | sed 's/.*"protocolVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
     if [[ -n "${session_id}" ]]; then
       pass "MCP initialize succeeded and returned a session id"
@@ -305,18 +333,16 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
       fail "MCP initialize response did not include a protocolVersion."
     fi
   else
-    response_body="$(cat "${body_file}")"
-    fail "MCP initialize failed with HTTP ${http_code}. Response: ${response_body}"
+    fail "MCP initialize failed with HTTP ${http_code}. Inspect server logs privately."
   fi
 
   if [[ -n "${session_id}" ]]; then
     follow_up_protocol_version="${negotiated_protocol_version:-${MCP_PROTOCOL_VERSION}}"
-    list_headers_file="$(mktemp)"
-    list_body_file="$(mktemp)"
     list_payload='{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-    http_code="$(post_json "${SERVER_URL}" "${list_payload}" "${list_headers_file}" "${list_body_file}" "X-API-Key: ${MCP_API_KEY}" "Mcp-Session-Id: ${session_id}" "MCP-Protocol-Version: ${follow_up_protocol_version}")"
-
-    if [[ "${http_code}" == "200" ]] && grep -q '"result"' "${list_body_file}" && ! grep -q 'NullPointerException' "${list_body_file}"; then
+    if ! http_code="$(post_json "${SERVER_URL}" "${list_payload}" "${headers_file}" "${body_file}" "X-API-Key: ${MCP_API_KEY}" "Mcp-Session-Id: ${session_id}" "MCP-Protocol-Version: ${follow_up_protocol_version}")"; then
+      fail "MCP tool discovery could not connect or complete its response. Check the endpoint and retry."
+    elif [[ "${http_code}" == "200" ]] && grep -Eq '"result"[[:space:]]*:[[:space:]]*\{' "${body_file}" \
+      && ! grep -q '"error"' "${body_file}" && ! grep -q 'NullPointerException' "${body_file}"; then
       pass "tools/list succeeded through the real MCP endpoint"
       required_guided_tools=(
         zap_crawl_start
@@ -330,24 +356,23 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
         zap_scan_history_customer_handoff
       )
       for tool in "${required_guided_tools[@]}"; do
-        require_tool_in_list "${tool}" "${list_body_file}"
+        require_tool_in_list "${tool}" "${body_file}"
       done
     else
-      response_body="$(cat "${list_body_file}")"
-      fail "tools/list failed with HTTP ${http_code}. Response: ${response_body}"
+      fail "tools/list failed with HTTP ${http_code}. Inspect server logs privately."
     fi
 
     if [[ "${SKIP_TOOL_CALL}" -eq 0 ]]; then
-      tool_headers_file="$(mktemp)"
-      tool_body_file="$(mktemp)"
       tool_payload='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"zap_passive_scan_status","arguments":{}}}'
-      http_code="$(post_json "${SERVER_URL}" "${tool_payload}" "${tool_headers_file}" "${tool_body_file}" "X-API-Key: ${MCP_API_KEY}" "Mcp-Session-Id: ${session_id}" "MCP-Protocol-Version: ${follow_up_protocol_version}")"
-
-      if [[ "${http_code}" == "200" ]] && ! grep -q '"error"' "${tool_body_file}" && ! grep -q 'NullPointerException' "${tool_body_file}"; then
+      if ! http_code="$(post_json "${SERVER_URL}" "${tool_payload}" "${headers_file}" "${body_file}" "X-API-Key: ${MCP_API_KEY}" "Mcp-Session-Id: ${session_id}" "MCP-Protocol-Version: ${follow_up_protocol_version}")"; then
+        fail "MCP passive-status probe could not connect or complete its response. Check the endpoint and retry."
+      elif [[ "${http_code}" == "200" ]] && grep -Eq '"result"[[:space:]]*:[[:space:]]*\{' "${body_file}" \
+        && grep -Eq '"content"[[:space:]]*:[[:space:]]*\[' "${body_file}" \
+        && ! grep -Eq '"isError"[[:space:]]*:[[:space:]]*true' "${body_file}" \
+        && ! grep -q '"error"' "${body_file}" && ! grep -q 'NullPointerException' "${body_file}"; then
         pass "zap_passive_scan_status succeeded as a harmless tool probe"
       else
-        response_body="$(cat "${tool_body_file}")"
-        fail "zap_passive_scan_status failed with HTTP ${http_code}. Response: ${response_body}"
+        fail "zap_passive_scan_status failed with HTTP ${http_code}. Inspect server logs privately."
       fi
     fi
   fi
@@ -358,12 +383,12 @@ if [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit 1
 fi
 
-cat <<'EOF'
+cat <<EOF
 
 Self-serve API-key path looks healthy.
 
 Next steps:
-- Connect your MCP client to http://localhost:7456/mcp using X-API-Key from MCP_API_KEY in .env.
+- Connect your MCP client to ${SERVER_URL} using X-API-Key from MCP_API_KEY in your private configuration.
 - Cursor: start from examples/cursor/mcp.json; see the client guide if GUI-launched Cursor does not inherit your shell environment.
 - Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
 - First-run guide: docs/getting-started/SELF_SERVE_FIRST_RUN.md

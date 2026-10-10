@@ -6,17 +6,18 @@ the chart and MCP image for `v0.15.0`; confirm release-image publication before
 installing the application. CloudFormation does not install MCP, ZAP, application
 credentials, target access rules or a database.
 
-A live evaluation of this template on EKS `1.36` with one `m7i.xlarge` worker
-verified cluster bootstrap, all five pinned add-ons, operator access and
-encrypted EBS provisioning. Using a matched prerelease MCP image/chart, it also
-verified authenticated crawl/passive/report flows, unchanged report readback
-and a fresh scan after MCP replacement, and permitted/denied network paths
-after policies settled.
+A live evaluation on 8 October 2026 using the published `v0.15.0` MCP image and
+matching chart on EKS `1.36` with one `m7i.xlarge` worker verified cluster
+bootstrap, all five pinned add-ons, operator access and encrypted EBS
+provisioning. It also verified MCP access with JWT authentication, HTTP crawls,
+passive analysis and complete report retrieval against an owned internal target,
+unchanged report readback and a fresh scan after MCP replacement, and
+permitted/denied network paths after policies settled.
 
 This single-worker evaluation does not establish HA, production capacity,
 deny-at-startup isolation or protection from hosting-node access. Optional import
-and automation flows were outside its scope. Verify the published image and
-complete the checks below in your own environment.
+and automation flows were outside its scope. Verify your selected published
+image and complete the checks below in your own environment.
 
 | File | Purpose |
 | --- | --- |

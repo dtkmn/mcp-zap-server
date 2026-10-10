@@ -51,13 +51,19 @@ openssl rand -hex 32
 openssl rand -base64 64
 ```
 
-For the README's `./dev.sh` stack, recreate the server after changing the mode:
+For the README's published-image stack started with
+`./bin/bootstrap-local.sh --start`, recreate the server after changing the mode:
+
+```bash
+docker compose up -d --no-build --force-recreate mcp-server
+```
+
+For a source-development stack started with `./dev.sh`, include its override:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
 ```
 
-If you started with only `docker-compose.yml`, omit the development override.
 The Compose file explicitly passes these settings into the MCP container.
 For a local `./gradlew bootRun` or `java -jar` process, export the variables or
 use Spring configuration; the application does not automatically read `.env`.
@@ -65,6 +71,10 @@ use Spring configuration; the application does not automatically read `.env`.
 Also update the credential in each MCP client and reconnect it.
 If you choose JWT, configure a pre-issued bearer token in each client; see
 [MCP Client Authentication](../mcp-client-authentication/).
+The startup helpers' doctor checks the API-key connection, not JWT issuance or
+bearer tokens. After switching to JWT, use
+the token issuance and MCP checks in [JWT Quick Start](../jwt-quick-start/) to
+verify readiness.
 
 ## What The Client Sends
 
@@ -131,12 +141,13 @@ user or network to reach the server.
 
 ```bash
 # Recreate the server to pick up .env changes
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate mcp-server
+docker compose up -d --no-build --force-recreate mcp-server
 ```
 
-Use the same Compose files that started your stack. A simple restart preserves
-the old container environment. For a local JVM process, verify that the settings
-are exported before launching it.
+Use the same Compose files that started your stack; include
+`docker-compose.dev.yml` for source development as shown above. A simple
+restart preserves the old container environment. For a local JVM process,
+verify that the settings are exported before launching it.
 
 ## Recommendation
 

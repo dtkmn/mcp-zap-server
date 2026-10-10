@@ -18,63 +18,35 @@ MCP ZAP Server lets MCP clients drive ZAP through guided, operator-controlled se
 
 ## Install Locally
 
-Prerequisites:
+Follow [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md)
+for prerequisites, the supported `./bin/bootstrap-local.sh --start` path,
+version selection, restart, and recovery. The stack does not bundle an MCP
+client; configure the user's chosen client separately.
 
-- Docker 20.10 or newer
-- Docker Compose v2
-- an MCP client that supports streamable HTTP and custom request headers
+Before assisting with setup:
 
-```bash
-git clone https://github.com/dtkmn/mcp-zap-server.git
-cd mcp-zap-server
+- Download images, run local containers, and edit client settings within the
+  user's authorized setup scope. Preserve unrelated settings and connections;
+  obtain permission for changes beyond that scope.
+- Inspect the existing setup before replacing it. Preserve `.env`, credentials,
+  workspace contents, and the user's selected version. Do not use bootstrap
+  `--force` for recovery; it resets settings and rotates API keys.
+- Keep credentials in private local settings. Never print API keys, tokens,
+  complete credential-bearing configs, or private logs into the conversation.
+- Report readiness only after the startup checks succeed and the client can
+  discover tools. If blocked, use the existing guide's diagnostics and report
+  the failing step instead of treating installation as a working connection.
 
-cp .env.example .env
-
-# Generate ZAP_API_KEY and MCP_API_KEY values, then place them in .env.
-openssl rand -hex 32
-openssl rand -hex 32
-
-docker compose up -d
-```
-
-The default stack binds local ports to `127.0.0.1`.
-
-- MCP endpoint: `http://localhost:7456/mcp`
-- browser-visible demo targets: Juice Shop on `http://localhost:3001`, Petstore on `http://localhost:3002`
-
-The stack does not bundle an MCP client. Install and configure your chosen
-client separately.
+For source builds, use [contributor setup](CONTRIBUTING.md#local-stack).
 
 ## MCP Client Configuration
 
 Use Streamable HTTP with the `X-API-Key` header from `MCP_API_KEY` in `.env`.
-See the [client compatibility and setup guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
-for the project's validation status and client-specific limitations.
-
-For Cursor, use `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (user-wide):
-
-```json
-{
-  "mcpServers": {
-    "zap-security": {
-      "url": "http://localhost:7456/mcp",
-      "headers": {
-        "X-API-Key": "${env:MCP_API_KEY}"
-      }
-    }
-  }
-}
-```
-
-The environment variable must be available to Cursor. If a GUI launch does
-not inherit it, put the value from `.env` in the `X-API-Key` header and restart
-Cursor. Keep configs containing real keys out of version control.
-
-Other clients use their own configuration format. Set the endpoint to
-`http://localhost:7456/mcp`, select Streamable HTTP, and configure the
-`X-API-Key` header. Do not assume Cursor's JSON schema or environment-variable
-syntax is portable to every client. The localhost endpoint assumes the client
-runs on the same host as the published Compose ports.
+Follow the [client compatibility and setup guide](docs/src/content/docs/getting-started/mcp-client-authentication.md)
+for the user's client and its validation status. Do not assume one client's
+configuration schema or environment-variable syntax works in another client.
+The default `http://localhost:7456/mcp` endpoint requires a client running on
+the same host as Compose; web-only clients cannot reach that loopback address.
 
 ## Standalone OCI Image With External ZAP
 
@@ -153,32 +125,11 @@ This default guided standalone path has been smoke-tested with MCP `initialize`,
 
 ## Safe First Test
 
-After the stack is running, ask the MCP client to list available ZAP tools before running a scan. Start with the bundled demo targets, not a public or third-party site.
-
-Suggested first request:
-
-```text
-Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
-and passive analysis to finish, show a findings summary, generate an HTML
-report, and read it back through MCP. Do not run an active scan.
-```
-
-Expect a completed crawl, a findings summary, and a readable report. Finding
-counts vary. If the client cannot list tools or the scan fails, resolve the
-error before interpreting the result. Run `./bin/self-serve-doctor.sh` for the
-local API-key connection check.
-
-For scans inside the default Compose stack, use the service URL reachable by the ZAP container:
-
-```text
-http://juice-shop:3000
-```
-
-The host URL is only for opening the demo app in your browser:
-
-```text
-http://localhost:3001
-```
+Use the bundled demo workflow in [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md)
+after tool discovery succeeds. For Compose targets, use the container URL
+reachable by ZAP, not the host browser preview. Do not run active scans without
+the user's explicit authorization for the target and scan scope. A failed
+scan or report retrieval is not a clean security result.
 
 ## Important Safety Notes
 
@@ -189,6 +140,6 @@ http://localhost:3001
 
 More documentation:
 
-- https://danieltse.org/mcp-zap-server/
-- https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/
-- https://danieltse.org/mcp-zap-server/operations/production-checklist/
+- [Full documentation](https://danieltse.org/mcp-zap-server/)
+- [Quick Start Security](QUICK_START_SECURITY.md)
+- [Production Readiness Checklist](docs/src/content/docs/operations/production-checklist.md)

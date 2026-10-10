@@ -164,11 +164,14 @@ ZAP_OPENAPI_CONTENT_MAX_RETAINED_IMPORTS=64
 ZAP_OPENAPI_CONTENT_RETENTION_MINUTES=60
 ```
 
-Start the base stack with the optional staging override:
+Start the published-image base stack with the optional staging override:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.openapi-content.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.openapi-content.yml up -d --no-build
 ```
+
+For source development, also include `-f docker-compose.dev.yml` after the base
+file and use `--build` to build the checkout.
 
 The override binds the pre-existing host `content-imports` directory at
 `/zap/imports` in both containers, read-only in ZAP. It does not create a missing

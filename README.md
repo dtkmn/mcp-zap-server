@@ -45,46 +45,33 @@ Watch the demo: [browser demo](https://danieltse.org/mcp-zap-server/demo.html) o
 Prerequisites:
 
 - Docker 20.10+
-- Docker Compose v2 (`docker compose`)
+- Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 
-./bin/bootstrap-local.sh
-./dev.sh
-./bin/self-serve-doctor.sh
+./bin/bootstrap-local.sh --start
 ```
 
-Those scripts are the supported local happy path, not hidden magic:
+This creates missing settings, preserves existing keys and workspace data,
+and starts a versioned release image. It reports ready after container health
+and authenticated MCP checks pass.
 
-- `bootstrap-local.sh` creates `.env`, generates local API keys, and prepares the ZAP workspace.
-- `dev.sh` starts the Docker Compose stack with the faster JVM image.
-- `self-serve-doctor.sh` checks Docker, auth, MCP initialize, `tools/list`, guided tools, and a harmless tool call.
-
-The JVM image remains Java 25 end to end: source compilation, bytecode, and
-runtime all target Java 25. Its final runtime is distroless, so it intentionally
-contains no shell, package manager, or `curl`. A small built-in HTTP probe keeps
-the normal Docker Compose health status; `docker compose ps` still reports the
-MCP service as `(healthy)` after startup.
+Use [Self-Serve First Run](./docs/getting-started/SELF_SERVE_FIRST_RUN.md) for
+version selection, configuration, stopping/restarting, startup timeouts,
+and recovery. For source builds, use the
+[contributor setup](./CONTRIBUTING.md#local-stack).
 
 Connect your MCP client:
 
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
 - Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
-- [Codex setup](./docs/src/content/docs/getting-started/mcp-client-authentication.md#codex)
-- Cursor config example: [`examples/cursor/mcp.json`](./examples/cursor/mcp.json)
-- [Client compatibility and setup](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
+- [Client setup for Codex, Cursor, and other MCP clients](./docs/src/content/docs/getting-started/mcp-client-authentication.md)
 
 The stack runs the MCP server, ZAP, and demo targets. Install and configure
 your preferred MCP client separately.
-
-When scanning the bundled demo targets, use the container URLs that ZAP can
-reach from inside Compose:
-
-- Juice Shop scan target: `http://juice-shop:3000`
-- Petstore scan target: `http://petstore:8080`
 
 After connecting, try this first prompt:
 
@@ -95,30 +82,14 @@ report, and read it back through MCP. Do not run an active scan.
 ```
 
 Expect a completed crawl, a findings summary, and a report the client can
-read. Finding counts vary; a connection or scan error is not a clean result.
+read. Use the container URL `http://juice-shop:3000` for this scan; the host
+preview `http://localhost:3001` is for your browser. Finding counts vary;
+a connection or scan error is not a clean result.
 
-Version `v0.15.0` adds complete paged report retrieval through
-`zap_report_read_chunk`, target-scoped report sanitization and independent HTTP
-crawl depth/child limits. These corrections are not in the `v0.14.0` image. See
-[Findings and Reports](./docs/src/content/docs/scanning/findings-and-reports.md)
-and [HTTP crawl limits](./docs/src/content/docs/scanning/scan-execution-modes.md#http-crawl-limits-unreleased-correction)
-for contracts and version requirements.
-
-The default Compose stack publishes host ports on `127.0.0.1` only. Set `MCP_ZAP_BIND_ADDRESS=0.0.0.0` only when you intentionally expose the stack behind trusted network controls.
-
-Client setup:
-
-- [Self-Serve First Run](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/)
-- [MCP Access Authentication](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
-- [MCP Client Configuration](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
-- [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
-- [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
-- [Agent install notes](./llms-install.md)
-
-There are two independent authentication layers. The API key or JWT lets
-Cursor call MCP ZAP Server. An optional target-auth profile lets ZAP log in to
-an application you are authorized to scan. Most first runs need only the MCP
-API key; never put a target website password in Cursor or an MCP prompt.
+The default stack binds published ports to loopback. Review
+[Quick Start Security](./QUICK_START_SECURITY.md) before changing access or
+scan-target settings. [Agent install notes](./llms-install.md) cover setup
+permissions and standalone OCI use.
 
 ## Discovery Metadata
 

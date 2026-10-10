@@ -202,7 +202,7 @@ Never add the target website username or password to this file.
 With the local Compose demo stack running, ask your connected client:
 
 ```text
-Run only a guided crawl against http://juice-shop:3000.
+Run only a guided HTTP crawl against http://juice-shop:3000.
 Poll until the crawl completes, wait for passive analysis, and summarize
 findings for that target. Generate an HTML report scoped to that target and
 read it back through MCP. Follow the tools' Next Actions. Do not start an

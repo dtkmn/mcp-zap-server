@@ -39,10 +39,7 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-home:/home/zap/.ZAP
 
   mcp-server:
-    build:
-      context: .
-      dockerfile: ${DOCKERFILE:-Dockerfile}
-    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-latest}
+    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.15.0}
     restart: always
     depends_on:
       zap:

@@ -1,16 +1,14 @@
 #!/bin/bash
-# Quick development workflow with JVM image (2-3 min builds)
+# Build the local checkout with the development Compose override.
+set -euo pipefail
 
-echo "🚀 Starting development environment (JVM - fast builds)"
-echo "⏱️  Build time: ~2-3 minutes"
-echo ""
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+echo "Building and starting the local development stack."
 
-echo ""
-echo "✅ Development environment ready!"
-echo "📊 Services:"
-echo "   - MCP endpoint: http://localhost:7456/mcp"
-echo "   - ZAP:         http://localhost:8090"
-echo "Connect your MCP client using X-API-Key from MCP_API_KEY in .env."
-echo "Client setup: https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/"
+docker compose --project-directory "$REPO_ROOT" --env-file "$REPO_ROOT/.env" \
+  -f "$REPO_ROOT/docker-compose.yml" -f "$REPO_ROOT/docker-compose.dev.yml" \
+  up -d --build --wait --wait-timeout 300
+"$REPO_ROOT/bin/self-serve-doctor.sh" --env-file "$REPO_ROOT/.env"
+
+echo "Local development stack is ready."

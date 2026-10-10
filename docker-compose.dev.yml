@@ -3,5 +3,6 @@
 services:
   mcp-server:
     build:
-      dockerfile: Dockerfile  # JVM image - fast builds
+      context: .
+      dockerfile: ${DOCKERFILE:-Dockerfile}
     image: mcp-zap-server:dev

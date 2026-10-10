@@ -63,6 +63,8 @@ public class ZapEngineReportAccess implements EngineReportAccess {
         String contextName = "mcp-report-" + UUID.randomUUID();
         boolean created = false;
         Throwable failure = null;
+        ZapApiException cleanupFailure = null;
+        String reportPath;
         try {
             zap.context.newContext(contextName);
             created = true;
@@ -77,7 +79,7 @@ public class ZapEngineReportAccess implements EngineReportAccess {
                 String site = scope.toString();
                 return scope.getRawPath().equals("/") ? site.substring(0, site.length() - 1) : site;
             }).toList());
-            return generateReport(request, contextName, engineSites);
+            reportPath = generateReport(request, contextName, engineSites);
         } catch (ClientApiException e) {
             ZapApiException wrapped = new ZapApiException("Error preparing target-scoped ZAP report", e);
             failure = wrapped;
@@ -94,17 +96,22 @@ public class ZapEngineReportAccess implements EngineReportAccess {
                     if (failure != null) {
                         failure.addSuppressed(cleanup);
                     } else {
-                        throw cleanup;
+                        cleanupFailure = cleanup;
                     }
                 }
             }
         }
+        if (cleanupFailure != null) {
+            throw cleanupFailure;
+        }
+        return reportPath;
     }
 
     private String reportScopeRegex(URI scope) {
         String authority = Pattern.quote(scope.getScheme() + "://" + scope.getHost());
+        int defaultPort = scope.getScheme().equals("https") ? 443 : 80;
         String port = scope.getPort() == -1
-                ? "(?::" + (scope.getScheme().equals("https") ? 443 : 80) + ")?"
+                ? "(?::" + defaultPort + ")?"
                 : ":" + scope.getPort();
         // ZAP compiles context includes case-insensitively; URL paths remain case-sensitive.
         String path = scope.getRawPath().equals("/") ? "(?:[/?#].*)?"

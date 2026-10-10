@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "local-scan-companion",
-  "version": "0.1.0",
-  "description": "Guided setup for a separately installed local MCP ZAP Server package in Codex.",
+  "version": "0.2.0",
+  "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex.",
   "author": {
     "name": "dtkmn",
     "url": "https://github.com/dtkmn"
@@ -15,8 +15,8 @@
       "onboardingSkill": "./skills/setup-local-scanner/SKILL.md",
       "interface": {
         "displayName": "Local Scan Companion",
-        "shortDescription": "Set up a local ZAP scanner",
-        "longDescription": "A local Codex setup prototype for the Apple Silicon macOS MCP ZAP Server preview. Run setup to locate a maintainer-supplied package, start its bundled Java and ZAP, and configure a separate private MCP connection. Installing this plugin does not install the scanner or expose MCP tools. A public Mac download and public-directory approval are pending. Requires local command execution; web-only chats cannot access a Mac's loopback server. This independent project is not affiliated with or endorsed by ZAP or OpenAI.",
+        "shortDescription": "Local Docker scanner setup",
+        "longDescription": "Set up MCP ZAP Server and ZAP locally in Codex using the project's Docker Compose setup. Requires Docker and Docker Compose already installed and running, plus local command execution. Use the setup skill to obtain the project, start its versioned release containers, and configure a separate authenticated MCP connection after startup succeeds. Installing this skills-only plugin does not install Docker, start the scanner, or expose MCP tools. Setup finishes with a connection check; scans require your target and intended workflow. Web-only chats cannot reach your machine's loopback server. Public-directory approval is pending. This independent project is not affiliated with or endorsed by ZAP or OpenAI.",
         "developerName": "dtkmn",
         "category": "Developer Tools",
         "capabilities": [],

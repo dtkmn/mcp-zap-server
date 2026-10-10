@@ -78,6 +78,30 @@ demo containers.
 The [Scan-To-Evidence Guide](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
 covers optional active scanning, release evidence, and customer handoff.
 
+## Guided Setup In Local Codex
+
+Local Scan Companion is a skills-only plugin that guides the same Docker Compose
+setup above. Docker and Compose must already be installed and running. Installing
+the plugin does not start the scanner or register MCP tools; ask its setup skill
+to start the release containers and configure your private connection. Public
+directory review is pending.
+
+The skill checks server readiness before changing client settings and verifies
+the connection with a harmless status call when the client has loaded it. A
+client reconnection or restart may be needed. Scanning is a separate request.
+
+Settings, API keys and scan reports are stored in your local installation. The setup
+downloads project files and container images from their publishers; authorized
+scans send requests to your chosen targets. This project does not operate a
+hosted scanner for this plugin. Prompts and MCP results are handled by your
+chosen AI client under that provider's data policies. Review those policies
+before scanning sensitive systems or returning reports to an AI client.
+
+For support, use the project's
+[GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues). Include versions
+and a redacted description of the failing step. Do not upload `.env`, Codex
+configuration, credentials, raw private logs or sensitive scan reports.
+
 ## Stop And Restart
 
 From the repository directory:

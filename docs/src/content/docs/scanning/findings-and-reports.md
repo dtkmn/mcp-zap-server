@@ -143,6 +143,16 @@ JSON retains engine identity and generation timestamps. Scoped HTML uses the
 standard template's default appearance; light/dark themes apply to full-session
 HTML. A path filter remains a prefix filter, not a scan-ID boundary.
 
+The root-origin preservation fix is newer than `v0.15.0`: reports generated
+with that fix treat `https://target.example` and `https://target.example/`
+equally, including alerts ZAP records with an empty root path. Other hosts,
+schemes and ports remain excluded. Non-root path prefixes are case-sensitive.
+
+Report templates group alert families and instances. Their totals are not
+necessarily interchangeable with individual alert records returned by the
+findings API. Compare the concrete URLs and evidence when investigating a
+difference; a count difference alone does not establish missing findings.
+
 Omitting `baseUrl` explicitly requests the full ZAP session. Expert reports with
 a nonblank `sites` filter support the reviewed traditional JSON, HTML and
 Markdown templates; unsupported scoped templates are rejected. Native Automation

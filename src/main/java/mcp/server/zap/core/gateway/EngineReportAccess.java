@@ -11,6 +11,15 @@ public interface EngineReportAccess {
 
     String generateReport(ReportGenerationRequest request);
 
+    /**
+     * Generates a report for the validated, canonical URL prefixes supplied by ReportService.
+     * Engines may preserve equivalent root URI spellings, but must not broaden the target scope.
+     * The default retains the native filter unchanged.
+     */
+    default String generateScopedReport(ReportGenerationRequest request) {
+        return generateReport(request);
+    }
+
     record ReportGenerationRequest(
             String title,
             String template,

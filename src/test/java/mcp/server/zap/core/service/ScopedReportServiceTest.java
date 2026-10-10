@@ -36,6 +36,7 @@ class ScopedReportServiceTest {
     @BeforeEach
     void setup() {
         engine = mock(EngineReportAccess.class);
+        when(engine.generateScopedReport(any())).thenCallRealMethod();
         ledger = mock(ScanHistoryLedgerService.class);
         service = new ReportService(engine);
         service.setScanHistoryLedgerService(ledger);

@@ -6,6 +6,7 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.Volume;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import mcp.server.zap.core.gateway.ZapEngineContextAccess;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
 import mcp.server.zap.core.gateway.ZapEngineReportAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
@@ -15,6 +16,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -32,6 +34,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,7 +53,14 @@ class FindingsAndReportServiceDockerTest {
     static final GenericContainer<?> TARGET =
             new GenericContainer<>(DockerImageName.parse("nginx:1.27-alpine"))
                     .withNetwork(NETWORK)
-                    .withNetworkAliases("findings-target", "findings-other-target")
+                    .withNetworkAliases("findings-target", "findings-other-target", "findings-target.evil")
+                    .withCopyToContainer(Transferable.of("""
+                            server {
+                                listen 80;
+                                listen 8080;
+                                root /usr/share/nginx/html;
+                            }
+                            """), "/etc/nginx/conf.d/default.conf")
                     .withExposedPorts(80)
                     .waitingFor(Wait.forHttp("/"));
 
@@ -199,9 +209,120 @@ class FindingsAndReportServiceDockerTest {
         assertTrue(combinedText.contains("Other Target Private Fixture Alert"));
     }
 
+    @Test
+    void scopedReportsKeepBothRootFormsWithoutBroadeningHostPortOrPathSelection() throws Exception {
+        String origin = "http://findings-target";
+        String otherOrigin = "http://findings-other-target";
+        addFixtureAlert(origin, "Bare Root Completeness Fixture");
+        addFixtureAlert(origin + "/", "Slash Root Completeness Fixture");
+        addFixtureAlert(origin + "/app/page", "Selected App Completeness Fixture");
+        addFixtureAlert(origin + "/other/page", "Sibling Path Completeness Fixture");
+        addFixtureAlert(origin + "/App/page", "Different Case Path Completeness Fixture");
+        addFixtureAlert(origin + ".evil/", "Lookalike Host Private Fixture");
+        addFixtureAlert(origin + ":8080/", "Sibling Port Private Fixture");
+        addFixtureAlert(otherOrigin + "/app/page", "Other Origin Selected App Fixture");
+        addFixtureAlert(otherOrigin + "/other/page", "Other Origin Sibling Path Private Fixture");
+
+        // Check the live engine fixture before testing report generation: a normalized
+        // fixture would hide the root-URI omission this regression is meant to expose.
+        var findings = new ZapEngineFindingAccess(clientApi).loadAlerts(null);
+        assertEquals(origin, findings.stream()
+                .filter(alert -> "Bare Root Completeness Fixture".equals(alert.name()))
+                .findFirst().orElseThrow().url());
+        assertEquals(origin + "/", findings.stream()
+                .filter(alert -> "Slash Root Completeness Fixture".equals(alert.name()))
+                .findFirst().orElseThrow().url());
+
+        String nativePath = reportAccess.generateReport(new ReportGenerationRequest(
+                "Native root omission control", "traditional-json", "", "", "", origin + "/",
+                "", "", "", "native-root-omission-control", "", REPORT_DIR.toString(), "false"));
+        String nativeReport = Files.readString(Path.of(nativePath));
+        assertTrue(nativeReport.contains("Slash Root Completeness Fixture"));
+        assertFalse(nativeReport.contains("Bare Root Completeness Fixture"),
+                "The native slash prefix should reproduce the omitted bare-root finding");
+
+        String contextName = "Preserved report fixture context";
+        clientApi.context.newContext(contextName);
+        clientApi.context.includeInContext(contextName, "http://findings-target(?:/.*)?");
+        clientApi.context.setContextInScope(contextName, "true");
+        Set<String> contextsBefore = responseValues(clientApi.context.contextList());
+        ZapEngineContextAccess contextAccess = new ZapEngineContextAccess(clientApi);
+        var contextSettingsBefore = Set.copyOf(contextAccess.listContexts());
+        Set<String> contextUrlsBefore = responseValues(clientApi.context.urls(contextName));
+
+        try {
+            for (String template : List.of("traditional-json", "traditional-json-plus",
+                    "traditional-html", "traditional-html-plus", "traditional-md")) {
+                for (String scope : List.of(origin, origin + "/")) {
+                    String report = generatedReport(template, scope);
+                    assertTrue(report.contains("Bare Root Completeness Fixture"), template + " must keep bare roots");
+                    assertTrue(report.contains("Slash Root Completeness Fixture"), template + " must keep slash roots");
+                    assertTrue(report.contains("Selected App Completeness Fixture"));
+                    assertTrue(report.contains("Sibling Path Completeness Fixture"));
+                    assertFalse(report.contains("Lookalike Host Private Fixture"));
+                    assertFalse(report.contains("Sibling Port Private Fixture"));
+                    assertFalse(report.contains("Other Origin Selected App Fixture"));
+                    assertFalse(report.contains("Other Origin Sibling Path Private Fixture"));
+                    if (template.contains("json")) {
+                        JsonNode site = JsonMapper.builder().build().readTree(report).path("site").get(0);
+                        assertEquals(origin + "/", site.path("@name").asString());
+                        Set<String> rootUris = site.path("alerts").valueStream()
+                                .filter(alert -> alert.path("name").asString().contains("Root Completeness Fixture"))
+                                .flatMap(alert -> alert.path("instances").valueStream())
+                                .map(instance -> instance.path("uri").asString()).collect(Collectors.toSet());
+                        assertEquals(Set.of(origin, origin + "/"), rootUris);
+                    }
+                }
+
+                String pathReport = generatedReport(template, origin + "/app/");
+                assertTrue(pathReport.contains("Selected App Completeness Fixture"));
+                assertFalse(pathReport.contains("Bare Root Completeness Fixture"));
+                assertFalse(pathReport.contains("Slash Root Completeness Fixture"));
+                assertFalse(pathReport.contains("Sibling Path Completeness Fixture"));
+                assertFalse(pathReport.contains("Different Case Path Completeness Fixture"));
+                assertFalse(pathReport.contains("Other Origin Selected App Fixture"));
+                assertFalse(pathReport.contains("Lookalike Host Private Fixture"));
+                assertFalse(pathReport.contains("Sibling Port Private Fixture"));
+
+                String combinedReport = generatedReport(template, origin + "/|" + otherOrigin + "/app/");
+                assertTrue(combinedReport.contains("Bare Root Completeness Fixture"));
+                assertTrue(combinedReport.contains("Slash Root Completeness Fixture"));
+                assertTrue(combinedReport.contains("Selected App Completeness Fixture"));
+                assertTrue(combinedReport.contains("Other Origin Selected App Fixture"));
+                assertFalse(combinedReport.contains("Other Origin Sibling Path Private Fixture"));
+                assertFalse(combinedReport.contains("Lookalike Host Private Fixture"));
+                assertFalse(combinedReport.contains("Sibling Port Private Fixture"));
+
+                assertEquals(contextsBefore, responseValues(clientApi.context.contextList()),
+                        "Report generation must remove its temporary context");
+                assertEquals(contextSettingsBefore, Set.copyOf(contextAccess.listContexts()),
+                        "Report generation must preserve context IDs, scope flags and include/exclude regexes");
+                assertEquals(contextUrlsBefore, responseValues(clientApi.context.urls(contextName)));
+            }
+        } finally {
+            clientApi.context.removeContext(contextName);
+        }
+    }
+
+    private static String generatedReport(String template, String scope) throws Exception {
+        return Files.readString(Path.of(reportService.generateReport(template, "light", scope)));
+    }
+
+    private static Set<String> responseValues(ApiResponse response) {
+        if (!(response instanceof ApiResponseList list)) {
+            throw new IllegalStateException("Expected a list response from the live fixture engine");
+        }
+        return list.getItems().stream().map(FindingsAndReportServiceDockerTest::apiResponseValue)
+                .collect(Collectors.toSet());
+    }
+
     private static void addFixtureAlert(String url, String name) throws Exception {
-        clientApi.core.accessUrl(url, "false");
-        clientApi.alert.addAlert(awaitFirstMessageId(url), name, "2", "2",
+        ApiResponse response = clientApi.core.accessUrl(url, "false");
+        if (!(response instanceof ApiResponseList list) || list.getItems().size() != 1
+                || !(list.getItems().getFirst() instanceof ApiResponseSet message)) {
+            throw new IllegalStateException("Expected the exact accessed fixture message for " + url);
+        }
+        clientApi.alert.addAlert(message.getStringValue("id"), name, "2", "2",
                 "Synthetic local report scope fixture", "", "", "", "Apply fixture fix",
                 "", "fixture evidence", "89", "19");
     }

@@ -3,6 +3,7 @@ package mcp.server.zap.core.gateway;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
 import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigRequest;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
 import org.zaproxy.clientapi.core.ApiResponseList;
@@ -40,10 +42,14 @@ import org.zaproxy.clientapi.gen.Users;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class ZapEngineBoundaryAccessTest {
@@ -153,6 +159,158 @@ class ZapEngineBoundaryAccessTest {
         ));
 
         assertThat(reportPath).isEqualTo("/tmp/reports/zap-report-1.json");
+    }
+
+    @Test
+    void scopedRootReportsConstrainBareEnginePrefixesWithAnOutOfScopeContext() throws Exception {
+        String scopes = "https://target.example/|http://[2001:db8::1]:8090/|http://narrow.example/App.+/";
+        String engineSites = "https://target.example|http://[2001:db8::1]:8090|http://narrow.example/App.+/";
+        ReportGenerationRequest request = reportRequest(scopes);
+        when(reports.generate(eq("title"), eq("traditional-json-plus"), eq(""), eq(""), anyString(),
+                eq(engineSites), eq(""), eq(""), eq(""), eq("zap-report-1"), eq(""),
+                eq("/tmp/reports"), eq("false")))
+                .thenReturn(new ApiResponseElement("file", "/tmp/reports/zap-report-1.json"));
+
+        assertThat(reportAccess.generateScopedReport(request)).isEqualTo("/tmp/reports/zap-report-1.json");
+        assertThat(request.sites()).isEqualTo(scopes);
+
+        var ordered = inOrder(context, reports);
+        ArgumentCaptor<String> contextName = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> regexes = ArgumentCaptor.forClass(String.class);
+        ordered.verify(context).newContext(contextName.capture());
+        ordered.verify(context).setContextInScope(contextName.getValue(), "false");
+        ordered.verify(context, times(3)).includeInContext(eq(contextName.getValue()), regexes.capture());
+        ordered.verify(reports).generate("title", "traditional-json-plus", "", "", contextName.getValue(),
+                engineSites, "", "", "", "zap-report-1", "", "/tmp/reports", "false");
+        ordered.verify(context).removeContext(contextName.getValue());
+        ordered.verifyNoMoreInteractions();
+
+        // ZAP compiles includes case-insensitively, so exercise the API regexes with that flag.
+        Pattern root = Pattern.compile(regexes.getAllValues().get(0), Pattern.CASE_INSENSITIVE);
+        for (String uri : List.of("https://target.example", "https://target.example/",
+                "HTTPS://TARGET.EXAMPLE:443", "https://target.example:443/page",
+                "https://target.example?query=1")) {
+            assertThat(root.matcher(uri).matches()).as(uri).isTrue();
+        }
+        for (String uri : List.of("https://target.example.evil/", "https://target.example:8443/",
+                "https://target.example@evil.example/", "http://target.example/")) {
+            assertThat(root.matcher(uri).matches()).as(uri).isFalse();
+        }
+        Pattern ipv6 = Pattern.compile(regexes.getAllValues().get(1), Pattern.CASE_INSENSITIVE);
+        assertThat(ipv6.matcher("http://[2001:db8::1]:8090").matches()).isTrue();
+        assertThat(ipv6.matcher("HTTP://[2001:DB8::1]:8090/page").matches()).isTrue();
+        assertThat(ipv6.matcher("http://[2001:db8::1]:80901/").matches()).isFalse();
+        assertThat(ipv6.matcher("http://[2001:db8::2]:8090/").matches()).isFalse();
+        Pattern path = Pattern.compile(regexes.getAllValues().get(2), Pattern.CASE_INSENSITIVE);
+        assertThat(path.matcher("HTTP://NARROW.EXAMPLE:80/App.+/page").matches()).isTrue();
+        assertThat(path.matcher("http://narrow.example/app.+/page").matches()).isFalse();
+        assertThat(path.matcher("http://narrow.example/AppX+/page").matches()).isFalse();
+        assertThat(path.matcher("http://narrow.example/Other/").matches()).isFalse();
+        assertThat(path.matcher("http://narrow.example.evil/App.+/").matches()).isFalse();
+    }
+
+    @Test
+    void rootReportContextCreationFailureCannotFallBackToANativeReport() throws Exception {
+        ClientApiException failure = new ClientApiException("Cannot create context");
+        when(context.newContext(anyString())).thenThrow(failure);
+
+        assertThatThrownBy(() -> reportAccess.generateScopedReport(reportRequest("https://target.example/")))
+                .isInstanceOf(ZapApiException.class)
+                .hasCause(failure);
+        verify(context).newContext(anyString());
+        verifyNoMoreInteractions(context);
+        verifyNoInteractions(reports);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"scope", "include"})
+    void rootReportContextSetupFailureCleansUpWithoutGenerating(String failedOperation) throws Exception {
+        ClientApiException failure = new ClientApiException("Cannot prepare report context");
+        if (failedOperation.equals("scope")) {
+            when(context.setContextInScope(anyString(), eq("false"))).thenThrow(failure);
+        } else {
+            when(context.includeInContext(anyString(), anyString())).thenThrow(failure);
+        }
+
+        assertThatThrownBy(() -> reportAccess.generateScopedReport(reportRequest("https://target.example/")))
+                .isInstanceOf(ZapApiException.class)
+                .hasCause(failure);
+        ArgumentCaptor<String> contextName = ArgumentCaptor.forClass(String.class);
+        var ordered = inOrder(context);
+        ordered.verify(context).newContext(contextName.capture());
+        ordered.verify(context).setContextInScope(contextName.getValue(), "false");
+        if (failedOperation.equals("include")) {
+            ordered.verify(context).includeInContext(eq(contextName.getValue()), anyString());
+        }
+        ordered.verify(context).removeContext(contextName.getValue());
+        ordered.verifyNoMoreInteractions();
+        verifyNoInteractions(reports);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void scopedReportGenerationFailureRemainsPrimaryWhenContextCleanupAlsoFails(boolean cleanupFails) throws Exception {
+        ClientApiException generationFailure = new ClientApiException("Cannot generate report");
+        when(reports.generate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenThrow(generationFailure);
+        ClientApiException cleanupFailure = new ClientApiException("Cannot remove context");
+        if (cleanupFails) {
+            when(context.removeContext(anyString())).thenThrow(cleanupFailure);
+        }
+
+        assertThatThrownBy(() -> reportAccess.generateScopedReport(reportRequest("https://target.example/")))
+                .isInstanceOf(ZapApiException.class)
+                .hasCause(generationFailure)
+                .satisfies(failure -> {
+                    if (cleanupFails) {
+                        assertThat(failure.getSuppressed()).hasSize(1);
+                        assertThat(failure.getSuppressed()[0]).hasCause(cleanupFailure);
+                    } else {
+                        assertThat(failure.getSuppressed()).isEmpty();
+                    }
+                });
+        ArgumentCaptor<String> contextName = ArgumentCaptor.forClass(String.class);
+        verify(context).newContext(contextName.capture());
+        verify(context).removeContext(contextName.getValue());
+        verify(reports).generate("title", "traditional-json-plus", "", "", contextName.getValue(),
+                "https://target.example", "", "", "", "zap-report-1", "", "/tmp/reports", "false");
+        verifyNoMoreInteractions(reports);
+    }
+
+    @Test
+    void successfulReportCannotReturnNormallyWhenItsContextCannotBeRemoved() throws Exception {
+        when(reports.generate(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(),
+                anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(new ApiResponseElement("file", "/tmp/reports/zap-report-1.json"));
+        ClientApiException failure = new ClientApiException("Cannot remove context");
+        when(context.removeContext(anyString())).thenThrow(failure);
+
+        assertThatThrownBy(() -> reportAccess.generateScopedReport(reportRequest("https://target.example/")))
+                .isInstanceOf(ZapApiException.class)
+                .hasCause(failure);
+        ArgumentCaptor<String> contextName = ArgumentCaptor.forClass(String.class);
+        verify(context).newContext(contextName.capture());
+        verify(context).removeContext(contextName.getValue());
+        verify(reports).generate("title", "traditional-json-plus", "", "", contextName.getValue(),
+                "https://target.example", "", "", "", "zap-report-1", "", "/tmp/reports", "false");
+        verifyNoMoreInteractions(reports);
+    }
+
+    @Test
+    void pathOnlyScopedReportsRetainNativeFilteringWithoutCreatingAContext() throws Exception {
+        when(reports.generate("title", "traditional-json-plus", "", "", "", "https://target.example/App/",
+                "", "", "", "zap-report-1", "", "/tmp/reports", "false"))
+                .thenReturn(new ApiResponseElement("file", "/tmp/reports/zap-report-1.json"));
+
+        assertThat(reportAccess.generateScopedReport(reportRequest("https://target.example/App/")))
+                .isEqualTo("/tmp/reports/zap-report-1.json");
+        verifyNoInteractions(context);
+    }
+
+    private static ReportGenerationRequest reportRequest(String sites) {
+        return new ReportGenerationRequest("title", "traditional-json-plus", "", "", "", sites,
+                "", "", "", "zap-report-1", "", "/tmp/reports", "false");
     }
 
     @Test

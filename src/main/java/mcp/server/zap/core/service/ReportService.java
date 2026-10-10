@@ -148,7 +148,7 @@ public class ReportService {
             Path reportPath;
             if (scopes.isEmpty()) {
                 reportPath = generateEngineReport(effectiveReportRoot, basename, effectiveTemplate,
-                        normalizedTheme, normalizedSites, "");
+                        normalizedTheme, normalizedSites, "", false);
                 requireGeneratedPath(effectiveReportRoot, reportPath);
             } else {
                 reportPath = generateScopedReport(configuredReportRoot, effectiveReportRoot, basename,
@@ -163,10 +163,12 @@ public class ReportService {
     }
 
     private Path generateEngineReport(Path directory, String basename, String template,
-                                      String theme, String sites, String sections) {
-        String fileName = engineReportAccess.generateReport(new ReportGenerationRequest(
+                                      String theme, String sites, String sections, boolean scoped) {
+        ReportGenerationRequest request = new ReportGenerationRequest(
                 "My ZAP Scan Report", template, theme, "", "", sites, sections, "", "",
-                basename, "", directory.toString(), "false"));
+                basename, "", directory.toString(), "false");
+        String fileName = scoped ? engineReportAccess.generateScopedReport(request)
+                : engineReportAccess.generateReport(request);
         return resolveReportPath(directory, requireText(fileName, "generated report path"));
     }
 
@@ -180,7 +182,7 @@ public class ReportService {
             inheritConfiguredRootPermissions(configuredRoot, staging);
             boolean json = template.equals("traditional-json") || template.equals("traditional-json-plus");
             Path raw = generateEngineReport(staging, basename, template, theme, sites,
-                    json ? "" : TARGET_REPORT_SECTIONS);
+                    json ? "" : TARGET_REPORT_SECTIONS, true);
             requireGeneratedPath(staging, raw);
             validateArtifact(configuredRoot, raw, true);
             Path prepared = raw;

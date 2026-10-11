@@ -113,3 +113,20 @@ private diagnostics local; share only redacted errors and version information.
 Local installation evidence does not establish public-directory approval.
 Scans require the user's target and intended workflow; active scanning is never
 a setup check.
+
+## Offer the first demo workflow
+
+After a setup request finishes with a verified client connection, offer one
+ready-to-copy prompt for the bundled local Juice Shop demo. Run it only after a
+separate user request. Omit this offer for status-only verification,
+troubleshooting or stop requests; leave it pending if client verification is
+incomplete.
+
+```text
+Run only a guided HTTP crawl against http://juice-shop:3000.
+Follow the server's Next Actions and poll until the crawl is complete.
+Wait for passive analysis to finish, summarize findings for this target,
+generate an HTML report scoped to that target, and retrieve the complete
+report through MCP.
+Do not start an active scan.
+```

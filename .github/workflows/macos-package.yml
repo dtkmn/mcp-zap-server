@@ -1,21 +1,6 @@
 name: macOS Package
 
 on:
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - .github/workflows/macos-package.yml
-      - packaging/macos/**
-      - bin/self-serve-doctor.sh
-      - docs/getting-started/MACOS_PACKAGE.md
-      - docs/getting-started/CHATGPT_LOCAL_TUNNEL.md
-      - src/main/**
-      - build.gradle
-      - settings.gradle
-      - gradle.properties
-      - gradle/wrapper/**
-      - gradlew
-      - LICENSE
   workflow_dispatch:
     inputs:
       draft_release_tag:

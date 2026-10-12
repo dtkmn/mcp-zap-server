@@ -35,9 +35,11 @@ source mapping is reviewed; do not add it without updating the distribution inpu
 
 ## GitHub Actions
 
-The **macOS Package** workflow builds this set on an Apple Silicon `macos-15`
-runner for relevant pull requests. Once merged to `main`, it is also available
-under **Actions → macOS Package → Run workflow**.
+The **macOS Package** workflow is manual-only and builds this set on an Apple
+Silicon `macos-15` runner. Automatic pull-request builds are paused while public
+signing/notarization and clean browser-download installation remain unresolved.
+Run deliberate testing under **Actions → macOS Package → Run workflow** once
+the workflow change is merged to `main`.
 
 Leave `draft_release_tag` empty for a build of the selected branch without
 release attachment. The resulting Actions artifact contains a ZIP wrapper
@@ -49,6 +51,10 @@ tests. A hosted packaging build does not establish desktop service behavior or
 a clean browser-downloaded installation.
 
 ## Attach before publishing
+
+Public Mac distribution is deferred until signing/notarization and clean
+browser-download installation verification are resolved. Use manual builds
+with an empty `draft_release_tag` for testing in the meantime.
 
 This repository uses immutable releases. Prepare the assets before publication:
 
@@ -70,16 +76,16 @@ version/tag for newer source. See [GitHub's immutable release guidance](https://
 
 ## Distribution checks
 
-Before publishing an unsigned preview:
+Before resuming public Mac distribution:
 
 - Keep the matching sources and dependency notices with the release, and label
-  its unsigned status and supported capabilities accurately.
+  its supported capabilities accurately.
 - Verify the browser-downloaded archive on a clean Apple Silicon Mac without
   Docker or system Java, following macOS's normal security controls.
 - Verify authenticated startup, an authorized HTTP/passive/report workflow,
   stop/restart and preservation with that final artifact.
 
-Signing and notarization are a separate distribution milestone. A signed edition
-needs verification of the complete payload and the downloaded distribution
-container, including applicable nested native code. The vendor JRE signature
-alone does not sign or notarize MCP ZAP Server.
+Complete signing and notarization before public distribution resumes. Verify
+the complete payload and downloaded distribution container, including
+applicable nested native code. The vendor JRE signature alone does not sign or
+notarize MCP ZAP Server.

@@ -56,11 +56,13 @@ the scanner under **Customize → MCPs**, select **Reload** and repeat the statu
 call. Scanning requires a separate request identifying your authorized target
 and intended workflow.
 
-## Privacy, support and license
+## Privacy, terms, support and license
 
 Settings, keys and reports remain in your installation; prompts and MCP results
 are processed by your AI provider. Read the
 [privacy policy](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#privacy-policy-for-local-scan-companion).
+The [terms of service](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#terms-of-service-for-mcp-zap-connect)
+explain local use, authorized scanning, third-party services and community support.
 Report problems through [GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues)
 with versions and a redacted error. Do not include keys, private configuration
 or sensitive reports.

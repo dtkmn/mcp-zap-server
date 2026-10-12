@@ -26,7 +26,11 @@ discovers this existing folder; select the plugin and add it for yourself.
 Find `setup-local-scanner` in **Customize → Skills**.
 
 Cursor repository imports use the repository-root
-`.cursor-plugin/marketplace.json` to locate this folder. Once that index is
+`.cursor-plugin/marketplace.json` to locate this folder and its
+`.cursor-plugin/plugin.json` for Cursor metadata. The portable `plugin.json`
+retains Codex metadata; both clients use the same `skills/` directory. Keep the
+shared name, version and metadata aligned when updating either manifest.
+Once the index and Cursor manifest are
 published on the repository's default branch, use **Customize → Plugins → Add →
 From GitHub Repository** with `https://github.com/dtkmn/mcp-zap-server`, then
 select this plugin. Public marketplace submission and approval are separate;

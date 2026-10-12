@@ -28,6 +28,11 @@ The practical truth: API-key mode is still the easiest self-serve client setup. 
 
 If you are starting from a fresh clone, use [Self-Serve First Run](../self-serve-first-run/) before tuning client-specific details here.
 
+For agent-assisted Docker setup, the same guide covers
+[MCP ZAP Connect in Codex and Cursor](../self-serve-first-run/#guided-setup-in-codex-and-cursor).
+The plugin supplies one shared setup skill; it configures only the client you
+request and verifies the connection without starting a scan.
+
 ## Client Compatibility
 
 Local API-key setup is documented below for Codex and Cursor. The statuses
@@ -38,7 +43,7 @@ may support.
 | --- | --- | --- |
 | Local Codex CLI with `X-API-Key` | Private HTTP workflow verified on 8 October 2026 | CLI 0.161.0 directly connected to the Apple Silicon Mac preview and completed controlled HTTP crawl/passive/report retrieval with independent checksum verification. The bounded test allowed seven workflow tools with automatic approval review. |
 | Local Codex desktop app with `X-API-Key` | Maintainer-reported HTTP workflow on 9 October 2026 | A second Mac (M4 Pro, macOS 27.0.1) completed the desktop HTTP/passive/report workflow. Screenshots show the connection and rendered report; Codex reported full MCP retrieval and checksum verification. Detailed tool traces were not independently reviewed, and the desktop version was not recorded. |
-| Local Cursor with `X-API-Key` | Previously validated setup | Previously documented local API-key setup at `~/.cursor/mcp.json`; client version and test date were not recorded. |
+| Local Cursor with `X-API-Key` | Setup and recovery verified on 12 October 2026 | Cursor 3.24.12 on Apple Silicon macOS 27.0.1 discovered MCP ZAP Connect 0.3.0, created its first connection to an existing Docker stack and verified `zap_passive_scan_status`. Failed readiness and an occupied port left settings unchanged. Owned stop/restart required reloading the Cursor MCP connection before status passed again. Fresh Docker installation, scanning and public marketplace distribution were not tested. |
 | ChatGPT through Secure MCP Tunnel | Private HTTP workflow verified on 8 October 2026 | The [private Mac connection guide](../chatgpt-local-tunnel/) records the tested Apple Silicon preview, authenticated forwarding and full report read-back. Requires Platform tunnel permissions and ChatGPT developer-mode access. Browser workflows and public distribution remain unverified; report-content limits are documented in the guide. |
 | Other streamable HTTP clients with custom headers | Expected to work, conditional | Must reach `/mcp`, send the configured auth header, and manage MCP sessions. Use the client's own configuration format and verify tool calls. |
 | Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
@@ -165,15 +170,33 @@ then restart Cursor. Do not commit a config containing a key.
 For project-specific configuration, Cursor also supports `.cursor/mcp.json`.
 Keep environment references in any shared file.
 
-Enable `mcp-zap-server` in Cursor's MCP settings and start an Agent chat. Ask:
+Enable `mcp-zap-server` in Cursor's MCP settings and start an Agent chat. Verify
+the connection without scanning:
 
 ```text
-List the available ZAP tools from mcp-zap-server.
+Call zap_passive_scan_status through mcp-zap-server only. Do not run a scan.
 ```
 
-Expected result: Cursor discovers tools including `zap_crawl_start`,
-`zap_crawl_status`, `zap_findings_summary`, and `zap_report_generate`, without
-an authentication error. Then run the [first scan below](#first-scan-and-expected-result).
+Expected result: the server returns passive completion, remaining records and
+active tasks without an authentication error. The locally installed setup skill
+created a first Cursor connection to the existing Docker stack and verified
+status in Cursor 3.24.12 on Apple Silicon macOS 27.0.1 on 12 October 2026.
+Credentials, the Codex connection and saved reports were preserved through
+owned stop/restart. Compose recreated the containers using the same images and
+configuration; retained report files were verified unchanged.
+
+After a Docker restart, Cursor may retain a disconnected MCP session even when
+the server doctor passes. In **Customize → MCPs**, open **mcp-zap-server** and
+select **Reload**, then repeat the status call. This restored the connection in
+the tested version without restarting the app or editing credentials. If tools
+remain unavailable, client verification is pending; use **Developer: Reload
+Window** and check again.
+
+Missing prerequisites, startup timeout and rejected authentication were checked
+with controlled script fixtures, not by altering this Mac's Docker installation.
+A conflicting project configuration was inspected as a fixture; actual project
+configuration precedence was not tested. When you are ready to scan the bundled
+demo, make a separate request using the [first scan below](#first-scan-and-expected-result).
 
 If you deliberately configure JWT mode on the server, replace the API-key
 header with a pre-issued token:

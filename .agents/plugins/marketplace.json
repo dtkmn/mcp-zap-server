@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "local-scan-companion",
+      "name": "mcp-zap-connect",
       "source": {
         "source": "local",
-        "path": "./plugins/local-scan-companion"
+        "path": "./plugins/mcp-zap-connect"
       },
       "policy": {
         "installation": "AVAILABLE",

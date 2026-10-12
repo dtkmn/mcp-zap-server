@@ -78,13 +78,33 @@ demo containers.
 The [Scan-To-Evidence Guide](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
 covers optional active scanning, release evidence, and customer handoff.
 
-## Guided Setup In Local Codex
+<a id="guided-setup-in-local-codex"></a>
+
+## Guided Setup In Codex And Cursor
 
 MCP ZAP Connect is a skills-only plugin that guides the same Docker Compose
 setup above. Docker and Compose must already be installed and running. Installing
 the plugin does not start the scanner or register MCP tools; ask its setup skill
 to start the release containers and configure your private connection. Public
-directory review is pending.
+directory submission and approval are pending; local installation does not
+establish a public listing in either client's marketplace.
+
+For a local Cursor plugin test, copy the complete
+[`plugins/mcp-zap-connect`](https://github.com/dtkmn/mcp-zap-server/tree/main/plugins/mcp-zap-connect)
+directory into `~/.cursor/plugins/local/mcp-zap-connect`. Preserve an existing
+copy rather than overwriting it. Use **Developer: Reload Window**, then check
+**Customize → Skills** and invoke `/setup-local-scanner` in a local Agent chat:
+
+```text
+Set up MCP ZAP Server in Cursor using the existing Docker installation.
+Preserve my Codex connection. Verify with a status call only; do not run a scan.
+```
+
+The plugin uses Cursor's private `~/.cursor/mcp.json` and Codex's private TOML
+configuration only when that client is requested. Cursor's
+[local plugin guide](https://cursor.com/docs/plugins#test-plugins-locally)
+documents installation and local-import policy restrictions. OpenAI's automatic
+onboarding entry point is specific to Codex; invoke the skill explicitly in Cursor.
 
 The skill checks server readiness before changing client settings and verifies
 the connection with a harmless status call when the client has loaded it. A
@@ -92,7 +112,7 @@ client reconnection or restart may be needed. Scanning is a separate request.
 
 For support, use the project's
 [GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues). Include versions
-and a redacted description of the failing step. Do not upload `.env`, Codex
+and a redacted description of the failing step. Do not upload `.env`, client
 configuration, credentials, raw private logs or sensitive scan reports.
 
 <a id="privacy-policy-for-local-scan-companion"></a>
@@ -129,7 +149,7 @@ your provider's settings before using sensitive targets or reports.
 data and no automatic deletion schedule for your local installation. Local data
 and private backups remain until you delete them or apply your own retention
 policy. Stopping containers preserves settings and reports. Uninstalling the
-plugin does not remove Docker containers, local files or the separate Codex MCP
+plugin does not remove Docker containers, local files or the separate client MCP
 connection. To stop using the setup, stop its containers, disable or remove that
 MCP connection, and delete the installation's files and backups when no longer
 needed. Deletion of reports or settings is a separate action and requires your
@@ -150,7 +170,7 @@ Use GitHub issues for non-sensitive questions about this policy.
 From the repository directory:
 
 ```bash
-docker compose stop
+docker compose --project-directory "$PWD" --env-file "$PWD/.env" -f "$PWD/docker-compose.yml" stop
 ./bin/bootstrap-local.sh --start
 ```
 

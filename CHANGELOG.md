@@ -13,14 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.
 - Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
 - Add private Codex TOML output through `client-config codex` and server runtime dependency notices checked against the packaged application inventory.
 - Build a checksum-linked source companion for the macOS preview, with pinned Java/ZAP source and build materials, supplemental component notices and documented library replacement. Publish binary and source archives together; browser-downloaded clean installation remains a separate check.
-- Build the four-file macOS preview set in GitHub Actions for relevant pull requests and manual runs. An owner-triggered run from `main` can attach files to an existing draft release after validating its version tag; release publication remains manual.
+- Build the four-file macOS preview set through manual GitHub Actions runs. An owner-triggered run from `main` can attach files to an existing draft release after validating its version tag; release publication remains manual.
 - Add an optional private ChatGPT tunnel helper that keeps local API-key authentication enabled and stores credential references, plus a canonical connection guide. A bounded live ChatGPT web test verified HTTP crawling, passive completion, full report read-back, in-flight crawl stopping and tunnel-loss reporting; the guide records the tested configuration and remaining report-content and public-distribution limits.
 
 ### Changed
 
+- Pause automatic macOS package builds on pull requests while signing/notarization and clean browser-download installation remain unresolved. Keep manual test builds available; public Mac distribution is deferred.
 - Start the local Docker quick start from a versioned published MCP image with `bootstrap-local.sh --start`, preserving existing settings and keys and reusing cached images on restart. Publish generated settings atomically, wait for container health and authenticated MCP checks before reporting readiness, and report the failing stage when MCP requests cannot complete. Keep source builds in the development override and reject failed MCP tool probes.
 - Launch the macOS preview services through the current user's macOS service manager so they survive terminal and agent-command completion. Explicit stop removes their registrations; login startup and automatic crash restarts remain disabled.
 - Bound the existing self-serve doctor's HTTP requests, keep its API key out of curl process arguments, and avoid dumping raw server error responses into diagnostics.

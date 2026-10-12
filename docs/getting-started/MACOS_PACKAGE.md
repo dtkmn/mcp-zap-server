@@ -28,6 +28,19 @@ directory:
 ./bin/mcp-zap start
 ```
 
+If startup fails, stop setup and leave existing MCP client settings unchanged.
+Configure the client only after `start` succeeds and confirms authenticated
+readiness. Retry after resolving the reported cause, rather than repeatedly
+starting the same failing installation.
+
+macOS may block this unsigned preview because Apple cannot verify its developer
+or notarization. A matching archive checksum or the bundled Java vendor's
+signature does not sign or notarize the complete package. Follow macOS's normal
+per-app approval process when available; do not remove quarantine or disable
+security checks. If no approval option is available, leave setup incomplete and
+use a signed/notarized distribution when supplied. See
+[Apple's guidance on opening downloaded software](https://support.apple.com/en-au/102445).
+
 The launcher starts only its bundled Java, binds the MCP and ZAP listeners to
 `127.0.0.1`, waits for readiness, and checks authenticated MCP initialization,
 tool discovery and a harmless passive-status call. A failed start stops its
@@ -166,5 +179,7 @@ An SSH session without a logged-in desktop is not supported by this preview.
 ## Build and release instructions
 
 Contributors can use the [macOS maintainer guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/macos/README.md)
-for local builds, GitHub Actions downloads and draft-release preparation.
+for local builds and manual GitHub Actions test downloads. Automatic package
+builds are paused, and public Mac distribution is deferred until
+signing/notarization and clean browser-download installation are resolved.
 The package's source-delivery materials and dependency notices remain included.

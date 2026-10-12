@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "local-scan-companion",
+  "name": "mcp-zap-connect",
   "version": "0.2.1",
   "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex.",
   "author": {

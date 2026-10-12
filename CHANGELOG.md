@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.
 - Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
 - Add private Codex TOML output through `client-config codex` and server runtime dependency notices checked against the packaged application inventory.
 - Build a checksum-linked source companion for the macOS preview, with pinned Java/ZAP source and build materials, supplemental component notices and documented library replacement. Publish binary and source archives together; browser-downloaded clean installation remains a separate check.

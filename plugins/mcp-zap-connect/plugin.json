@@ -23,6 +23,7 @@
         "websiteURL": "https://danieltse.org/mcp-zap-server/",
         "supportURL": "https://github.com/dtkmn/mcp-zap-server/issues",
         "privacyPolicyURL": "https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#privacy-policy-for-local-scan-companion",
+        "termsOfServiceURL": "https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#terms-of-service-for-mcp-zap-connect",
         "defaultPrompt": "Help me set up the local scanner in Codex. Verify with a status call only; do not run a scan.",
         "composerIcon": "./assets/icon.svg",
         "logo": "./assets/icon.svg"

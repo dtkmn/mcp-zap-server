@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Add MCP ZAP Connect terms of service to the existing first-run guide and link them from the plugin's OpenAI listing metadata and README.
 - Add Cursor-native metadata to MCP ZAP Connect's existing plugin folder so its repository index meets Cursor's documented multi-plugin layout. Codex retains its portable manifest; both formats use the same setup skill.
 - Preserve empty-path root alert evidence in target-scoped reports while excluding other origins and ports. Temporary report contexts stay out of scan scope and are removed after generation; existing artifact authorization and session-metadata filtering remain enforced.
 

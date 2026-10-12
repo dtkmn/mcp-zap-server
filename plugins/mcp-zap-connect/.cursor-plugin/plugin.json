@@ -1,0 +1,13 @@
+{
+  "name": "mcp-zap-connect",
+  "displayName": "MCP ZAP Connect",
+  "version": "0.3.0",
+  "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex or Cursor.",
+  "author": {
+    "name": "Daniel Tse"
+  },
+  "homepage": "https://danieltse.org/mcp-zap-server/",
+  "repository": "https://github.com/dtkmn/mcp-zap-server",
+  "license": "Apache-2.0",
+  "logo": "assets/icon.svg"
+}

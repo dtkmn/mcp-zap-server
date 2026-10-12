@@ -17,7 +17,7 @@
         "displayName": "MCP ZAP Connect",
         "shortDescription": "Local Docker scanner setup",
         "longDescription": "Set up or reconnect MCP ZAP Server and ZAP on your machine using the project's Docker Compose setup in local Codex. Requires local command execution, Git, a POSIX shell, and Docker with Docker Compose already installed and running. Java and ZAP run inside the containers. Ask the setup skill to obtain the project, start its versioned release containers, and configure a separate authenticated MCP connection after startup succeeds. Existing settings and reports are preserved. Installing this skills-only plugin does not install Docker, start the scanner, or expose MCP tools. Setup verifies the connection with a status call; it does not run a scan. Codex may need reconnection or a restart to load a changed MCP connection. Scanning requires a separate request identifying your authorized target and intended workflow. Web-only chats cannot reach your machine's loopback server. Settings, keys and reports stay in your installation; prompts and MCP results are handled by your AI provider. This independent project is not affiliated with or endorsed by ZAP or OpenAI.",
-        "developerName": "Daniel Tse",
+        "developerName": "Kin Man Tse",
         "category": "Developer Tools",
         "capabilities": [],
         "websiteURL": "https://danieltse.org/mcp-zap-server/",

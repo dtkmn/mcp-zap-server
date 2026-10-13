@@ -92,7 +92,8 @@ Important variables used by the wrapper script:
   before Docker starts.
 - `ZAP_BASELINE_FILE`: optional path to a prior `zap_findings_snapshot` JSON file
 - `ZAP_BASELINE_MODE`: `seed` allows first-run baseline review; `enforce`
-  fails when `ZAP_FAIL_ON_NEW_FINDINGS=true` but no findings diff can be produced
+  fails when `ZAP_FAIL_ON_NEW_FINDINGS=true` but no comparable findings diff can
+  be produced, including changed or unknown scanner provenance
 - `ZAP_SEED_REQUESTS_FILE`: optional JSON file with HTTP requests replayed
   through the ZAP proxy before crawling; use this for API endpoints that a
   spider cannot discover
@@ -179,8 +180,26 @@ Recommended baseline pattern is the same as the GitHub template:
 
 1. keep a reviewed baseline snapshot in the repo
 2. compare every new run against it
-3. inspect `findings-diff.txt` for net-new findings
+3. check scanner comparability in `findings-diff.json`, then inspect comparable
+   net-new findings in `findings-diff.txt`
 4. update the baseline only after intentional acceptance
+
+The provenance-aware contracts are newer than the published `v0.15.0` release;
+copy the matching updated helper and use the updated server. Snapshot v3 records
+the running ZAP version and installed add-ons. The gate compares the measured
+engine version and complete add-on ID, version, and status inventories.
+Matching provenance allows the normal new/resolved counts. `different` or
+`unknown` provenance produces `null` comparison counts and informational
+added/removed observations instead; removed observations are not labelled
+resolved.
+
+Legacy v1/v2 baselines remain readable with unknown provenance. In `seed` mode,
+review the current snapshot before accepting a v3 replacement. With
+`ZAP_BASELINE_MODE=enforce` and `ZAP_FAIL_ON_NEW_FINDINGS=true`, incomparable
+evidence fails the gate. The helper never overwrites the approved baseline.
+Matching provenance alone does not establish equal scan coverage or application
+remediation. See [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md) for
+consumer migration and report linkage.
 
 If you need temporary accepted exceptions without changing the stored baseline, provide `ZAP_SUPPRESSIONS_FILE` and use the suppression contract documented in [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md).
 

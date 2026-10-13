@@ -102,7 +102,8 @@ Use them when:
 - you need before/after comparison for CI or release gates
 - you want to focus on net-new findings instead of total backlog size
 
-New server snapshots use version 2. Comparisons prefer the full `nodeName`
+Snapshots newer than published `v0.15.0` use version 3 and include measured
+scanner inventory. Version 3 retains version 2 finding identity: comparisons prefer the full `nodeName`
 plus HTTP method, falling back to the raw URL when `nodeName` is unavailable.
 Rule, risk, confidence, and parameter differences still distinguish findings.
 This avoids treating changing parameter values as new locations when ZAP maps
@@ -112,11 +113,30 @@ configuration when comparing scans. See [ZAP's alert de-duplication guidance](ht
 Snapshots preserve individual example records; diffs count unique finding
 identities. Several exported records can therefore count as one finding.
 
-Version 1 baselines remain supported: comparisons use the previous URL-based
-algorithm and show an explicit legacy-comparison notice. Export a new baseline
-after review to use version 2 identities. Update the bundled CI gate alongside
-the server; it handles both old and new server snapshots. Older external
-snapshot readers may need an update before consuming version 2 exports.
+Version 1 and 2 baselines remain readable. Version 1 uses the previous URL-based
+algorithm and shows a legacy notice; version 2 retains node identity. Neither
+old format records scanner provenance, so its comparison is marked `unknown`.
+Update the bundled CI gate alongside the server and update external snapshot
+readers for version 3 before accepting a reviewed replacement baseline.
+
+The `scanner` object records the measured ZAP version and installed add-on
+IDs, versions and maturity, plus available server build identity. Missing
+revision or image digests remain `null`; configured image tags are not measured
+image identities. Failed, malformed or changing inventory reads make
+`inventoryComplete` false while findings remain readable.
+
+New/resolved counts require complete matching engine/add-on inventories.
+Changed or unknown inventories show informational added/removed/retained
+observations instead. A disappeared alert after a rule update is therefore not
+reported as an application fix. In the CI gate, `baseline-mode: enforce` with
+`fail-on-new-findings: true` fails for an incomparable baseline; `seed` permits
+review. Accepted baselines are never automatically overwritten.
+
+Inventory is measured around snapshot export, not reconstructed from past
+scan history. Keep the engine and add-ons fixed during the scan/report run;
+matching inventory alone proves neither identical coverage nor remediation.
+See the repository's [CI gate contracts](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/scanning/CI_GATE_CONTRACTS.md)
+for the versioned evidence fields and baseline migration.
 
 ## Report Artifacts
 

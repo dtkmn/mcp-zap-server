@@ -33,18 +33,16 @@ public interface EngineRuntimeAccess {
                 if (inspected++ >= MAX_ADD_ONS) {
                     break;
                 }
-                if (addOn == null || addOn.id() == null || !seenIds.add(addOn.id())) {
-                    if (addOn != null && addOn.id() != null) {
-                        installed.remove(addOn.id());
-                    }
+                if (addOn == null || addOn.id() == null) {
                     inventoryComplete = false;
-                    continue;
-                }
-                if (addOn.version() == null || addOn.status() == null) {
+                } else if (!seenIds.add(addOn.id())) {
+                    installed.remove(addOn.id());
                     inventoryComplete = false;
-                    continue;
+                } else if (addOn.version() == null || addOn.status() == null) {
+                    inventoryComplete = false;
+                } else {
+                    installed.put(addOn.id(), addOn);
                 }
-                installed.put(addOn.id(), addOn);
             }
             addOns = List.copyOf(installed.values());
         }
@@ -57,12 +55,12 @@ public interface EngineRuntimeAccess {
     /** Installed add-on identity; status is its maturity, not installation state. */
     record AddOn(String id, String version, String status) {
 
-        private static final Pattern ID = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,127}");
-        private static final Pattern VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,127}");
+        private static final Pattern ID_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,127}");
+        private static final Pattern VERSION_PATTERN = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._+-]{0,127}");
         private static final Set<String> STATUSES = Set.of("unknown", "example", "alpha", "beta", "weekly", "release");
 
         public AddOn {
-            id = normalizeToken(id, ID);
+            id = normalizeToken(id, ID_PATTERN);
             version = normalizeVersion(version);
             status = status == null ? null : status.trim();
             if (status != null && !STATUSES.contains(status)) {
@@ -71,7 +69,7 @@ public interface EngineRuntimeAccess {
         }
 
         private static String normalizeVersion(String value) {
-            return normalizeToken(value, VERSION);
+            return normalizeToken(value, VERSION_PATTERN);
         }
 
         private static String normalizeToken(String value, Pattern pattern) {

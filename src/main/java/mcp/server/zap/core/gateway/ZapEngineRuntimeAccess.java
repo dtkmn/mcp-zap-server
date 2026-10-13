@@ -40,7 +40,7 @@ public class ZapEngineRuntimeAccess implements EngineRuntimeAccess {
         String version = null;
         try {
             version = elementValue(zap.core.version());
-        } catch (ClientApiException | RuntimeException ignored) {
+        } catch (ClientApiException | RuntimeException _) {
             // Inventory is optional evidence; never expose the API failure or its request details.
         }
 
@@ -61,7 +61,7 @@ public class ZapEngineRuntimeAccess implements EngineRuntimeAccess {
                 }
             }
             return new ScannerInventory(version, addOns, true);
-        } catch (ClientApiException | RuntimeException ignored) {
+        } catch (ClientApiException | RuntimeException _) {
             return new ScannerInventory(version, List.of(), false);
         }
     }

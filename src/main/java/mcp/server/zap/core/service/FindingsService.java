@@ -34,6 +34,9 @@ import org.slf4j.LoggerFactory;
 public class FindingsService {
     private static final int DEFAULT_INSTANCE_LIMIT = 20;
     private static final int MAX_INSTANCE_LIMIT = 100;
+    private static final String SCANNER_COMPARISON_MATCHING = "matching";
+    private static final String UNKNOWN_VALUE = "unknown";
+    private static final String VERSION_FIELD = "version";
     private static final Logger log = LoggerFactory.getLogger(FindingsService.class);
 
     private final EngineFindingAccess engineFindingAccess;
@@ -251,7 +254,7 @@ public class FindingsService {
         FindingsSnapshot baseline = parseSnapshot(baselineSnapshot);
         FindingsSnapshot current = buildSnapshot(baseUrl, baseline.version() == 1 ? 1 : 3);
         String scannerComparison = compareScanners(baseline.scanner(), current.scanner());
-        boolean comparable = "matching".equals(scannerComparison);
+        boolean comparable = SCANNER_COMPARISON_MATCHING.equals(scannerComparison);
         Map<String, FindingFingerprint> baselineFingerprints = uniqueFindings(baseline);
         Map<String, FindingFingerprint> currentFingerprints = uniqueFindings(current);
 
@@ -499,7 +502,7 @@ public class FindingsService {
                 .toList();
 
         ScannerProvenance after = readScannerProvenance();
-        if (!"matching".equals(compareScanners(before, after))) {
+        if (!SCANNER_COMPARISON_MATCHING.equals(compareScanners(before, after))) {
             after = after.withIncompleteInventory();
         }
         return new FindingsSnapshot(
@@ -519,7 +522,7 @@ public class FindingsService {
                 if (measured != null) {
                     inventory = measured;
                 }
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException _) {
                 // Findings remain readable; do not publish upstream errors or claim a complete inventory.
             }
         }
@@ -536,19 +539,19 @@ public class FindingsService {
     private String compareScanners(ScannerProvenance baseline, ScannerProvenance current) {
         if (baseline == null || current == null || baseline.version() != 1 || current.version() != 1
                 || !baseline.inventoryComplete() || !current.inventoryComplete()) {
-            return "unknown";
+            return UNKNOWN_VALUE;
         }
         return baseline.zapVersion().equals(current.zapVersion()) && baseline.addOns().equals(current.addOns())
-                ? "matching" : "different";
+                ? SCANNER_COMPARISON_MATCHING : "different";
     }
 
     private void appendScannerSummary(StringBuilder output, String label, ScannerProvenance scanner) {
         output.append(label).append(" MCP ZAP Server Version: ")
-                .append(scanner == null || scanner.serverVersion() == null ? "unknown" : scanner.serverVersion()).append('\n')
+                .append(scanner == null || scanner.serverVersion() == null ? UNKNOWN_VALUE : scanner.serverVersion()).append('\n')
                 .append(label).append(" Server Revision: ")
-                .append(scanner == null || scanner.serverRevision() == null ? "unknown" : scanner.serverRevision()).append('\n')
+                .append(scanner == null || scanner.serverRevision() == null ? UNKNOWN_VALUE : scanner.serverRevision()).append('\n')
                 .append(label).append(" ZAP Version: ")
-                .append(scanner == null || scanner.zapVersion() == null ? "unknown" : scanner.zapVersion()).append('\n')
+                .append(scanner == null || scanner.zapVersion() == null ? UNKNOWN_VALUE : scanner.zapVersion()).append('\n')
                 .append(label).append(" Add-on Inventory Complete: ")
                 .append(scanner != null && scanner.inventoryComplete() ? "yes" : "no").append('\n');
         if (scanner != null) {
@@ -562,7 +565,7 @@ public class FindingsService {
     private FindingsSnapshot parseSnapshot(String baselineSnapshot) {
         try {
             JsonNode payload = objectMapper.readTree(baselineSnapshot);
-            if (!(payload instanceof ObjectNode object) || !payload.path("version").isInt()) {
+            if (!(payload instanceof ObjectNode object) || !payload.path(VERSION_FIELD).isInt()) {
                 throw new IllegalArgumentException("Baseline snapshot must be an object with an integer version");
             }
             // Parse provenance separately: scalar coercion must not turn malformed evidence into a complete inventory.
@@ -589,8 +592,8 @@ public class FindingsService {
     }
 
     private ScannerProvenance parseScanner(JsonNode payload) {
-        if (payload == null || !payload.isObject() || !payload.path("version").isInt()
-                || payload.path("version").asInt() != 1) {
+        if (payload == null || !payload.isObject() || !payload.path(VERSION_FIELD).isInt()
+                || payload.path(VERSION_FIELD).asInt() != 1) {
             return new ScannerProvenance(1, null, null, null, null, null, List.of(), false);
         }
         JsonNode addOns = payload.path("addOns");
@@ -598,7 +601,7 @@ public class FindingsService {
         if (addOns.isArray() && addOns.size() <= ScannerInventory.MAX_ADD_ONS) {
             inventory = new ArrayList<>();
             for (JsonNode addOn : addOns) {
-                inventory.add(new AddOn(scannerText(addOn, "id"), scannerText(addOn, "version"), scannerText(addOn, "status")));
+                inventory.add(new AddOn(scannerText(addOn, "id"), scannerText(addOn, VERSION_FIELD), scannerText(addOn, "status")));
             }
         }
         boolean complete = payload.path("inventoryComplete").isBoolean()

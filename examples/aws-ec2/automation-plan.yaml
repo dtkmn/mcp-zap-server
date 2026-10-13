@@ -8,6 +8,7 @@ env:
     failOnWarning: true
     continueOnFailure: false
     progressToStdout: false
+    maxDuration: 300 # Whole-plan seconds; requires automation 0.61.0 and ZAP 2.17.0 or newer.
 
 jobs:
   - type: requestor
@@ -20,14 +21,15 @@ jobs:
     parameters:
       context: smoke-target
       url: http://smoke-target:8080
-      maxDuration: 1
+      maxDuration: 1 # Spider minutes.
       maxDepth: 2
       maxChildren: 10
       threadCount: 1
   - type: passiveScan-wait
     parameters:
-      maxDuration: 1
+      maxDuration: 1 # Passive-wait minutes.
   - type: report
+    alwaysRun: true # Produce a partial report after a soft deadline stop.
     parameters:
       template: traditional-json-plus
       reportFile: example-automation-report

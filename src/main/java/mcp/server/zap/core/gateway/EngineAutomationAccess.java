@@ -27,9 +27,5 @@ public interface EngineAutomationAccess {
         public boolean completed() {
             return finished != null && !finished.isBlank();
         }
-
-        public boolean successful() {
-            return completed() && errors.isEmpty();
-        }
     }
 }

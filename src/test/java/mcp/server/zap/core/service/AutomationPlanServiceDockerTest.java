@@ -7,7 +7,10 @@ import com.github.dockerjava.api.model.Volume;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineAutomationAccess;
+import mcp.server.zap.core.gateway.ZapEngineRuntimeAccess;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
@@ -17,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
 import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
@@ -25,12 +29,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
+import java.net.URI;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -87,11 +94,12 @@ class AutomationPlanServiceDockerTest {
 
     private static AutomationPlanService service;
     private static ZapEngineAutomationAccess automationAccess;
+    private static ClientApi clientApi;
     private static String targetUrl;
 
     @BeforeAll
     static void setupService() throws Exception {
-        ClientApi clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
+        clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
         awaitAutomationApiReady(clientApi);
 
@@ -103,6 +111,12 @@ class AutomationPlanServiceDockerTest {
         ReflectionTestUtils.setField(policy, "blacklist", List.of());
         automationAccess = spy(new ZapEngineAutomationAccess(clientApi));
         service = new AutomationPlanService(automationAccess, policy);
+        ZapEngineRuntimeAccess runtimeAccess = new ZapEngineRuntimeAccess(clientApi);
+        service.setRuntimeAccess(runtimeAccess);
+        var inventory = runtimeAccess.readScannerInventory();
+        String automationVersion = inventory.addOns().stream().filter(addOn -> "automation".equals(addOn.id()))
+                .map(addOn -> addOn.version()).findFirst().orElse("unknown");
+        System.out.printf("Automation fixture: ZAP %s, automation %s%n", inventory.zapVersion(), automationVersion);
         ReflectionTestUtils.setField(service, "automationLocalDirectory", AUTOMATION_ROOT.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", AUTOMATION_ROOT.toString());
     }
@@ -119,6 +133,7 @@ class AutomationPlanServiceDockerTest {
                                 - %s
                           parameters:
                             progressToStdout: true
+                            maxDuration: 300
                         jobs:
                           - type: requestor
                             requests:
@@ -152,10 +167,135 @@ class AutomationPlanServiceDockerTest {
 
         assertTrue(runResponse.contains("Automation plan started."), runResponse);
         assertTrue(finalStatus.contains("Completed: yes"), finalStatus);
-        assertTrue(finalStatus.contains("Successful: yes"), finalStatus);
+        assertTrue(finalStatus.contains("Successful: unknown"), finalStatus);
         assertTrue(finalStatus.contains("Job report generated report"), finalStatus);
         assertTrue(artifacts.contains("automation-report.json"), artifacts);
         assertTrue(artifacts.contains("\"@programName\": \"ZAP\""), artifacts);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void wholePlanDeadlineStopsFollowingRequestsAndHonorsAlwaysRunReports(boolean alwaysRun) throws Exception {
+        String markerUrl = targetUrl + "deadline-marker-" + UUID.randomUUID();
+        String runResponse = service.runAutomationPlan(null,
+                delayedPlan(2, alwaysRun, markerUrl, targetUrl), "deadline-plan.yaml");
+        String planId = extractValue(PLAN_ID_PATTERN, runResponse);
+        String planPath = extractValue(PLAN_FILE_PATTERN, runResponse);
+
+        String finalStatus = awaitCompletedStatus(planId);
+        var progress = automationAccess.loadAutomationPlanProgress(planId);
+        String artifacts = service.getAutomationPlanArtifacts(planPath, 10, 12000);
+
+        assertFalse(progress.warnings().isEmpty(), finalStatus);
+        assertTrue(progress.errors().isEmpty(), finalStatus);
+        assertTrue(finalStatus.contains("Successful: unknown"), finalStatus);
+        assertFalse(engineRecordedUrl(markerUrl), "The ordinary request after the interrupted delay must not execute");
+        if (alwaysRun) {
+            assertTrue(artifacts.contains("deadline-report.json"), artifacts);
+            assertTrue(artifacts.contains("\"@programName\": \"ZAP\""), artifacts);
+        } else {
+            assertTrue(artifacts.contains("no generated files found yet"), artifacts);
+        }
+        System.out.printf("Whole-plan expiry: alwaysRun=%s, status=%s%n", alwaysRun, finalStatus);
+    }
+
+    @Test
+    void nativeCancellationDoesNotBecomeSuccessWhenTheEngineReportsNoErrors() throws Exception {
+        String markerUrl = targetUrl + "cancel-marker-" + UUID.randomUUID();
+        String runResponse = service.runAutomationPlan(null,
+                delayedPlan(300, true, markerUrl, targetUrl), "cancel-plan.yaml");
+        String planId = extractValue(PLAN_ID_PATTERN, runResponse);
+        String planPath = extractValue(PLAN_FILE_PATTERN, runResponse);
+        awaitDelayStarted(planId);
+        clientApi.automation.stopPlan(planId);
+
+        String finalStatus = awaitCompletedStatus(planId);
+        var progress = automationAccess.loadAutomationPlanProgress(planId);
+        assertTrue(progress.errors().isEmpty(), finalStatus);
+        assertTrue(finalStatus.contains("Successful: unknown"), finalStatus);
+        assertFalse(engineRecordedUrl(markerUrl), "Cancellation must skip the following ordinary request");
+        String artifacts = service.getAutomationPlanArtifacts(planPath, 10, 12000);
+        assertTrue(artifacts.contains("no generated files found yet"), artifacts);
+        System.out.printf("Native cancellation status: %s%n", finalStatus);
+    }
+
+    @Test
+    void requestFailureWarningStopsOrdinaryWorkWithoutClaimingSuccess() throws Exception {
+        String markerUrl = targetUrl + "failure-marker-" + UUID.randomUUID();
+        String refusedUrl = "http://" + URI.create(targetUrl).getHost() + ":1/";
+        String runResponse = service.runAutomationPlan(null,
+                delayedPlan(300, true, markerUrl, refusedUrl).replace("failOnWarning: false", "failOnWarning: true"),
+                "failure-plan.yaml");
+        String planId = extractValue(PLAN_ID_PATTERN, runResponse);
+        String finalStatus = awaitCompletedStatus(planId);
+        var progress = automationAccess.loadAutomationPlanProgress(planId);
+        assertFalse(progress.warnings().isEmpty(), finalStatus);
+        assertTrue(progress.errors().isEmpty(), finalStatus);
+        assertTrue(finalStatus.contains("Successful: unknown"), finalStatus);
+        assertFalse(engineRecordedUrl(markerUrl), "The requestor failure must skip subsequent ordinary jobs");
+        String artifacts = service.getAutomationPlanArtifacts(extractValue(PLAN_FILE_PATTERN, runResponse), 10, 12000);
+        assertTrue(artifacts.contains("deadline-report.json"), artifacts);
+        System.out.printf("Request failure warning status: %s%n", finalStatus);
+    }
+
+    private static String delayedPlan(int maxDurationSeconds, boolean alwaysRun, String markerUrl, String requestUrl) {
+        return """
+                env:
+                  contexts:
+                    - name: deadline-target
+                      urls: [%s]
+                  parameters:
+                    maxDuration: %d
+                    failOnError: true
+                    failOnWarning: false
+                    continueOnFailure: false
+                jobs:
+                  - type: requestor
+                    requests:
+                      - url: %s
+                        method: GET
+                        responseCode: 200
+                  - type: delay
+                    name: deadline-delay
+                    parameters:
+                      time: "60"
+                  - type: requestor
+                    name: ordinary-after-delay
+                    requests:
+                      - url: %s
+                        method: GET
+                  - type: report
+                    alwaysRun: %s
+                    parameters:
+                      template: traditional-json-plus
+                      reportFile: deadline-report
+                      displayReport: false
+                    sites: [%s]
+                """.formatted(targetUrl, maxDurationSeconds, requestUrl, markerUrl, alwaysRun, targetUrl);
+    }
+
+    private static boolean engineRecordedUrl(String url) throws ClientApiException {
+        ApiResponse response = clientApi.core.urls(targetUrl);
+        if (!(response instanceof ApiResponseList urls)) {
+            throw new IllegalStateException("Unexpected URL inventory response");
+        }
+        return urls.getItems().stream().anyMatch(item -> item instanceof ApiResponseElement element
+                && url.equals(element.getValue()));
+    }
+
+    private static void awaitDelayStarted(String planId) throws Exception {
+        long deadline = System.nanoTime() + AUTOMATION_PLAN_COMPLETION_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadline) {
+            var progress = automationAccess.loadAutomationPlanProgress(planId);
+            if (progress.info().stream().anyMatch(message -> message.contains("Job delay started"))) {
+                return;
+            }
+            if (progress.completed()) {
+                throw new IllegalStateException("Plan finished before the cancellation fixture reached its delay");
+            }
+            Thread.sleep(100);
+        }
+        throw new IllegalStateException("Cancellation fixture did not reach its delay job");
     }
 
     @Test

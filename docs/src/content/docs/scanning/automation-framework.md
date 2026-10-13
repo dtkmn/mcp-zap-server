@@ -113,6 +113,55 @@ That gives you:
 
 The returned `Plan File` path is the one to reuse with `zap_automation_plan_artifacts`.
 
+### Whole-Plan Duration (Unreleased)
+
+The whole-plan checks and status changes below are **Unreleased**; they are not
+included in the published `v0.15.0` MCP server. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before relying
+on them.
+
+Set `env.parameters.maxDuration` to an integer number of **seconds**, such as
+`300`. Declaring this field requires measured ZAP core `2.17.0` or newer and the
+`automation` add-on `0.61.0` or newer. The MCP runner checks the running engine's
+inventory before writing or dispatching the plan; missing, unknown or unsupported
+capabilities produce an actionable error. A compatible stable core and released
+add-on support this option; a weekly engine build is not required.
+
+Accepted values are YAML integers from `0` to `2147483647`. Zero means unlimited.
+Omitting the field preserves existing behavior without adding a whole-plan
+deadline. Negative values, null, fractional numbers, quoted strings and overflow
+are rejected instead of risking an unintended unlimited run. Existing job limits
+retain their own units: the `spider` and `passiveScan-wait` jobs use **minutes**.
+See [ZAP's environment reference](https://www.zaproxy.org/docs/desktop/addons/automation-framework/environment/),
+[Spider job reference](https://www.zaproxy.org/docs/desktop/addons/spider/automation/)
+and [passive-wait reference](https://www.zaproxy.org/docs/desktop/addons/passive-scanner/job-pscanwait/).
+
+In Automation Framework `0.61.0`, the timer starts after environment and
+configuration preparation. Expiry records a warning, requests a **soft stop** and
+interrupts the plan thread. Subsequent ordinary jobs are skipped; enabled jobs
+with `alwaysRun: true` can still run. Set that flag explicitly on a report job if
+you want a report of the results available when the plan stops. Report generation
+can extend execution beyond the configured duration, and its artifact does not
+establish that the scan completed successfully. The deadline is cooperative; it
+does not guarantee an exact wall-clock ceiling or forcibly terminate every
+network request. These behaviors follow the
+[upstream deadline and job execution implementation](https://github.com/zaproxy/zap-extensions/blob/automation-v0.61.0/addOns/automation/src/main/java/org/zaproxy/addon/automation/ExtensionAutomation.java#L588).
+
+Stopping a `passiveScan-wait` job ends the wait, **not** background passive
+analysis. A finished plan can still have queued or running passive work; inspect
+`zap_passive_scan_status` before treating the findings or report as final.
+An in-flight requestor request can finish after expiry. With Automation Framework
+`0.61.0` and Spider `0.20.0`, a deadline reached during slow seed-page preparation
+can also allow the spider to start afterward. Keep job-level scan limits as
+additional bounds. If you require a strict cutoff for target traffic, enforce it
+through an operator-controlled engine lifecycle or network boundary; neither plan
+completion nor `maxDuration` establishes that all requests have stopped.
+See the [passive-wait implementation](https://github.com/zaproxy/zap-extensions/blob/pscan-v0.6.0/addOns/pscan/src/main/java/org/zaproxy/addon/pscan/automation/jobs/PassiveScanWaitJob.java#L77)
+and [Spider job implementation](https://github.com/zaproxy/zap-extensions/blob/spider-v0.20.0/addOns/spider/src/main/java/org/zaproxy/addon/spider/automation/SpiderJob.java#L218).
+
+An MCP or client timeout bounds the caller's wait. Check engine progress
+separately; that timeout alone does not cancel the ZAP plan.
+
 ### YAML Limits
 
 The limits below are introduced in `v0.14.0` and are not included in `v0.13.0`.
@@ -170,6 +219,7 @@ The MCP runner rejects:
 - arbitrary `includePaths`, which can expand context scope beyond declared URLs
 - `env.proxy` and `env.configs`, which can change engine networking or configuration
 - script, browser, client, and autodetect authentication or script session management
+- `authentication.verification.pollMethod`, which ZAP documents as post-`2.17.0`; support remains deferred until a compatible engine capability and HTTP-method validation are verified
 - all other job types, including imports (OpenAPI, GraphQL, SOAP, HAR/sequence), scripts, replacer rules, add-on installation, and browser crawlers
 
 Variables remain available for credentials and request bodies. Disabling URL validation deliberately disables the configured network filtering; it does not enable unsupported jobs or destination substitutions.
@@ -185,7 +235,7 @@ This is validation of declared destinations, not an engine network sandbox. Craw
   "tool": "zap_automation_plan_run",
   "arguments": {
     "planFileName": "nightly-plan.yaml",
-    "planYaml": "env:\n  contexts:\n    - name: local-target\n      urls:\n        - http://example.com/\njobs:\n  - type: requestor\n    requests:\n      - url: http://example.com/\n        method: GET\n        responseCode: 200\n  - type: passiveScan-wait\n    parameters:\n      maxDuration: 2\n  - type: report\n    parameters:\n      template: traditional-json-plus\n      reportFile: nightly-report\n      reportTitle: Nightly Automation Report\n      displayReport: false\n    sites:\n      - example.com"
+    "planYaml": "env:\n  contexts:\n    - name: local-target\n      urls:\n        - http://example.com/\n  parameters:\n    maxDuration: 300\njobs:\n  - type: requestor\n    requests:\n      - url: http://example.com/\n        method: GET\n        responseCode: 200\n  - type: passiveScan-wait\n    parameters:\n      maxDuration: 2\n  - type: report\n    alwaysRun: true\n    parameters:\n      template: traditional-json-plus\n      reportFile: nightly-report\n      reportTitle: Nightly Automation Report\n      displayReport: false\n    sites:\n      - example.com"
   }
 }
 ```
@@ -198,6 +248,17 @@ Use the response from `zap_automation_plan_run` like this:
 2. poll `zap_automation_plan_status`
 3. capture `Plan File`
 4. call `zap_automation_plan_artifacts` with that `Plan File`
+
+With the **Unreleased** status behavior, `Completed: yes` means ZAP supplied a
+finish timestamp. ZAP's progress API exposes messages and timestamps, without a
+success or termination-reason field. `Successful` is `pending` while running,
+`no` when a finished plan reports errors, and `unknown` otherwise. Deadline
+warnings remain visible; a native hard cancellation can finish without warnings
+or errors. Request failures can also appear as warnings, so inspect them even
+when the error count is zero. Completion, clean diagnostics and report presence therefore do not
+prove that every job ran. Check the relevant job messages and expected target
+evidence before treating a report as a completed scan. See the
+[upstream progress fields](https://github.com/zaproxy/zap-extensions/blob/automation-v0.61.0/addOns/automation/src/main/java/org/zaproxy/addon/automation/AutomationAPI.java#L137).
 
 If you need a deeper read of a generated report file, use `zap_report_read` with
 the returned absolute file path. The file must be inside the caller's report

@@ -646,7 +646,6 @@ class ZapEngineBoundaryAccessTest {
 
         assertThat(planId).isEqualTo("33");
         assertThat(progress.completed()).isTrue();
-        assertThat(progress.successful()).isTrue();
         assertThat(progress.info()).containsExactly("requestor finished");
     }
 

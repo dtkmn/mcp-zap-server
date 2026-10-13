@@ -50,10 +50,7 @@ final class AutomationPlanTargetPolicy {
             validateAuthentication(context.get("authentication"), field + ".authentication");
             validateSessionManagement(context.get("sessionManagement"), field + ".sessionManagement");
         }
-        if (env.get("parameters") != null) {
-            allowedKeys(mapping(env.get("parameters"), "env.parameters"), Set.of(
-                    "failOnError", "failOnWarning", "continueOnFailure", "progressToStdout", "maxDuration"), "env.parameters");
-        }
+        validateEnvironmentParameters(env.get("parameters"));
         if (env.get("vars") != null) {
             mapping(env.get("vars"), "env.vars");
         }
@@ -91,6 +88,21 @@ final class AutomationPlanTargetPolicy {
         }
     }
 
+    private void validateEnvironmentParameters(Object value) {
+        Map<?, ?> parameters = optionalMapping(value, "env.parameters");
+        allowedKeys(parameters, Set.of(
+                "failOnError", "failOnWarning", "continueOnFailure", "progressToStdout", "maxDuration"), "env.parameters");
+        if (parameters.containsKey("maxDuration")) {
+            Object duration = parameters.get("maxDuration");
+            if (!(duration instanceof Integer || duration instanceof Long)
+                    || ((Number) duration).longValue() < 0
+                    || ((Number) duration).longValue() > Integer.MAX_VALUE) {
+                throw invalid("env.parameters.maxDuration",
+                        "must be an integer number of seconds from 0 to 2147483647; 0 means unlimited");
+            }
+        }
+    }
+
     private void validateAuthentication(Object value, String field) {
         if (value == null) {
             return;
@@ -111,6 +123,10 @@ final class AutomationPlanTargetPolicy {
             optionalDestination(parameters.get("loginPageUrl"), field + ".parameters.loginPageUrl");
         }
         Map<?, ?> verification = optionalMapping(authentication.get("verification"), field + ".verification");
+        if (verification.containsKey("pollMethod")) {
+            throw invalid(field + ".verification.pollMethod",
+                    "is not supported by this MCP runner; ZAP documents it as post-2.17.0. Remove this field and use the supported polling settings");
+        }
         allowedKeys(verification, Set.of("method", "loggedInRegex", "loggedOutRegex", "pollFrequency", "pollUnits",
                 "pollUrl", "pollPostData", "pollAdditionalHeaders"), field + ".verification");
         boolean polling = false;

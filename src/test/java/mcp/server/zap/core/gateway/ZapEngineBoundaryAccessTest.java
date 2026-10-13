@@ -1,9 +1,11 @@
 package mcp.server.zap.core.gateway;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineApiImportAccess.UrlImportRequest;
 import mcp.server.zap.core.gateway.EngineContextAccess.AuthenticationConfigRequest;
@@ -14,7 +16,9 @@ import mcp.server.zap.core.gateway.EngineContextAccess.UserMutation;
 import mcp.server.zap.core.gateway.EngineContextAccess.UserMutationResult;
 import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.AddOn;
 import mcp.server.zap.core.gateway.EngineRuntimeAccess.NetworkDefaults;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.ScannerInventory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +33,7 @@ import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.AjaxSpider;
 import org.zaproxy.clientapi.gen.Authentication;
 import org.zaproxy.clientapi.gen.Automation;
+import org.zaproxy.clientapi.gen.Autoupdate;
 import org.zaproxy.clientapi.gen.Context;
 import org.zaproxy.clientapi.gen.Core;
 import org.zaproxy.clientapi.gen.Graphql;
@@ -66,6 +71,7 @@ class ZapEngineBoundaryAccessTest {
     private Pscan pscan;
     private AjaxSpider ajaxSpider;
     private Automation automation;
+    private Autoupdate autoupdate;
     private Core core;
     private Network network;
     private ZapEngineFindingAccess findingAccess;
@@ -93,6 +99,7 @@ class ZapEngineBoundaryAccessTest {
         pscan = mock(Pscan.class);
         ajaxSpider = mock(AjaxSpider.class);
         automation = mock(Automation.class);
+        autoupdate = mock(Autoupdate.class);
         core = mock(Core.class);
         network = mock(Network.class);
         clientApi.alert = alert;
@@ -107,6 +114,7 @@ class ZapEngineBoundaryAccessTest {
         clientApi.pscan = pscan;
         clientApi.ajaxSpider = ajaxSpider;
         clientApi.automation = automation;
+        clientApi.autoupdate = autoupdate;
         clientApi.core = core;
         clientApi.network = network;
 
@@ -675,6 +683,135 @@ class ZapEngineBoundaryAccessTest {
         verify(network).setDefaultUserAgent("MCP ZAP Server");
         verify(network).setConnectionTimeout("30");
         verify(network).setDnsTtlSuccessfulQueries("60");
+    }
+
+    @Test
+    void runtimeInventoryMapsOnlyMeasuredIdentityAndSortsInstalledAddOns() throws Exception {
+        when(core.version()).thenReturn(element("version", "2.17.0"));
+        when(autoupdate.installedAddons()).thenReturn(new ApiResponseList("installedAddons", List.of(
+                set("addon", Map.of(
+                        "id", element("id", "pscanrules"),
+                        "version", element("version", "76"),
+                        "status", element("status", "release"),
+                        "file", element("file", "/private/addons/pscanrules.zap"),
+                        "url", element("url", "https://user:secret@example.invalid/addon")
+                )),
+                addOn("automation", "0.61.0", "beta")
+        )));
+
+        var inventory = runtimeAccess.readScannerInventory();
+
+        assertThat(inventory.zapVersion()).isEqualTo("2.17.0");
+        assertThat(inventory.addOns()).containsExactly(
+                new AddOn("automation", "0.61.0", "beta"),
+                new AddOn("pscanrules", "76", "release")
+        );
+        assertThat(inventory.inventoryComplete()).isTrue();
+        verify(core).version();
+        verify(autoupdate).installedAddons();
+        verifyNoMoreInteractions(core, autoupdate);
+        verifyNoInteractions(network);
+    }
+
+    @Test
+    void runtimeInventoryRejectsMalformedAndAmbiguousAddOnIdentities() throws Exception {
+        when(core.version()).thenReturn(element("version", "2.17.0"));
+        when(autoupdate.installedAddons()).thenReturn(new ApiResponseList("installedAddons", List.of(
+                addOn("pscanrules", "75", "release"),
+                addOn("pscanrules", "76", "release"),
+                addOn("pscanrules", "77", "release"),
+                set("addon", Map.of("id", element("id", "missing-version"))),
+                set("addon", Map.of(
+                        "id", element("id", "nested-version"),
+                        "version", new ApiResponseList("version"),
+                        "status", element("status", "release")
+                )),
+                addOn("private-version", "https://user:secret@example.invalid", "release"),
+                addOn("invalid-status", "1", "unexpected"),
+                element("error", "private failure details"),
+                addOn("automation", "0.61.0", "beta")
+        )));
+
+        var inventory = runtimeAccess.readScannerInventory();
+
+        assertThat(inventory.zapVersion()).isEqualTo("2.17.0");
+        assertThat(inventory.addOns()).containsExactly(new AddOn("automation", "0.61.0", "beta"));
+        assertThat(inventory.inventoryComplete()).isFalse();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"version", "addons"})
+    void runtimeInventoryAcquisitionFailuresRetainOnlyAvailableIdentity(String failedRead) throws Exception {
+        if (failedRead.equals("version")) {
+            when(core.version()).thenThrow(new ClientApiException("https://user:secret@example.invalid"));
+            when(autoupdate.installedAddons()).thenReturn(new ApiResponseList("installedAddons",
+                    List.of(addOn("automation", "0.61.0", "beta"))));
+        } else {
+            when(core.version()).thenReturn(element("version", "2.17.0"));
+            when(autoupdate.installedAddons()).thenThrow(new ClientApiException("https://user:secret@example.invalid"));
+        }
+
+        var inventory = runtimeAccess.readScannerInventory();
+
+        assertThat(inventory.inventoryComplete()).isFalse();
+        if (failedRead.equals("version")) {
+            assertThat(inventory.zapVersion()).isNull();
+            assertThat(inventory.addOns()).containsExactly(new AddOn("automation", "0.61.0", "beta"));
+        } else {
+            assertThat(inventory.zapVersion()).isEqualTo("2.17.0");
+            assertThat(inventory.addOns()).isEmpty();
+        }
+    }
+
+    @Test
+    void runtimeInventoryMalformedResponsesCannotClaimCompleteInventory() throws Exception {
+        when(core.version()).thenReturn(element("version", "https://user:secret@example.invalid"));
+        when(autoupdate.installedAddons()).thenReturn(element("error", "private failure details"));
+
+        assertThat(runtimeAccess.readScannerInventory()).isEqualTo(ScannerInventory.unknown());
+    }
+
+    @Test
+    void scannerInventoryCanonicalizesBaselineRecordsAndOwnsItsImmutableList() {
+        var records = new ArrayList<>(List.of(
+                new AddOn(" pscanrules ", " 76 ", " release "),
+                new AddOn("automation", "0.61.0", "beta"),
+                new AddOn("private-addon", "https://user:secret@example.invalid", "release")
+        ));
+        records.add(null);
+
+        var inventory = new ScannerInventory(" 2.17.0 ", records, true);
+        records.clear();
+
+        assertThat(inventory.zapVersion()).isEqualTo("2.17.0");
+        assertThat(inventory.addOns()).containsExactly(
+                new AddOn("automation", "0.61.0", "beta"), new AddOn("pscanrules", "76", "release"));
+        assertThat(inventory.inventoryComplete()).isFalse();
+        assertThatThrownBy(() -> inventory.addOns().clear()).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(new ScannerInventory("2.17.0", null, true)).isEqualTo(new ScannerInventory("2.17.0", List.of(), false));
+        assertThat(new ScannerInventory("2.17.0", List.of(), false).inventoryComplete()).isFalse();
+    }
+
+    @Test
+    void runtimeInventoryBoundsOversizedApiResponsesAndMarksThemIncomplete() throws Exception {
+        List<ApiResponse> addOns = IntStream.rangeClosed(0, ScannerInventory.MAX_ADD_ONS)
+                .mapToObj(index -> (ApiResponse) addOn("addon-" + index, "1", "release"))
+                .toList();
+        when(core.version()).thenReturn(element("version", "2.17.0"));
+        when(autoupdate.installedAddons()).thenReturn(new ApiResponseList("installedAddons", addOns));
+
+        var inventory = runtimeAccess.readScannerInventory();
+
+        assertThat(inventory.addOns()).hasSize(ScannerInventory.MAX_ADD_ONS);
+        assertThat(inventory.inventoryComplete()).isFalse();
+    }
+
+    private ApiResponseSet addOn(String id, String version, String status) {
+        return set("addon", Map.of(
+                "id", element("id", id),
+                "version", element("version", version),
+                "status", element("status", status)
+        ));
     }
 
     private ApiResponseSet alert(String id,

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import mcp.server.zap.core.gateway.ZapEngineContextAccess;
 import mcp.server.zap.core.gateway.ZapEngineFindingAccess;
 import mcp.server.zap.core.gateway.ZapEngineReportAccess;
+import mcp.server.zap.core.gateway.ZapEngineRuntimeAccess;
 import mcp.server.zap.core.gateway.EngineReportAccess.ReportGenerationRequest;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import org.junit.jupiter.api.Tag;
@@ -98,6 +99,7 @@ class FindingsAndReportServiceDockerTest {
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
 
         findingsService = new FindingsService(new ZapEngineFindingAccess(clientApi));
+        findingsService.setRuntimeAccess(new ZapEngineRuntimeAccess(clientApi));
         ScanHistoryLedgerService scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
         when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("http://findings-target/")).thenReturn(true);
         findingsService.setScanHistoryLedgerService(scanHistoryLedgerService);
@@ -142,7 +144,15 @@ class FindingsAndReportServiceDockerTest {
         assertTrue(instances.contains("Node Name: " + alert.nodeName()));
         assertTrue(instances.contains("Method: GET"));
         String snapshot = findingsService.exportFindingsSnapshot(targetUrl);
-        assertTrue(snapshot.contains("\"version\" : 2"));
+        JsonMapper json = JsonMapper.builder().build();
+        JsonNode scanner = json.readTree(snapshot).path("scanner");
+        assertEquals(3, json.readTree(snapshot).path("version").asInt());
+        assertTrue(scanner.path("inventoryComplete").asBoolean());
+        var measured = new ZapEngineRuntimeAccess(clientApi).readScannerInventory();
+        assertEquals(measured.zapVersion(), scanner.path("zapVersion").asString());
+        assertEquals(json.valueToTree(measured.addOns()), scanner.path("addOns"));
+        assertFalse(scanner.path("addOns").isEmpty());
+        assertTrue(findingsService.diffFindings(targetUrl, snapshot, 10).contains("Scanner Comparison: matching"));
 
         String reportTemplate = awaitReportTemplate();
         String reportSite = awaitReportSite(targetUrl);
@@ -152,6 +162,8 @@ class FindingsAndReportServiceDockerTest {
 
         assertTrue(reportContents.contains("Report artifact"));
         assertTrue(reportContents.contains("Codex Test Alert"));
+        JsonNode report = json.readTree(Path.of(reportPath));
+        assertEquals(scanner.path("zapVersion").asString(), report.path("@version").asString());
     }
 
     @Test

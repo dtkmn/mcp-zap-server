@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,15 @@ class RequestCorrelationIntegrationTest {
     @BeforeEach
     void attachLogAppender() {
         requestLogger = (Logger) LoggerFactory.getLogger(RequestCorrelationWebFilter.class);
-        requestLogAppender = new ListAppender<>();
+        requestLogAppender = new ListAppender<>() {
+            @Override
+            protected void append(ILoggingEvent event) {
+                // Capture lazy MDC fields on the request thread before the test reads the event.
+                event.prepareForDeferredProcessing();
+                super.append(event);
+            }
+        };
+        requestLogAppender.list = new CopyOnWriteArrayList<>();
         requestLogAppender.start();
         requestLogger.addAppender(requestLogAppender);
     }
@@ -68,7 +77,7 @@ class RequestCorrelationIntegrationTest {
         assertThat(body).isNotNull();
         assertThat(body.get("correlationId")).isEqualTo("corr-123");
 
-        ILoggingEvent completionEvent = lastCompletionEvent();
+        ILoggingEvent completionEvent = completionEvent("corr-123");
         assertThat(completionEvent.getFormattedMessage()).contains("path=/auth/validate");
         assertThat(completionEvent.getFormattedMessage()).contains("status=400");
         assertThat(completionEvent.getMDCPropertyMap())
@@ -93,7 +102,7 @@ class RequestCorrelationIntegrationTest {
         assertThat(body).isNotNull();
         assertThat(body.get("correlationId")).isEqualTo(correlationId);
 
-        ILoggingEvent completionEvent = lastCompletionEvent();
+        ILoggingEvent completionEvent = completionEvent(correlationId);
         assertThat(completionEvent.getMDCPropertyMap())
                 .containsEntry(RequestLogContext.CORRELATION_ID_MDC_KEY, correlationId)
                 .containsEntry(RequestLogContext.CLIENT_ID_MDC_KEY, "anonymous")
@@ -115,7 +124,7 @@ class RequestCorrelationIntegrationTest {
         assertThat(body).isNotNull();
         assertThat(body.get("correlationId")).isEqualTo("legacy-req-123");
 
-        ILoggingEvent completionEvent = lastCompletionEvent();
+        ILoggingEvent completionEvent = completionEvent("legacy-req-123");
         assertThat(completionEvent.getMDCPropertyMap())
                 .containsEntry(RequestLogContext.CORRELATION_ID_MDC_KEY, "legacy-req-123");
     }
@@ -124,9 +133,9 @@ class RequestCorrelationIntegrationTest {
         return WebTestClient.bindToServer().baseUrl("http://localhost:" + port).build();
     }
 
-    private ILoggingEvent lastCompletionEvent() {
+    private ILoggingEvent completionEvent(String correlationId) {
         long deadlineNanos = System.nanoTime() + 2_000_000_000L;
-        List<ILoggingEvent> events = completionEvents();
+        List<ILoggingEvent> events = completionEvents(correlationId);
         while (events.isEmpty() && System.nanoTime() < deadlineNanos) {
             try {
                 Thread.sleep(25);
@@ -134,15 +143,16 @@ class RequestCorrelationIntegrationTest {
                 Thread.currentThread().interrupt();
                 break;
             }
-            events = completionEvents();
+            events = completionEvents(correlationId);
         }
         assertThat(events).isNotEmpty();
         return events.get(events.size() - 1);
     }
 
-    private List<ILoggingEvent> completionEvents() {
+    private List<ILoggingEvent> completionEvents(String correlationId) {
         return requestLogAppender.list.stream()
-                .filter(event -> event.getFormattedMessage().startsWith("request.completed"))
+                .filter(event -> event.getFormattedMessage()
+                        .startsWith("request.completed correlationId=" + correlationId + " "))
                 .toList();
     }
 }

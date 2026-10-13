@@ -98,13 +98,13 @@ jobs:
               )
             return payload
 
-          pass1_metadata = load_json("PASS1_METADATA", "ci_gate_result/v1")
-          pass1_snapshot = load_json("PASS1_SNAPSHOT", "ci_gate_findings_snapshot/v1", "ci_gate_findings_snapshot/v2")
+          pass1_metadata = load_json("PASS1_METADATA", "ci_gate_result/v2")
+          pass1_snapshot = load_json("PASS1_SNAPSHOT", "ci_gate_findings_snapshot/v3")
           pass1_manifest = load_json("PASS1_MANIFEST", "ci_gate_artifact_manifest/v1")
-          pass2_metadata = load_json("PASS2_METADATA", "ci_gate_result/v1")
-          pass2_snapshot = load_json("PASS2_SNAPSHOT", "ci_gate_findings_snapshot/v1", "ci_gate_findings_snapshot/v2")
+          pass2_metadata = load_json("PASS2_METADATA", "ci_gate_result/v2")
+          pass2_snapshot = load_json("PASS2_SNAPSHOT", "ci_gate_findings_snapshot/v3")
           pass2_manifest = load_json("PASS2_MANIFEST", "ci_gate_artifact_manifest/v1")
-          pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v2")
+          pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v3")
 
           if pass1_metadata.get("tool_surface") != "expert":
             raise SystemExit(f"Pass 1 should use expert tools, got {pass1_metadata.get('tool_surface')}")
@@ -114,8 +114,8 @@ jobs:
             raise SystemExit("Pass 1 should emit at least one normalized finding for Juice Shop.")
           if not pass2_metadata.get("baseline_used"):
             raise SystemExit("Pass 2 should report that the baseline was used.")
-          if pass2_diff.get("counts", {}).get("new", 0) < 0:
-            raise SystemExit("Pass 2 diff count cannot be negative.")
+          if pass2_diff.get("scanner_comparison", {}).get("status") != "matching":
+            raise SystemExit("Pass 2 requires a complete matching scanner inventory for baseline replay.")
 
           report_path = Path("zap-artifacts/juice-shop-pass2/reports/zap-report.html")
           if not report_path.is_file():

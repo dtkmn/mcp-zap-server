@@ -21,6 +21,12 @@ group = 'mcp.server.zap'
 version = '0.15.0'
 def extensionApiPublicationVersion = version.toString()
 
+springBoot {
+    buildInfo {
+        excludes = ['time', 'group', 'name', 'artifact']
+    }
+}
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)

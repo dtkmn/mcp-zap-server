@@ -24,14 +24,21 @@ OPERATION_ID_PATTERN = re.compile(r"^Operation ID:\s*(.+)$", re.MULTILINE)
 REPORT_PATH_PATTERN = re.compile(r"^Path:\s*(.+)$", re.MULTILINE)
 COMPLETED_PATTERN = re.compile(r"^Completed:\s*(yes|no)$", re.MULTILINE | re.IGNORECASE)
 PROGRESS_PATTERN = re.compile(r"^Progress:\s*(\d+)%$", re.MULTILINE)
-CI_GATE_RESULT_CONTRACT_VERSION = "ci_gate_result/v1"
-CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v2"
+CI_GATE_RESULT_CONTRACT_VERSION = "ci_gate_result/v2"
+CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v3"
+PREVIOUS_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v2"
 LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v1"
-CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION = "ci_gate_findings_diff/v2"
+CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION = "ci_gate_findings_diff/v3"
 CI_GATE_SUPPRESSIONS_CONTRACT_VERSION = "ci_gate_suppressions/v1"
 CI_GATE_ARTIFACT_MANIFEST_CONTRACT_VERSION = "ci_gate_artifact_manifest/v1"
 LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "legacy_zap_findings_snapshot/v1"
-FINDINGS_SNAPSHOT_CONTRACT_VERSION = "zap_findings_snapshot/v2"
+FINDINGS_SNAPSHOT_CONTRACT_VERSION = "zap_findings_snapshot/v3"
+SCANNER_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,127}")
+SCANNER_ADD_ON_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+SCANNER_REVISION_PATTERN = re.compile(r"[0-9a-fA-F]{7,64}")
+SCANNER_DIGEST_PATTERN = re.compile(r"sha256:[0-9a-fA-F]{64}")
+SCANNER_ADD_ON_STATUSES = {"unknown", "example", "alpha", "beta", "weekly", "release"}
+MAX_SCANNER_ADD_ONS = 1024
 SUPPORTED_SUPPRESSION_MATCH_FIELDS = ("plugin_id", "alert_name", "risk", "confidence", "url", "param")
 RISK_RANKS = {
     "High": 3,
@@ -442,22 +449,106 @@ def group_sort_key(group: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def scanner_token(value: Any, pattern: re.Pattern[str] = SCANNER_TOKEN_PATTERN) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if pattern.fullmatch(normalized) else None
+
+
+def normalize_scanner(raw: Any) -> dict[str, Any]:
+    """Keep measured inventory and bounded public build identifiers only."""
+    scanner = {
+        "version": 1,
+        "serverVersion": None,
+        "serverRevision": None,
+        "serverImageDigest": None,
+        "zapImageDigest": None,
+        "zapVersion": None,
+        "addOns": [],
+        "inventoryComplete": False,
+    }
+    if not isinstance(raw, dict) or type(raw.get("version")) is not int or raw["version"] != 1:
+        return scanner
+
+    scanner["serverVersion"] = scanner_token(raw.get("serverVersion"))
+    scanner["serverRevision"] = scanner_token(raw.get("serverRevision"), SCANNER_REVISION_PATTERN)
+    scanner["serverImageDigest"] = scanner_token(raw.get("serverImageDigest"), SCANNER_DIGEST_PATTERN)
+    scanner["zapImageDigest"] = scanner_token(raw.get("zapImageDigest"), SCANNER_DIGEST_PATTERN)
+    scanner["zapVersion"] = scanner_token(raw.get("zapVersion"))
+    add_ons = raw.get("addOns")
+    if not isinstance(add_ons, list) or len(add_ons) > MAX_SCANNER_ADD_ONS:
+        return scanner
+
+    valid_inventory = scanner["zapVersion"] is not None
+    normalized_add_ons: dict[str, dict[str, str]] = {}
+    for item in add_ons:
+        if not isinstance(item, dict):
+            valid_inventory = False
+            continue
+        identifier = scanner_token(item.get("id"), SCANNER_ADD_ON_ID_PATTERN)
+        version = scanner_token(item.get("version"))
+        status = item.get("status")
+        if isinstance(status, str):
+            status = status.strip()
+        if not identifier or not version or not isinstance(status, str) or status not in SCANNER_ADD_ON_STATUSES:
+            valid_inventory = False
+            continue
+        if identifier in normalized_add_ons:
+            valid_inventory = False
+            continue
+        normalized_add_ons[identifier] = {"id": identifier, "version": version, "status": status}
+    scanner["addOns"] = sorted(normalized_add_ons.values(), key=lambda add_on: add_on["id"])
+    scanner["inventoryComplete"] = raw.get("inventoryComplete") is True and valid_inventory
+    return scanner
+
+
+def compare_scanners(baseline: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    if not baseline["inventoryComplete"] or not current["inventoryComplete"]:
+        return {"status": "unknown", "reason": "scanner_provenance_unknown"}
+    if baseline["zapVersion"] != current["zapVersion"] or baseline["addOns"] != current["addOns"]:
+        return {"status": "different", "reason": "scanner_inventory_changed"}
+    return {"status": "matching", "reason": None}
+
+
+def render_scanner_summary(scanner: dict[str, Any], prefix: str = "Scanner") -> list[str]:
+    lines = [
+        f"{prefix} ZAP Version: {scanner['zapVersion'] or 'unknown'}",
+        f"{prefix} Inventory Complete: {'yes' if scanner['inventoryComplete'] else 'no'}",
+    ]
+    for field, label in (
+        ("serverVersion", "Server Version"), ("serverRevision", "Server Revision"),
+        ("serverImageDigest", "Server Image Digest"), ("zapImageDigest", "ZAP Image Digest"),
+    ):
+        lines.append(f"{prefix} {label}: {scanner[field] or 'unknown'}")
+    lines.append(f"{prefix} Add-ons: {len(scanner['addOns'])}")
+    lines.extend(f"- {item['id']} | Version: {item['version']} | Status: {item['status']}" for item in scanner["addOns"])
+    return lines
+
+
 def canonicalize_snapshot(payload: dict[str, Any], fallback_target_url: str | None = None) -> tuple[dict[str, Any], str]:
     contract_version = payload.get("contract_version")
     if contract_version in {
         CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
+        PREVIOUS_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
         LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
     }:
         raw_findings = payload.get("findings")
         target_url = payload.get("target_url") or fallback_target_url
         source_contract = contract_version
-        identity_version = 2 if contract_version == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else 1
-    elif payload.get("version") in {1, 2} and isinstance(payload.get("fingerprints"), list):
+        identity_version = 1 if contract_version == LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else 2
+        scanner_supported = contract_version == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION
+        if scanner_supported:
+            identity_version = payload.get("identity_version", 2)
+        if type(identity_version) is not int or identity_version not in {1, 2}:
+            raise ValueError("Findings snapshot has unsupported identity_version")
+    elif type(payload.get("version")) is int and payload["version"] in {1, 2, 3} and isinstance(payload.get("fingerprints"), list):
         raw_findings = payload.get("fingerprints")
         target_url = payload.get("baseUrl") or fallback_target_url
-        identity_version = payload["version"]
-        source_contract = (FINDINGS_SNAPSHOT_CONTRACT_VERSION if identity_version == 2
-                           else LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
+        identity_version = 1 if payload["version"] == 1 else 2
+        scanner_supported = payload["version"] == 3
+        source_contract = (LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION if identity_version == 1
+                           else f"zap_findings_snapshot/v{payload['version']}")
     else:
         raise ValueError("Baseline snapshot must be valid JSON exported by zap_findings_snapshot or current-findings.json")
 
@@ -478,8 +569,9 @@ def canonicalize_snapshot(payload: dict[str, Any], fallback_target_url: str | No
 
     findings = sorted(deduped.values(), key=finding_sort_key)
     snapshot = {
-        "contract_version": (CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION if identity_version == 2
-                             else LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION),
+        "contract_version": CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION,
+        "identity_version": identity_version,
+        "scanner": normalize_scanner(payload.get("scanner") if scanner_supported else None),
         "target_url": normalize_url(target_url),
         "finding_count": len({finding["fingerprint"] for finding in findings}),
         "findings": findings,
@@ -502,6 +594,8 @@ def render_findings_summary(snapshot: dict[str, Any]) -> str:
         f"Unique Recorded Findings: {snapshot['finding_count']}",
         f"Recorded Examples: {len(findings)}",
         "Counts describe recorded findings, not the total number of affected endpoints.",
+        "",
+        *render_scanner_summary(snapshot["scanner"]),
         "",
     ]
 
@@ -569,19 +663,44 @@ def render_diff_text(diff_contract: dict[str, Any]) -> str:
         f"Current Findings: {diff_contract['current']['finding_count']}",
         f"Suppressed Baseline Recorded Examples: {suppressions['suppressed_baseline_findings']}",
         f"Suppressed Current Recorded Examples: {suppressions['suppressed_current_findings']}",
-        f"New Findings: {counts['new']}",
-        f"Resolved Findings: {counts['resolved']}",
-        f"Unchanged Findings: {counts['unchanged']}",
+        f"Scanner Comparison: {diff_contract['scanner_comparison']['status']}",
         ("Comparison: ZAP node identity (URL fallback)." if diff_contract["identity_version"] == 2
-         else "Comparison: legacy URL identity because at least one snapshot is version 1."),
+         else "Comparison: legacy URL identity because at least one snapshot uses version 1 identity."),
         "Counts describe recorded findings, not the total number of affected endpoints.",
         "",
+        *render_scanner_summary(diff_contract["baseline"]["scanner"], "Baseline Scanner"),
+        "",
+        *render_scanner_summary(diff_contract["current"]["scanner"], "Current Scanner"),
+        "",
     ]
+    if diff_contract["scanner_comparison"]["status"] == "matching":
+        lines.extend([
+            f"New Findings: {counts['new']}",
+            f"Resolved Findings: {counts['resolved']}",
+            f"Unchanged Findings: {counts['unchanged']}",
+            "Resolved means absent from this recorded scan; it is not proof of remediation.",
+            "",
+        ])
+        compared_groups = (
+            ("New finding groups", diff_contract["new_finding_groups"]),
+            ("Resolved finding groups", diff_contract["resolved_finding_groups"]),
+        )
+    else:
+        observed = diff_contract["observed_changes"]
+        lines.extend([
+            f"Scanner comparison unavailable: {diff_contract['scanner_comparison']['reason']}.",
+            "Scanner inventories differ or are unknown. Do not interpret these changes as remediation or regressions.",
+            f"Observed Added: {observed['added']}",
+            f"Observed Removed: {observed['removed']}",
+            f"Observed Retained: {observed['retained']}",
+            "",
+        ])
+        compared_groups = (
+            ("Observed added finding groups", diff_contract["observed_added_finding_groups"]),
+            ("Observed removed finding groups", diff_contract["observed_removed_finding_groups"]),
+        )
 
-    for heading, groups in (
-        ("New finding groups", diff_contract["new_finding_groups"]),
-        ("Resolved finding groups", diff_contract["resolved_finding_groups"]),
-    ):
+    for heading, groups in compared_groups:
         lines.append(f"{heading}: {len(groups)}")
         if not groups:
             lines.append("- none")
@@ -779,9 +898,15 @@ def build_diff_contract(target_url: str,
         or normalize_url(target_url)
     )
     identity_version = 2 if all(
-        snapshot["contract_version"] == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION
+        snapshot.get("identity_version", 1 if snapshot["contract_version"] == LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else 2) == 2
         for snapshot in (baseline_snapshot, current_snapshot)
     ) else 1
+    baseline_scanner = normalize_scanner(baseline_snapshot.get("scanner") if
+                                        baseline_snapshot["contract_version"] == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else None)
+    current_scanner = normalize_scanner(current_snapshot.get("scanner") if
+                                       current_snapshot["contract_version"] == CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION else None)
+    scanner_comparison = compare_scanners(baseline_scanner, current_scanner)
+    comparable = scanner_comparison["status"] == "matching"
 
     def comparison_map(snapshot: dict[str, Any]) -> dict[str, dict[str, Any]]:
         compared: dict[str, dict[str, Any]] = {}
@@ -807,29 +932,42 @@ def build_diff_contract(target_url: str,
         [finding for fingerprint, finding in baseline_map.items() if fingerprint not in current_map],
         key=finding_sort_key,
     )
+    retained_count = len(set(baseline_map).intersection(current_map))
+    added_groups = build_diff_groups(new_findings)
+    removed_groups = build_diff_groups(resolved_findings)
 
     return {
         "contract_version": CI_GATE_FINDINGS_DIFF_CONTRACT_VERSION,
         "identity_version": identity_version,
         "target_url": normalized_target_url,
+        "scanner_comparison": scanner_comparison,
         "baseline": {
             "contract_version": baseline_snapshot["contract_version"],
             "finding_count": len(baseline_map),
             "recorded_example_count": len(baseline_snapshot["findings"]),
+            "scanner": baseline_scanner,
         },
         "current": {
             "contract_version": current_snapshot["contract_version"],
             "finding_count": len(current_map),
             "recorded_example_count": len(current_snapshot["findings"]),
+            "scanner": current_scanner,
         },
         "suppressions": suppressions_summary,
         "counts": {
-            "new": len(new_findings),
-            "resolved": len(resolved_findings),
-            "unchanged": len(set(baseline_map).intersection(current_map)),
+            "new": len(new_findings) if comparable else None,
+            "resolved": len(resolved_findings) if comparable else None,
+            "unchanged": retained_count if comparable else None,
         },
-        "new_finding_groups": build_diff_groups(new_findings),
-        "resolved_finding_groups": build_diff_groups(resolved_findings),
+        "observed_changes": {
+            "added": len(new_findings),
+            "removed": len(resolved_findings),
+            "retained": retained_count,
+        },
+        "new_finding_groups": added_groups if comparable else [],
+        "resolved_finding_groups": removed_groups if comparable else [],
+        "observed_added_finding_groups": added_groups,
+        "observed_removed_finding_groups": removed_groups,
     }
 
 
@@ -1067,9 +1205,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("enforce", "seed"),
         default="enforce",
         help=(
-            "How to handle missing baseline diff evidence. 'enforce' fails when "
-            "fail-on-new-findings is true but no diff can be produced; 'seed' allows "
-            "first-run baseline review without blocking."
+            "How to handle missing or incomparable baseline evidence. 'enforce' fails when "
+            "fail-on-new-findings is true but no comparable diff can be produced; 'seed' allows "
+            "baseline review without blocking."
         ),
     )
     parser.add_argument("--suppressions-file")
@@ -1245,6 +1383,7 @@ def main(argv: list[str] | None = None) -> int:
     current_findings_for_diff: dict[str, Any] | None = None
     baseline_snapshot_contract: dict[str, Any] | None = None
     baseline_source_contract: str | None = None
+    diff_contract: dict[str, Any] | None = None
 
     if surface == "expert":
         raw_snapshot = client.call_tool("zap_findings_snapshot", {"baseUrl": args.target_url})
@@ -1363,14 +1502,17 @@ def main(argv: list[str] | None = None) -> int:
         write_text(diff_text_path, render_diff_text(diff_contract))
         write_json(diff_json_path, diff_contract)
 
-    if diff_json_path is not None:
-        diff_unavailable_reason = None
+    scanner_comparison = (diff_contract["scanner_comparison"] if diff_contract is not None
+                          else {"status": "unknown", "reason": "scanner_provenance_unknown"})
+    diff_available = diff_contract is not None and scanner_comparison["status"] == "matching"
+    if diff_contract is not None:
+        diff_unavailable_reason = scanner_comparison["reason"]
     elif baseline_requested and diff_unavailable_reason is None:
         diff_unavailable_reason = "snapshot_diff_unavailable"
 
-    new_findings = None if diff_json_path is None else json.loads(diff_json_path.read_text(encoding="utf-8"))["counts"]["new"]
-    resolved_findings = None if diff_json_path is None else json.loads(diff_json_path.read_text(encoding="utf-8"))["counts"]["resolved"]
-    unchanged_findings = None if diff_json_path is None else json.loads(diff_json_path.read_text(encoding="utf-8"))["counts"]["unchanged"]
+    new_findings = None if diff_contract is None else diff_contract["counts"]["new"]
+    resolved_findings = None if diff_contract is None else diff_contract["counts"]["resolved"]
+    unchanged_findings = None if diff_contract is None else diff_contract["counts"]["unchanged"]
 
     if surface == "guided":
         report_response = client.call_tool(
@@ -1399,12 +1541,11 @@ def main(argv: list[str] | None = None) -> int:
         copied_report_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(mapped_report, copied_report_path)
 
-    diff_available = diff_json_path is not None
     enforcement_requested = bool(args.fail_on_new_findings)
     enforcement_failure_reason: str | None = None
     gate_passed = True
     if diff_available and enforcement_requested:
-        gate_passed = (new_findings or 0) <= args.max_new_findings
+        gate_passed = new_findings is not None and new_findings <= args.max_new_findings
         if not gate_passed:
             enforcement_failure_reason = "new_findings_exceeded_threshold"
     elif enforcement_requested and args.baseline_mode == "enforce":
@@ -1427,12 +1568,15 @@ def main(argv: list[str] | None = None) -> int:
         "baseline_requested": baseline_requested,
         "baseline_mode": args.baseline_mode,
         "baseline_used": baseline_used,
+        "scanner": normalize_scanner(None if current_snapshot_contract is None else current_snapshot_contract.get("scanner")),
+        "scanner_comparison": scanner_comparison,
         "baseline": {
             "source_name": None if not baseline_requested else Path(args.baseline_file).name if args.baseline_file else None,
             "source_contract": baseline_source_contract,
             "finding_count": None if baseline_snapshot_contract is None else baseline_snapshot_contract["finding_count"],
             "missing": baseline_requested and not baseline_used,
             "diff_unavailable_reason": diff_unavailable_reason,
+            "scanner": None if baseline_snapshot_contract is None else baseline_snapshot_contract["scanner"],
         },
         "enforcement": {
             "requested": enforcement_requested,
@@ -1483,10 +1627,13 @@ def main(argv: list[str] | None = None) -> int:
         f"- Baseline mode: `{args.baseline_mode}`",
         f"- Baseline used: `{'yes' if baseline_used else 'no'}`",
         f"- Suppressions requested: `{'yes' if suppressions_requested else 'no'}`",
+        f"- Scanner comparison: `{scanner_comparison['status']}`",
+        "",
+        *render_scanner_summary(metadata["scanner"]),
     ]
     if attack_reference:
         gate_summary_lines.append(f"- Attack reference: `{attack_reference}`")
-    if diff_json_path:
+    if diff_available:
         gate_summary_lines.extend(
             [
                 f"- New findings: `{new_findings if new_findings is not None else 'unknown'}`",
@@ -1494,6 +1641,16 @@ def main(argv: list[str] | None = None) -> int:
                 f"- Gate passed: `{'yes' if gate_passed else 'no'}`",
             ]
         )
+    elif diff_contract is not None:
+        observed = diff_contract["observed_changes"]
+        gate_summary_lines.extend([
+            f"- Findings comparison unavailable: `{scanner_comparison['reason']}`.",
+            "- Scanner inventories differ or are unknown; observed changes are not remediation or regression claims.",
+            f"- Observed added / removed / retained: `{observed['added']} / {observed['removed']} / {observed['retained']}`",
+            f"- Gate passed: `{'yes' if gate_passed else 'no'}`",
+        ])
+        if args.baseline_mode == "seed" and enforcement_requested:
+            gate_summary_lines.append("- Seed mode allows baseline review; no comparable new-findings assessment was made.")
     elif baseline_requested and surface == "guided":
         gate_summary_lines.append("- Baseline diff was skipped because the guided self-serve surface does not expose snapshot/diff tools.")
     elif baseline_requested and not baseline_used:
@@ -1502,7 +1659,7 @@ def main(argv: list[str] | None = None) -> int:
         gate_summary_lines.append("- No baseline file was used.")
     if enforcement_failure_reason and not diff_available:
         gate_summary_lines.append(
-            "- Gate failed: enforcement requested but no findings diff could be produced "
+            "- Gate failed: enforcement requested but no comparable findings diff could be produced "
             f"(`{enforcement_failure_reason}`)."
         )
     if suppressions_requested and suppressions_summary["reason"]:
@@ -1569,7 +1726,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             print(
-                "Security gate failed: enforcement requested but no findings diff could be produced "
+                "Security gate failed: enforcement requested but no comparable findings diff could be produced "
                 f"({enforcement_failure_reason}). Use --baseline-mode seed or "
                 "--fail-on-new-findings false for first-run baseline review.",
                 file=sys.stderr,

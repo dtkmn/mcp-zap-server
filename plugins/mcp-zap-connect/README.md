@@ -20,21 +20,36 @@ Other platforms need validation. Web-only chats cannot reach the local scanner.
 
 ## Install
 
-For local Cursor testing, use **Customize → Plugins → Add → From Local
-Repository** and select the MCP ZAP Server checkout. The repository index
-discovers this existing folder; select the plugin and add it for yourself.
-Find `setup-local-scanner` in **Customize → Skills**.
+Cursor provides a disk-import route at **Customize → Plugins → Add → From Local
+Repository**. Select the MCP ZAP Server checkout's repository root. If the plugin
+appears, select MCP ZAP Connect and add it for yourself, then find
+`setup-local-scanner` in **Customize → Skills**. On 12 October 2026, this route
+discovered and installed MCP ZAP Connect 0.3.0 with its single setup skill in
+Cursor 3.24.12. The latest retest below did not reproduce that import success.
 
 Cursor repository imports use the repository-root
 `.cursor-plugin/marketplace.json` to locate this folder and its
 `.cursor-plugin/plugin.json` for Cursor metadata. The portable `plugin.json`
 retains Codex metadata; both clients use the same `skills/` directory. Keep the
 shared name, version and metadata aligned when updating either manifest.
-Once the index and Cursor manifest are
-published on the repository's default branch, use **Customize → Plugins → Add →
-From GitHub Repository** with `https://github.com/dtkmn/mcp-zap-server`, then
-select this plugin. Public marketplace submission and approval are separate;
-no public listing is claimed here.
+
+**Disk import limitation:** on 13 October 2026, fresh imports in Cursor 3.24.12
+through **From Local Repository** and marketplace **Import from Disk** left the
+catalogue empty, including repository-root and direct plugin-folder attempts.
+The original local plugin remained installed; a fresh indexed installation was
+not confirmed. Fresh native Cursor status verification also remains pending:
+agent requests were blocked by **Service Unavailable** and a usage limit before
+any observed MCP tool call. The cause of the empty catalogue is unconfirmed;
+the usage limit has not been established as the cause of the import failures.
+
+**GitHub import limitation:** on 12 October 2026, **From GitHub Repository**
+returned an empty plugin catalogue in Cursor 3.24.12 even after the index and
+manifests were published on the default branch. The `/add-plugin` command also
+returned **No result**. [Cursor issue #452](https://github.com/cursor/plugins/issues/452)
+reports a matching symptom; the cause of our result is unconfirmed.
+
+Public marketplace submission, approval and installation are separate checks;
+no public listing or verified marketplace installation is claimed here.
 
 See the [canonical setup guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#guided-setup-in-codex-and-cursor)
 for the shared workflow and client configuration details.

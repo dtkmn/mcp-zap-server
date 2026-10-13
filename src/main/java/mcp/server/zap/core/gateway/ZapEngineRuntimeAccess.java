@@ -1,10 +1,14 @@
 package mcp.server.zap.core.gateway;
 
+import java.util.ArrayList;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
 import org.springframework.stereotype.Component;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
+import org.zaproxy.clientapi.core.ApiResponseList;
+import org.zaproxy.clientapi.core.ApiResponseSet;
 import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 
@@ -29,6 +33,44 @@ public class ZapEngineRuntimeAccess implements EngineRuntimeAccess {
         } catch (ClientApiException e) {
             throw new ZapApiException("ZAP connectivity check failed", e);
         }
+    }
+
+    @Override
+    public ScannerInventory readScannerInventory() {
+        String version = null;
+        try {
+            version = elementValue(zap.core.version());
+        } catch (ClientApiException | RuntimeException _) {
+            // Inventory is optional evidence; never expose the API failure or its request details.
+        }
+
+        try {
+            if (!(zap.autoupdate.installedAddons() instanceof ApiResponseList response)) {
+                return new ScannerInventory(version, List.of(), false);
+            }
+            List<AddOn> addOns = new ArrayList<>();
+            for (ApiResponse item : response.getItems()) {
+                if (addOns.size() >= ScannerInventory.MAX_ADD_ONS) {
+                    return new ScannerInventory(version, addOns, false);
+                }
+                if (item instanceof ApiResponseSet addOn) {
+                    addOns.add(new AddOn(elementValue(addOn.getValue("id")),
+                            elementValue(addOn.getValue("version")), elementValue(addOn.getValue("status"))));
+                } else {
+                    addOns.add(null);
+                }
+            }
+            return new ScannerInventory(version, addOns, true);
+        } catch (ClientApiException | RuntimeException _) {
+            return new ScannerInventory(version, List.of(), false);
+        }
+    }
+
+    private String elementValue(ApiResponse response) {
+        if (response instanceof ApiResponseElement element && element.getValue() != null) {
+            return element.getValue().trim();
+        }
+        return null;
     }
 
     @Override

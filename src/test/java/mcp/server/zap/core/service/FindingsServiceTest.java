@@ -2,12 +2,18 @@ package mcp.server.zap.core.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import mcp.server.zap.core.gateway.EngineFindingAccess;
 import mcp.server.zap.core.gateway.EngineFindingAccess.AlertSnapshot;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.AddOn;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.ScannerInventory;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.boot.info.BuildProperties;
+import org.springframework.boot.info.GitProperties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,11 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class FindingsServiceTest {
     private EngineFindingAccess findingAccess;
     private ScanHistoryLedgerService scanHistoryLedgerService;
     private FindingsService service;
+    private EngineRuntimeAccess runtimeAccess;
 
     @BeforeEach
     void setup() {
@@ -28,6 +36,9 @@ class FindingsServiceTest {
         scanHistoryLedgerService = mock(ScanHistoryLedgerService.class);
         service = new FindingsService(findingAccess);
         service.setScanHistoryLedgerService(scanHistoryLedgerService);
+        runtimeAccess = mock(EngineRuntimeAccess.class);
+        service.setRuntimeAccess(runtimeAccess);
+        when(runtimeAccess.readScannerInventory()).thenReturn(inventory("75"));
         when(scanHistoryLedgerService.hasVisibleScanEvidenceForTarget("http://target")).thenReturn(true);
     }
 
@@ -104,7 +115,7 @@ class FindingsServiceTest {
 
         String snapshot = service.exportFindingsSnapshot("http://target");
 
-        assertTrue(snapshot.contains("\"version\" : 2"));
+        assertTrue(snapshot.contains("\"version\" : 3"));
         assertTrue(snapshot.contains("\"baseUrl\" : \"http://target\""));
         assertTrue(snapshot.contains("\"alertName\" : \"SQL Injection\""));
         assertTrue(snapshot.contains("\"fingerprint\""));
@@ -209,14 +220,16 @@ class FindingsServiceTest {
                 endpointAlert("http://target/product?id=123", "http://target/product (id)", "GET", Map.of())));
 
         String unchanged = service.diffFindings("http://target", baseline, 10);
-        assertTrue(unchanged.contains("Unchanged Findings: 1"));
+        assertTrue(unchanged.contains("Observed Retained Findings: 1"));
+        assertTrue(unchanged.contains("Scanner Comparison: unknown"));
         assertTrue(unchanged.contains("Legacy version 1 baseline"));
 
         when(findingAccess.loadAlerts(any())).thenReturn(List.of(
                 endpointAlert("http://target/product?id=456", "http://target/product (id)", "GET", Map.of())));
         String changed = service.diffFindings("http://target", baseline, 10);
-        assertTrue(changed.contains("New Findings: 1"));
-        assertTrue(changed.contains("Resolved Findings: 1"));
+        assertTrue(changed.contains("Observed Added Findings: 1"));
+        assertTrue(changed.contains("Observed Removed Findings: 1"));
+        assertTrue(changed.contains("Resolved Findings: unknown"));
     }
 
     @Test
@@ -259,7 +272,7 @@ class FindingsServiceTest {
 
     @Test
     void snapshotsRejectUnsupportedVersionsAndMissingFingerprints() {
-        for (String payload : List.of("{\"version\":3,\"fingerprints\":[]}",
+        for (String payload : List.of("{\"version\":4,\"fingerprints\":[]}",
                 "{\"version\":2}", "{\"version\":2,\"fingerprints\":[{}]}")) {
             assertThrows(IllegalArgumentException.class, () -> service.diffFindings("http://target", payload, 10));
         }
@@ -273,6 +286,114 @@ class FindingsServiceTest {
     @Test
     void findingsRejectTargetsWithoutVisibleScanEvidence() {
         assertThrows(IllegalArgumentException.class, () -> service.getFindingsSummary("http://other"));
+    }
+
+    @Test
+    void snapshotRecordsMeasuredScannerAndAvailableBuildIdentity() {
+        Properties build = new Properties();
+        build.setProperty("version", "0.15.0");
+        service.setBuildProperties(new BuildProperties(build));
+        Properties git = new Properties();
+        git.setProperty("commit.id", "a".repeat(40));
+        service.setGitProperties(new GitProperties(git));
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+
+        var scanner = new ObjectMapper().readTree(service.exportFindingsSnapshot("http://target")).path("scanner");
+        assertEquals(1, scanner.path("version").asInt());
+        assertEquals("0.15.0", scanner.path("serverVersion").asString());
+        assertEquals("a".repeat(40), scanner.path("serverRevision").asString());
+        assertEquals("2.17.0", scanner.path("zapVersion").asString());
+        assertTrue(scanner.path("inventoryComplete").asBoolean());
+        assertEquals("pscanrules", scanner.path("addOns").get(0).path("id").asString());
+        assertTrue(scanner.path("serverImageDigest").isNull());
+        assertTrue(scanner.path("zapImageDigest").isNull());
+    }
+
+    @Test
+    void changedScanRuleDoesNotTurnDisappearedCspAlertIntoRemediation() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "10055-12", "CSP Header & Meta", "Medium", "High", "http://target/", "101")));
+        String baseline = service.exportFindingsSnapshot("http://target");
+        when(runtimeAccess.readScannerInventory()).thenReturn(inventory("76"));
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+
+        String diff = service.diffFindings("http://target", baseline, 10);
+
+        assertTrue(diff.contains("Scanner Comparison: different"));
+        assertTrue(diff.contains("Resolved Findings: unknown"));
+        assertTrue(diff.contains("Observed Removed Findings: 1"));
+        assertFalse(diff.contains("Resolved Findings: 1"));
+        assertFalse(diff.contains("No net-new findings"));
+    }
+
+    @Test
+    void matchingScannerRetainsFindingRemovalComparison() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of(
+                createAlert("1", "10055-12", "CSP Header & Meta", "Medium", "High", "http://target/", "101")));
+        String baseline = service.exportFindingsSnapshot("http://target");
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+
+        String diff = service.diffFindings("http://target", baseline, 10);
+
+        assertTrue(diff.contains("Scanner Comparison: matching"));
+        assertTrue(diff.contains("Resolved Findings: 1"));
+        assertTrue(diff.contains("does not establish identical scan coverage or prove application remediation"));
+    }
+
+    @Test
+    void scannerAcquisitionFailureKeepsFindingsReadableWithoutPublishingUpstreamError() {
+        when(runtimeAccess.readScannerInventory()).thenThrow(new IllegalStateException("private-api-key-in-error"));
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+
+        String snapshot = service.exportFindingsSnapshot("http://target");
+        var scanner = new ObjectMapper().readTree(snapshot).path("scanner");
+        assertFalse(scanner.path("inventoryComplete").asBoolean());
+        assertTrue(scanner.path("zapVersion").isNull());
+        assertFalse(snapshot.contains("private-api-key"));
+        assertTrue(service.diffFindings("http://target", snapshot, 10).contains("Scanner Comparison: unknown"));
+    }
+
+    @Test
+    void inventoryChangedDuringExportIsIncomplete() {
+        when(runtimeAccess.readScannerInventory()).thenReturn(inventory("75"), inventory("76"));
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+
+        var scanner = new ObjectMapper().readTree(service.exportFindingsSnapshot("http://target")).path("scanner");
+
+        assertFalse(scanner.path("inventoryComplete").asBoolean());
+    }
+
+    @Test
+    void versionTwoBaselineRemainsReadableWithUnknownScannerComparison() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+        String diff = service.diffFindings("http://target", "{\"version\":2,\"fingerprints\":[]}", 10);
+        assertTrue(diff.contains("Scanner Comparison: unknown"));
+        assertTrue(diff.contains("Resolved Findings: unknown"));
+    }
+
+    @Test
+    void unscopedSnapshotDoesNotMeasureSharedEngineInventory() {
+        assertThrows(IllegalArgumentException.class, () -> service.exportFindingsSnapshot("http://other"));
+        verifyNoInteractions(runtimeAccess);
+    }
+
+    @Test
+    void malformedScalarProvenanceCannotBecomeACompleteInventory() {
+        when(findingAccess.loadAlerts(any())).thenReturn(List.of());
+        for (String scanner : List.of(
+                "{\"version\":\"1\",\"zapVersion\":\"2.17.0\",\"addOns\":[],\"inventoryComplete\":true}",
+                "{\"version\":1,\"zapVersion\":\"2.17.0\",\"addOns\":[],\"inventoryComplete\":\"true\"}",
+                "{\"version\":1,\"zapVersion\":\"2.17.0\",\"addOns\":[],\"inventoryComplete\":1}",
+                "{\"version\":1,\"zapVersion\":\"2.17.0\",\"addOns\":[{\"id\":\"pscanrules\",\"version\":75,\"status\":\"release\"}],\"inventoryComplete\":true}")) {
+            String baseline = "{\"version\":3,\"fingerprints\":[],\"scanner\":" + scanner + "}";
+            String diff = service.diffFindings("http://target", baseline, 10);
+            assertTrue(diff.contains("Scanner Comparison: unknown"));
+            assertTrue(diff.contains("Resolved Findings: unknown"));
+        }
+    }
+
+    private ScannerInventory inventory(String passiveRulesVersion) {
+        return new ScannerInventory("2.17.0", List.of(new AddOn("pscanrules", passiveRulesVersion, "release")), true);
     }
 
     @Test

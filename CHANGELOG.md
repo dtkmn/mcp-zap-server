@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Require complete matching ZAP engine/add-on inventories before reporting net-new or resolved findings. Changed or unknown scanner identity produces informational observations; enforced CI gates fail until a reviewed comparable baseline is supplied.
 - Add MCP ZAP Connect terms of service to the existing first-run guide and link them from the plugin's OpenAI listing metadata and README.
 - Add Cursor-native metadata to MCP ZAP Connect's existing plugin folder so its repository index meets Cursor's documented multi-plugin layout. Codex retains its portable manifest; both formats use the same setup skill.
 - Preserve empty-path root alert evidence in target-scoped reports while excluding other origins and ports. Temporary report contexts stay out of scan scope and are removed after generation; existing artifact authorization and session-metadata filtering remain enforced.
 
 ### Added
 
+- Include measured scanner inventory and available server build identity in version 3 findings snapshots, CI diff evidence and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
 - Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.
 - Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
 - Add private Codex TOML output through `client-config codex` and server runtime dependency notices checked against the packaged application inventory.
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Version CI findings snapshots and diffs as `/v3` and gate results as `/v2` for scanner-aware comparison and nullable counts. Keep the existing version 2 node identity and suppression behavior; seed mode remains available for explicit baseline review.
 - Pause automatic macOS package builds on pull requests while signing/notarization and clean browser-download installation remain unresolved. Keep manual test builds available; public Mac distribution is deferred.
 - Start the local Docker quick start from a versioned published MCP image with `bootstrap-local.sh --start`, preserving existing settings and keys and reusing cached images on restart. Publish generated settings atomically, wait for container health and authenticated MCP checks before reporting readiness, and report the failing stage when MCP requests cannot complete. Keep source builds in the development override and reject failed MCP tool probes.
 - Launch the macOS preview services through the current user's macOS service manager so they survive terminal and agent-command completion. Explicit stop removes their registrations; login startup and automatic crash restarts remain disabled.

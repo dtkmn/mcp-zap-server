@@ -52,7 +52,13 @@ reviewable, repeatable security gate for important API behavior.
    fail-on-new-findings: "true"
    ```
 
-   Enforcement should block net-new findings and missing baseline evidence. A
+   With the updated server/gate contracts newer than published `v0.15.0`,
+   enforcement also requires complete matching ZAP engine/add-on inventories.
+   A changed scanner or a legacy baseline with unknown provenance requires
+   review of a fresh snapshot. Do not copy today's inventory into an old
+   baseline or automatically accept a replacement.
+
+   Enforcement should block net-new findings and missing or incomparable baseline evidence. A
    gate that passes because the baseline vanished is not a gate.
 
 5. Improve seeds deliberately.
@@ -160,11 +166,15 @@ tourist.
   - URLs do not expose secrets
 - `current-findings.json`
   - target and finding counts make sense
+  - scanner version/add-on inventory is measured and complete; keep the engine
+    fixed during the run because export-time inventory does not reconstruct past scans
   - findings are not only from a health endpoint unless this is explicitly a
     wiring smoke
   - noisy findings are understood before suppressing them
 - `gate-summary.md`
   - baseline mode matches the intended run
+  - scanner comparison is `matching` before interpreting net-new/resolved counts;
+    `different` or `unknown` provides informational observations only
   - seed request count is non-zero when this is an API proof
   - active scan status matches your rollout choice
 - `zap-report.html`

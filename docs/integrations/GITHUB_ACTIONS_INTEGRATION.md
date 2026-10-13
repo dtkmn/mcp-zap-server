@@ -87,17 +87,36 @@ Pin to a real release tag once the next release is cut.
 
 The action expects an optional baseline file that contains either:
 
-- the legacy JSON returned by `zap_findings_snapshot`
+- the JSON returned by `zap_findings_snapshot`, including legacy exports
 - the normalized `current-findings.json` contract emitted by a previous helper run
 
 Recommended pattern:
 
 1. keep an accepted baseline file in your repo, such as `.zap/baselines/main-findings.json`
 2. run the gate on pull requests or release branches
-3. inspect `findings-diff.txt` for net-new findings
+3. check scanner comparability in `findings-diff.json`, then inspect comparable
+   net-new findings in `findings-diff.txt`
 4. update the baseline only after an intentionally accepted security state change
 
-Baseline behavior is mode-specific. In `baseline-mode: seed`, a missing baseline stays non-blocking and the action emits a fresh `current-findings.json` artifact for review. In `baseline-mode: enforce`, a missing baseline fails the run when `fail-on-new-findings: "true"` because the gate cannot produce an auditable diff.
+The provenance-aware contracts are newer than the published `v0.15.0` release;
+use the matching updated action and server. Snapshot v3 records the running ZAP
+version and installed add-on inventory. Comparability is `matching` only when
+both exports contain the same measured engine version and complete add-on ID,
+version, and status inventory. Old v1/v2 baselines remain readable, but their
+provenance is `unknown`.
+
+In `baseline-mode: seed`, a missing or incomparable baseline stays non-blocking
+and the action emits current evidence for review. In `baseline-mode: enforce`
+with `fail-on-new-findings: "true"`, missing, `different`, or `unknown`
+comparison evidence fails the run, even when no added observations appear.
+Incomparable diffs expose informational added/removed observations with `null`
+new/resolved counts; they do not call a disappearing alert resolved.
+
+If the scanner changed, review a fresh snapshot in seed mode before deliberately
+accepting a replacement baseline. The action does not overwrite the approved
+baseline. A matching scanner does not prove unchanged scan coverage or that an
+application defect was fixed; review the target evidence too. See
+[CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md) for contract migration.
 
 ## Seeded API Requests
 
@@ -242,7 +261,7 @@ rejects the placeholder before it starts Docker so pilot failures stay obvious.
 Use `baseline-mode: seed` for the first evidence run. Use
 `baseline-mode: enforce` only after the baseline exists and has been reviewed.
 When `fail-on-new-findings: "true"` is paired with `baseline-mode: enforce`,
-the action fails if it cannot produce a findings diff.
+the action fails if it cannot produce a comparable findings diff.
 
 Example override file:
 

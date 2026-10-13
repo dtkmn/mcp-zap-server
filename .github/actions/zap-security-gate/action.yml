@@ -10,7 +10,7 @@ inputs:
     required: false
     default: ""
   baseline-mode:
-    description: Baseline handling mode. Use enforce for blocking gates; use seed for first-run baseline review when a diff may not exist yet.
+    description: Baseline handling mode. Enforce requires complete matching scanner inventories; seed allows review when baseline evidence is missing or incomparable.
     required: false
     default: "enforce"
   suppressions-file:
@@ -42,7 +42,7 @@ inputs:
     required: false
     default: ""
   fail-on-new-findings:
-    description: Whether the action should fail if new findings exceed max-new-findings.
+    description: Whether to enforce max-new-findings. In enforce mode, missing or incomparable scanner/baseline evidence also fails.
     required: false
     default: "true"
   max-new-findings:
@@ -112,10 +112,10 @@ inputs:
 
 outputs:
   new-findings:
-    description: Net-new findings reported by findings diff when the active tool surface supports snapshot/diff.
+    description: Net-new findings for complete matching scanner inventories. Empty when comparison is unavailable or incomparable.
     value: ${{ steps.gate.outputs.new_findings }}
   resolved-findings:
-    description: Findings that were present in the baseline but not in the current run, when diff tools are available.
+    description: Baseline findings absent from the current run under matching scanner inventories. Empty when comparison is unavailable or incomparable; absence does not prove remediation.
     value: ${{ steps.gate.outputs.resolved_findings }}
   baseline-used:
     description: Whether a baseline file was actually used. Guided self-serve flows may request a baseline but skip diff if snapshot tools are unavailable.

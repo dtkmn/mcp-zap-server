@@ -180,7 +180,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
         snapshot, source_contract = MODULE.canonicalize_snapshot(payload)
 
         self.assertEqual(source_contract, MODULE.LEGACY_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
-        self.assertEqual(snapshot["contract_version"], MODULE.LEGACY_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
+        self.assertEqual(snapshot["contract_version"], MODULE.CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION)
+        self.assertEqual(snapshot["identity_version"], 1)
+        self.assertFalse(snapshot["scanner"]["inventoryComplete"])
         self.assertEqual(snapshot["target_url"], "https://example.com/")
         self.assertEqual(snapshot["finding_count"], 1)
         self.assertEqual(snapshot["findings"][0]["risk"], "High")
@@ -226,9 +228,19 @@ class McpZapGateHelpersTest(unittest.TestCase):
         }
 
     @staticmethod
-    def node_snapshot(findings, version=2):
+    def scanner_inventory(**overrides):
+        return {
+            "version": 1, "zapVersion": "2.17.0", "inventoryComplete": True,
+            "addOns": [{"id": "pscanrules", "version": "65.0.0", "status": "release"}],
+            **overrides,
+        }
+
+    @classmethod
+    def node_snapshot(cls, findings, version=3, **overrides):
         return MODULE.canonicalize_snapshot({
             "version": version, "baseUrl": "https://example.com/", "fingerprints": findings,
+            **({"scanner": cls.scanner_inventory()} if version == 3 else {}),
+            **overrides,
         })[0]
 
     @staticmethod
@@ -237,6 +249,143 @@ class McpZapGateHelpersTest(unittest.TestCase):
             "requested": False, "used": False, "reason": None, "matched_rule_ids": [],
             "suppressed_baseline_findings": 0, "suppressed_current_findings": 0,
         })
+
+    def test_scanner_update_does_not_label_removed_csp_alert_as_resolved(self):
+        csp = self.node_finding(pluginId="10038", alertName="Content Security Policy Header Not Set")
+        baseline = self.node_snapshot([csp])
+        current = self.node_snapshot([], scanner=self.scanner_inventory(addOns=[
+            {"id": "pscanrules", "version": "66.0.0", "status": "release"},
+        ]))
+
+        diff = self.compare_snapshots(baseline, current)
+
+        self.assertEqual(diff["scanner_comparison"], {"status": "different", "reason": "scanner_inventory_changed"})
+        self.assertEqual(diff["counts"], {"new": None, "resolved": None, "unchanged": None})
+        self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 1, "retained": 0})
+        self.assertEqual(diff["resolved_finding_groups"], [])
+        self.assertEqual(diff["observed_removed_finding_groups"][0]["plugin_id"], "10038")
+        rendered = MODULE.render_diff_text(diff)
+        self.assertIn("Do not interpret these changes as remediation or regressions", rendered)
+        self.assertIn("Observed Removed: 1", rendered)
+        self.assertNotIn("Resolved Findings:", rendered)
+
+    def test_matching_scanner_preserves_removed_finding_counts(self):
+        diff = self.compare_snapshots(self.node_snapshot([self.node_finding()]), self.node_snapshot([]))
+
+        self.assertEqual(diff["scanner_comparison"], {"status": "matching", "reason": None})
+        self.assertEqual(diff["counts"], {"new": 0, "resolved": 1, "unchanged": 0})
+        self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 1, "retained": 0})
+        self.assertEqual(diff["resolved_finding_groups"][0]["count"], 1)
+        self.assertIn("not proof of remediation", MODULE.render_diff_text(diff))
+
+    def test_scanner_comparison_uses_engine_and_inventory_but_not_build_context(self):
+        baseline = self.node_snapshot([])
+        for changes in (
+            {"zapVersion": "2.18.0"},
+            {"addOns": []},
+            {"addOns": [{"id": "pscanrules", "version": "65.0.0", "status": "beta"}]},
+        ):
+            with self.subTest(changes=changes):
+                current = self.node_snapshot([], scanner=self.scanner_inventory(**changes))
+                self.assertEqual(self.compare_snapshots(baseline, current)["scanner_comparison"]["status"], "different")
+        current = self.node_snapshot([], scanner=self.scanner_inventory(
+            serverVersion="0.16.0", serverRevision="abcdef0123",
+            serverImageDigest="sha256:" + "a" * 64, zapImageDigest="sha256:" + "b" * 64,
+        ))
+        self.assertEqual(self.compare_snapshots(baseline, current)["scanner_comparison"]["status"], "matching")
+        self.assertEqual(current["scanner"]["serverRevision"], "abcdef0123")
+
+    def test_scanner_inventory_order_is_deterministic(self):
+        add_ons = [
+            {"id": "pscanrules", "version": "65.0.0", "status": "release"},
+            {"id": "ascanrules", "version": "71.0.0", "status": "weekly"},
+        ]
+        baseline = self.node_snapshot([], scanner=self.scanner_inventory(addOns=add_ons))
+        current = self.node_snapshot([], scanner=self.scanner_inventory(addOns=list(reversed(add_ons))))
+
+        self.assertEqual(baseline, current)
+        self.assertEqual(self.compare_snapshots(baseline, current)["scanner_comparison"]["status"], "matching")
+
+    def test_missing_legacy_and_malformed_scanner_inventories_are_unknown(self):
+        cases = [
+            None, "private raw error", {},
+            self.scanner_inventory(version=2),
+            self.scanner_inventory(version=True),
+            self.scanner_inventory(inventoryComplete=False),
+            self.scanner_inventory(inventoryComplete="true"),
+            self.scanner_inventory(zapVersion=""),
+            self.scanner_inventory(zapVersion="2.17.0\ninternal"),
+            self.scanner_inventory(addOns=None),
+            self.scanner_inventory(addOns=["raw error"]),
+            self.scanner_inventory(addOns=[{"id": "pscanrules", "version": "65.0.0", "status": "untrusted"}]),
+            self.scanner_inventory(addOns=[{"id": "../../private", "version": "65.0.0", "status": "release"}]),
+            self.scanner_inventory(addOns=[{"id": "pscanrules", "version": "", "status": "release"}]),
+            self.scanner_inventory(addOns=[{"id": "pscanrules", "version": "65.0.0", "status": "release"}] * 2),
+            self.scanner_inventory(addOns=[{"id": "pscanrules", "version": "65.0.0", "status": "release"}] * 1025),
+        ]
+        baseline = self.node_snapshot([self.node_finding()])
+        for scanner in cases:
+            with self.subTest(scanner=scanner):
+                current = self.node_snapshot([], scanner=scanner)
+                restored = MODULE.canonicalize_snapshot(json.loads(json.dumps(current)))[0]
+                diff = self.compare_snapshots(baseline, restored)
+                self.assertFalse(restored["scanner"]["inventoryComplete"])
+                self.assertEqual(diff["scanner_comparison"], {"status": "unknown", "reason": "scanner_provenance_unknown"})
+                self.assertIsNone(diff["counts"]["resolved"])
+                self.assertEqual(diff["observed_changes"]["removed"], 1)
+        for version in (1, 2):
+            current = self.node_snapshot([], version=version)
+            self.assertEqual(self.compare_snapshots(baseline, current)["scanner_comparison"]["status"], "unknown")
+
+    def test_scanner_normalization_drops_unrecognized_metadata_and_sensitive_values(self):
+        scanner = self.scanner_inventory(
+            debug={"apiKey": "private-secret", "home": "/Users/maintainer"},
+            serverVersion="0.16.0\nprivate-secret", serverRevision="private-secret",
+            serverImageDigest="registry.example/private:image", zapImageDigest="sha256:" + "f" * 64,
+            addOns=[{"id": "pscanrules", "version": "65.0.0", "status": "release", "path": "/Users/maintainer"}],
+        )
+        normalized = MODULE.normalize_scanner(scanner)
+
+        self.assertEqual(set(normalized), {
+            "version", "serverVersion", "serverRevision", "serverImageDigest", "zapImageDigest",
+            "zapVersion", "addOns", "inventoryComplete",
+        })
+        self.assertNotIn("private", json.dumps(normalized))
+        self.assertNotIn("/Users/", json.dumps(normalized))
+        self.assertTrue(normalized["inventoryComplete"])
+        self.assertIsNone(normalized["serverVersion"])
+        self.assertEqual(normalized["zapImageDigest"], "sha256:" + "f" * 64)
+
+    def test_legacy_contract_cannot_gain_measured_provenance_from_extra_fields(self):
+        baseline = self.node_snapshot([])
+        for version in (1, 2):
+            payloads = [
+                {"version": version, "fingerprints": [], "scanner": self.scanner_inventory()},
+                {"contract_version": f"ci_gate_findings_snapshot/v{version}", "findings": [],
+                 "scanner": self.scanner_inventory()},
+                {"contract_version": f"ci_gate_findings_snapshot/v{version}", "version": 3,
+                 "findings": [], "scanner": self.scanner_inventory()},
+            ]
+            for payload in payloads:
+                with self.subTest(version=version, payload=payload):
+                    current, _source = MODULE.canonicalize_snapshot(payload)
+                    self.assertFalse(current["scanner"]["inventoryComplete"])
+                    self.assertEqual(self.compare_snapshots(baseline, current)["scanner_comparison"]["status"], "unknown")
+
+    def test_v2_saved_snapshot_keeps_node_identity_after_contract_upgrade(self):
+        raw = self.node_snapshot([self.node_finding()])
+        raw["contract_version"] = MODULE.PREVIOUS_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION
+        raw.pop("identity_version")
+        raw.pop("scanner")
+        restored, source = MODULE.canonicalize_snapshot(raw)
+        current = self.node_snapshot([self.node_finding("https://example.com/search?q=two")])
+        diff = self.compare_snapshots(restored, current)
+
+        self.assertEqual(source, "ci_gate_findings_snapshot/v2")
+        self.assertEqual(restored["identity_version"], 2)
+        self.assertEqual(diff["identity_version"], 2)
+        self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 0, "retained": 1})
+        self.assertEqual(diff["scanner_comparison"]["status"], "unknown")
 
     def test_v2_same_node_survives_representative_url_and_tag_changes(self):
         baseline = self.node_snapshot([self.node_finding()])
@@ -284,7 +433,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
         for baseline in (legacy, saved_legacy):
             diff = self.compare_snapshots(baseline, current)
             self.assertEqual(diff["identity_version"], 1)
-            self.assertEqual(diff["counts"], {"new": 0, "resolved": 0, "unchanged": 2})
+            self.assertEqual(diff["counts"], {"new": None, "resolved": None, "unchanged": None})
+            self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 0, "retained": 2})
+            self.assertEqual(diff["scanner_comparison"]["status"], "unknown")
             self.assertEqual(diff["current"]["finding_count"], 2)
             self.assertIn("legacy URL identity", MODULE.render_diff_text(diff))
 
@@ -292,8 +443,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
         baseline = self.node_snapshot([self.node_finding()], version=1)
         current = self.node_snapshot([self.node_finding("https://example.com/search?q=two")])
 
-        self.assertEqual(self.compare_snapshots(baseline, current)["counts"], {"new": 1, "resolved": 1, "unchanged": 0})
-        self.assertEqual(self.compare_snapshots(current, baseline)["counts"], {"new": 1, "resolved": 1, "unchanged": 0})
+        self.assertEqual(self.compare_snapshots(baseline, current)["observed_changes"], {"added": 1, "removed": 1, "retained": 0})
+        self.assertEqual(self.compare_snapshots(current, baseline)["observed_changes"], {"added": 1, "removed": 1, "retained": 0})
 
     def test_v2_keeps_old_suppression_hashes_and_exact_url_matching(self):
         rows = [self.node_finding(), self.node_finding("https://example.com/search?q=two")]
@@ -353,7 +504,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
             "zap_active_scan_status": "Completed: yes",
             "zap_passive_scan_wait": "Completed: yes",
             "zap_get_findings_summary": "Unused expert summary",
-            "zap_findings_snapshot": json.dumps({"version": 2, "baseUrl": "https://example.com/", "fingerprints": rows}),
+            "zap_findings_snapshot": json.dumps({"version": 3, "baseUrl": "https://example.com/", "fingerprints": rows,
+                                                  "scanner": self.scanner_inventory()}),
             "zap_generate_report": "/zap/wrk/report.html",
         }
 
@@ -380,7 +532,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
                 }],
             }), encoding="utf-8")
             output = root / "output"
-            with mock.patch.object(MODULE, "McpHttpClient", FakeClient), mock.patch("sys.stdout"):
+            with mock.patch.object(MODULE, "McpHttpClient", FakeClient), mock.patch("sys.stdout"), mock.patch("sys.stderr"):
                 result = MODULE.main([
                     "--server-url", "http://example.com/mcp", "--api-key", "test-key",
                     "--target-url", "https://example.com/", "--baseline-file", str(baseline),
@@ -388,12 +540,14 @@ class McpZapGateHelpersTest(unittest.TestCase):
                     "--run-active-scan", "false",
                 ])
 
-            self.assertEqual(result, 0)
+            self.assertEqual(result, 1)
             snapshot = json.loads((output / "current-findings.json").read_text())
             self.assertEqual(snapshot["recorded_example_count"], 2)
             diff = json.loads((output / "findings-diff.json").read_text())
             self.assertEqual(diff["identity_version"], 1)
-            self.assertEqual(diff["counts"], {"new": 0, "resolved": 0, "unchanged": 1})
+            self.assertEqual(diff["counts"], {"new": None, "resolved": None, "unchanged": None})
+            self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 0, "retained": 1})
+            self.assertEqual(diff["scanner_comparison"]["status"], "unknown")
             self.assertEqual(diff["suppressions"]["suppressed_baseline_findings"], 1)
             self.assertEqual(diff["suppressions"]["suppressed_current_findings"], 1)
 
@@ -643,7 +797,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
                 raise AssertionError(f"Unexpected tool call: {name}")
 
         baseline_payload = {
-            "version": 1,
+            "version": 3,
+            "scanner": self.scanner_inventory(),
             "baseUrl": "https://example.com",
             "exportedAt": "2026-03-21T00:00:00Z",
             "fingerprints": [
@@ -659,7 +814,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
             ],
         }
         snapshot_variant_a = {
-            "version": 1,
+            "version": 3,
+            "scanner": self.scanner_inventory(),
             "baseUrl": "https://example.com",
             "exportedAt": "2026-03-22T01:00:00Z",
             "fingerprints": [
@@ -684,7 +840,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
             ],
         }
         snapshot_variant_b = {
-            "version": 1,
+            "version": 3,
+            "scanner": self.scanner_inventory(),
             "baseUrl": "https://example.com",
             "exportedAt": "2026-03-22T02:00:00Z",
             "fingerprints": [
@@ -774,6 +931,87 @@ class McpZapGateHelpersTest(unittest.TestCase):
             self.assertEqual(metadata["findings"]["new_findings"], 1)
             self.assertFalse(metadata["gate_passed"])
             self.assertEqual(metadata["report"]["artifact_path"], "reports/zap-report.html")
+
+    def test_main_enforces_comparable_evidence_and_seed_mode_retains_unknown_counts(self):
+        responses = {
+            "zap_spider_start": "Scan ID: spider-1",
+            "zap_spider_status": "Completed: yes",
+            "zap_active_scan_start": "Scan ID: active-1",
+            "zap_active_scan_status": "Completed: yes",
+            "zap_passive_scan_wait": "Completed: yes",
+            "zap_get_findings_summary": "unused summary",
+            "zap_findings_snapshot": "",
+            "zap_generate_report": "/zap/wrk/report.html",
+        }
+
+        class FakeClient:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def list_tools(self):
+                return list(responses)
+
+            def call_tool(self, name, _arguments):
+                return responses[name]
+
+        csp = self.node_finding(pluginId="10038", alertName="Content Security Policy Header Not Set")
+        changed_inventory = self.scanner_inventory(addOns=[
+            {"id": "pscanrules", "version": "66.0.0", "status": "release"},
+        ])
+        cases = [
+            ("matching", self.scanner_inventory(), 3, "enforce", True, 0, 0),
+            ("different", changed_inventory, 3, "enforce", True, 1, None),
+            ("different", changed_inventory, 3, "seed", True, 0, None),
+            ("different", changed_inventory, 3, "enforce", False, 0, None),
+            ("unknown", self.scanner_inventory(inventoryComplete=False), 3, "enforce", True, 1, None),
+            ("unknown", self.scanner_inventory(inventoryComplete=False), 3, "seed", True, 0, None),
+            ("unknown", None, 3, "enforce", True, 1, None),
+            ("unknown", self.scanner_inventory(), 2, "enforce", True, 1, None),
+            ("unknown", self.scanner_inventory(), 2, "seed", True, 0, None),
+        ]
+        for status, scanner, baseline_version, mode, fail_on_new, expected_result, expected_new in cases:
+            with self.subTest(status=status, baseline_version=baseline_version, mode=mode, fail_on_new=fail_on_new):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    root = Path(tmpdir)
+                    baseline = root / "baseline.json"
+                    baseline.write_text(json.dumps(self.node_snapshot([csp], version=baseline_version)), encoding="utf-8")
+                    current_payload = {"version": 3, "baseUrl": "https://example.com/", "fingerprints": [], "scanner": scanner}
+                    responses["zap_findings_snapshot"] = json.dumps(current_payload)
+                    output = root / "artifacts"
+                    with mock.patch.object(MODULE, "McpHttpClient", FakeClient), mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+                        result = MODULE.main([
+                            "--server-url", "http://example.com/mcp", "--api-key", "test-key",
+                            "--target-url", "https://example.com/", "--baseline-file", str(baseline),
+                            "--output-dir", str(output), "--baseline-mode", mode,
+                            "--fail-on-new-findings", str(fail_on_new).lower(), "--run-active-scan", "false",
+                        ])
+
+                    self.assertEqual(result, expected_result)
+                    snapshot = json.loads((output / "current-findings.json").read_text())
+                    metadata = json.loads((output / "gate-metadata.json").read_text())
+                    diff = json.loads((output / "findings-diff.json").read_text())
+                    summary = (output / "gate-summary.md").read_text()
+                    self.assertEqual(metadata["contract_version"], "ci_gate_result/v2")
+                    self.assertEqual(snapshot["contract_version"], "ci_gate_findings_snapshot/v3")
+                    self.assertEqual(diff["contract_version"], "ci_gate_findings_diff/v3")
+                    self.assertEqual(metadata["scanner"], snapshot["scanner"])
+                    self.assertEqual(diff["current"]["scanner"], snapshot["scanner"])
+                    self.assertEqual(metadata["baseline"]["scanner"], diff["baseline"]["scanner"])
+                    self.assertEqual(metadata["scanner_comparison"], diff["scanner_comparison"])
+                    self.assertEqual(metadata["scanner_comparison"]["status"], status)
+                    self.assertEqual(metadata["enforcement"]["diff_available"], status == "matching")
+                    self.assertEqual(metadata["new_findings"], expected_new)
+                    self.assertEqual(metadata["findings"]["new_findings"], expected_new)
+                    self.assertEqual(diff["observed_changes"], {"added": 0, "removed": 1, "retained": 0})
+                    self.assertIn(f"Scanner comparison: `{status}`", summary)
+                    self.assertIn(f"Scanner ZAP Version: {snapshot['scanner']['zapVersion'] or 'unknown'}", summary)
+                    if status != "matching":
+                        self.assertNotIn("Resolved findings:", summary)
+                        self.assertIn("Observed added / removed / retained: `0 / 1 / 0`", summary)
+                    if expected_result:
+                        self.assertEqual(metadata["enforcement"]["failure_reason"], diff["scanner_comparison"]["reason"])
+                    if mode == "seed" and status != "matching":
+                        self.assertIn("Seed mode allows baseline review", summary)
 
     def test_main_prefers_expert_surface_when_both_surfaces_are_available(self):
         class FakeMcpHttpClient:

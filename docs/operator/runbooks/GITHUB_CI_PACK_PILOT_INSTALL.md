@@ -17,10 +17,13 @@ team process: seed mode, artifact review, baseline acceptance, and enforcement.
 - Copyable workflow: `examples/github-actions/zap-security-gate.yml`
 - Validation workflow: `.github/workflows/zap-security-gate-juice-shop.yml`
 - Optional webhook callback action: `.github/actions/zap-webhook-callback`
-- Artifact contracts: `ci_gate_result/v1`, `ci_gate_findings_snapshot/v2`,
-  `ci_gate_findings_diff/v2`, and `ci_gate_artifact_manifest/v1`
-- Legacy snapshot v1 remains accepted and emitted for old server exports.
-  Mixed-version diffs use URL identity; see [CI Gate Contracts](../../scanning/CI_GATE_CONTRACTS.md).
+- Artifact contracts in the updated implementation: `ci_gate_result/v2`,
+  `ci_gate_findings_snapshot/v3`, `ci_gate_findings_diff/v3`, and
+  `ci_gate_artifact_manifest/v1`. These provenance contracts are newer than
+  the published `v0.15.0` release; use the matching updated server and action.
+- Legacy v1/v2 snapshots remain readable and retain their identity mode when
+  normalized into v3, but missing scanner provenance means unknown
+  comparability. See [CI Gate Contracts](../../scanning/CI_GATE_CONTRACTS.md).
 
 ## Preflight
 
@@ -34,7 +37,7 @@ team process: seed mode, artifact review, baseline acceptance, and enforcement.
    `fail-on-new-findings: "false"` is better for the first baseline run.
 6. Use `baseline-mode: seed` until the first baseline is reviewed. Switch to
    `baseline-mode: enforce` when the gate is meant to block on missing or
-   mistyped baseline evidence.
+   mistyped baseline evidence and changed or unknown scanner provenance.
 
 Do not use mutable image tags such as `latest`, `dev`, `main`, `nightly`,
 `edge`, or `canary`. The action rejects them because a pilot gate must be
@@ -66,6 +69,10 @@ without custom engineering, the pack is not ready for that pilot yet.
 - [ ] Upload or attach `zap-artifacts` to the pilot issue.
 - [ ] Review `current-findings.json`, `gate-metadata.json`, and
   `artifact-manifest.json`.
+- [ ] Confirm the snapshot records the running ZAP version and complete
+  installed add-on inventory. Review scanner comparability before using diff
+  counts; a disappearing alert with changed or unknown provenance is not
+  labelled resolved.
 - [ ] Commit a baseline only after the pilot owner accepts the current security
   state.
 
@@ -111,6 +118,9 @@ for the action, Compose stack, MCP server, ZAP, and generated artifacts.
    after review.
 9. Enable blocking mode only after the baseline and suppressions are agreed:
    set `baseline-mode: enforce` and `fail-on-new-findings: "true"` together.
+   Different or unknown scanner provenance then fails enforcement. If ZAP or
+   its add-ons change, review fresh seed-mode evidence and explicitly accept
+   a replacement baseline; the action never overwrites it automatically.
 
 ## Rollback
 

@@ -45,7 +45,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_findings_snapshot",
-            description = "Export a normalized findings snapshot as JSON for a required target baseUrl covered by scan evidence visible to the caller, so CI or release workflows can save a stable baseline."
+            description = "Export a normalized findings snapshot with measured ZAP version and installed add-on inventory as JSON for a required target baseUrl covered by scan evidence visible to the caller, so CI or release workflows can save a baseline. Unavailable scanner identity is explicitly marked incomplete."
     )
     public String exportFindingsSnapshot(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl
@@ -55,7 +55,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_findings_diff",
-            description = "Compare current findings for a required target baseUrl covered by scan evidence visible to the caller against a previously exported findings snapshot."
+            description = "Compare current findings for a required target baseUrl covered by scan evidence visible to the caller against a previously exported findings snapshot. New/resolved counts require matching complete scanner inventories; otherwise only informational observed changes are reported. Matching inventory does not prove application remediation or equal scan coverage."
     )
     public String diffFindings(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,

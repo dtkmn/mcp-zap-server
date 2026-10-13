@@ -18,6 +18,7 @@ public class ExpertAutomationMcpToolsService implements ExpertToolGroup {
     @Tool(
             name = "zap_automation_plan_run",
             description = "Run a supported ZAP Automation Framework plan from a workspace file or inline YAML. "
+                    + "env.parameters.maxDuration is a capability-checked cooperative budget in seconds, not a guaranteed network cutoff. "
                     + "Literal context, requestor, scan, and login URLs must pass the configured destination policy. "
                     + "Script/import/browser jobs, proxy/config overrides, and variable-based destinations are unsupported."
     )
@@ -31,7 +32,9 @@ public class ExpertAutomationMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_automation_plan_status",
-            description = "Get status for a previously launched ZAP Automation Framework plan."
+            description = "Get status for a previously launched ZAP Automation Framework plan. "
+                    + "Completion does not establish scan success, stopped requests, or a drained passive backlog. "
+                    + "Successful is pending while running, no on reported errors, and unknown otherwise; review messages and artifacts."
     )
     public String getAutomationPlanStatus(
             @ToolParam(description = "Automation plan ID returned by zap_automation_plan_run") String planId,

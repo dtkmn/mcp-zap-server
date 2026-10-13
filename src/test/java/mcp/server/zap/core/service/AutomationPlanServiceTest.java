@@ -2,8 +2,16 @@ package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.gateway.EngineAutomationAccess;
 import mcp.server.zap.core.gateway.EngineAutomationAccess.AutomationPlanProgress;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.AddOn;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.ScannerInventory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.yaml.snakeyaml.Yaml;
 
@@ -12,8 +20,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,13 +38,16 @@ class AutomationPlanServiceTest {
     private static final int PLAN_BYTE_LIMIT = 1024 * 1024;
 
     private EngineAutomationAccess automationAccess;
+    private EngineRuntimeAccess runtimeAccess;
     private AutomationPlanService service;
     private Path automationRoot;
 
     @BeforeEach
     void setup() throws Exception {
         automationAccess = mock(EngineAutomationAccess.class);
+        runtimeAccess = mock(EngineRuntimeAccess.class);
         service = new AutomationPlanService(automationAccess, mock(UrlValidationService.class));
+        service.setRuntimeAccess(runtimeAccess);
         automationRoot = Files.createTempDirectory("automation-plan-service-test");
         ReflectionTestUtils.setField(service, "automationLocalDirectory", automationRoot.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", "/zap/automation");
@@ -86,6 +99,121 @@ class AutomationPlanServiceTest {
         assertTrue(error.getMessage().contains("Provide exactly one of planPath or planYaml"));
     }
 
+    @ParameterizedTest
+    @CsvSource({"0, 2.17.0, 0.61.0", "300, 2.17.0, 0.61.0", "300, 2.18.1, 0.62.1"})
+    void supportedWholePlanDeadlinePreservesSecondsAndPerJobBudgets(
+            int maxDuration, String zapVersion, String automationVersion) throws Exception {
+        when(runtimeAccess.readScannerInventory()).thenReturn(deadlineInventory(zapVersion, automationVersion));
+        when(automationAccess.runAutomationPlan(anyString())).thenReturn("7");
+        String plan = deadlinePlan(maxDuration) + """
+                jobs:
+                  - type: spider
+                    parameters: {context: local-target, maxDuration: 2}
+                  - type: passiveScan-wait
+                    parameters: {maxDuration: 1}
+                """;
+
+        String response = service.runAutomationPlan(null, plan, "deadline.yaml");
+
+        assertTrue(response.contains("Plan ID: 7"));
+        verify(runtimeAccess).readScannerInventory();
+        verify(automationAccess).runAutomationPlan(anyString());
+        Path materialized;
+        try (var files = Files.walk(automationRoot.resolve("runs"))) {
+            materialized = files.filter(path -> path.getFileName().toString().equals("deadline.yaml"))
+                    .findFirst().orElseThrow();
+        }
+        Map<?, ?> normalized = new Yaml().load(Files.readString(materialized));
+        Map<?, ?> env = (Map<?, ?>) normalized.get("env");
+        assertEquals(maxDuration, ((Map<?, ?>) env.get("parameters")).get("maxDuration"));
+        List<?> jobs = (List<?>) normalized.get("jobs");
+        assertEquals(2, ((Map<?, ?>) ((Map<?, ?>) jobs.get(0)).get("parameters")).get("maxDuration"));
+        assertEquals(1, ((Map<?, ?>) ((Map<?, ?>) jobs.get(1)).get("parameters")).get("maxDuration"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "jobs: [{type: spider, parameters: {context: local-target, maxDuration: 1}}]"})
+    void plansWithoutWholePlanDeadlineDoNotRequireRuntimeInventory(String jobs) {
+        when(automationAccess.runAutomationPlan(anyString())).thenReturn("7");
+
+        assertTrue(service.runAutomationPlan(null, VALID_ENV + jobs, "legacy.yaml").contains("Plan ID: 7"));
+
+        verify(automationAccess).runAutomationPlan(anyString());
+        verifyNoInteractions(runtimeAccess);
+    }
+
+    @ParameterizedTest
+    @MethodSource("unsupportedDeadlineInventories")
+    void unsupportedWholePlanDeadlineRejectsInlineAndFileBeforeMaterialization(ScannerInventory inventory) throws Exception {
+        when(runtimeAccess.readScannerInventory()).thenReturn(inventory);
+        String plan = deadlinePlan(0) + "jobs: []\n";
+
+        IllegalArgumentException inlineError = assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(null, plan, "inline.yaml"));
+        Path source = automationRoot.resolve("source.yaml");
+        Files.writeString(source, plan);
+        IllegalArgumentException fileError = assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(source.toString(), null, null));
+
+        assertTrue(inlineError.getMessage().contains("maxDuration"), inlineError.getMessage());
+        assertTrue(fileError.getMessage().contains("maxDuration"), fileError.getMessage());
+        verifyNoInteractions(automationAccess);
+        try (var files = Files.walk(automationRoot)) {
+            assertFalse(files.filter(Files::isRegularFile).anyMatch(path -> !path.equals(source)),
+                    "Unsupported deadlines must not materialize a run");
+        }
+    }
+
+    static Stream<ScannerInventory> unsupportedDeadlineInventories() {
+        return Stream.of(
+                null,
+                ScannerInventory.unknown(),
+                new ScannerInventory("2.17.0", List.of(), true),
+                new ScannerInventory("2.17.0", List.of(new AddOn("automation", "0.61.0", "beta")), false),
+                new ScannerInventory("2.17.0", List.of(new AddOn("automation", "0.61.0", "beta"),
+                        new AddOn("automation", "0.62.0", "beta")), true),
+                deadlineInventory("2.16.0", "0.61.0"),
+                deadlineInventory("2.17.0", "0.60.0"),
+                deadlineInventory("development", "0.61.0"),
+                deadlineInventory("2.17.0", "development"),
+                deadlineInventory("2.17.0-SNAPSHOT", "0.61.0"),
+                deadlineInventory("2.17.0", "0.61.0-SNAPSHOT")
+        );
+    }
+
+    @Test
+    void unavailableDeadlineInventoryDoesNotExposeUpstreamFailureOrMaterializePlan() throws Exception {
+        when(runtimeAccess.readScannerInventory()).thenThrow(
+                new IllegalStateException("private-api-key https://user:secret@example.invalid"));
+        String plan = deadlinePlan(300);
+
+        IllegalArgumentException inlineError = assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(null, plan, "deadline.yaml"));
+        Path source = automationRoot.resolve("source.yaml");
+        Files.writeString(source, plan);
+        IllegalArgumentException fileError = assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(source.toString(), null, null));
+
+        for (IllegalArgumentException error : List.of(inlineError, fileError)) {
+            assertTrue(error.getMessage().contains("maxDuration"), error.getMessage());
+            assertFalse(error.getMessage().contains("private-api-key"));
+            assertFalse(error.getMessage().contains("user:secret"));
+        }
+        verifyNoInteractions(automationAccess);
+        try (var files = Files.walk(automationRoot)) {
+            assertFalse(files.filter(Files::isRegularFile).anyMatch(path -> !path.equals(source)));
+        }
+    }
+
+    private static ScannerInventory deadlineInventory(String zapVersion, String automationVersion) {
+        return new ScannerInventory(zapVersion, List.of(new AddOn("automation", automationVersion, "beta")), true);
+    }
+
+    private static String deadlinePlan(int maxDuration) {
+        return "env: {contexts: [{name: local-target, urls: ['http://example.com/']}], parameters: {maxDuration: "
+                + maxDuration + "}}\n";
+    }
+
     @Test
     void getAutomationPlanStatusFormatsProgressState() {
         when(automationAccess.loadAutomationPlanProgress("11")).thenReturn(new AutomationPlanProgress(
@@ -101,9 +229,36 @@ class AutomationPlanServiceTest {
         assertTrue(result.contains("Automation plan status:"));
         assertTrue(result.contains("Plan ID: 11"));
         assertTrue(result.contains("Completed: no"));
+        assertTrue(result.contains("Successful: pending"));
         assertTrue(result.contains("Warnings: 1"));
         assertTrue(result.contains("Job requestor started"));
         assertTrue(result.contains("Report directory was empty before run"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("terminalProgress")
+    void completedStatusDoesNotInferSuccessFromMissingErrorsOrUnclassifiedWarnings(
+            List<String> warnings, List<String> errors, String success) {
+        when(automationAccess.loadAutomationPlanProgress("11")).thenReturn(new AutomationPlanProgress(
+                "2026-03-14T09:00:00Z", "2026-03-14T09:01:00Z", List.of(), warnings, errors));
+
+        String result = service.getAutomationPlanStatus("11", 10);
+
+        assertTrue(result.contains("Completed: yes"));
+        assertTrue(result.contains("Successful: " + success), result);
+        assertTrue(result.contains("Warnings: " + warnings.size()));
+        assertTrue(result.contains("Errors: " + errors.size()));
+        warnings.forEach(warning -> assertTrue(result.contains(warning)));
+        errors.forEach(error -> assertTrue(result.contains(error)));
+    }
+
+    static Stream<Arguments> terminalProgress() {
+        return Stream.of(
+                Arguments.of(List.of(), List.of(), "unknown"),
+                Arguments.of(List.of("Unclassified engine warning requiring review"), List.of(), "unknown"),
+                Arguments.of(List.of(), List.of("Engine execution failed"), "no"),
+                Arguments.of(List.of("Unclassified engine warning"), List.of("Engine execution failed"), "no")
+        );
     }
 
     @Test

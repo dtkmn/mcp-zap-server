@@ -1,6 +1,7 @@
 package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.gateway.EngineAutomationAccess;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -125,6 +126,52 @@ class AutomationPlanTargetPolicyTest {
         assertThrows(IllegalArgumentException.class, () -> service.runAutomationPlan(null,
                 ENV + "jobs: [{type: '" + type + "', enabled: false}]", "plan.yaml"));
         verifyNoInteractions(engine);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"null", "true", "false", "1.5", "'300'", "-1", "2147483648", "999999999999999999999999"})
+    void invalidWholePlanDeadlineRejectsInlineAndFileBeforeInventoryOrDispatch(String duration) throws Exception {
+        EngineRuntimeAccess runtime = mock(EngineRuntimeAccess.class);
+        service.setRuntimeAccess(runtime);
+        String yaml = "env: {contexts: [{name: target, urls: ['" + URL
+                + "']}], parameters: {maxDuration: " + duration + "}}\njobs: []\n";
+
+        IllegalArgumentException inlineError = assertThrows(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(null, yaml, "inline.yaml"));
+        Path source = root.resolve("source.yaml");
+        Files.writeString(source, yaml);
+        IllegalArgumentException fileError = assertThrows(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(source.toString(), null, null));
+
+        assertTrue(inlineError.getMessage().contains("env.parameters.maxDuration"), inlineError.getMessage());
+        assertTrue(fileError.getMessage().contains("env.parameters.maxDuration"), fileError.getMessage());
+        verifyNoInteractions(runtime, engine);
+        try (var files = Files.walk(root)) {
+            assertFalse(files.filter(Files::isRegularFile).anyMatch(path -> !path.equals(source)),
+                    "Invalid deadlines must not materialize a run");
+        }
+    }
+
+    @Test
+    void unsupportedPollMethodHasActionableRejectionForInlineAndFilePlans() throws Exception {
+        String yaml = contextAuth("{method: manual, verification: {method: poll, pollUrl: '" + URL
+                + "status', pollMethod: GET}}") + "jobs: []\n";
+
+        IllegalArgumentException inlineError = assertThrows(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(null, yaml, "inline.yaml"));
+        Path source = root.resolve("source.yaml");
+        Files.writeString(source, yaml);
+        IllegalArgumentException fileError = assertThrows(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(source.toString(), null, null));
+
+        assertTrue(inlineError.getMessage().contains("pollMethod"), inlineError.getMessage());
+        assertTrue(inlineError.getMessage().toLowerCase(java.util.Locale.ROOT).contains("remove"), inlineError.getMessage());
+        assertTrue(fileError.getMessage().contains("pollMethod"), fileError.getMessage());
+        verifyNoInteractions(engine);
+        try (var files = Files.walk(root)) {
+            assertFalse(files.filter(Files::isRegularFile).anyMatch(path -> !path.equals(source)),
+                    "Unsupported polling configuration must not materialize a run");
+        }
     }
 
     @Test

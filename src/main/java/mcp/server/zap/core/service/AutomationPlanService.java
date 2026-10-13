@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAutomationAccess;
 import mcp.server.zap.core.gateway.EngineAutomationAccess.AutomationPlanProgress;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess;
+import mcp.server.zap.core.gateway.EngineRuntimeAccess.ScannerInventory;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,6 +68,7 @@ public class AutomationPlanService {
     private final AutomationPlanTargetPolicy targetPolicy;
     private OperationRegistry operationRegistry;
     private ClientWorkspaceResolver clientWorkspaceResolver;
+    private EngineRuntimeAccess runtimeAccess;
 
     @Value("${zap.automation.local-directory:/zap/wrk/automation}")
     private String automationLocalDirectory;
@@ -86,6 +89,11 @@ public class AutomationPlanService {
     @Autowired(required = false)
     void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
         this.clientWorkspaceResolver = clientWorkspaceResolver;
+    }
+
+    @Autowired(required = false)
+    void setRuntimeAccess(EngineRuntimeAccess runtimeAccess) {
+        this.runtimeAccess = runtimeAccess;
     }
 
     public String runAutomationPlan(
@@ -117,7 +125,7 @@ public class AutomationPlanService {
                 .append("Started: ").append(progress.started()).append('\n')
                 .append("Finished: ").append(completed ? progress.finished() : "<running>").append('\n')
                 .append("Completed: ").append(completed ? "yes" : "no").append('\n')
-                .append("Successful: ").append(progress.successful() ? "yes" : "no").append('\n')
+                .append("Successful: ").append(planSuccess(progress)).append('\n')
                 .append("Info Messages: ").append(progress.info().size()).append('\n')
                 .append("Warnings: ").append(progress.warnings().size()).append('\n')
                 .append("Errors: ").append(progress.errors().size()).append('\n');
@@ -125,6 +133,16 @@ public class AutomationPlanService {
         appendMessages(output, "Info", progress.info(), boundedMaxMessages);
         appendMessages(output, "Warnings", progress.warnings(), boundedMaxMessages);
         appendMessages(output, "Errors", progress.errors(), boundedMaxMessages);
+
+        if (completed && progress.errors().isEmpty()) {
+            output.append("ZAP reports that the plan finished, but its progress API does not expose a success or termination reason. "
+                    + "Review job messages and artifacts; completion alone does not establish that every job ran.\n");
+        }
+
+        if (completed) {
+            output.append("Plan completion does not establish that all scanner requests stopped or the passive backlog drained. "
+                    + "Check scanner status separately before treating reports as final.\n");
+        }
 
         if (!completed) {
             output.append("Use 'zap_automation_plan_artifacts' with the returned plan file path to inspect generated files while the plan is running.");
@@ -235,6 +253,7 @@ public class AutomationPlanService {
 
         Map<String, Object> normalizedPlan = parseYamlObject(sourcePlanContent);
         targetPolicy.validate(normalizedPlan);
+        validatePlanCapabilities(normalizedPlan);
 
         String runId = "plan-" + Instant.now().toEpochMilli() + "-" + UUID.randomUUID().toString().substring(0, 8);
         Path localRunDirectory = localRoot.resolve("runs").resolve(runId).normalize();
@@ -259,6 +278,61 @@ public class AutomationPlanService {
         writeFile(localPlanPath, dumpYaml(normalizedPlan));
 
         return new PreparedAutomationPlan(localPlanPath, zapPlanPath, localRunDirectory, localArtifactsDirectory, reportArtifacts);
+    }
+
+    private void validatePlanCapabilities(Map<String, Object> plan) {
+        Map<String, Object> parameters = childMap(childMap(plan.get("env")).get("parameters"));
+        if (!parameters.containsKey("maxDuration")) {
+            return;
+        }
+        ScannerInventory inventory;
+        try {
+            inventory = runtimeAccess == null ? null : runtimeAccess.readScannerInventory();
+        } catch (RuntimeException _) {
+            throw unsupportedWholePlanDuration();
+        }
+        if (inventory == null || !inventory.inventoryComplete()
+                || !versionAtLeast(inventory.zapVersion(), 2, 17, 0)) {
+            throw unsupportedWholePlanDuration();
+        }
+        String automationVersion = inventory.addOns().stream()
+                .filter(addOn -> "automation".equals(addOn.id()))
+                .map(EngineRuntimeAccess.AddOn::version)
+                .findFirst().orElse(null);
+        if (!versionAtLeast(automationVersion, 0, 61, 0)) {
+            throw unsupportedWholePlanDuration();
+        }
+    }
+
+    private static boolean versionAtLeast(String version, int major, int minor, int patch) {
+        if (version == null || !version.matches("[0-9]{1,9}\\.[0-9]{1,9}\\.[0-9]{1,9}")) {
+            return false;
+        }
+        String[] parts = version.split("\\.");
+        int[] minimum = {major, minor, patch};
+        for (int i = 0; i < minimum.length; i++) {
+            int comparison = Integer.compare(Integer.parseInt(parts[i]), minimum[i]);
+            if (comparison != 0) {
+                return comparison > 0;
+            }
+        }
+        return true;
+    }
+
+    private static IllegalArgumentException unsupportedWholePlanDuration() {
+        return new IllegalArgumentException("Automation plan env.parameters.maxDuration requires a verified ZAP 2.17.0 or newer "
+                + "and automation add-on 0.61.0 or newer. Check engine connectivity and install a compatible stable add-on. "
+                + "Omit this field only if an unlimited whole-plan duration is acceptable.");
+    }
+
+    private String planSuccess(AutomationPlanProgress progress) {
+        if (!progress.completed()) {
+            return "pending";
+        }
+        if (!progress.errors().isEmpty()) {
+            return "no";
+        }
+        return "unknown";
     }
 
     private void trackAutomationPlanStarted(String planId, String workspaceId) {

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop inferring Automation Framework success from a finish timestamp and an empty error list. Report `Successful` as `pending` while running, `no` on reported errors, or `unknown` otherwise; upstream progress does not expose the termination reason, and clean native cancellation does not prove a completed scan.
 - Require complete matching ZAP engine/add-on inventories before reporting net-new or resolved findings. Changed or unknown scanner identity produces informational observations; enforced CI gates fail until a reviewed comparable baseline is supplied.
 - Add MCP ZAP Connect terms of service to the existing first-run guide and link them from the plugin's OpenAI listing metadata and README.
 - Add Cursor-native metadata to MCP ZAP Connect's existing plugin folder so its repository index meets Cursor's documented multi-plugin layout. Codex retains its portable manifest; both formats use the same setup skill.
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Validate whole-plan Automation Framework durations and verify running ZAP core/add-on capabilities before dispatch. Require ZAP `2.17.0` and Automation Framework `0.61.0` or newer for `env.parameters.maxDuration`; reject invalid durations and explicitly keep unsupported authentication `pollMethod` configurations rejected.
 - Include measured scanner inventory and available server build identity in version 3 findings snapshots, CI diff evidence and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
 - Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.
 - Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
@@ -26,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Give the canonical Automation Framework example a 300-second whole-plan limit while retaining per-job minute limits. Set the report job's `alwaysRun` flag explicitly so a soft deadline stop can produce partial evidence; document cooperative termination and possible report work beyond the budget.
 - Version CI findings snapshots and diffs as `/v3` and gate results as `/v2` for scanner-aware comparison and nullable counts. Keep the existing version 2 node identity and suppression behavior; seed mode remains available for explicit baseline review.
 - Pause automatic macOS package builds on pull requests while signing/notarization and clean browser-download installation remain unresolved. Keep manual test builds available; public Mac distribution is deferred.
 - Start the local Docker quick start from a versioned published MCP image with `bootstrap-local.sh --start`, preserving existing settings and keys and reusing cached images on restart. Publish generated settings atomically, wait for container health and authenticated MCP checks before reporting readiness, and report the failing stage when MCP requests cannot complete. Keep source builds in the development override and reject failed MCP tool probes.
@@ -35,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Clarify Automation Framework expiry boundaries: requestor work and always-run jobs can outlast the plan budget, stopping passive waits leaves background analysis active, and slow Spider seed preparation can allow crawling to start after expiry in Automation Framework `0.61.0` / Spider `0.20.0`. Keep job limits and verify scanner state before treating reports as final.
 - Consolidate local Docker onboarding into the shared first-run guide with three steps: start, connect, and generate a report. Keep security and agent notes focused on their own requirements, and place source-build instructions in the contributor guide.
 - Update the EKS walkthrough after a scoped live validation of the published `v0.15.0` image and matching chart, including report persistence and settled network-policy paths.
 - Document Mac installation, local client setup and data retention, with separate contributor build/release instructions and concise private ChatGPT setup guidance.

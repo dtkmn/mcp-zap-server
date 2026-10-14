@@ -5,6 +5,7 @@ import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
+import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.ZapEngineContextAccess;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import mcp.server.zap.core.model.ScanJobStatus;
@@ -22,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -43,12 +46,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -66,14 +72,34 @@ class DirectScanServicesDockerTest {
                     .withNetwork(NETWORK)
                     .withNetworkAliases("direct-scan-target")
                     .withCopyToContainer(Transferable.of("""
+                            server {
+                                listen 80;
+                                root /usr/share/nginx/html;
+                                index index.html;
+                                location = /http-slow { limit_rate 1024; }
+                                location / { try_files $uri $uri/ =404; }
+                            }
+                            """), "/etc/nginx/conf.d/default.conf")
+                    .withCopyToContainer(Transferable.of("""
                             <!doctype html>
                             <html><body><h1>Client Spider fixture</h1>
                             <script>
                             fetch('/' + ['client', 'discovered'].join('-') + location.search);
                             </script></body></html>
                             """), "/usr/share/nginx/html/client-crawl.html")
+                    .withCopyToContainer(Transferable.of("""
+                            <!doctype html>
+                            <html><body><a href="/http-slow">Finite slow response</a>
+                            <script>
+                            fetch('/' + ['client', 'discovered'].join('-') + location.search);
+                            </script></body></html>
+                            """), "/usr/share/nginx/html/http-stop.html")
+                    .withCopyToContainer(Transferable.of("x".repeat(64 * 1024)),
+                            "/usr/share/nginx/html/http-slow")
                     .withCopyToContainer(Transferable.of("Discovered through JavaScript"),
                             "/usr/share/nginx/html/client-discovered")
+                    .withCopyToContainer(Transferable.of("<!doctype html><html><body></body></html>"),
+                            "/usr/share/nginx/html/client-idle.html")
                     .withCopyToContainer(Transferable.of("""
                             <!doctype html>
                             <html><body><script>
@@ -121,7 +147,9 @@ class DirectScanServicesDockerTest {
                             "-config",
                             "api.addrs.addr.regex=true",
                             "-addoninstall",
-                            "client"
+                            "client",
+                            "-addoninstall",
+                            "spiderAjax"
                     )
                     .waitingFor(ZapDockerTestSupport.waitForZapPort());
 
@@ -134,6 +162,12 @@ class DirectScanServicesDockerTest {
     static void setupServices() throws Exception {
         clientApi = ZapDockerTestSupport.clientApi(ZAP.getHost(), ZAP.getMappedPort(8090));
         ZapDockerTestSupport.awaitZapApiReady(clientApi);
+        System.out.println("Crawler test ZAP core: " + clientApi.core.version().toString(0));
+        System.out.println("Crawler test installed add-ons: " + clientApi.autoupdate.installedAddons().toString(0));
+        String firefoxPath = ((ApiResponseElement) clientApi.selenium.optionFirefoxBinaryPath()).getValue();
+        String driverPath = ((ApiResponseElement) clientApi.selenium.optionFirefoxDriverPath()).getValue();
+        printBrowserVersion("Firefox", firefoxPath.isBlank() ? "firefox" : firefoxPath);
+        printBrowserVersion("WebDriver", driverPath.isBlank() ? "geckodriver" : driverPath);
 
         ScanLimitProperties scanLimitProperties = new ScanLimitProperties();
         scanLimitProperties.setMaxActiveScanDurationInMins(1);
@@ -148,6 +182,146 @@ class DirectScanServicesDockerTest {
         activeScanService = new ActiveScanService(engineScanExecution, urlValidationService, scanLimitProperties);
         spiderScanService = new SpiderScanService(engineScanExecution, urlValidationService, scanLimitProperties);
         clientSpiderService = new ClientSpiderService(engineScanExecution, urlValidationService, scanLimitProperties);
+    }
+
+    @ParameterizedTest
+    @MethodSource("guidedCrawlerModes")
+    void guidedCrawlerSelectionKeepsNativeLifecycleAndMeasuredJavaScriptCoverage(
+            String strategy, GuidedExecutionModeResolver.ExecutionMode mode) throws Exception {
+        if ("browser".equals(strategy)) {
+            // AJAX stop status does not prove that its global engine is idle. Give these
+            // independent contract cases a fresh class-owned engine; this is test isolation,
+            // not production recovery or a guarantee that restarting preserves scan state.
+            ZAP.stop();
+            ZAP.start();
+            setupServices();
+        }
+        String effectiveStrategy = "auto".equals(strategy) ? "http" : strategy;
+        String query = "?crawl=matrix-" + mode.name() + "-" + strategy;
+        String origin = "http://direct-scan-target";
+        boolean browserCrawl = !"http".equals(effectiveStrategy);
+        String targetUrl = origin + (browserCrawl ? "/client-crawl.html" : "/http-stop.html") + query;
+        String discoveredUrl = origin + "/client-discovered" + query;
+        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
+        when(executionMode.resolveDefaultMode()).thenReturn(mode);
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        AjaxSpiderService ajaxSpider = new AjaxSpiderService(
+                new ZapEngineAjaxSpiderExecution(clientApi), mock(UrlValidationService.class));
+        ajaxSpider.setScanJobStore(store);
+        var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
+        ScanJobQueueService queue = new ScanJobQueueService(
+                activeScanService, spiderScanService, ajaxSpider, clientSpiderService,
+                mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
+                false, store, new SingleNodeQueueLeadershipCoordinator());
+        GuidedScanWorkflowService guided = new GuidedScanWorkflowService(
+                executionMode, spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
+                queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory());
+        String operationId = null;
+        try {
+            String started = guided.startCrawl(targetUrl, strategy, null, null);
+            operationId = extractResponseValue(started, "Operation ID: ");
+            assertTrue(started.contains("Strategy: " + effectiveStrategy), started);
+            assertTrue(started.contains("Execution Mode: " + mode.name().toLowerCase(Locale.ROOT)), started);
+            String jobId = mode == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+                    ? extractResponseValue(started, "Job ID: ") : null;
+            String scanId;
+            if (jobId != null) {
+                String operationToPoll = operationId;
+                // Queue admission can precede backend startup. Poll through normal dispatch.
+                await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(250)).untilAsserted(() -> {
+                    String queuedStatus = guided.getCrawlStatus(operationToPoll);
+                    var pending = store.load(jobId).orElseThrow();
+                    assertTrue(pending.getZapScanId() != null && !pending.getZapScanId().isBlank(), queuedStatus);
+                });
+                var job = store.load(jobId).orElseThrow();
+                ScanJobType expectedType = switch (effectiveStrategy) {
+                    case "client" -> ScanJobType.CLIENT_SPIDER;
+                    case "browser" -> ScanJobType.AJAX_SPIDER;
+                    default -> ScanJobType.SPIDER_SCAN;
+                };
+                assertEquals(expectedType, job.getType());
+                scanId = job.getZapScanId();
+            } else {
+                scanId = "browser".equals(effectiveStrategy) ? null : extractScanId(started);
+            }
+            String status = guided.getCrawlStatus(operationId);
+            assertTrue(status.contains("Strategy: " + effectiveStrategy), status);
+            if (jobId != null) {
+                assertTrue(status.contains("Job ID: " + jobId), status);
+                assertTrue(status.contains("ZAP Scan ID: " + scanId), status);
+            } else if (scanId != null) {
+                assertTrue(status.contains("Scan ID: " + scanId), status);
+            } else {
+                assertTrue(status.contains("AJAX Spider Status:"), status);
+            }
+            if (browserCrawl) {
+                await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(500))
+                        .until(() -> recordedUrls(origin).contains(discoveredUrl));
+                if ("client".equals(effectiveStrategy)) {
+                    assertTrue(clientSpiderService.getClientSpiderProgressPercent(scanId) < 100,
+                            "Client crawl must still be running when cancellation is requested");
+                } else {
+                    assertTrue(ajaxSpider.isAjaxSpiderRunning(),
+                            "AJAX crawl must still be running when cancellation is requested");
+                }
+            } else {
+                await().atMost(Duration.ofSeconds(45)).pollInterval(Duration.ofMillis(250))
+                        .until(() -> {
+                            int progress = spiderScanService.getSpiderScanProgressPercent(scanId);
+                            return progress > 0 && progress < 100;
+                        });
+                assertFalse(recordedUrls(origin).contains(discoveredUrl),
+                        "An HTTP or auto crawl must not be treated as JavaScript coverage");
+                assertTrue(spiderScanService.getSpiderScanProgressPercent(scanId) < 100,
+                        "HTTP crawl must still be running when cancellation is requested");
+            }
+            String operationToStop = operationId;
+            assertTrue(guided.stopCrawl(operationToStop).contains("Guided crawl stop requested."));
+            await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
+                String stopped = guided.getCrawlStatus(operationToStop);
+                switch (effectiveStrategy) {
+                    case "client" -> assertEquals(100, clientSpiderService.getClientSpiderProgressPercent(scanId));
+                    case "browser" -> assertFalse(ajaxSpider.isAjaxSpiderRunning());
+                    default -> assertEquals(100, spiderScanService.getSpiderScanProgressPercent(scanId));
+                }
+                if (jobId != null) {
+                    assertEquals(ScanJobStatus.CANCELLED, store.load(jobId).orElseThrow().getStatus());
+                }
+                if (browserCrawl) {
+                    assertFalse(stopped.contains("Continue security testing: call zap_attack_start"), stopped);
+                }
+            });
+        } finally {
+            try {
+                if (operationId != null) {
+                    guided.stopCrawl(operationId);
+                }
+            } finally {
+                queue.shutdownExecutor();
+            }
+        }
+    }
+
+    private static Stream<Arguments> guidedCrawlerModes() {
+        return Stream.of("http", "client", "browser", "auto")
+                .flatMap(strategy -> Stream.of(GuidedExecutionModeResolver.ExecutionMode.values())
+                        .map(mode -> Arguments.of(strategy, mode)));
+    }
+
+    private static void printBrowserVersion(String name, String executable) throws Exception {
+        var result = ZAP.execInContainer(executable, "--version");
+        System.out.printf("Crawler test %s (exit %d): %s %s%n", name, result.getExitCode(),
+                result.getStdout().trim(), result.getStderr().trim());
+    }
+
+    private static List<String> recordedUrls(String origin) throws Exception {
+        return ((ApiResponseList) clientApi.core.urls(origin)).getItems().stream()
+                .map(ApiResponseElement.class::cast).map(ApiResponseElement::getValue).toList();
+    }
+
+    private static String extractResponseValue(String response, String prefix) {
+        return response.lines().filter(line -> line.startsWith(prefix))
+                .map(line -> line.substring(prefix.length()).trim()).findFirst().orElseThrow();
     }
 
     @Test
@@ -203,6 +377,12 @@ class DirectScanServicesDockerTest {
 
     private void assertPreparedBrowserSessionCrawl(GuidedExecutionModeResolver.ExecutionMode mode,
                                                    Path temporaryDirectory, boolean bearerSession) throws Exception {
+        // Browser authentication's auto-detected header/cookie replay depends on passive
+        // session detection. Do not carry a previous duration test's backlog into login.
+        System.out.println("Browser authentication fixture passive records before setup: "
+                + clientApi.pscan.recordsToScan().toString(0));
+        await().atMost(Duration.ofSeconds(120)).pollInterval(Duration.ofMillis(500))
+                .until(() -> "0".equals(((ApiResponseElement) clientApi.pscan.recordsToScan()).getValue()));
         String targetOrigin = "http://client-auth-target:8080";
         String authFlavor = bearerSession ? "bearer" : "cookie";
         String crawlQuery = "?crawl=" + mode.name();
@@ -344,6 +524,42 @@ class DirectScanServicesDockerTest {
                 "ZAP's native verdict alone accepts a response without either configured indicator");
         assertTrue(unexpectedPoll.getStringValue("responseHeader").contains(" 500 "));
         assertTrue(unexpectedPoll.getStringValue("responseBody").contains("Temporarily unavailable"));
+    }
+
+    @Test
+    void clientSpiderDurationExpiresWithoutReceivingNewNodes() throws Exception {
+        String previousInitialLoadTime = ((ApiResponseElement) clientApi.callApi(
+                "clientSpider", "view", "optionInitialLoadTimeInSecs", Map.of())).getValue();
+        String previousPageLoadTime = ((ApiResponseElement) clientApi.callApi(
+                "clientSpider", "view", "optionPageLoadTimeInSecs", Map.of())).getValue();
+        String durationStatistic = "stats.client.spider.event.max.time";
+        String scanId = null;
+        try {
+            // Client 0.33 schedules the deadline independently of new-node events. A finite,
+            // blank page with a longer initial wait must expire before that wait finishes.
+            clientApi.callApi("clientSpider", "action", "setOptionInitialLoadTimeInSecs", Map.of("Integer", "120"));
+            clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "120"));
+            clientApi.stats.clearStats(durationStatistic);
+            scanId = clientSpiderService.startClientSpiderJob("http://direct-scan-target/client-idle.html", 1);
+            String scanToExpire = scanId;
+            await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
+                    .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanToExpire) == 100);
+            ApiResponseSet statistics = (ApiResponseSet) clientApi.stats.stats(durationStatistic);
+            String expirations = statistics.getStringValue(durationStatistic);
+            assertTrue(expirations != null && Long.parseLong(expirations) > 0,
+                    "The idle crawl must finish because ZAP enforced its duration, without new-node activity");
+        } finally {
+            try {
+                if (scanId != null) {
+                    clientSpiderService.stopClientSpiderJob(scanId);
+                }
+            } finally {
+                clientApi.callApi("clientSpider", "action", "setOptionInitialLoadTimeInSecs",
+                        Map.of("Integer", previousInitialLoadTime));
+                clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs",
+                        Map.of("Integer", previousPageLoadTime));
+            }
+        }
     }
 
     @Test

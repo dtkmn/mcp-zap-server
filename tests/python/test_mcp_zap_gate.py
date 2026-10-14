@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import sys
@@ -727,6 +728,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
         self.assertEqual(request.headers["Content-type"], "application/json")
 
     def test_execute_seed_requests_records_unexpected_status(self):
+        response_body = b'{"error":"private response detail"}'
+        response_stream = io.BytesIO(response_body)
+
         class FakeHttpErrorOpener:
             def open(self, _request, timeout):
                 raise MODULE.urllib.error.HTTPError(
@@ -734,7 +738,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
                     400,
                     "Bad Request",
                     {},
-                    None,
+                    response_stream,
                 )
 
         result = MODULE.execute_seed_requests(
@@ -756,6 +760,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
         self.assertEqual(result["failure_count"], 1)
         self.assertFalse(result["requests"][0]["ok"])
         self.assertEqual(result["requests"][0]["status"], 400)
+        self.assertEqual(result["requests"][0]["response_bytes"], len(response_body))
+        self.assertTrue(response_stream.closed)
+        self.assertNotIn("private response detail", json.dumps(result))
 
     def test_main_writes_deterministic_gate_contract_artifacts(self):
         class FakeMcpHttpClient:

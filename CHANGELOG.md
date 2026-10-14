@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Clarify guided crawler selection without changing routing: `auto` uses HTTP, with AJAX fallback only after an unauthenticated direct start fails; JavaScript applications should explicitly select Client Spider. Document native scan IDs versus the global AJAX lifecycle, Client `0.33.0` idle expiry, and separate crawler/rule coverage. Remove unsupported AJAX WAF-bypass and browser-crawl completion claims from tool guidance.
 - Clarify Automation Framework expiry boundaries: requestor work and always-run jobs can outlast the plan budget, stopping passive waits leaves background analysis active, and slow Spider seed preparation can allow crawling to start after expiry in Automation Framework `0.61.0` / Spider `0.20.0`. Keep job limits and verify scanner state before treating reports as final.
 - Consolidate local Docker onboarding into the shared first-run guide with three steps: start, connect, and generate a report. Keep security and agent notes focused on their own requirements, and place source-build instructions in the contributor guide.
 - Update the EKS walkthrough after a scoped live validation of the published `v0.15.0` image and matching chart, including report persistence and settled network-policy paths.

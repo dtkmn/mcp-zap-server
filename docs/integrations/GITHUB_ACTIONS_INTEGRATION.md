@@ -66,12 +66,15 @@ Start from [`examples/github-actions/zap-security-gate.yml`](../../examples/gith
 Before copying it into another repository, run the helper behavior tests:
 
 ```bash
+python3 -m pip install PyYAML==6.0.3
 python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
 These tests cover the gate helper behavior and execute both GitHub and GitLab
 gate entrypoints. The repository's Juice Shop workflow provides the live
-container end-to-end coverage.
+container end-to-end coverage. Run them with Python 3.9+, Helm and Docker Compose
+available; the Compose checks render configuration without starting containers.
+PyYAML is a test-only dependency for checking rendered Helm resources.
 
 If you are using this repository directly, copy it into `.github/workflows/zap-security-gate.yml`.
 

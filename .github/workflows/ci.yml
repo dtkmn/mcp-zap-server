@@ -35,7 +35,9 @@ jobs:
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
 
       - name: Run CI helper tests
-        run: python3 -m unittest discover -s tests/python -p 'test_*.py'
+        run: |
+          python3 -m pip install PyYAML==6.0.3
+          python3 -m unittest discover -s tests/python -p 'test_*.py'
 
       - name: Build with Gradle
         run: ./gradlew build --scan --no-daemon --stacktrace --info

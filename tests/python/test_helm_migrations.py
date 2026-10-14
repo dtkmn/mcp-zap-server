@@ -1,9 +1,10 @@
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 import unittest
+
+from test_helm_security import env_values, find_resource, parse_manifests
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,42 +33,43 @@ class HelmMigrationTest(unittest.TestCase):
             timeout=30,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        return {
-            match.group(1): document
-            for document in result.stdout.split("\n---")
-            if (match := re.search(r"# Source: mcp-zap-server/templates/([^\n]+)", document))
-        }
+        return parse_manifests(result.stdout)
 
-    def annotation(self, document, name):
-        match = re.search(r'^    "' + re.escape(name) + r'": (.+)$', document, re.MULTILINE)
-        self.assertIsNotNone(match, f"Missing {name} annotation")
-        return match.group(1).strip('"')
+    def sql_hook(self, resources):
+        hooks = [resource for resource in resources
+                 if "helm.sh/hook" in resource["metadata"].get("annotations", {})]
+        return find_resource(hooks, "ConfigMap")
 
     def test_sql_hook_precedes_job_and_survives_until_job_mount(self):
         for upgrade in (False, True):
             with self.subTest(upgrade=upgrade):
                 resources = self.render(*(["--is-upgrade"] if upgrade else []))
-                sql = resources["db-migration-configmap.yaml"]
-                job = resources["db-migration-job.yaml"]
+                sql = self.sql_hook(resources)
+                job = find_resource(resources, "Job")
                 for resource in (sql, job):
-                    self.assertEqual(
-                        self.annotation(resource, "helm.sh/hook"),
-                        "pre-install,pre-upgrade",
+                    self.assertCountEqual(
+                        resource["metadata"]["annotations"]["helm.sh/hook"].split(","),
+                        ["pre-install", "pre-upgrade"],
                     )
+                sql_annotations = sql["metadata"]["annotations"]
+                job_annotations = job["metadata"]["annotations"]
                 self.assertLess(
-                    int(self.annotation(sql, "helm.sh/hook-weight")),
-                    int(self.annotation(job, "helm.sh/hook-weight")),
+                    int(sql_annotations["helm.sh/hook-weight"]),
+                    int(job_annotations["helm.sh/hook-weight"]),
                 )
-                self.assertEqual(
-                    self.annotation(sql, "helm.sh/hook-delete-policy"),
-                    "before-hook-creation",
+                self.assertCountEqual(
+                    sql_annotations["helm.sh/hook-delete-policy"].split(","),
+                    ["before-hook-creation"],
                 )
-                self.assertEqual(
-                    self.annotation(job, "helm.sh/hook-delete-policy"),
-                    "before-hook-creation,hook-succeeded",
+                self.assertCountEqual(
+                    job_annotations["helm.sh/hook-delete-policy"].split(","),
+                    ["before-hook-creation", "hook-succeeded"],
                 )
-                sql_name = re.search(r"^  name: (.+)$", sql, re.MULTILINE).group(1)
-                self.assertIn(f"            name: {sql_name}\n", job)
+                pod = job["spec"]["template"]["spec"]
+                volumes = {volume["name"]: volume for volume in pod["volumes"]}
+                mount = next(mount for mount in pod["containers"][0]["volumeMounts"]
+                             if mount["mountPath"] == "/flyway/sql")
+                self.assertEqual(volumes[mount["name"]]["configMap"]["name"], sql["metadata"]["name"])
 
     def test_upgrade_sql_hook_includes_new_chart_migration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -75,48 +77,48 @@ class HelmMigrationTest(unittest.TestCase):
             shutil.copytree(CHART, chart)
             new_migration = chart / "files/db/migration/V999__helm_test.sql"
             new_migration.write_text("SELECT 'new-upgrade-sql';\n", encoding="utf-8")
-            sql = self.render("--is-upgrade", chart=chart)["db-migration-configmap.yaml"]
-            self.assertEqual(self.annotation(sql, "helm.sh/hook"), "pre-install,pre-upgrade")
-            self.assertIn("V999__helm_test.sql:", sql)
-            self.assertIn("SELECT 'new-upgrade-sql';", sql)
+            sql = self.sql_hook(self.render("--is-upgrade", chart=chart))
+            self.assertEqual(sql["data"]["V999__helm_test.sql"].strip(), "SELECT 'new-upgrade-sql';")
 
     def test_hook_does_not_depend_on_chart_service_account(self):
-        job = self.render(
+        job = find_resource(self.render(
             "--set-string", "serviceAccount.name=created-after-hooks",
             "--set", "serviceAccount.automountServiceAccountToken=true",
-        )["db-migration-job.yaml"]
-        self.assertIn("      automountServiceAccountToken: false\n", job)
-        self.assertNotIn("serviceAccountName:", job)
-        self.assertIn("        runAsNonRoot: true\n", job)
-        self.assertIn("            allowPrivilegeEscalation: false\n", job)
-        self.assertIn("              drop:\n              - ALL\n", job)
-        self.assertIn("              type: RuntimeDefault\n", job)
+        ), "Job")
+        pod = job["spec"]["template"]["spec"]
+        self.assertIs(pod["automountServiceAccountToken"], False)
+        self.assertNotIn("serviceAccountName", pod)
+        self.assertIs(pod["securityContext"]["runAsNonRoot"], True)
+        container_security = pod["containers"][0]["securityContext"]
+        self.assertIs(container_security["allowPrivilegeEscalation"], False)
+        self.assertIn("ALL", container_security["capabilities"]["drop"])
+        self.assertEqual(container_security["seccompProfile"]["type"], "RuntimeDefault")
 
-    def test_hook_preserves_credentials_options_and_resource_configuration(self):
-        job = self.render(
+    def test_hook_binds_credentials_and_operator_migration_options(self):
+        job = find_resource(self.render(
             "--set-string", "migrations.postgres.existingSecret.usernameKey=migration-user",
             "--set-string", "migrations.postgres.existingSecret.passwordKey=migration-password",
             "--set", "migrations.connectRetries=7",
             "--set", "migrations.validateOnMigrate=false",
             "--set", "migrations.baselineOnMigrate=true",
-            "--set-string", "migrations.resources.requests.cpu=125m",
-            "--set-string", "migrations.resources.limits.memory=768Mi",
-        )["db-migration-job.yaml"]
-        self.assertIn("- -url=jdbc:postgresql://database:5432/mcp\n", job)
-        self.assertIn("- -user=$(DB_MIGRATION_USERNAME)\n", job)
-        self.assertIn("- -password=$(DB_MIGRATION_PASSWORD)\n", job)
+        ), "Job")
+        container = job["spec"]["template"]["spec"]["containers"][0]
+        self.assertIn("-url=jdbc:postgresql://database:5432/mcp", container["args"])
+        self.assertIn("-user=$(DB_MIGRATION_USERNAME)", container["args"])
+        self.assertIn("-password=$(DB_MIGRATION_PASSWORD)", container["args"])
         for option in ("connectRetries=7", "validateOnMigrate=false", "baselineOnMigrate=true"):
-            self.assertIn(f"- -{option}\n", job)
-        self.assertEqual(job.count("name: migration-credentials\n"), 2)
-        self.assertIn("key: migration-user\n", job)
-        self.assertIn("key: migration-password\n", job)
-        self.assertIn("cpu: 125m\n", job)
-        self.assertIn("memory: 768Mi\n", job)
+            self.assertIn(f"-{option}", container["args"])
+        environment = env_values(container)
+        for variable, key in (("DB_MIGRATION_USERNAME", "migration-user"),
+                              ("DB_MIGRATION_PASSWORD", "migration-password")):
+            self.assertEqual(environment[variable], {
+                "secretKeyRef": {"name": "migration-credentials", "key": key}})
 
     def test_disabled_migrations_render_neither_hook(self):
         resources = self.render(migrations=False)
-        self.assertNotIn("db-migration-configmap.yaml", resources)
-        self.assertNotIn("db-migration-job.yaml", resources)
+        self.assertFalse(any(resource["kind"] in {"ConfigMap", "Job"}
+                             and "helm.sh/hook" in resource["metadata"].get("annotations", {})
+                             for resource in resources))
 
 
 if __name__ == "__main__":

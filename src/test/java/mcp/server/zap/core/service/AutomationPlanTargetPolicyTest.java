@@ -130,7 +130,7 @@ class AutomationPlanTargetPolicyTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{reportDir: '', reportFile: ''}",
             "{reportDir: reports, reportFile: 'scan-{{yyyy-MM-dd}}'}"})
-    void literalReportOutputsAndDefaultsRemainSupported(String parameters) throws Exception {
+    void literalReportOutputsAndDefaultsRemainSupported(String parameters) {
         String yaml = ENV + "jobs: [{type: report, parameters: " + parameters + "}]\n";
         String result = service.runAutomationPlan(null, yaml, "plan.yaml");
         Path planPath = Path.of(result.lines().filter(line -> line.startsWith("Plan File: "))
@@ -148,9 +148,10 @@ class AutomationPlanTargetPolicyTest {
     void artifactInspectionRejectsUnsafeReportOutputDescriptors(String parameters) throws Exception {
         Path source = root.resolve("source.yaml");
         Files.writeString(source, ENV + "jobs: [{type: report, parameters: " + parameters + "}]\n");
+        String sourcePath = source.toString();
 
         assertThrows(IllegalArgumentException.class,
-                () -> service.getAutomationPlanArtifacts(source.toString(), 10, 4000));
+                () -> service.getAutomationPlanArtifacts(sourcePath, 10, 4000));
         verifyNoInteractions(engine);
     }
 

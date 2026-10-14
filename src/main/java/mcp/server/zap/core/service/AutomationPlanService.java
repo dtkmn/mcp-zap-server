@@ -638,7 +638,7 @@ public class AutomationPlanService {
             if (((Number) Files.getAttribute(normalized, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue() != 1) {
                 throw new IllegalArgumentException("Automation files must not have multiple hard links");
             }
-        } catch (UnsupportedOperationException ignored) {
+        } catch (UnsupportedOperationException _) {
             // Other filesystems still enforce containment, symbolic-link and regular-file checks.
         }
         return attributes;

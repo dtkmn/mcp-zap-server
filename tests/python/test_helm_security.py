@@ -4,10 +4,32 @@ import shutil
 import subprocess
 import unittest
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[2]
 CHART = ROOT / "helm" / "mcp-zap-server"
 HELM = shutil.which("helm")
+
+
+def parse_manifests(rendered):
+    return [resource for resource in yaml.safe_load_all(rendered) if resource is not None]
+
+
+def find_resource(resources, kind, component=None, name=None):
+    matches = [resource for resource in resources
+               if resource["kind"] == kind
+               and (component is None or resource.get("metadata", {}).get("labels", {}).get(
+                   "app.kubernetes.io/component") == component)
+               and (name is None or resource.get("metadata", {}).get("name") == name)]
+    if len(matches) != 1:
+        raise AssertionError(f"Expected one {kind} resource for component={component}, name={name}; got {len(matches)}")
+    return matches[0]
+
+
+def env_values(container):
+    return {entry["name"]: entry["value"] if "value" in entry else entry["valueFrom"]
+            for entry in container.get("env", [])}
 
 
 @unittest.skipUnless(HELM, "Helm is required for chart rendering tests")
@@ -19,7 +41,7 @@ class HelmSecurityTest(unittest.TestCase):
         )
         if succeeds:
             self.assertEqual(result.returncode, 0, result.stderr)
-            return result.stdout
+            return parse_manifests(result.stdout)
         self.assertNotEqual(result.returncode, 0, "Unsafe configuration unexpectedly rendered")
         return result.stderr
 
@@ -34,32 +56,43 @@ class HelmSecurityTest(unittest.TestCase):
             *arguments, succeeds=succeeds,
         )
 
-    def test_shipped_presets_keep_cloud_baselines_single_and_private(self):
+    def mcp_container(self, resources):
+        deployment = find_resource(resources, "Deployment", component="mcp-server")
+        return next(container for container in deployment["spec"]["template"]["spec"]["containers"]
+                    if container["name"] == "mcp-server")
+
+    def test_shipped_presets_use_single_mcp_replica_and_internal_service(self):
         for preset in ("values-ci.yaml", "values-aws.yaml", "values-gcp.yaml", "values-secure-existing-secret.yaml"):
             with self.subTest(preset=preset):
-                rendered = self.render(preset=preset)
-                self.assertIn("replicas: 1", rendered)
-                self.assertNotIn("kind: HorizontalPodAutoscaler", rendered)
-                self.assertNotIn("type: LoadBalancer", rendered)
+                resources = self.render(preset=preset)
+                deployment = find_resource(resources, "Deployment", component="mcp-server")
+                self.assertEqual(deployment["spec"]["replicas"], 1)
+                service = find_resource(resources, "Service", component="mcp-server")
+                self.assertEqual(service["spec"]["type"], "ClusterIP")
+                self.assertFalse(any(resource["kind"] == "HorizontalPodAutoscaler" for resource in resources))
 
     def test_ha_emits_shared_revocation_tls_and_stable_affinity(self):
-        rendered = self.render(preset="values-ha.yaml")
-        self.assertIn('name: JWT_REVOCATION_STORE_BACKEND\n          value: "postgres"', rendered)
-        self.assertIn('key: "RDS_PASSWORD"', rendered)
-        self.assertIn('claimName: "mcp-zap-workspace"', rendered)
-        self.assertIn("kind: Ingress", rendered)
-        self.assertIn("secretName: mcp-zap-tls", rendered)
-        self.assertIn('nginx.ingress.kubernetes.io/ssl-redirect: "true"', rendered)
-        self.assertIn('nginx.ingress.kubernetes.io/upstream-hash-by: $remote_addr$http_user_agent', rendered)
-        self.assertNotIn("$http_mcp_session_id", rendered)
-        self.assertNotIn("type: LoadBalancer", rendered)
+        resources = self.render(preset="values-ha.yaml")
+        environment = env_values(self.mcp_container(resources))
+        self.assertEqual(environment["JWT_REVOCATION_STORE_BACKEND"], "postgres")
+        self.assertEqual(environment["JWT_REVOCATION_STORE_POSTGRES_PASSWORD"], {
+            "secretKeyRef": {"name": "mcp-zap-rds", "key": "RDS_PASSWORD"}})
+        ingress = find_resource(resources, "Ingress", component="mcp-server")
+        self.assertEqual(ingress["spec"]["tls"], [{
+            "secretName": "mcp-zap-tls", "hosts": ["mcp-zap.example.com"]}])
+        annotations = ingress["metadata"]["annotations"]
+        self.assertEqual(annotations["nginx.ingress.kubernetes.io/ssl-redirect"], "true")
+        self.assertEqual(annotations["nginx.ingress.kubernetes.io/upstream-hash-by"],
+                         "$remote_addr$http_user_agent")
 
     def test_hpa_maximum_requires_affinity(self):
         error = self.render("--set", "mcp.autoscaling.enabled=true", "--set", "mcp.autoscaling.minReplicas=1", "--set", "mcp.autoscaling.maxReplicas=3", succeeds=False)
         self.assertIn("requires mcp.streamableHttp.sessionAffinity.enabled", error)
 
     def test_hpa_ignores_deployment_replica_count(self):
-        self.render("--set", "mcp.replicaCount=3", "--set", "mcp.autoscaling.enabled=true", "--set", "mcp.autoscaling.maxReplicas=1")
+        resources = self.render("--set", "mcp.replicaCount=3", "--set", "mcp.autoscaling.enabled=true", "--set", "mcp.autoscaling.maxReplicas=1")
+        self.assertNotIn("replicas", find_resource(resources, "Deployment", component="mcp-server")["spec"])
+        self.assertEqual(find_resource(resources, "HorizontalPodAutoscaler")["spec"]["maxReplicas"], 1)
 
     def test_multi_jwt_rejects_local_state_even_outside_jwt_mode(self):
         for mode in ("api-key", "jwt", "none"):
@@ -67,9 +100,10 @@ class HelmSecurityTest(unittest.TestCase):
                 self.assertIn("multi-replica JWT requires", self.multi("--set", "mcp.security.mode=" + mode, succeeds=False))
 
     def test_multi_jwt_accepts_explicit_postgres_url_only_configuration(self):
-        rendered = self.multi("--set", "mcp.security.jwt.revocation.backend=postgres", "--set-string", "mcp.security.jwt.revocation.postgres.url=jdbc:postgresql://database/test")
-        self.assertIn('value: "postgres"', rendered)
-        self.assertIn('value: "jdbc:postgresql://database/test"', rendered)
+        resources = self.multi("--set", "mcp.security.jwt.revocation.backend=postgres", "--set-string", "mcp.security.jwt.revocation.postgres.url=jdbc:postgresql://database/test")
+        environment = env_values(self.mcp_container(resources))
+        self.assertEqual(environment["JWT_REVOCATION_STORE_BACKEND"], "postgres")
+        self.assertEqual(environment["JWT_REVOCATION_STORE_POSTGRES_URL"], "jdbc:postgresql://database/test")
 
     def test_postgres_requires_url(self):
         error = self.multi("--set", "mcp.security.jwt.revocation.backend=postgres", succeeds=False)
@@ -90,7 +124,9 @@ class HelmSecurityTest(unittest.TestCase):
 
     def test_spring_json_preserves_bootstrap_profiles_and_custom_client_configuration(self):
         value = {"mcp": {"server": {"auth": {"bootstrap": {"profiles": []}, "apiKeys": [{"clientId": "test-client", "key": "ci-only-test-key"}]}}}}
-        self.render("--set-json", "mcp.env=" + json.dumps([{"name": "SPRING_APPLICATION_JSON", "value": json.dumps(value)}]))
+        resources = self.render("--set-json", "mcp.env=" + json.dumps([{"name": "SPRING_APPLICATION_JSON", "value": json.dumps(value)}]))
+        environment = env_values(self.mcp_container(resources))
+        self.assertEqual(json.loads(environment["SPRING_APPLICATION_JSON"]), value)
 
     def test_malformed_or_non_object_json_is_rejected(self):
         for value in ("{broken", "[]", "null"):
@@ -138,10 +174,18 @@ class HelmSecurityTest(unittest.TestCase):
         error = self.render("--set", "mcp.replicaCount=2", "--set", "zap.persistence.shareWithMcp=false", "--set", "mcp.streamableHttp.sessionAffinity.enabled=true", "--set", "mcp.streamableHttp.sessionAffinity.provider=aws-nlb", "--set", "mcp.service.type=LoadBalancer", "--set-json", 'mcp.service.annotations={"service.beta.kubernetes.io/aws-load-balancer-ssl-cert":"arn:test"}', succeeds=False)
         self.assertIn("TLS listeners do not support source-IP stickiness", error)
 
-    def test_liveness_uses_listener_while_readiness_checks_aggregate_health(self):
-        rendered = self.render()
-        self.assertIn("livenessProbe:\n          tcpSocket:\n            port: 7456", rendered)
-        self.assertIn("path: /actuator/health", rendered)
+    def test_custom_probes_keep_listener_liveness_separate_from_readiness_health(self):
+        resources = self.render(
+            "--set", "mcp.service.targetPort=8443",
+            "--set", "mcp.livenessProbe.tcpSocket.port=8443",
+            "--set", "mcp.readinessProbe.httpGet.port=8443",
+            "--set-string", "mcp.readinessProbe.httpGet.path=/actuator/health/readiness")
+        container = self.mcp_container(resources)
+        self.assertEqual(container["livenessProbe"]["tcpSocket"], {"port": 8443})
+        self.assertNotIn("httpGet", container["livenessProbe"])
+        self.assertEqual(container["readinessProbe"]["httpGet"], {
+            "port": 8443, "path": "/actuator/health/readiness"})
+        self.assertEqual(env_values(container)["SERVER_PORT"], "8443")
 
 
 if __name__ == "__main__":

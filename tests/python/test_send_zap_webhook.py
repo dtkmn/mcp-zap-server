@@ -1,5 +1,6 @@
 import importlib.util
 import contextlib
+import hmac
 import io
 import json
 import os
@@ -26,28 +27,39 @@ class SendZapWebhookTest(unittest.TestCase):
 
     def test_build_payload_includes_gate_and_ci_context(self):
         metadata = {"target_url": "https://example.com", "gate_passed": True, "new_findings": 0}
-        payload = MODULE.build_payload(
-            "zap_security_gate.completed",
-            "github",
-            {
-                "GITHUB_REPOSITORY": "example/repo",
-                "GITHUB_SERVER_URL": "https://github.com",
-                "GITHUB_RUN_ID": "42",
-                "GITHUB_REF_NAME": "main",
-            },
-            metadata,
-            {"metadataPath": Path("/tmp/meta.json")},
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            present = root / "metadata.json"
+            present.write_text(json.dumps(metadata), encoding="utf-8")
+            missing = root / "summary.md"
+            payload = MODULE.build_payload(
+                "zap_security_gate.completed",
+                "github",
+                {
+                    "GITHUB_REPOSITORY": "example/repo",
+                    "GITHUB_SERVER_URL": "https://github.com",
+                    "GITHUB_RUN_ID": "42",
+                    "GITHUB_REF_NAME": "main",
+                },
+                metadata,
+                {"metadataPath": present, "summaryPath": missing, "diffPath": None},
+            )
+
+            self.assertEqual(payload["status"], "passed")
+            self.assertEqual(payload["ci"]["runId"], "42")
+            self.assertEqual(payload["gate"]["target_url"], "https://example.com")
+            self.assertEqual(payload["artifacts"], {
+                "metadataPath": {"path": str(present), "exists": True},
+                "summaryPath": {"path": str(missing), "exists": False},
+            })
+
+    def test_compute_signature_matches_rfc_4231_vector(self):
+        # RFC 4231 section 4.3, independently published HMAC-SHA-256 test case.
+        # https://www.rfc-editor.org/rfc/rfc4231.html#section-4.3
+        self.assertEqual(
+            MODULE.compute_signature("Jefe", b"what do ya want for nothing?"),
+            "sha256=5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
         )
-
-        self.assertEqual(payload["status"], "passed")
-        self.assertEqual(payload["ci"]["runId"], "42")
-        self.assertEqual(payload["gate"]["target_url"], "https://example.com")
-        self.assertTrue(payload["artifacts"]["metadataPath"]["exists"] is False)
-
-    def test_compute_signature_uses_sha256_prefix(self):
-        signature = MODULE.compute_signature("secret", b'{"hello":"world"}')
-        self.assertTrue(signature.startswith("sha256="))
-        self.assertGreater(len(signature), len("sha256="))
 
     def test_deliver_with_retries_retries_then_succeeds(self):
         calls = []
@@ -131,8 +143,11 @@ class SendZapWebhookTest(unittest.TestCase):
             request = sender.call_args.args[0]
             self.assertEqual(request.full_url, destination)
             self.assertEqual(request.get_header("Authorization"), "Bearer HEADER_SECRET")
+            expected_signature = "sha256=" + hmac.digest(
+                b"SIGNING_SECRET", request.data, "sha256"
+            ).hex()
             self.assertEqual(request.get_header("X-mcp-zap-signature-sha256"),
-                             MODULE.compute_signature("SIGNING_SECRET", request.data))
+                             expected_signature)
             delivery = json.loads(record.read_text())
             self.assertTrue(delivery["delivered"])
             self.assertEqual(delivery["webhook_target"], "https://notify.example")

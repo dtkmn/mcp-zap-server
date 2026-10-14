@@ -105,6 +105,51 @@ Run the smallest meaningful set locally before opening a PR:
 
 The normal build excludes Docker-tagged tests. CI runs them for pull requests targeting `main`, pushes to `main` before image publication, manual workflow runs, and releases. Development and feature pushes skip them.
 
+### Java test coverage
+
+Generate coverage from the existing non-Docker tests with:
+
+```bash
+./gradlew clean test jacocoTestReport
+```
+
+Open `build/reports/jacoco/test/html/index.html` for the local report. SonarQube
+imports `build/reports/jacoco/test/jacocoTestReport.xml`. The report measures
+production Java code; it does not measure the Python helper suite, browser
+crawl completeness or ZAP vulnerability detection. No Gradle coverage minimum
+is added. Sonar's existing quality gate still applies; importing coverage can
+activate its existing condition for coverage on new code. Use uncovered lines
+and branches to identify meaningful test gaps.
+Sonar retains the existing resource and extension-example analysis scope. The
+local JaCoCo report covers the application's main source set; Sonar's line
+coverage can differ because it also includes the example Java files. Sonar's
+overall coverage metric combines line and branch coverage.
+
+When Docker integration testing is appropriate, use
+`./gradlew clean test dockerTest jacocoTestReport` to include both suites. The
+report task itself does not start Docker tests. Use a clean build when comparing
+coverage baselines so earlier Docker execution data cannot inflate the result.
+
+The existing CI workflow generates and uploads coverage after its test stages.
+Sonar analysis runs only for trusted events with a `SONAR_TOKEN` repository
+secret; fork and Dependabot pull requests still generate local coverage artifacts.
+Missing credentials produce an explicit notice rather than a false claim that
+Sonar coverage was published.
+
+For maintainers enabling CI analysis, create a dedicated Sonar analysis token
+and store it as the GitHub Actions repository secret `SONAR_TOKEN`. Use an
+analysis-scoped organization token if the account plan supports it. Before the
+first authenticated CI run, turn off **Automatic Analysis** under the Sonar
+project's **Administration > Analysis method**; Automatic Analysis cannot import
+coverage and conflicts with CI analysis. Coordinate this switch with delivery
+of the workflow so the project retains a working analysis path. Confirm the
+completed Sonar background task and displayed coverage before closing the
+tracking issue. For an authorized local upload, supply `SONAR_TOKEN` privately
+in the environment and select the actual branch explicitly, for example
+`./gradlew sonar -Dsonar.branch.name=dev` for a `dev` checkout. Do not upload
+development code as the `main` baseline or put the token in commands, tracked
+files or build scans.
+
 If you cannot run something locally, say so in the PR and explain why.
 
 ## Documentation Standards

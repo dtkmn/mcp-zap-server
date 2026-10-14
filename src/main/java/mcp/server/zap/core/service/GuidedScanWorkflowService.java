@@ -440,6 +440,10 @@ public class GuidedScanWorkflowService {
                 && started.preparedAuthSession().authKind() == AuthBootstrapKind.BROWSER) {
             output.append("- When crawl stops: call zap_passive_scan_wait, then review findings and crawl coverage.\n")
                     .append("- This browser session supports Client Spider only. Authenticated active testing currently requires a prepared form-login session.");
+        } else if (operation.kind() == OperationKind.CRAWL
+                && (STRATEGY_CLIENT.equals(operation.strategy()) || STRATEGY_BROWSER.equals(operation.strategy()))) {
+            output.append("- When crawl stops: call zap_passive_scan_wait, then review findings and crawl coverage.\n")
+                    .append("- Call zap_attack_start only if active testing is approved.");
         } else if (operation.kind() == OperationKind.CRAWL) {
             output.append("- When crawl is complete: call zap_attack_start if active testing is approved, or zap_passive_scan_wait before findings/report if crawl-only evidence is enough.");
         } else {

@@ -85,11 +85,11 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, strategy=browser for the existing AJAX Spider, or strategy=auto for the default crawl engine. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
+            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, or strategy=browser for the existing AJAX Spider API. strategy=auto starts with HTTP Spider; only an unauthenticated direct HTTP start failure triggers AJAX fallback. Auto does not detect JavaScript coverage. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
-            @ToolParam(required = false, description = "Optional crawl strategy: auto for the default engine, http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for AJAX Spider.") String strategy,
+            @ToolParam(required = false, description = "Optional crawl strategy: auto starts HTTP (unauthenticated direct mode alone falls back to AJAX on HTTP start failure), http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for the AJAX Spider API. Auto does not detect JavaScript coverage.") String strategy,
             @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
             @ToolParam(required = false, description = "Optional session ID from zap_auth_session_prepare. Use a kind=browser profile with strategy=client, or a kind=form profile with http/auto. The browser strategy means AJAX Spider and rejects authSessionId.") String authSessionId
     ) {

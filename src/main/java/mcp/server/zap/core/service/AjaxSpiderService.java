@@ -216,9 +216,8 @@ public class AjaxSpiderService {
     private String formatDirectStartMessage(String targetUrl) {
         return String.format(
                 "AJAX Spider scan started successfully for URL: %s%n" +
-                        "Using real browser (Firefox headless) to crawl JavaScript content.%n" +
-                        "This method bypasses WAF protection and bot detection.%n" +
-                        "Using default scan duration and browser settings.%n" +
+                        "Using browser-based crawling for JavaScript content.%n" +
+                        "Using ZAP's configured duration and browser settings.%n" +
                         "Use 'zap_ajax_spider_status' to check progress.",
                 targetUrl
         );

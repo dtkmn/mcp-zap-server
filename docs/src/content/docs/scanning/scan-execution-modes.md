@@ -30,11 +30,13 @@ Guided crawl strategy:
 - `strategy=http` for the traditional spider
 - `strategy=browser` for AJAX Spider behavior
 - `strategy=client` for Client Spider browser crawling
-- `strategy=auto` to let the server decide
+- `strategy=auto` to start with the HTTP spider; this does not detect JavaScript coverage
 
 Important nuance:
 
 - guided queue mode currently defaults `strategy=auto` to the HTTP spider
+- unauthenticated direct `auto` falls back to the AJAX Spider API only if the HTTP start fails; a successful HTTP crawl does not trigger browser crawling
+- prepared form-login sessions use HTTP for `http` and `auto`, without an anonymous browser fallback
 - pass `strategy=browser` if you need queued AJAX Spider explicitly
 - pass `strategy=client` to use Client Spider explicitly in either execution mode
 
@@ -42,7 +44,7 @@ Client Spider is useful for JavaScript-heavy applications. It runs one headless 
 
 Client Spider uses `ZAP_MAX_SPIDER_SCAN_DURATION` (minutes; default 15, 0 means unlimited) for both direct and queued crawls. Before starting a crawl, the server sets ZAP's native Client Spider duration option, which ZAP copies into that scan. The limit therefore continues to apply if the MCP server restarts. Keep this setting consistent across MCP replicas sharing one ZAP instance. If ZAP cannot accept the duration option, the crawl is not started.
 
-This uses ZAP's native duration enforcement: it stops the crawl when a browser event is processed after the deadline. It is not a hard wall-clock watchdog for an unresponsive browser. API request, queue startup/wait, and cancellation timeouts remain separate.
+This uses ZAP's native duration enforcement. Client Side Integration **0.33.0** fixes expiry when no new nodes or components are discovered; earlier versions could depend on browser events to notice the deadline. Browser shutdown remains cooperative, so the duration is not a guarantee that all in-flight requests end at that instant. API request, queue startup/wait, and cancellation timeouts remain separate.
 
 Client Spider requires ZAP's Client Side Integration (`client`) add-on version 0.27.0 or newer, Selenium, Firefox, and a compatible WebDriver. The supplied Compose and Helm configurations install `client`, and the default ZAP image includes the browser and WebDriver. If you connect to your own ZAP deployment, provide those prerequisites there.
 

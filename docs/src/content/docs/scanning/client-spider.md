@@ -10,25 +10,29 @@ Client Spider explores a website using headless Firefox and ZAP's Client Side In
 
 ## Choose a Crawler
 
-| Guided strategy | Crawler | Use |
+| Guided strategy | Direct execution | Queued execution |
 | --- | --- | --- |
-| `http` | Traditional Spider | Discover links in server-rendered content. |
-| `browser` | AJAX Spider | Use the existing browser-driven crawl workflow. |
-| `client` | Client Spider | Explore JavaScript applications with the browser extension and optional guided browser authentication. |
-| `auto` | Server-selected crawler | Use the default selection; this does not select Client Spider. |
+| `http` | Traditional HTTP Spider. | Traditional HTTP Spider job. |
+| `client` | Client Spider with its native scan ID. | Client Spider job with a queue job ID. |
+| `browser` | AJAX Spider's global lifecycle API. | Queue-managed AJAX Spider lifecycle. |
+| `auto` or omitted | HTTP Spider; an unauthenticated start falls back to AJAX Spider if the HTTP start fails. | HTTP Spider job; no automatic browser fallback. |
 
-The strategy `browser` means AJAX Spider. The authentication profile kind `browser` is a separate setting and currently works only with `strategy: client`.
+Use `http` for server-rendered links and explicit `client` for JavaScript applications, following [ZAP's recommended crawler](https://www.zaproxy.org/blog/2026-09-08-zap-updates-august-2026/). `auto` does not detect JavaScript coverage or select Client Spider. A successful HTTP crawl can still miss requests made only by JavaScript. Prepared form-login sessions use HTTP for both `http` and `auto`, without a browser fallback.
+
+The strategy `browser` retains the AJAX Spider API route. The authentication profile kind `browser` is a separate setting and currently works only with `strategy: client`.
 
 ZAP describes Client Spider's direct access to page content in its [Client Spider documentation](https://www.zaproxy.org/docs/desktop/addons/client-side-integration/spider/). Coverage depends on the application, login state, and crawl limits. Do not assume it finds more issues than another crawler without comparing equivalent runs.
 
 ## Prerequisites and Limits
 
-- ZAP Client Side Integration (`client`) add-on version **0.27.0 or newer**, Selenium, Firefox, and a compatible WebDriver. The supplied Compose and Helm configurations install `client`; the default ZAP image includes the browser and WebDriver.
+- ZAP Client Side Integration (`client`) add-on version **0.27.0 or newer**, Selenium, Firefox, and a compatible WebDriver. The supplied Compose and Helm configurations explicitly install both `client` and `spiderAjax`; the default ZAP image includes the browser and WebDriver.
 - For browser login: Authentication Helper and ZAP **2.16.1 or newer** for API configuration. Set `ZAP_API_READ_TIMEOUT_MS=60000` (`mcp.zapClient.readTimeoutMs: 60000` in Helm) so browser login has time to finish.
 - `ZAP_SPIDER_MAX_DEPTH` sets the default depth (**10**). Expert start and queue calls can override it with `maxDepth`. **0** means unlimited.
 - `ZAP_MAX_SPIDER_SCAN_DURATION` sets the duration in minutes (**15** by default, **0** means unlimited) for both direct and queued crawls. The server sets ZAP's native duration option before starting; if that fails, it does not launch the crawl. Keep the setting consistent across replicas sharing ZAP.
 
-Each crawl uses one headless Firefox browser. ZAP copies the duration setting into the crawl and enforces it when processing browser events; this is not a hard deadline for a hung browser. Queue and API timeouts remain separate. Upgrade all workers sharing a queue before submitting Client Spider jobs. Older workers cannot read stored `CLIENT_SPIDER` records, including completed jobs; account for the stored queue state before rolling workers back.
+Each crawl uses one headless Firefox browser. ZAP copies the duration setting into each crawl. Earlier Client versions could depend on browser events to notice the deadline; [Client `0.33.0`](https://github.com/zaproxy/zap-extensions/releases/tag/client-v0.33.0) fixes expiry when no new nodes are discovered. Browser shutdown remains cooperative, so the duration does not guarantee that all in-flight requests end at that instant. Queue and API timeouts remain separate. Upgrade all workers sharing a queue before submitting Client Spider jobs. Older workers cannot read stored `CLIENT_SPIDER` records, including completed jobs; account for the stored queue state before rolling workers back.
+
+ZAP's [weekly and nightly defaults](https://www.zaproxy.org/blog/2026-10-01-zap-updates-september-2026/) now favor Client Spider and omit AJAX Spider and the DOM XSS Active Scan Rule add-on. Legacy AJAX compatibility belongs to ZAP; it does not change this server's strategy selection. For alternate or minimal images, verify the installed add-ons, browser, and start/status/stop APIs before use. Client Spider crawling does not replace a DOM XSS active scan rule: record the actual rule inventory when comparing security coverage.
 
 ## Guided Crawl
 
@@ -57,6 +61,8 @@ For a fresh ZAP session, see the [tested home-page visit workaround](#browser-st
 4. Check that fresh requests reached protected content as the expected user.
 
 Browser profiles enable automatic session detection, allowing ZAP to replay cookies or header tokens, including bearer tokens, during verification. This addresses applications such as Juice Shop where the browser login succeeds but a separate verification request would otherwise omit the token. A public page returning HTTP `200` is not proof of login.
+
+Automatic replay depends on ZAP's passive Session Detection rule. Keep that rule enabled and let earlier passive work settle before browser authentication. A successful browser login does not prove ZAP has detected a session it can replay. If validation returns `Valid: false`, pause the workflow and inspect session detection, protected responses and the profile; do not treat the browser login alone as successful verification.
 
 This profile supports automatic username/password login in direct and queued Client Spider crawls. It does not configure custom login steps, MFA, or CAPTCHA. Browser sessions are rejected by `auto`, HTTP, AJAX, and guided active-scan paths; keep a separate form profile for supported HTTP and active-scan workflows.
 
@@ -89,7 +95,7 @@ After the crawl stops:
 
 Findings and reports use the **shared ZAP session**. Filtering by `baseUrl` narrows the target; it does not isolate one Client Spider scan ID. Repeated crawls and other scans can contribute to the same report. Alert instances are recorded examples, not necessarily distinct confirmed vulnerabilities.
 
-There is currently no dedicated Client Spider results-list or Client Map export tool in this MCP server. AJAX Spider's `zap_ajax_spider_results` does not return Client Spider results. For controlled comparisons, use separate ZAP sessions or instances with the same target, authentication, and crawl settings. See [Findings and Reports](../findings-and-reports/).
+There is currently no dedicated Client Spider results-list or Client Map export tool in this MCP server. `zap_ajax_spider_results` reads the global AJAX API results; it is not a results lookup for a native Client Spider scan ID. For controlled comparisons, use separate ZAP sessions or instances with the same target, authentication, and crawl settings. See [Findings and Reports](../findings-and-reports/).
 
 ## Browser-Storage Alerts Missing During Login
 

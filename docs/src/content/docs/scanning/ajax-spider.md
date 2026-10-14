@@ -1,9 +1,9 @@
 ---
 title: "AJAX Spider"
 editUrl: false
-description: "Use the browser-backed crawler for JavaScript-heavy apps, protected sites, and queued HA workflows."
+description: "Use the existing AJAX Spider API route for browser crawling, with direct or queue-managed lifecycle control."
 ---
-The AJAX Spider uses a real browser to crawl sites. It is much more effective than the traditional HTTP spider for JavaScript-heavy applications, login-heavy flows, and sites that behave differently for normal browsers.
+AJAX Spider uses a real browser to explore rendered pages and JavaScript navigation. For new JavaScript application workflows, prefer explicit [Client Spider](../client-spider/) with `strategy=client`, following [ZAP's recommendation](https://www.zaproxy.org/blog/2026-09-08-zap-updates-august-2026/). Existing AJAX workflows remain available with `strategy=browser`. Browser crawling does not guarantee that every route is discovered or that WAF and bot protections are bypassed.
 
 ## Surface Note
 
@@ -17,22 +17,26 @@ Raw AJAX Spider tools are `expert` only:
 
 If you stay on the default `guided` surface, use `zap_crawl_start` with `strategy=browser`.
 
-In `v0.13.0`, [Client Spider](../client-spider/) is a separate crawler selected with `strategy=client`. It supports guided browser authentication profiles. AJAX Spider's `strategy=browser` rejects guided `authSessionId`; its results tool does not return Client Spider results.
+Client Spider supports guided browser authentication profiles. The AJAX API route selected by `strategy=browser` rejects guided `authSessionId`. `zap_ajax_spider_results` reads global AJAX API results; it is not a lookup by native Client Spider scan ID.
 
 ## When To Use It
 
-Use AJAX Spider when:
+Keep AJAX Spider for existing workflows that need its API or crawl behavior. Guided selection remains:
 
-- the target is an SPA
-- pages depend on client-side routing or JavaScript rendering
-- the traditional spider misses navigation paths
-- you want browser-driven crawling inside the shared queue lifecycle
+- `http`: traditional HTTP link discovery in direct or queued mode.
+- `client`: explicit Client Spider in either mode.
+- `browser`: the AJAX Spider API route in either mode.
+- `auto` or omitted: HTTP Spider; only an unauthenticated direct start falls back to AJAX when HTTP start fails. Queued `auto` and prepared form-login sessions stay with HTTP.
+
+`auto` does not inspect JavaScript coverage. HTTP start success alone is not a reason to assume a modern application's routes were explored.
+
+The supplied Compose and Helm configurations explicitly install both `spiderAjax` and `client`. ZAP [removed AJAX Spider from weekly/nightly defaults](https://www.zaproxy.org/blog/2026-10-01-zap-updates-september-2026/) but keeps it available in the Marketplace and provides legacy compatibility through Client Spider when AJAX is absent. That compatibility belongs to ZAP. An alternate or minimal image still needs compatible APIs, a browser, and the required add-ons; verify those before using it with this server.
 
 ## Direct And Queued Options
 
 ### Direct
 
-Use `zap_ajax_spider` for simple or single-replica workflows.
+Use `zap_ajax_spider` for simple or single-replica workflows. AJAX status and stop address the global AJAX crawler, rather than a native scan ID. Do not treat an old guided AJAX Operation ID as an independent crawler instance. Use Client Spider when you need native scan-specific status and stopping.
 
 ### Queue-managed
 
@@ -43,14 +47,20 @@ Use `zap_queue_ajax_spider` when:
 - you want cancel, retry, and dead-letter behavior consistent with other queued scans
 - you want idempotent admission with `idempotencyKey`
 
+AJAX queue jobs retain a server-generated backend tracking ID. It is not an independent native ZAP scan ID; the underlying AJAX status and stop API remain global.
+
 ## After The Crawl
 
-If the next step is findings review or report generation, follow the crawl with `zap_passive_scan_wait` so passive analysis has time to finish processing the browser-driven traffic.
+ZAP's AJAX status confirms whether the crawler is running, not whether crawling succeeded. A finished queue lifecycle also does not prove coverage. Check the discovered traffic and follow the crawl with `zap_passive_scan_wait` before findings review or report generation.
+
+In AJAX Spider `23.33.0`, the stop API can report stopped while its worker is still initializing browsers or finishing cleanup. ZAP can still reject a new start as busy until that worker finishes. Queued work waits for the engine within its configured wait limit; a stop response does not establish readiness for another crawl or immediate termination of all requests.
+
+Crawler selection and vulnerability-rule coverage are separate. Weekly/nightly defaults also omit the DOM XSS Active Scan Rule add-on; using Client Spider does not by itself provide the same active checks. Record installed rules when comparing findings across images.
 
 ## Best Practices
 
-- start with the normal spider when speed matters and the site is simple
-- switch to browser crawling when coverage is clearly incomplete
+- use HTTP Spider for simple server-rendered sites
+- prefer Client Spider for new JavaScript application workflows, and verify actual discovered traffic
 - prefer `zap_queue_ajax_spider` in HA deployments
 - use a stable `idempotencyKey` for client retries when queueing
 - watch memory usage because browser crawling is heavier than the HTTP spider

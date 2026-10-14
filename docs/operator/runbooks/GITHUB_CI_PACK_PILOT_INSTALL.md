@@ -81,12 +81,15 @@ without custom engineering, the pack is not ready for that pilot yet.
 Run the CI helper behavior tests:
 
 ```bash
+python3 -m pip install PyYAML==6.0.3
 python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
 These tests cover helper behavior and execute both GitHub and GitLab gate
 entrypoints. The repository's Juice Shop workflow is the live end-to-end proof
 for the action, Compose stack, MCP server, ZAP, and generated artifacts.
+Use Python 3.9+, Helm and Docker Compose; PyYAML is only needed for these tests.
+The Compose checks render configuration without starting containers.
 
 ## Install In A Pilot Repository
 

@@ -6,19 +6,21 @@ API supplied with the example. This path is useful when you have an AWS account
 and want to evaluate the server without creating a Kubernetes cluster.
 
 The [example configuration](../../../examples/aws-ec2/) targets MCP ZAP Server
-**v0.15.0** and ZAP **2.17.0**, with images pinned by digest. First confirm
+**v0.16.0** and ZAP **2.17.0**, with images pinned by digest. Publication is
+pending. First confirm
 [release-image publication](https://github.com/dtkmn/mcp-zap-server/releases),
 then select the MCP digest in step 4; release preparation does not publish it.
 The reference configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an
 encrypted 40 GiB disk.
 These are a starting point for a small evaluation, not measured production
-capacity or a minimum requirement. Crawl, bounded active scan, report readback,
-OpenAPI import, automation, container restart and EC2 reboot have been exercised
-with this private deployment approach. Validate the supplied example on your own
-instance before relying on it.
+capacity or a minimum requirement. Recorded **v0.15.0** evaluation exercised
+crawl, bounded active scan, report readback, OpenAPI import, automation, container
+restart and EC2 reboot with this private deployment approach. It does not prove
+`v0.16.0` on AWS. Validate this version on your own instance before relying on it.
 
-MCP **v0.15.0** applies HTTP crawl depth and child limits independently, filters
-target-report metadata and exposes `zap_report_read_chunk` for complete report
+The corrections introduced in MCP **v0.15.0** apply HTTP crawl depth and child
+limits independently, filter target-report metadata and expose
+`zap_report_read_chunk` for complete report
 retrieval. The older `v0.14.0` image maps HTTP depth to child count and does not
 provide the child setting or chunk tool. Use the intended release image;
 configuration alone cannot add these fixes to an older image.
@@ -124,7 +126,7 @@ the same parameters. `CREATE_COMPLETE` confirms infrastructure creation; it
 does not confirm Session Manager availability or install/start MCP, ZAP or
 Docker. Continue with the connection checks below and steps 3–8. No application
 API keys, containers, VPC, NAT gateway, load balancer, database or backup are created by
-the template. Image selection still requires the published **v0.15.0** digest
+the template. Image selection still requires the published **v0.16.0** digest
 in step 4; infrastructure provisioning does not publish that release.
 
 This is a disposable host starter. Its workspace and configuration live on the
@@ -200,7 +202,8 @@ and [Docker installation](https://docs.aws.amazon.com/AmazonECS/latest/developer
 
 ## 4. Configure credentials and shared storage
 
-Confirm that the `v0.15.0` release image workflow succeeded before proceeding.
+Confirm that the `v0.16.0` release image workflow succeeded before proceeding.
+Publication is pending; do not run this step until the image is available.
 The snippet below pulls that tag, reads the GHCR digest returned by Docker,
 validates its format and saves the immutable image reference as `MCP_ZAP_IMAGE`.
 If publication or digest selection fails, it stops before writing credentials.
@@ -224,13 +227,13 @@ writes a mode `0600` file. Temporary variables are confined to its subshell:
   set +x
   set -euo pipefail
   umask 077
-  MCP_EC2_TAG=ghcr.io/dtkmn/mcp-zap-server:v0.15.0
+  MCP_EC2_TAG=ghcr.io/dtkmn/mcp-zap-server:v0.16.0
   docker pull "$MCP_EC2_TAG"
   MCP_EC2_DIGEST=$(docker image inspect "$MCP_EC2_TAG" \
     --format '{{range .RepoDigests}}{{println .}}{{end}}' \
     | sed -n '/^ghcr[.]io\/dtkmn\/mcp-zap-server@sha256:/p')
   if [[ ! $MCP_EC2_DIGEST =~ ^ghcr[.]io/dtkmn/mcp-zap-server@sha256:[0-9a-f]{64}$ ]]; then
-    printf 'Expected one GHCR digest for v0.15.0. Verify image publication before retrying.\n' >&2
+    printf 'Expected one GHCR digest for v0.16.0. Verify image publication before retrying.\n' >&2
     exit 1
   fi
   MCP_EC2_IMAGE="$MCP_EC2_TAG@${MCP_EC2_DIGEST#*@}"
@@ -390,8 +393,8 @@ with target **`http://smoke-target:8080`**:
    preview does not prove complete report retrieval. Save the path and complete
    report content locally for the recovery check.
 
-With `v0.15.0`, use `zap_report_read_chunk` to retrieve all pages by following
-`nextOffset` until `endOfFile` is true and pass the first page's `artifactSha256`
+Use `zap_report_read_chunk`, introduced in `v0.15.0`, to retrieve all pages by
+following `nextOffset` until `endOfFile` is true and pass the first page's `artifactSha256`
 as `expectedSha256` on later reads. Append each page's `content` exactly and
 verify the assembled UTF-8 artifact's SHA-256 against `artifactSha256`. See
 [complete report retrieval](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/#preview-or-complete-retrieval).
@@ -511,7 +514,7 @@ Do not treat a stopped instance as completed cleanup.
 | Symptom | Check |
 | --- | --- |
 | Instance unavailable in Session Manager | Instance role, agent status, outbound route/DNS and operator permissions |
-| Missing MCP image or failed image pull | Wait for successful v0.15.0 release-image publication and configure its verified digest as `MCP_ZAP_IMAGE` |
+| Missing MCP image or failed image pull | Wait for successful v0.16.0 release-image publication and configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
 | No automation tools | Inspect the actual surface; this example uses expert, while the main local Compose setup defaults to guided |

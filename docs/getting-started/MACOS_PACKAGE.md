@@ -5,7 +5,9 @@ Server, ZAP and a private Java runtime. Its launcher needs no Docker, system
 Java, Git, Gradle, Python or source compilation. Connect an existing MCP client;
 the package does not include a chat UI or model.
 
-Runtime verification covers Apple Silicon with macOS 27.0.1. Other macOS
+Recorded runtime verification used the **v0.15.0** preview on Apple Silicon
+with macOS 27.0.1. Its package inventory and private connection tests are
+historical evidence, not validation of a `v0.16.0` package. Other macOS
 versions still require runtime verification.
 
 Public Mac downloads are not yet available. This preview is unsigned and has

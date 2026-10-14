@@ -74,9 +74,9 @@ own depth option; Automation Framework plans configure their own jobs.
 
 This correction is not included in `v0.14.0`: that version sends the HTTP depth
 value as a child-count limit. Setting the environment variable on that image
-does not establish an actual depth bound. Upgrade to `v0.15.0` to apply the
-corrected depth limit. ZAP's HTTP depth setting is engine-wide; keep limits
-consistent across MCP servers sharing an engine.
+does not establish an actual depth bound. Use `v0.15.0` or later to apply the
+corrected depth limit; current `v0.16.0` publication is pending. ZAP's HTTP depth
+setting is engine-wide; keep limits consistent across MCP servers sharing an engine.
 
 ZAP checks the child limit against its evolving Sites tree. Sibling links
 already queued can still be fetched before the cap takes effect; this setting

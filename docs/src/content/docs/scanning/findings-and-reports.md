@@ -102,8 +102,11 @@ Use them when:
 - you need before/after comparison for CI or release gates
 - you want to focus on net-new findings instead of total backlog size
 
-Snapshots newer than published `v0.15.0` use version 3 and include measured
-scanner inventory. Version 3 retains version 2 finding identity: comparisons prefer the full `nodeName`
+Snapshots from `v0.16.0` use version 3 and include measured scanner inventory.
+Publication is pending; see the
+[release and upgrade guide](/mcp-zap-server/releases/0.16.0/) before updating
+the server and gate together. Version 3 retains version 2 finding identity:
+comparisons prefer the full `nodeName`
 plus HTTP method, falling back to the raw URL when `nodeName` is unavailable.
 Rule, risk, confidence, and parameter differences still distinguish findings.
 This avoids treating changing parameter values as new locations when ZAP maps
@@ -163,8 +166,8 @@ JSON retains engine identity and generation timestamps. Scoped HTML uses the
 standard template's default appearance; light/dark themes apply to full-session
 HTML. A path filter remains a prefix filter, not a scan-ID boundary.
 
-The root-origin preservation fix is newer than `v0.15.0`: reports generated
-with that fix treat `https://target.example` and `https://target.example/`
+The root-origin preservation fix is included in `v0.16.0` (publication pending):
+reports generated with that version treat `https://target.example` and `https://target.example/`
 equally, including alerts ZAP records with an empty root path. Other hosts,
 schemes and ports remain excluded. Non-root path prefixes are case-sensitive.
 

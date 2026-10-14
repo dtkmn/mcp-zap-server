@@ -3,135 +3,102 @@ title: "Dependency Security Status"
 description: "Known upstream dependency findings, affected deployment layers, and the review process for MCP ZAP Server."
 ---
 
-Runtime and Snyk baseline: **3 October 2026**, against the `v0.14.0` preparation commit
-`8cbcd1a455e2307f029537d99a6df34bd9f9146d` and its main-branch scan results.
-The six upstream findings in the table below were open in that scan; this
-dated baseline does not establish that every affected native operation is
-unreachable. The build-tool alignment section was updated on **4 October 2026**
-for `v0.15.0`. The documentation dependency update below was reviewed on
-**6 October 2026**; it does not establish closure of the historical Snyk alerts.
-Preparing `v0.15.0` does not refresh this dated Snyk baseline.
+Reviewed **15 October 2026** for the local `v0.16.0` candidate. The latest
+[main Snyk run](https://github.com/dtkmn/mcp-zap-server/actions/runs/38561648021)
+analyzed revision `19055b52d2bc3655514fa9f87827f0d2348a1a5c` on **14 October**,
+before the two dependency patches below. It reported eight high-severity
+results representing seven distinct advisories across its Gradle, docs and
+container categories. GitHub also retains older category records for some
+of those advisories; those records are not additional distinct vulnerabilities.
 
-The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up for each row.
-The next review of the remaining findings is due **17 October 2026 UTC**, or
-sooner when a relevant fix or deployment change becomes available.
+The container results cover its **Linux AMD64** image. They do not establish
+an ARM64 assessment or a scan of the final `v0.16.0` release image. Local source
+changes, passing tests and a green scanner workflow do not close GitHub alerts
+or publish a release.
 
-## Findings from the 3 October scan
+The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up. Review
+remaining findings again by **17 October 2026 UTC**, or sooner when a relevant
+upstream fix or deployment change becomes available.
 
-These six high-severity findings were reported by the
-[main Snyk run](https://github.com/dtkmn/mcp-zap-server/actions/runs/37114638325).
-Container package versions below were observed in its **Linux AMD64** image;
-this run does not establish an ARM64 vulnerability assessment.
+## Dependency patches in the v0.16.0 candidate
 
-| Component and observed version | Public advisory | Scope and disposition |
+| Component | Advisory and affected behavior | Candidate disposition |
 | --- | --- | --- |
-| Debian 13 `gcc-14` source packages, `14.2.0-19` | [CVE-2026-95619](https://security-tracker.debian.org/tracker/CVE-2026-95619) | Inherited runtime `libstdc++` aligned-allocation issue. No application-to-vulnerable-operation path demonstrated; Debian lists no fixed package. Retain the finding and reassess the runtime image when a fix is available. |
-| Debian 13 `gcc-14` source packages, `14.2.0-19` | [CVE-2026-102010](https://security-tracker.debian.org/tracker/CVE-2026-102010) | Inherited runtime `libstdc++` binary-heap `erase_if` issue. No application-to-vulnerable-operation path demonstrated; Debian lists no fixed package. Retain separately from the allocation issue. |
-| Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Native compression library in the runtime image. Application reachability remains unproven; Debian lists it as vulnerable without a fixed package. Await a compatible patched base image. |
-| Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-93990](https://security-tracker.debian.org/tracker/CVE-2026-93990) | Native XML library inherited through the base image. Java XML parsing does not establish a path to this library. Fixed packages are listed for other Debian releases, but no Debian 13 fix is listed. Await a compatible patched base image. |
-| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93748](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Astro build dependency; absent from the MCP Java runtime image. The current docs lockfile resolves `4.3.0`, outside the npm advisory's affected range through `4.2.0`; the obsolete npm exception has been removed. Closure of the historical Snyk alert has not been established. |
-| Docs `http-cache-semantics`, `4.2.0` | [CVE-2026-93750](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate cache finding in the same docs dependency. On 6 October, Snyk still lists all versions as affected and no fixed version. Keep this finding visible; selecting `4.3.0` or passing npm audit does not establish its remediation or Snyk alert closure. |
+| PostgreSQL JDBC `42.7.12` → `42.7.14` | [GHSA-rhp9-mr79-r74h / CVE-2026-107314](https://github.com/pgjdbc/pgjdbc/security/advisories/GHSA-rhp9-mr79-r74h): an operator-supplied `requireAuth` value excluding every method, or naming none, silently allowed any authentication method. | Adopt the upstream patched driver. Supplied defaults do not set this property; deployment-specific exposure is unproven. Invalid restrictions now reject the connection; valid settings retain their behavior. Review JDBC URL overrides when upgrading. |
+| Docs Zod `4.6.5` → `4.6.7` | [SNYK-JS-ZOD-20510278](https://security.snyk.io/vuln/SNYK-JS-ZOD-20510278): excessive validation issue accumulation in containers. The [upstream patch](https://github.com/colinhacks/zod/pull/6652) checks leading container size limits before parsing elements. | Refresh the existing lockfile within Astro and Sitemap's compatible ranges; no direct dependency or override is needed. This does not impose limits on every unbounded schema. Zod is used by the static docs build and is absent from the Java runtime image. |
+
+Focused before/after checks against the resolved libraries showed the invalid
+JDBC restrictions being rejected while normal authentication controls remained
+accepted. Oversized bounded arrays, nested arrays and sets produced one size
+error after the Zod update, rather than an error for each invalid element;
+a valid bounded array still parsed. These scoped checks do not prove safety
+for every JDBC deployment or every Zod schema.
+
+A fresh local Snyk test of the root Gradle project reports no **high or critical**
+vulnerabilities at the configured high threshold. The docs Snyk test no longer
+reports Zod and retains the two cache advisories below. The complete local npm
+audit reports zero vulnerabilities, and `audit-ci.jsonc` has an empty allowlist.
+No Snyk ignore, patch policy or new npm exception was added. GitHub alert closure
+and scanning both final release-image architectures remain separate checks.
+
+## Remaining upstream findings
+
+| Component and reported version | Public advisory | Deployment scope and next action |
+| --- | --- | --- |
+| Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Inherited native compression library. The vulnerable nonblocking gzip operation has no demonstrated application call path here; this is a proof gap, not a remediation claim. Debian's tracker lists no fixed Trixie package. Retain the finding and review a compatible patched base image. |
+| Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-93990](https://security-tracker.debian.org/tracker/CVE-2026-93990) | Native XML surrogate-handling issue. Java XML parsing alone does not establish a path to this library. Fixes in other Debian releases do not establish a compatible Debian 13 fix; keep the runtime finding visible. |
+| Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-77214](https://security-tracker.debian.org/tracker/CVE-2026-77214) | Separate native buffer over-read requiring the affected parse-buffer API and invalid caller-supplied length. No application-to-operation path is demonstrated. Debian lists a fixed unstable package, but no fixed Trixie package. Await a compatible patched runtime. |
+| Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93748 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Snyk still reports the cache-reuse advisory with no fixed version. The [npm/GitHub advisory](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) limits its affected range to `<= 4.2.0`; the maintainer disputes the report in [upstream #56](https://github.com/kornelski/http-cache-semantics/issues/56), now closed. Those sources disagree; a clean npm audit or the closed issue does not clear the Snyk record. |
+| Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93750 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate `Vary` cache-matching advisory. The fresh Snyk test still reports all versions affected and no fix. Keep it recorded and reassess before adding a publicly reachable cache or remote asset processing service. |
 
 ## Deployment boundaries
 
-The Dockerfile pins `gcr.io/distroless/java25-debian13:nonroot` at index digest
+The Dockerfile retains its signed, multi-architecture
+`gcr.io/distroless/java25-debian13:nonroot` index pin:
 `sha256:ca60da1345c0f17b6d019049e6749e15f10fd3c0da86dec938d2b4ec565d0629`.
-On the review date, the published tag had that same digest; updating the pin
-alone would not change these packages. The image runs as a nonroot user, and
-the Helm references restrict container privileges. Those controls reduce attack
-surface and consequences; they do not patch native libraries or prove the CVEs
-cannot be reached. Removing runtime libraries or switching Debian generations
-without compatibility testing is not the remediation plan.
+The upstream tag now resolves to a different index; this release preparation
+has not adopted or validated it. A newer digest does not establish that these
+specific native findings are fixed. Nonroot execution and restricted container
+privileges reduce exposure and consequences; they do not patch libraries.
+Do not mix Debian generations or remove native runtime libraries without
+compatibility evidence.
 
-The docs site publishes static files from `docs/dist`; no Astro/Node cache
-service is deployed by the Pages workflow. Astro uses the affected package in
-its remote-image build cache, and no such optimized-image use was found in the
-reviewed content. The Docker build excludes `docs/` and copies only the Java
-application and health probe into the runtime image. Keep docs static and
-reassess both cache findings before adding server rendering, remote asset
-processing, authenticated remote assets, or a publicly exposed development
-server. This is a scoped exposure assessment, not a claim that the library is
-fixed.
+The Pages workflow publishes only static `docs/dist` files. No Astro/Node cache
+service is deployed there. Astro's image cache is a build-time dependency, and
+no optimized remote-image use was found in the reviewed content. The Docker
+build excludes the docs dependency tree. These facts defeat the reported
+cross-user HTTP cache path for the current deployed documentation, but do not
+prove the dependency safe for other applications. Reassess before introducing
+SSR, remote/authenticated assets, a public development server, or an HTTP cache.
 
-## Scanner results and exceptions
+## Scanner scope and historical follow-up
 
-The Snyk workflow permits finding-related scan failures so it can upload SARIF
-to GitHub. A green workflow confirms its configured steps completed; review the
-actual findings before deciding on a release. The main application and bundled
-Java dependencies reported no findings at the configured **high** threshold in
-this run, which is not a zero-vulnerability guarantee.
+The Snyk workflow allows finding-related test failures so it can upload SARIF.
+A green workflow means the configured steps completed, not that all findings
+were fixed. Keep the actual findings and resolved dependency versions attached
+to the release assessment.
 
-## Documentation dependency update — 6 October 2026
+The **3 October** baseline also recorded two `gcc-14`/`libstdc++` advisories,
+[CVE-2026-95619](https://security-tracker.debian.org/tracker/CVE-2026-95619) and
+[CVE-2026-102010](https://security-tracker.debian.org/tracker/CVE-2026-102010).
+They are absent from the latest selected main scan; absence does not establish
+application remediation or replace the earlier native reachability assessment.
 
-The current docs lockfile resolves `http-cache-semantics` to `4.3.0`, outside
-the affected range through `4.2.0` in
-[GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp).
-A fresh npm report no longer flags that advisory, so its temporary exception
-has been removed from
-[`audit-ci.jsonc`](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/audit-ci.jsonc).
-The allowlist is empty. The separate Snyk cache finding remains as described in
-the historical findings table.
-
-The newly reported
-[GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf)
-affects `postcss-selector-parser` versions below `7.1.6`. The existing docs
-dependency overrides now select `^7.1.6`, and the updated lockfile resolves
-`7.1.6`. A clean local installation, the CI audit command, the content check
-and the site build passed. The complete npm report contained zero reported
-vulnerabilities, and the generated CSS was unchanged from the previous build.
-These local results do not establish a passing GitHub run or resolve the
-separate Snyk findings. No Snyk ignores or new npm exceptions were added.
-
-The docs audit continues to block unaccepted findings of moderate severity or
-higher. Future exceptions require a named advisory, owner, rationale and UTC
-expiry. Review each newly reported advisory separately and confirm that a
-complete audit report was produced.
-
-## Build tooling and coverage follow-up
-
-The application's Jackson `3.2.3` BOM does not align Gradle plugin classpaths.
-The `v0.15.0` build uses two separate Gradle buildscript BOMs: Jackson
-`3.1.7` for Spring Boot tooling and Jackson `2.22.3` for CycloneDX tooling. These
-replace the previously resolved `3.1.5` and `2.22.1` families and meet the fixed
-version floors for the reviewed [core memory-growth](https://github.com/advisories/GHSA-7hhh-6rmp-j9qf),
-[core CPU-exhaustion](https://github.com/advisories/GHSA-p6pp-m3f8-5c89) and
-[databind CPU-exhaustion](https://github.com/advisories/GHSA-cxp5-3px4-pw24)
-advisories, alongside the earlier Jackson findings tracked in
-[issue #275](https://github.com/dtkmn/mcp-zap-server/issues/275).
-
-Regular platform constraints align the modules in each family without forcing
-all dependency configurations. Shared `jackson-annotations` remains `2.22`;
-the application's selected runtime graph and packaged Jackson `3.2.3` family
-are unchanged. Plugin versions and Gateway Core/WebFlux `0.11.0` are unchanged.
-This removes affected versions from the selected build-tool graph; it does not
-establish that an attacker could reach the vulnerable library operations in
-the previous build.
-
-Published `v0.14.0` does not contain this build-tool alignment. Verify the fresh
-GitHub dependency submission and targeted alert state before closing #275;
-local dependency resolution and a runtime scan alone do not establish alert
-closure. The follow-up retains the **17 October 2026 UTC** review deadline.
-See the [v0.15.0 release notes](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/RELEASE_NOTES_0.15.0.md)
-for the broader upgrade requirements and publication checks.
-
-Snyk also reported that one of two detected Gradle manifests did not return
-dependencies. The experimental standalone extension sample is a separate build
-using a locally staged extension API, and this run did not establish its scan
-coverage. The follow-up is to stage that API, scan the standalone build explicitly,
-and verify the returned dependency report before changing the workflow. Do not
-silently exclude it or infer coverage from staging alone.
+The Jackson build-tool alignment shipped in `v0.15.0`: Spring Boot tooling
+resolves Jackson `3.1.7`, CycloneDX tooling `2.22.3`, and the application uses
+Jackson `3.2.3`. These are separate classpaths. Keep the previously tracked
+standalone extension-sample scan coverage gap separate from the fresh root
+Gradle project result; successful root dependency resolution does not prove
+that optional build was scanned.
 
 ## Removing a finding
 
-For each row, check its advisory and resolved package version at the next review.
-Adopt a compatible fixed dependency or signed base-image digest, then verify
-application packaging, health and integration behavior. Scan the actual release
-image for each supported architecture; a clean build or an AMD64 scan alone does
-not establish ARM64 results. For docs changes, run the content check, site build
-and dependency audit against the updated lockfile.
+Retain each record until a fresh scan or supported scope assessment justifies
+its changed disposition. Verify resolved packages, legitimate behavior and
+actual release-image results for each supported architecture before claiming
+remediation. Known dependency findings may remain in a release with documented
+scope and follow-up; do not describe that release as vulnerability-free.
 
-Remove an npm exception after its affected dependency path is resolved and a
-fresh, complete audit report no longer needs it. Keep each risk record until its
-finding is resolved or its changed disposition is supported by new evidence.
-If no compatible fix is available by the review date, reassess exposure and
-record the next decision explicitly; do not silently extend the exception.
+Remove an exception only after a complete audit no longer needs it. New exceptions
+require the advisory, owner, deployment rationale and UTC expiry. If no compatible
+fix is available by the review date, record the next decision explicitly.

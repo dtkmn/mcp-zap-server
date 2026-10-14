@@ -181,8 +181,9 @@ contract, and configure both absolute paths explicitly. They can
 differ, for example MCP `/srv/mcp-imports` and ZAP `/zap/imports`, but must map the
 same files. A local write is not an upload to an unrelated remote ZAP filesystem.
 
-For **Helm**, the `v0.15.0` chart can provision sibling directories on the shared
-PVC and mount staging read-only in ZAP:
+For **Helm**, chart `0.16.0` retains the sibling-directory storage option
+introduced in `0.15.0`, mounting staging read-only in ZAP (current publication
+pending):
 
 ```yaml
 zap:
@@ -207,8 +208,8 @@ creates staging with mode `0750` and rejects symlinks or incompatible ownership.
 The chart configures content enablement and both directory paths automatically.
 Keep one MCP writer; `Recreate` avoids overlapping writers during upgrades and
 briefly interrupts MCP service. This preset does not establish EFS/NFS or
-multi-writer support. Use a `v0.15.0` server image with this chart;
-the `v0.14.0` image does not include content import.
+multi-writer support. Use server image `v0.16.0` with chart `0.16.0` after
+publication; the `v0.14.0` image does not include content import.
 
 **Existing PVC users must migrate first:** setting `workspaceSubPath` changes the
 visible report/automation directory and does not move files. Quiesce all writers,

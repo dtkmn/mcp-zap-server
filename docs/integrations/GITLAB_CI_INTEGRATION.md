@@ -184,8 +184,9 @@ Recommended baseline pattern is the same as the GitHub template:
    net-new findings in `findings-diff.txt`
 4. update the baseline only after intentional acceptance
 
-The provenance-aware contracts are newer than the published `v0.15.0` release;
-copy the matching updated helper and use the updated server. Snapshot v3 records
+The provenance-aware contracts are included in `v0.16.0`; publication is
+pending. Upgrade the copied helper and server together; see the
+[release and upgrade guide](../releases/RELEASE_NOTES_0.16.0.md). Snapshot v3 records
 the running ZAP version and installed add-ons. The gate compares the measured
 engine version and complete add-on ID, version, and status inventories.
 Matching provenance allows the normal new/resolved counts. `different` or

@@ -39,7 +39,7 @@ For the default single API-key client, that workspace is
 Place the automation directory inside it so a generated report can be read
 through MCP. The report access restriction remains in place.
 
-The `v0.15.0` `docker-compose.yml` defaults both automation
+The current `v0.16.0` `docker-compose.yml` defaults both automation
 directories to
 `${ZAP_REPORT_DIRECTORY}/workspaces/${MCP_CLIENT_ID}/automation`, using `/zap/wrk`
 and `default-client` when those settings are absent. It also forwards
@@ -96,8 +96,8 @@ or workspaces. Use a separate MCP/ZAP deployment for independent clients in this
 single-client configuration. Keep plans and reports on writable persistent
 storage, and recreate the MCP container after changing its environment.
 
-**Unreleased workspace hardening:** use ordinary directories and regular files
-inside the configured automation workspace. Symbolic links in the automation
+**Workspace hardening in v0.16.0 (publication pending):** use ordinary
+directories and regular files inside the configured automation workspace. Symbolic links in the automation
 root, plan paths, report directories or selected report files are rejected, as
 are paths whose actual filesystem location is outside the workspace. Files with
 multiple hard links are rejected when the filesystem exposes their link count.
@@ -109,8 +109,9 @@ patterns remain available.
 This applies to plan input, artifact previews and normalized output preparation;
 ordinary report directories that have not been created yet remain valid. These
 checks are not included in the published `v0.15.0` server. Keep workspace write
-access limited to the trusted MCP and ZAP processes; the checks do not replace
-filesystem permissions or isolation from untrusted local writers.
+access limited to trusted MCP and ZAP processes. The checks do not protect
+against hostile local writers concurrently swapping filesystem ancestors, and
+do not replace filesystem permissions or deployment isolation.
 
 ## How Plan Input Works
 
@@ -129,10 +130,13 @@ That gives you:
 
 The returned `Plan File` path is the one to reuse with `zap_automation_plan_artifacts`.
 
-### Whole-Plan Duration (Unreleased)
+<a id="whole-plan-duration-unreleased"></a>
 
-The whole-plan checks and status changes below are **Unreleased**; they are not
-included in the published `v0.15.0` MCP server. Check
+### Whole-Plan Duration (v0.16.0)
+
+The whole-plan checks and status changes below are included in **v0.16.0**,
+with publication pending. They are not included in `v0.15.0`. See the
+[release and upgrade guide](/mcp-zap-server/releases/0.16.0/) and check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before relying
 on them.
 
@@ -265,7 +269,7 @@ Use the response from `zap_automation_plan_run` like this:
 3. capture `Plan File`
 4. call `zap_automation_plan_artifacts` with that `Plan File`
 
-With the **Unreleased** status behavior, `Completed: yes` means ZAP supplied a
+With the **v0.16.0** status behavior, `Completed: yes` means ZAP supplied a
 finish timestamp. ZAP's progress API exposes messages and timestamps, without a
 success or termination-reason field. `Successful` is `pending` while running,
 `no` when a finished plan reports errors, and `unknown` otherwise. Deadline

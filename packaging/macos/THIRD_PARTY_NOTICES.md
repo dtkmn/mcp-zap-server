@@ -3,8 +3,8 @@
 MCP ZAP Server is licensed under the Apache License, Version 2.0; see the
 package's `LICENSE`. Third-party components retain their own licenses.
 
-This notice inventory covers the 126 dependency JAR files in the MCP ZAP Server
-0.15.0 executable JAR (`app/server.jar`, under `BOOT-INF/lib/`). It reproduces
+This notice inventory covers the 127 dependency JAR files in the MCP ZAP Server
+0.16.0 executable JAR (`app/server.jar`, under `BOOT-INF/lib/`). It reproduces
 embedded license and notice texts and supplements missing texts from the
 corresponding upstream release. The embedded CycloneDX SBOM
 (`META-INF/sbom/application.cdx.json`) is additional component metadata; its
@@ -84,6 +84,7 @@ below rather than replacing it with the SBOM label.
 | `antlr-runtime-3.5.3.jar` | `org.antlr:antlr-runtime:3.5.3` | BSD three-clause text | [source](https://repo.maven.apache.org/maven2/org/antlr/antlr-runtime/3.5.3/antlr-runtime-3.5.3-sources.jar) |
 | `antlr4-runtime-4.13.1.jar` | `org.antlr:antlr4-runtime:4.13.1` | BSD-3-Clause | [source](https://repo.maven.apache.org/maven2/org/antlr/antlr4-runtime/4.13.1/antlr4-runtime-4.13.1-sources.jar) |
 | `aspectjweaver-1.9.25.1.jar` | `org.aspectj:aspectjweaver:1.9.25.1` | EPL-2.0; included BSD-3-Clause / Apache-1.1 notices | [source](https://repo.maven.apache.org/maven2/org/aspectj/aspectjweaver/1.9.25.1/aspectjweaver-1.9.25.1-sources.jar) |
+| `checker-qual-3.55.1.jar` | `org.checkerframework:checker-qual:3.55.1` | MIT | [source](https://repo.maven.apache.org/maven2/org/checkerframework/checker-qual/3.55.1/checker-qual-3.55.1-sources.jar) |
 | `classmate-1.7.3.jar` | `com.fasterxml:classmate:1.7.3` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.7.3/classmate-1.7.3-sources.jar) |
 | `commons-logging-1.3.6.jar` | `commons-logging:commons-logging:1.3.6` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/commons-logging/commons-logging/1.3.6/commons-logging-1.3.6-sources.jar) |
 | `context-propagation-1.2.1.jar` | `io.micrometer:context-propagation:1.2.1` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/micrometer/context-propagation/1.2.1/context-propagation-1.2.1-sources.jar) |
@@ -147,7 +148,7 @@ below rather than replacing it with the SBOM label.
 | `netty-transport-native-epoll-4.2.18.Final-linux-x86_64.jar` | `io.netty:netty-transport-native-epoll:4.2.18.Final` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/netty/netty-transport-native-epoll/4.2.18.Final/netty-transport-native-epoll-4.2.18.Final-sources.jar) |
 | `netty-transport-native-unix-common-4.2.18.Final.jar` | `io.netty:netty-transport-native-unix-common:4.2.18.Final` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/netty/netty-transport-native-unix-common/4.2.18.Final/netty-transport-native-unix-common-4.2.18.Final-sources.jar) |
 | `nimbus-jose-jwt-10.9.1.jar` | `com.nimbusds:nimbus-jose-jwt:10.9.1` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/com/nimbusds/nimbus-jose-jwt/10.9.1/nimbus-jose-jwt-10.9.1-sources.jar) |
-| `postgresql-42.7.12.jar` | `org.postgresql:postgresql:42.7.12` | BSD-2-Clause | [source](https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.12/postgresql-42.7.12-sources.jar) |
+| `postgresql-42.7.14.jar` | `org.postgresql:postgresql:42.7.14` | BSD-2-Clause | [source](https://repo.maven.apache.org/maven2/org/postgresql/postgresql/42.7.14/postgresql-42.7.14-sources.jar) |
 | `prometheus-metrics-config-1.7.0.jar` | `io.prometheus:prometheus-metrics-config:1.7.0` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/prometheus/prometheus-metrics-config/1.7.0/prometheus-metrics-config-1.7.0-sources.jar) |
 | `prometheus-metrics-core-1.7.0.jar` | `io.prometheus:prometheus-metrics-core:1.7.0` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/prometheus/prometheus-metrics-core/1.7.0/prometheus-metrics-core-1.7.0-sources.jar) |
 | `prometheus-metrics-exposition-formats-1.7.0.jar` | `io.prometheus:prometheus-metrics-exposition-formats:1.7.0` | Apache-2.0 | [source](https://repo.maven.apache.org/maven2/io/prometheus/prometheus-metrics-exposition-formats/1.7.0/prometheus-metrics-exposition-formats-1.7.0-sources.jar) |
@@ -1737,7 +1738,7 @@ package in the Spring Framework library, distributed by VMware, Inc:
 
 Original locations:
 
-- `BOOT-INF/lib/postgresql-42.7.12.jar!/META-INF/LICENSE`
+- `BOOT-INF/lib/postgresql-42.7.14.jar!/META-INF/LICENSE`
 
 ````text
 Copyright (c) 1997, PostgreSQL Global Development Group
@@ -1779,8 +1780,8 @@ BSD-2-Clause
 
 Original locations:
 
-- `BOOT-INF/lib/postgresql-42.7.12.jar!/META-INF/licenses/com.ongres.scram/scram-client-3.2/META-INF/LICENSE`
-- `BOOT-INF/lib/postgresql-42.7.12.jar!/META-INF/licenses/com.ongres.scram/scram-common-3.2/META-INF/LICENSE`
+- `BOOT-INF/lib/postgresql-42.7.14.jar!/META-INF/licenses/com.ongres.scram/scram-client-3.2/META-INF/LICENSE`
+- `BOOT-INF/lib/postgresql-42.7.14.jar!/META-INF/licenses/com.ongres.scram/scram-common-3.2/META-INF/LICENSE`
 
 ````text
 Copyright (c) 2017 OnGres, Inc.
@@ -1811,8 +1812,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Original locations:
 
-- `BOOT-INF/lib/postgresql-42.7.12.jar!/META-INF/licenses/com.ongres.stringprep/saslprep-2.2/META-INF/LICENSE`
-- `BOOT-INF/lib/postgresql-42.7.12.jar!/META-INF/licenses/com.ongres.stringprep/stringprep-2.2/META-INF/LICENSE`
+- `BOOT-INF/lib/postgresql-42.7.14.jar!/META-INF/licenses/com.ongres.stringprep/saslprep-2.2/META-INF/LICENSE`
+- `BOOT-INF/lib/postgresql-42.7.14.jar!/META-INF/licenses/com.ongres.stringprep/stringprep-2.2/META-INF/LICENSE`
 
 ````text
 Copyright (c) 2019 OnGres, Inc.
@@ -5221,6 +5222,37 @@ Copyright 2006, 2010 The Apache Software Foundation.
 
 This product includes software developed at
 The Apache Software Foundation (https://www.apache.org/).
+````
+
+### E061: LICENSE.txt
+
+Original locations:
+
+- `BOOT-INF/lib/checker-qual-3.55.1.jar!/META-INF/LICENSE.txt`
+
+````text
+Checker Framework qualifiers
+Copyright 2004-present by the Checker Framework developers
+
+MIT License:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ````
 
 ## Supplemental upstream licenses and notices

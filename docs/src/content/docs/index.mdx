@@ -39,7 +39,7 @@ editUrl: false
     </div>
   </div>
 
-  <p>Version v0.15.0 introduces optional client-supplied OpenAPI content imports, complete paged report retrieval, scoped report privacy, independent HTTP crawl depth and recovery of mandatory ZAP settings. It also includes a <a href="./operations/aws-eks-infrastructure/">CloudFormation EKS starter</a> with a shared deployment walkthrough, evaluated on one worker using a matched prerelease application/chart. Before installing, check <a href="https://github.com/dtkmn/mcp-zap-server/releases">GitHub Releases</a> and successful image publication in the release workflow. Preparing or merging a version does not publish its release or images.</p>
+  <p>Version v0.16.0 adds scanner-aware findings and CI baselines, validated whole-plan Automation Framework limits, safer plan/report paths and preservation of root alert evidence in scoped reports. Read the <a href="./releases/0.16.0/">release and upgrade guide</a> before upgrading the server and CI gate together. Release, image and registry publication are pending; before installing, check <a href="https://github.com/dtkmn/mcp-zap-server/releases">GitHub Releases</a> and successful image publication. Preparing or merging a version does not publish its artifacts.</p>
 
   <span class="section-label">./execute_mission.sh</span>
 
@@ -72,9 +72,9 @@ editUrl: false
       <h3>&gt; [07] EXTENSION_POLICY</h3>
       <p>See what must be true before the extension API becomes a public compatibility promise.</p>
     </a>
-    <a class="mission-card" href="https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/RELEASE_NOTES_0.15.0.md">
-      <h3>&gt; [v0.15.0] RELEASE_NOTES</h3>
-      <p>Review content import storage, complete report retrieval, crawl limits, startup recovery and the EKS deployment starter.</p>
+    <a class="mission-card" href="./releases/0.16.0/">
+      <h3>&gt; [v0.16.0] RELEASE_AND_UPGRADE</h3>
+      <p>Migrate CI baselines and review Automation Framework duration, status and workspace requirements. Publication is pending.</p>
     </a>
     <a class="mission-card" href="./security-modes/#registered-api-keys-in-v0140">
       <h3>&gt; [v0.14.0] SECURITY_UPGRADE</h3>

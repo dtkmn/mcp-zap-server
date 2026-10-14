@@ -7,45 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [0.16.0]
 
-- Enforce filesystem containment for Automation Framework plans and artifacts, rejecting linked files and directories before reading or preparing outputs. Validate literal report output directories and filenames before ZAP dispatch. Open files without following symbolic links, reject multiple hard links where supported, and bound report preview reads while preserving ordinary missing-output handling.
-- Remove an unreachable HTTP-method fallback from request logging; Spring's supported server requests always provide a method.
-- Stop inferring Automation Framework success from a finish timestamp and an empty error list. Report `Successful` as `pending` while running, `no` on reported errors, or `unknown` otherwise; upstream progress does not expose the termination reason, and clean native cancellation does not prove a completed scan.
-- Require complete matching ZAP engine/add-on inventories before reporting net-new or resolved findings. Changed or unknown scanner identity produces informational observations; enforced CI gates fail until a reviewed comparable baseline is supplied.
-- Add MCP ZAP Connect terms of service to the existing first-run guide and link them from the plugin's OpenAI listing metadata and README.
-- Add Cursor-native metadata to MCP ZAP Connect's existing plugin folder so its repository index meets Cursor's documented multi-plugin layout. Codex retains its portable manifest; both formats use the same setup skill.
-- Preserve empty-path root alert evidence in target-scoped reports while excluding other origins and ports. Temporary report contexts stay out of scan scope and are removed after generation; existing artifact authorization and session-metadata filtering remain enforced.
+Release, image, Helm and MCP Registry publication are pending. Preparing or
+merging this version does not publish its artifacts. Read the
+[release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md) before
+updating CI consumers or Automation Framework plans, and verify
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+release-image workflow before installing.
 
 ### Added
 
-- Generate JaCoCo XML and HTML coverage from existing Java tests, combining Docker-backed results when available. Import the report through authenticated CI-based SonarQube analysis, retain local coverage artifacts for fork builds, and document the analysis-mode transition without introducing a minimum coverage gate.
-- Validate whole-plan Automation Framework durations and verify running ZAP core/add-on capabilities before dispatch. Require ZAP `2.17.0` and Automation Framework `0.61.0` or newer for `env.parameters.maxDuration`; reject invalid durations and explicitly keep unsupported authentication `pollMethod` configurations rejected.
-- Include measured scanner inventory and available server build identity in version 3 findings snapshots, CI diff evidence and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
-- Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.
-- Add a maintainer-built Apple Silicon CLI preview containing a private Java runtime, MCP Server and an HTTP-focused ZAP distribution, with private persistent settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Public signing/notarization and fresh-Mac installation are pending.
-- Add private Codex TOML output through `client-config codex` and server runtime dependency notices checked against the packaged application inventory.
-- Build a checksum-linked source companion for the macOS preview, with pinned Java/ZAP source and build materials, supplemental component notices and documented library replacement. Publish binary and source archives together; browser-downloaded clean installation remains a separate check.
-- Build the four-file macOS preview set through manual GitHub Actions runs. An owner-triggered run from `main` can attach files to an existing draft release after validating its version tag; release publication remains manual.
-- Add an optional private ChatGPT tunnel helper that keeps local API-key authentication enabled and stores credential references, plus a canonical connection guide. A bounded live ChatGPT web test verified HTTP crawling, passive completion, full report read-back, in-flight crawl stopping and tunnel-loss reporting; the guide records the tested configuration and remaining report-content and public-distribution limits.
+- Record measured ZAP engine/add-on inventory and available server build identity in v3 findings snapshots, CI diffs and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
+- Validate whole-plan Automation Framework durations and runtime capabilities before dispatch. Declaring `env.parameters.maxDuration` requires ZAP `2.17.0` and Automation Framework `0.61.0` or newer; invalid durations and unsupported authentication `pollMethod` configurations are rejected.
+- Add Cursor onboarding and native plugin metadata to MCP ZAP Connect's shared Docker setup skill, with private client configuration, status-only verification and terms linked from the first-run guide and listing metadata. Plugin `0.3.0` public directory submission/approval remains pending.
+- Add an unsigned maintainer-built Apple Silicon CLI preview with a private Java runtime, HTTP-focused ZAP, persistent private settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Add private Codex TOML output, packaged runtime notices and a checksum-linked source companion with documented library replacement. Public signing/notarization and fresh browser-download installation remain pending; existing `v0.15.0` preview inventory and tests are historical evidence.
+- Add optional private ChatGPT tunnel support with local API-key authentication and a shared connection guide. Recorded private HTTP crawl, passive/report readback, stop and tunnel-loss checks used the existing preview; they do not validate a `v0.16.0` binary or public distribution.
+
+### Fixed
+
+- Require complete matching ZAP engine/add-on inventories before reporting new or resolved findings. Changed or unknown scanner identity produces informational observations; enforced CI gates fail until a reviewed comparable baseline is supplied.
+- Stop inferring Automation Framework success from a finish timestamp and an empty error list. Report `Successful` as `pending` while running, `no` on finished plans with reported errors, or `unknown` otherwise; native cancellation does not prove a completed scan.
+- Enforce containment and link restrictions for Automation Framework plans and artifacts, validate literal report output directories/filenames before ZAP dispatch, use no-follow file reads, reject multiple hard links where supported and bound previews. These checks require trusted local writers and do not protect against concurrent hostile filesystem ancestor swaps.
+- Preserve empty-path root alert evidence in target-scoped reports while excluding other origins and ports. Temporary report contexts stay outside scan scope and are removed afterward; existing artifact authorization and session-metadata filtering remain enforced.
+- Remove an unreachable HTTP-method fallback from request logging; supported Spring server requests always provide a method.
 
 ### Changed
 
-- Give the canonical Automation Framework example a 300-second whole-plan limit while retaining per-job minute limits. Set the report job's `alwaysRun` flag explicitly so a soft deadline stop can produce partial evidence; document cooperative termination and possible report work beyond the budget.
-- Version CI findings snapshots and diffs as `/v3` and gate results as `/v2` for scanner-aware comparison and nullable counts. Keep the existing version 2 node identity and suppression behavior; seed mode remains available for explicit baseline review.
-- Pause automatic macOS package builds on pull requests while signing/notarization and clean browser-download installation remain unresolved. Keep manual test builds available; public Mac distribution is deferred.
-- Start the local Docker quick start from a versioned published MCP image with `bootstrap-local.sh --start`, preserving existing settings and keys and reusing cached images on restart. Publish generated settings atomically, wait for container health and authenticated MCP checks before reporting readiness, and report the failing stage when MCP requests cannot complete. Keep source builds in the development override and reject failed MCP tool probes.
-- Launch the macOS preview services through the current user's macOS service manager so they survive terminal and agent-command completion. Explicit stop removes their registrations; login startup and automatic crash restarts remain disabled.
-- Bound the existing self-serve doctor's HTTP requests, keep its API key out of curl process arguments, and avoid dumping raw server error responses into diagnostics.
-- Exclude the optional ZAP Import/Export add-on from the HTTP Mac preview while its historical dependency source mapping remains unverified; its HAR, packet-capture and ModSecurity import/export features are unavailable in this distribution.
+- Version CI snapshots/diffs as `/v3` and gate results as `/v2`, with nullable comparison counts. Preserve node identity and suppression behavior. Upgrade server and gate together; review a fresh v3 baseline before restoring enforcement against legacy v1/v2 evidence.
+- Set a 300-second whole-plan limit and explicit always-run report job in the canonical Automation Framework example. Document cooperative expiry, requestor/report work beyond the budget, passive analysis remaining active and possible Spider starts after expiry during slow seed preparation.
+- Start the local Docker quick start from versioned image `v0.16.0` after publication, preserving settings/keys and cached images. Generate settings atomically and require container health plus authenticated MCP probes before reporting readiness; retain source builds in the development override.
+- Use the current user's macOS service manager for preview processes so they survive terminal/agent completion. Explicit stop removes registrations; login startup and automatic crash restarts stay disabled. Bound doctor HTTP requests, keep keys out of process arguments and avoid raw server errors in diagnostics.
+- Keep Mac packaging/source archives in the manual workflow; owner-triggered `main` builds can attach the four-file set to an existing draft release after tag validation, while publication stays manual. Automatic PR package builds and public Mac distribution remain deferred. Exclude Import/Export while its source mapping remains unverified; HAR, packet-capture and ModSecurity import/export are unavailable in this preview.
+- Generate JaCoCo XML/HTML coverage from existing Java tests, combine Docker results when available and import through authenticated CI-based SonarQube analysis. Retain fork coverage artifacts without adding a minimum coverage gate.
+- Update PostgreSQL JDBC to `42.7.14` for its upstream security fixes and the docs lockfile's Zod to `4.6.7`. Refresh the macOS runtime notices for the JDBC update and its Checker Framework qualifier dependency; Mac distribution remains deferred.
+- Align current application, chart, registry metadata, local extension proof and installation references to `0.16.0` / `v0.16.0`. No database migration is added beyond V1–V8, and Gateway Core/WebFlux stays `0.11.0`.
 
 ### Documentation
 
-- Clarify guided crawler selection without changing routing: `auto` uses HTTP, with AJAX fallback only after an unauthenticated direct start fails; JavaScript applications should explicitly select Client Spider. Document native scan IDs versus the global AJAX lifecycle, Client `0.33.0` idle expiry, and separate crawler/rule coverage. Remove unsupported AJAX WAF-bypass and browser-crawl completion claims from tool guidance.
-- Clarify Automation Framework expiry boundaries: requestor work and always-run jobs can outlast the plan budget, stopping passive waits leaves background analysis active, and slow Spider seed preparation can allow crawling to start after expiry in Automation Framework `0.61.0` / Spider `0.20.0`. Keep job limits and verify scanner state before treating reports as final.
-- Consolidate local Docker onboarding into the shared first-run guide with three steps: start, connect, and generate a report. Keep security and agent notes focused on their own requirements, and place source-build instructions in the contributor guide.
-- Update the EKS walkthrough after a scoped live validation of the published `v0.15.0` image and matching chart, including report persistence and settled network-policy paths.
-- Document Mac installation, local client setup and data retention, with separate contributor build/release instructions and concise private ChatGPT setup guidance.
+- Clarify crawler routing without changing it: `auto` uses HTTP, with AJAX fallback only after an unauthenticated direct start fails; JavaScript apps should explicitly select Client Spider. Document native scan IDs, the global AJAX lifecycle, Client `0.33.0` idle expiry and separate crawler/rule coverage; remove unsupported WAF-bypass and completion claims. Routing redesign #319 remains deferred.
+- Consolidate Docker onboarding into start, connect and report steps, with source builds in the contributor guide. Document Mac data retention and private client/tunnel setup separately from build/release instructions.
+- Update cloud walkthroughs while retaining recorded `v0.15.0` EC2/EKS and matched prerelease evaluation evidence. Current `v0.16.0` instructions are not proof of a new AWS deployment test.
 
 ## [0.15.0]
 

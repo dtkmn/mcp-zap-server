@@ -20,7 +20,7 @@ plugins {
 }
 
 group = 'mcp.server.zap'
-version = '0.15.0'
+version = '0.16.0'
 def extensionApiPublicationVersion = version.toString()
 
 springBoot {
@@ -67,7 +67,7 @@ ext {
     set('commonsCompressVersion', "1.28.0")
     set('jackson-bom.version', "3.2.3")
     set('netty.version', '4.2.18.Final')
-    set('postgresql.version', '42.7.12')
+    set('postgresql.version', '42.7.14')
     set('logback.version', '1.6.4')
 }
 

@@ -39,6 +39,7 @@ export default defineConfig({
 					label: 'Mission Control',
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
+						{ slug: 'releases/0.16.0' },
 						{ slug: 'getting-started/self-serve-first-run' },
 						{ slug: 'getting-started/macos-package' },
 						{ slug: 'getting-started/chatgpt-local-tunnel' },

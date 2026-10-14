@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Generate JaCoCo XML and HTML coverage from existing Java tests, combining Docker-backed results when available. Import the report through authenticated CI-based SonarQube analysis, retain local coverage artifacts for fork builds, and document the analysis-mode transition without introducing a minimum coverage gate.
 - Validate whole-plan Automation Framework durations and verify running ZAP core/add-on capabilities before dispatch. Require ZAP `2.17.0` and Automation Framework `0.61.0` or newer for `env.parameters.maxDuration`; reject invalid durations and explicitly keep unsupported authentication `pollMethod` configurations rejected.
 - Include measured scanner inventory and available server build identity in version 3 findings snapshots, CI diff evidence and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
 - Add Cursor onboarding to MCP ZAP Connect's shared Docker setup skill, with private client configuration and status-only verification. Cursor 3.24.12 tests covered its first connection to an existing Docker stack, failed readiness, an occupied port and owned stop/restart. Reloading the Cursor MCP connection restored status after restart; prerequisite and authentication failures were checked separately with controlled fixtures.

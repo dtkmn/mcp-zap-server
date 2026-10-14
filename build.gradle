@@ -11,7 +11,9 @@ buildscript {
 
 plugins {
     id 'java'
+    id 'jacoco'
     id 'maven-publish'
+    id 'org.sonarqube' version '7.5.0.8588'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
     id 'org.cyclonedx.bom' version '3.4.1'
@@ -221,6 +223,45 @@ tasks.register('dockerTest', Test) {
         includeTags 'docker'
     }
     shouldRunAfter tasks.named('test')
+}
+
+jacoco {
+    toolVersion = '0.8.15'
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test')
+    // Include Docker coverage when it exists, without starting Docker tests.
+    executionData tasks.named('dockerTest').get()
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+    }
+}
+
+sonar {
+    properties {
+        property 'sonar.projectKey', 'dtkmn_mcp-zap-server'
+        property 'sonar.organization', 'dtkmn'
+        property 'sonar.host.url', 'https://sonarcloud.io'
+        // Retain the resources and extension examples indexed by Automatic Analysis.
+        property 'sonar.sources', (sourceSets.main.allSource.srcDirs +
+                sourceSets.sampleExtension.allJava.srcDirs +
+                [file('examples/extensions/standalone-policy-metadata-extension/src/main/java')])
+                .findAll { it.isDirectory() }
+        property 'sonar.java.binaries', sourceSets.main.output.classesDirs +
+                sourceSets.sampleExtension.output.classesDirs +
+                files('examples/extensions/standalone-policy-metadata-extension/build/classes/java/main')
+        property 'sonar.coverage.jacoco.xmlReportPaths',
+                layout.buildDirectory.file('reports/jacoco/test/jacocoTestReport.xml').get().asFile.absolutePath
+    }
+}
+
+tasks.named('sonar') {
+    dependsOn tasks.named('jacocoTestReport')
+    dependsOn tasks.named('sampleExtensionClasses')
+    dependsOn tasks.named('standalonePolicyMetadataExtensionJar')
 }
 
 tasks.named('assemble') {

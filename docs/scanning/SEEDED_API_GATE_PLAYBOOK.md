@@ -52,7 +52,7 @@ reviewable, repeatable security gate for important API behavior.
    fail-on-new-findings: "true"
    ```
 
-   With the updated server/gate contracts newer than published `v0.15.0`,
+   With the `v0.16.0` server/gate contracts (publication pending),
    enforcement also requires complete matching ZAP engine/add-on inventories.
    A changed scanner or a legacy baseline with unknown provenance requires
    review of a fresh snapshot. Do not copy today's inventory into an old

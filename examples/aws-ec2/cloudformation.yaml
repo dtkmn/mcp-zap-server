@@ -1,8 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   Dedicated x86_64 Amazon Linux 2023 host for the MCP ZAP Server EC2 Compose
-  walkthrough (v0.15.0). Infrastructure only; install the example and configure
-  verified public image digests and credentials manually using the runbook.
+  walkthrough (v0.16.0 preparation; publication pending). Infrastructure only;
+  install the example and configure verified public image digests and credentials
+  manually using the runbook after publication.
 
 Parameters:
   VpcId:

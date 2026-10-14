@@ -48,6 +48,13 @@ Prerequisites:
 - Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
+These sources prepare `v0.16.0`; release and image publication are pending.
+Before `--start`, confirm publication in
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the release
+workflow. To use an already published version, run `./bin/bootstrap-local.sh`
+without `--start`, set `IMAGE_TAG` in `.env` to a verified published version,
+then run the start command. Existing settings and selected versions are preserved.
+
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
@@ -94,6 +101,7 @@ permissions and standalone OCI use.
 ## Discovery Metadata
 
 This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json).
+The metadata prepares `0.16.0`; image and Registry publication are pending.
 Use metadata from the same version as the image you deploy. The image includes
 the MCP server name expected by registry and catalog tooling. Check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
@@ -114,6 +122,30 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
 In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
+
+## Version 0.16.0
+
+Version `v0.16.0` is prepared locally; release, container-image and MCP Registry
+publication are pending. Check
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest) and the
+release workflow before deploying its image.
+
+Automation Framework plans now validate whole-plan durations and required
+engine/add-on capabilities, enforce filesystem containment for plans and
+artifacts, and validate report output directories and filenames. Plan status
+reports `Successful` as `pending`, `no` or `unknown` without treating a finish
+timestamp as proof of a completed scan. Scanner-aware CI comparisons require matching
+measured engine/add-on inventories, and target-scoped reports retain root alert
+evidence from the requested origin.
+
+The local Docker quick start uses an explicitly versioned release image and
+authenticated readiness checks. Apple Silicon packaging and private ChatGPT
+connection work remain previews with separate distribution and installation
+checks; their presence here does not establish public availability.
+
+- [0.16.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.16.0.md)
+- [Release notes archive](./docs/releases/README.md)
+- [Changelog](./CHANGELOG.md)
 
 ## Version 0.15.0
 

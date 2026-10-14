@@ -4,10 +4,17 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.15.0` defaults to MCP image `v0.15.0`. Use the chart from the same release
-as your image, and confirm that the corresponding release workflow has published
-the image before installing. [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
-is the source for publication status. Release preparation does not publish images.
+Chart `0.16.0` defaults to MCP image `v0.16.0`; publication is pending. Use the
+chart from the same release as your image, and confirm that the corresponding
+release workflow has published the image before installing.
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) is the source
+for publication status. Release preparation does not publish images.
+
+Version `0.16.0` validates Automation Framework duration capabilities, enforces
+plan/artifact filesystem containment, validates report output paths, and corrects
+plan success reporting. CI findings comparisons now require matching measured
+scanner inventories. Review the
+[0.16.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.16.0.md) before rollout.
 
 Version `0.15.0` adds OpenAPI content import and complete report retrieval through
 `zap_report_read_chunk`, corrects HTTP crawl depth, and reapplies mandatory ZAP
@@ -753,11 +760,11 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml
 
-# Upgrade with specific image version
+# Upgrade with specific image version after verifying publication
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml \
-  --set mcp.image.tag=v0.15.0
+  --set mcp.image.tag=v0.16.0
 ```
 
 ## Uninstalling

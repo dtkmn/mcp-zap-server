@@ -101,9 +101,11 @@ Recommended pattern:
    net-new findings in `findings-diff.txt`
 4. update the baseline only after an intentionally accepted security state change
 
-The provenance-aware contracts are newer than the published `v0.15.0` release;
-use the matching updated action and server. Snapshot v3 records the running ZAP
-version and installed add-on inventory. Comparability is `matching` only when
+The provenance-aware contracts are included in `v0.16.0`; publication is
+pending. Upgrade the action and server together; see the
+[release and upgrade guide](../releases/RELEASE_NOTES_0.16.0.md). Snapshot v3
+records the running ZAP version and installed add-on inventory. Comparability is
+`matching` only when
 both exports contain the same measured engine version and complete add-on ID,
 version, and status inventory. Old v1/v2 baselines remain readable, but their
 provenance is `unknown`.

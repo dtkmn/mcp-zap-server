@@ -7,6 +7,17 @@ const generatedRoot = join(repoRoot, 'docs/src/content/docs/generated');
 
 const pages = [
   {
+    source: 'docs/releases/RELEASE_NOTES_0.16.0.md',
+    slug: 'releases/0.16.0',
+    title: 'v0.16.0 Release and Upgrade Guide',
+    description: 'Review scanner-aware CI contracts, Automation Framework changes and installation boundaries before upgrading.',
+    links: {
+      '../scanning/CI_GATE_CONTRACTS.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/docs/scanning/CI_GATE_CONTRACTS.md',
+      '../src/content/docs/scanning/automation-framework.md': '/mcp-zap-server/scanning/automation-framework/',
+      '../src/content/docs/reference/dependency-security.md': '/mcp-zap-server/reference/dependency-security/',
+    },
+  },
+  {
     source: 'docs/getting-started/MACOS_PACKAGE.md',
     slug: 'getting-started/macos-package',
     title: 'Headless macOS Preview',

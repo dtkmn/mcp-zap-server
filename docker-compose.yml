@@ -39,7 +39,8 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-home:/home/zap/.ZAP
 
   mcp-server:
-    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.15.0}
+    # v0.16.0 publication is pending; use only after verifying the release image.
+    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.16.0}
     restart: always
     depends_on:
       zap:

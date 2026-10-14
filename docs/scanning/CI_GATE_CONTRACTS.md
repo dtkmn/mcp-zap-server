@@ -5,9 +5,10 @@ and baseline enforcement. Snapshot version 3 records the scanner that produced
 the export. A missing finding is only a comparable observation when the ZAP
 engine and complete add-on inventory match the baseline.
 
-These provenance contracts are newer than the published `v0.15.0` release.
-Use the matching updated server and gate implementation; a `v0.15.0` server
-does not export snapshot v3.
+These provenance contracts are included in `v0.16.0`; publication is pending.
+Upgrade the server and gate together, following the
+[release and upgrade guide](../releases/RELEASE_NOTES_0.16.0.md). A `v0.15.0`
+server does not export snapshot v3.
 
 The helper now emits these stable contracts under the configured output directory:
 

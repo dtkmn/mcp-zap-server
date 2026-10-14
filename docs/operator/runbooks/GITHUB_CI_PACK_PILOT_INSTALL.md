@@ -19,8 +19,9 @@ team process: seed mode, artifact review, baseline acceptance, and enforcement.
 - Optional webhook callback action: `.github/actions/zap-webhook-callback`
 - Artifact contracts in the updated implementation: `ci_gate_result/v2`,
   `ci_gate_findings_snapshot/v3`, `ci_gate_findings_diff/v3`, and
-  `ci_gate_artifact_manifest/v1`. These provenance contracts are newer than
-  the published `v0.15.0` release; use the matching updated server and action.
+  `ci_gate_artifact_manifest/v1`. These provenance contracts are included in
+  `v0.16.0`, with publication pending; upgrade the server and action together.
+  See the [release and upgrade guide](../../releases/RELEASE_NOTES_0.16.0.md).
 - Legacy v1/v2 snapshots remain readable and retain their identity mode when
   normalized into v3, but missing scanner provenance means unknown
   comparability. See [CI Gate Contracts](../../scanning/CI_GATE_CONTRACTS.md).

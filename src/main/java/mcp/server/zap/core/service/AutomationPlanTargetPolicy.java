@@ -85,7 +85,29 @@ final class AutomationPlanTargetPolicy {
                     destination(request.get("url"), requestField + ".url");
                 }
             }
+            if ("report".equals(type)) {
+                validateReportParameters(parameters, field + ".parameters");
+            }
         }
+    }
+
+    void validateReportParameters(Map<?, ?> parameters, String field) {
+        optionalLiteralText(parameters.get("reportDir"), field + ".reportDir");
+        String fileName = optionalLiteralText(parameters.get("reportFile"), field + ".reportFile");
+        // ZAP expands variables again after expanding filename patterns. Reject dollar
+        // signs as well so a date pattern cannot synthesize a variable reference.
+        if (fileName != null && (fileName.equals(".") || fileName.equals("..")
+                || fileName.contains("/") || fileName.contains("\\") || fileName.contains(":")
+                || fileName.contains("$"))) {
+            throw invalid(field + ".reportFile", "must be a literal filename pattern without directory, drive or variable components");
+        }
+    }
+
+    private String optionalLiteralText(Object value, String field) {
+        if (value == null || value instanceof String text && text.isBlank()) {
+            return null;
+        }
+        return literalText(value, field);
     }
 
     private void validateEnvironmentParameters(Object value) {

@@ -7,6 +7,7 @@ import mcp.server.zap.core.gateway.EngineRuntimeAccess.AddOn;
 import mcp.server.zap.core.gateway.EngineRuntimeAccess.ScannerInventory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -23,10 +24,12 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -41,6 +44,8 @@ class AutomationPlanServiceTest {
     private EngineRuntimeAccess runtimeAccess;
     private AutomationPlanService service;
     private Path automationRoot;
+    @TempDir
+    Path temporaryDirectory;
 
     @BeforeEach
     void setup() throws Exception {
@@ -48,7 +53,7 @@ class AutomationPlanServiceTest {
         runtimeAccess = mock(EngineRuntimeAccess.class);
         service = new AutomationPlanService(automationAccess, mock(UrlValidationService.class));
         service.setRuntimeAccess(runtimeAccess);
-        automationRoot = Files.createTempDirectory("automation-plan-service-test");
+        automationRoot = Files.createDirectory(temporaryDirectory.resolve("automation"));
         ReflectionTestUtils.setField(service, "automationLocalDirectory", automationRoot.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", "/zap/automation");
     }
@@ -261,8 +266,9 @@ class AutomationPlanServiceTest {
         );
     }
 
-    @Test
-    void getAutomationPlanArtifactsListsReportOutputsAndPreview() throws Exception {
+    @ParameterizedTest
+    @ValueSource(ints = {0, 2300})
+    void getAutomationPlanArtifactsListsReportOutputsAndPreview(int padding) throws Exception {
         Path runDirectory = automationRoot.resolve("runs/plan-123");
         Path artifactsDirectory = runDirectory.resolve("artifacts");
         Files.createDirectories(artifactsDirectory);
@@ -281,7 +287,7 @@ class AutomationPlanServiceTest {
                       reportFile: automation-report
                 """);
         Path reportFile = artifactsDirectory.resolve("automation-report.json");
-        Files.writeString(reportFile, "{\"status\":\"ok\"}");
+        Files.writeString(reportFile, "{\"status\":\"ok\",\"padding\":\"" + "é".repeat(padding) + "\",\"end\":\"END_OF_REPORT\"}");
 
         String result = service.getAutomationPlanArtifacts(planFile.toString(), 10, 4000);
 
@@ -290,12 +296,14 @@ class AutomationPlanServiceTest {
         assertTrue(result.contains("Artifact Type: plan"));
         assertTrue(result.contains("Artifact Type: report"));
         assertTrue(result.contains(reportFile.toString()));
-        assertTrue(result.contains("{\"status\":\"ok\"}"));
+        assertTrue(result.contains("{\"status\":\"ok\""));
+        assertEquals(padding == 0, result.contains("END_OF_REPORT"));
+        assertEquals(padding > 0, result.contains("Preview (truncated=yes)"));
     }
 
     @Test
     void getAutomationPlanArtifactsRejectsPathOutsideAutomationRoot() throws Exception {
-        Path outsidePlan = Files.createTempFile("outside-automation-plan", ".yaml");
+        Path outsidePlan = temporaryDirectory.resolve("outside-plan.yaml");
         Files.writeString(outsidePlan, "env: {}");
 
         IllegalArgumentException error = assertThrowsExactly(
@@ -304,6 +312,117 @@ class AutomationPlanServiceTest {
         );
 
         assertTrue(error.getMessage().contains("must stay within the configured automation workspace"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"leaf", "ancestor", "root", "hard-link"})
+    void planReadersRejectFilesystemLinks(String linkType) throws Exception {
+        Path outsideDirectory = Files.createDirectory(temporaryDirectory.resolve("private"));
+        Path outsidePlan = outsideDirectory.resolve("plan.yaml");
+        Files.writeString(outsidePlan, VALID_ENV);
+        Path planPath;
+        switch (linkType) {
+            case "leaf" -> {
+                planPath = automationRoot.resolve("plan.yaml");
+                Files.createSymbolicLink(planPath, outsidePlan);
+            }
+            case "ancestor" -> {
+                Path linkedDirectory = automationRoot.resolve("linked");
+                Files.createSymbolicLink(linkedDirectory, outsideDirectory);
+                planPath = linkedDirectory.resolve("plan.yaml");
+            }
+            case "root" -> {
+                Files.delete(automationRoot);
+                Files.createSymbolicLink(automationRoot, outsideDirectory);
+                planPath = automationRoot.resolve("plan.yaml");
+            }
+            case "hard-link" -> {
+                assumeTrue(automationRoot.getFileSystem().supportedFileAttributeViews().contains("unix"));
+                planPath = automationRoot.resolve("plan.yaml");
+                Files.createLink(planPath, outsidePlan);
+            }
+            default -> throw new IllegalArgumentException(linkType);
+        }
+
+        assertAll(
+                () -> assertThrowsExactly(IllegalArgumentException.class,
+                        () -> service.getAutomationPlanArtifacts(planPath.toString(), 10, 1000)),
+                () -> assertThrowsExactly(IllegalArgumentException.class,
+                        () -> service.runAutomationPlan(planPath.toString(), null, null))
+        );
+        verifyNoInteractions(automationAccess);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"leaf", "directory", "hard-link", "dangling"})
+    void getAutomationPlanArtifactsRejectsLinkedReports(String linkType) throws Exception {
+        Path outsideDirectory = Files.createDirectory(temporaryDirectory.resolve("private"));
+        Path outsideReport = outsideDirectory.resolve("automation-report.json");
+        Files.writeString(outsideReport, "{\"private\":true}");
+        Path artifacts = automationRoot.resolve("artifacts");
+        if ("directory".equals(linkType)) {
+            Files.createSymbolicLink(artifacts, outsideDirectory);
+        } else {
+            Files.createDirectory(artifacts);
+            Path reportPath = artifacts.resolve("automation-report.json");
+            if ("hard-link".equals(linkType)) {
+                assumeTrue(automationRoot.getFileSystem().supportedFileAttributeViews().contains("unix"));
+                Files.createLink(reportPath, outsideReport);
+            } else {
+                Files.createSymbolicLink(reportPath, outsideReport);
+                if ("dangling".equals(linkType)) {
+                    Files.delete(outsideReport);
+                }
+            }
+        }
+        Path planFile = automationRoot.resolve("plan.yaml");
+        Files.writeString(planFile, VALID_ENV + """
+                jobs:
+                  - type: report
+                    parameters:
+                      reportDir: /zap/automation/artifacts
+                      reportFile: automation-report
+                """);
+
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.getAutomationPlanArtifacts(planFile.toString(), 10, 4000));
+        verifyNoInteractions(automationAccess);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"runs", "reports"})
+    void runAutomationPlanRejectsLinkedOutputDirectories(String directoryName) throws Exception {
+        Path outsideDirectory = Files.createDirectory(temporaryDirectory.resolve("private"));
+        Files.createSymbolicLink(automationRoot.resolve(directoryName), outsideDirectory);
+
+        assertThrowsExactly(IllegalArgumentException.class,
+                () -> service.runAutomationPlan(null, VALID_ENV + """
+                        jobs:
+                          - type: report
+                            parameters:
+                              reportDir: /zap/automation/reports
+                        """, null));
+        verifyNoInteractions(automationAccess);
+        try (Stream<Path> children = Files.list(outsideDirectory)) {
+            assertEquals(0, children.count());
+        }
+    }
+
+    @Test
+    void getAutomationPlanArtifactsPreservesMissingReportDirectory() throws Exception {
+        Path planFile = automationRoot.resolve("plan.yaml");
+        Files.writeString(planFile, VALID_ENV + """
+                jobs:
+                  - type: report
+                    parameters:
+                      reportDir: /zap/automation/not-created-yet
+                """);
+
+        String result = service.getAutomationPlanArtifacts(planFile.toString(), 10, 4000);
+
+        assertTrue(result.contains("Report Job 1: no generated files found yet"));
+        assertFalse(Files.exists(automationRoot.resolve("not-created-yet")));
+        verifyNoInteractions(automationAccess);
     }
 
     @Test

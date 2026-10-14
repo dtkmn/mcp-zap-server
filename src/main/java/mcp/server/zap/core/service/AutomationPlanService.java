@@ -22,17 +22,22 @@ import org.yaml.snakeyaml.nodes.NodeTuple;
 import org.yaml.snakeyaml.nodes.ScalarNode;
 import org.yaml.snakeyaml.nodes.SequenceNode;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -599,6 +604,46 @@ public class AutomationPlanService {
         return resolved;
     }
 
+    private Path validateWorkspacePath(Path path) throws IOException {
+        Path root = Paths.get(requireText(automationLocalDirectory, "automationLocalDirectory"))
+                .toAbsolutePath().normalize();
+        Path normalized = path.toAbsolutePath().normalize();
+        if (!normalized.startsWith(root) || Files.isSymbolicLink(root)) {
+            throw new IllegalArgumentException("Automation paths must stay within the configured workspace without symbolic links");
+        }
+        Path current = root;
+        for (Path segment : root.relativize(normalized)) {
+            current = current.resolve(segment);
+            if (Files.isSymbolicLink(current)) {
+                throw new IllegalArgumentException("Automation paths must not contain symbolic links");
+            }
+        }
+        // Check the actual location as well, including filesystem redirects that are not
+        // reported as symbolic links. Missing ordinary output paths remain valid.
+        if (Files.exists(normalized, LinkOption.NOFOLLOW_LINKS)
+                && !normalized.toRealPath().startsWith(root.toRealPath())) {
+            throw new IllegalArgumentException("Automation paths must stay within the configured workspace");
+        }
+        return normalized;
+    }
+
+    private BasicFileAttributes validateWorkspaceFile(Path path) throws IOException {
+        Path normalized = validateWorkspacePath(path);
+        BasicFileAttributes attributes = Files.readAttributes(normalized, BasicFileAttributes.class,
+                LinkOption.NOFOLLOW_LINKS);
+        if (!attributes.isRegularFile()) {
+            throw new IllegalArgumentException("Automation artifacts must be regular files");
+        }
+        try {
+            if (((Number) Files.getAttribute(normalized, "unix:nlink", LinkOption.NOFOLLOW_LINKS)).longValue() != 1) {
+                throw new IllegalArgumentException("Automation files must not have multiple hard links");
+            }
+        } catch (UnsupportedOperationException _) {
+            // Other filesystems still enforce containment, symbolic-link and regular-file checks.
+        }
+        return attributes;
+    }
+
     private Path localAutomationRoot() {
         Path root = Paths.get(requireText(automationLocalDirectory, "automationLocalDirectory")).toAbsolutePath().normalize();
         createDirectories(root);
@@ -659,15 +704,16 @@ public class AutomationPlanService {
                                     String reportFilePrefix,
                                     String template,
                                     int remainingPreviewChars) {
-        output.append("Artifact Type: ").append(type).append('\n')
-                .append("Path: ").append(artifactPath).append('\n')
-                .append("Exists: ").append(Files.exists(artifactPath) ? "yes" : "no").append('\n');
-        if (!Files.exists(artifactPath) || !Files.isRegularFile(artifactPath)) {
-            return 1;
-        }
-
         try {
-            output.append("Size: ").append(Files.size(artifactPath)).append(" bytes\n");
+            artifactPath = validateWorkspacePath(artifactPath);
+            output.append("Artifact Type: ").append(type).append('\n')
+                    .append("Path: ").append(artifactPath).append('\n')
+                    .append("Exists: ").append(Files.exists(artifactPath, LinkOption.NOFOLLOW_LINKS) ? "yes" : "no").append('\n');
+            if (!Files.exists(artifactPath, LinkOption.NOFOLLOW_LINKS)) {
+                return 1;
+            }
+            BasicFileAttributes attributes = validateWorkspaceFile(artifactPath);
+            output.append("Size: ").append(attributes.size()).append(" bytes\n");
             if (reportFilePrefix != null) {
                 output.append("Declared Prefix: ").append(reportFilePrefix).append('\n');
             }
@@ -676,9 +722,21 @@ public class AutomationPlanService {
             }
             if (remainingPreviewChars > 0 && isPreviewableTextFile(artifactPath)) {
                 int previewChars = Math.min(remainingPreviewChars, MAX_PREVIEW_PER_FILE);
-                String preview = Files.readString(artifactPath, StandardCharsets.UTF_8);
-                boolean truncated = preview.length() > previewChars;
-                String body = truncated ? preview.substring(0, previewChars) : preview;
+                char[] preview = new char[previewChars + 1];
+                int returned;
+                try (InputStream input = Files.newInputStream(artifactPath, LinkOption.NOFOLLOW_LINKS);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(input,
+                             StandardCharsets.UTF_8.newDecoder()))) {
+                    returned = 0;
+                    int count;
+                    while (returned < preview.length
+                            && (count = reader.read(preview, returned, preview.length - returned)) != -1) {
+                        returned += count;
+                    }
+                }
+                validateWorkspaceFile(artifactPath);
+                boolean truncated = returned > previewChars;
+                String body = new String(preview, 0, Math.min(returned, previewChars));
                 output.append("Preview (truncated=").append(truncated ? "yes" : "no").append("):\n")
                         .append(body).append('\n');
             }
@@ -697,23 +755,24 @@ public class AutomationPlanService {
     }
 
     private List<Path> discoverArtifactFiles(ReportArtifactSpec reportArtifact) {
-        if (!Files.exists(reportArtifact.localDirectory()) || !Files.isDirectory(reportArtifact.localDirectory())) {
-            return List.of();
-        }
-
-        try (Stream<Path> children = Files.list(reportArtifact.localDirectory())) {
-            Stream<Path> regularFiles = children
-                    .filter(Files::isRegularFile)
-                    .sorted(Comparator.comparing(path -> path.getFileName().toString()));
-
-            if (!hasText(reportArtifact.reportFile())) {
-                return regularFiles.toList();
+        try {
+            Path directory = validateWorkspacePath(reportArtifact.localDirectory());
+            if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+                return List.of();
             }
-
-            String prefix = reportArtifact.reportFile().trim();
-            return regularFiles
-                    .filter(path -> matchesReportFile(path.getFileName().toString(), prefix))
-                    .toList();
+            try (Stream<Path> children = Files.list(directory)) {
+                String prefix = trimToNull(reportArtifact.reportFile());
+                List<Path> entries = children
+                        .filter(path -> prefix == null || matchesReportFile(path.getFileName().toString(), prefix))
+                        .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                        .toList();
+                for (Path entry : entries) {
+                    validateWorkspacePath(entry);
+                }
+                return entries.stream()
+                        .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                        .toList();
+            }
         } catch (IOException e) {
             log.warn("Unable to inspect automation artifact directory {}: {}", reportArtifact.localDirectory(), e.getMessage());
             return List.of();
@@ -787,15 +846,17 @@ public class AutomationPlanService {
 
     private String readFile(Path path) {
         try {
-            if (Files.size(path) > MAX_PLAN_INPUT_BYTES) {
+            BasicFileAttributes attributes = validateWorkspaceFile(path);
+            if (attributes.size() > MAX_PLAN_INPUT_BYTES) {
                 throw planInputTooLarge();
             }
-            try (InputStream input = Files.newInputStream(path)) {
+            try (InputStream input = Files.newInputStream(path, LinkOption.NOFOLLOW_LINKS)) {
                 // Bound the read itself as well: a workspace file can grow after the size check.
                 byte[] content = input.readNBytes(MAX_PLAN_INPUT_BYTES + 1);
                 if (content.length > MAX_PLAN_INPUT_BYTES) {
                     throw planInputTooLarge();
                 }
+                validateWorkspaceFile(path);
                 return StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
             }
         } catch (IOException e) {
@@ -806,7 +867,9 @@ public class AutomationPlanService {
 
     private void writeFile(Path path, String content) {
         try {
-            Files.writeString(path, content, StandardCharsets.UTF_8);
+            path = validateWorkspacePath(path);
+            Files.writeString(path, content, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
         } catch (IOException e) {
             log.error("Error writing automation plan {}: {}", path, e.getMessage(), e);
             throw new ZapApiException("Error writing automation plan file", e);
@@ -815,7 +878,9 @@ public class AutomationPlanService {
 
     private void createDirectories(Path path) {
         try {
+            path = validateWorkspacePath(path);
             Files.createDirectories(path);
+            validateWorkspacePath(path);
         } catch (IOException e) {
             log.error("Error creating automation directory {}: {}", path, e.getMessage(), e);
             throw new ZapApiException("Error preparing automation workspace", e);
@@ -880,6 +945,7 @@ public class AutomationPlanService {
                 continue;
             }
             Map<String, Object> parameters = childMap(job.get("parameters"));
+            targetPolicy.validateReportParameters(parameters, "jobs[" + i + "].parameters");
             String reportDirValue = trimToNull(stringValue(parameters.get("reportDir")));
             Path localDirectory;
             if (reportDirValue == null) {

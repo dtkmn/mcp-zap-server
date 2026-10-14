@@ -96,6 +96,22 @@ or workspaces. Use a separate MCP/ZAP deployment for independent clients in this
 single-client configuration. Keep plans and reports on writable persistent
 storage, and recreate the MCP container after changing its environment.
 
+**Unreleased workspace hardening:** use ordinary directories and regular files
+inside the configured automation workspace. Symbolic links in the automation
+root, plan paths, report directories or selected report files are rejected, as
+are paths whose actual filesystem location is outside the workspace. Files with
+multiple hard links are rejected when the filesystem exposes their link count.
+Report jobs must use literal `reportDir` and `reportFile` values, without `${...}`
+substitutions. `reportFile` is a filename pattern, not a path: dollar signs,
+directory separators, drive components and `.`/`..` names are rejected. Omit the
+fields or leave them empty to use the existing defaults; ordinary ZAP filename
+patterns remain available.
+This applies to plan input, artifact previews and normalized output preparation;
+ordinary report directories that have not been created yet remain valid. These
+checks are not included in the published `v0.15.0` server. Keep workspace write
+access limited to the trusted MCP and ZAP processes; the checks do not replace
+filesystem permissions or isolation from untrusted local writers.
+
 ## How Plan Input Works
 
 `zap_automation_plan_run` accepts exactly one of:

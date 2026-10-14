@@ -75,7 +75,7 @@ public class RequestCorrelationWebFilter implements WebFilter, Ordered {
     private void logCompletion(ServerWebExchange exchange, String correlationId, Instant startedAt, String signalType) {
         Duration duration = Duration.between(startedAt, Instant.now());
         long durationMs = duration.toMillis();
-        String method = exchange.getRequest().getMethod() != null ? exchange.getRequest().getMethod().name() : "UNKNOWN";
+        String method = exchange.getRequest().getMethod().name();
         String path = exchange.getRequest().getPath().pathWithinApplication().value();
         String clientId = stringAttribute(exchange, RequestLogContext.CLIENT_ID_ATTRIBUTE);
         String workspaceId = stringAttribute(exchange, RequestLogContext.WORKSPACE_ID_ATTRIBUTE);

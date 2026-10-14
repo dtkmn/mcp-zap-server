@@ -91,6 +91,17 @@ class AutomationPlanTargetPolicyTest {
                 ENV + "jobs: [{type: spider, parameters: {context: existing-engine-context}}]",
                 ENV + "jobs: [{type: spider, parameters: {Context: target}}]",
                 ENV + "jobs: [{type: spider, parameters: {context: '${CONTEXT}'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportDir: '${OUTPUT}'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '${OUTPUT}'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: \"{{$'{OUTPUT}'}}\"}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '../outside-report'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '/outside-report'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '..\\outside-report'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: 'C:outside-report'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '..'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: '.'}}]",
+                ENV + "jobs: [{type: report, parameters: {reportFile: [outside-report]}}]",
+                ENV + "jobs: [{type: report, parameters: {reportDir: {value: reports}}}]",
                 ENV + "jobs: [{type: requestor, parameters: bad, requests: []}]",
                 contextAuth("{method: script, parameters: {scriptInline: 'arbitrary code'}}"),
                 contextAuth("{Method: script, Parameters: {scriptInline: 'arbitrary code'}}"),
@@ -114,6 +125,33 @@ class AutomationPlanTargetPolicyTest {
 
     private static String contextAuth(String auth) {
         return "env: {contexts: [{name: target, urls: ['" + URL + "'], authentication: " + auth + "}] }\n";
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{}", "{reportDir: '', reportFile: ''}",
+            "{reportDir: reports, reportFile: 'scan-{{yyyy-MM-dd}}'}"})
+    void literalReportOutputsAndDefaultsRemainSupported(String parameters) throws Exception {
+        String yaml = ENV + "jobs: [{type: report, parameters: " + parameters + "}]\n";
+        String result = service.runAutomationPlan(null, yaml, "plan.yaml");
+        Path planPath = Path.of(result.lines().filter(line -> line.startsWith("Plan File: "))
+                .findFirst().orElseThrow().substring("Plan File: ".length()));
+
+        assertTrue(result.contains("Plan ID: 7"));
+        assertTrue(service.getAutomationPlanArtifacts(planPath.toString(), 10, 4000)
+                .contains("Declared Report Jobs: 1"));
+        verify(engine).runAutomationPlan(anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{reportDir: '${OUTPUT}'}", "{reportFile: '${OUTPUT}'}",
+            "{reportFile: '../outside-report'}"})
+    void artifactInspectionRejectsUnsafeReportOutputDescriptors(String parameters) throws Exception {
+        Path source = root.resolve("source.yaml");
+        Files.writeString(source, ENV + "jobs: [{type: report, parameters: " + parameters + "}]\n");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.getAutomationPlanArtifacts(source.toString(), 10, 4000));
+        verifyNoInteractions(engine);
     }
 
     private static String contextSession(String session) {

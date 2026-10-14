@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Enforce filesystem containment for Automation Framework plans and artifacts, rejecting linked files and directories before reading or preparing outputs. Validate literal report output directories and filenames before ZAP dispatch. Open files without following symbolic links, reject multiple hard links where supported, and bound report preview reads while preserving ordinary missing-output handling.
+- Remove an unreachable HTTP-method fallback from request logging; Spring's supported server requests always provide a method.
 - Stop inferring Automation Framework success from a finish timestamp and an empty error list. Report `Successful` as `pending` while running, `no` on reported errors, or `unknown` otherwise; upstream progress does not expose the termination reason, and clean native cancellation does not prove a completed scan.
 - Require complete matching ZAP engine/add-on inventories before reporting net-new or resolved findings. Changed or unknown scanner identity produces informational observations; enforced CI gates fail until a reviewed comparable baseline is supplied.
 - Add MCP ZAP Connect terms of service to the existing first-run guide and link them from the plugin's OpenAI listing metadata and README.

@@ -99,12 +99,54 @@ yourself. Docker and Compose must already be installed and running; review any
 permissions requested by your client. Installing this skills-only plugin does
 not start the scanner or register MCP tools until you request setup.
 
-This setup and status-verification workflow has been tested locally in Codex.
+This setup and status-verification workflow has been tested locally in Codex on
+Apple Silicon macOS.
 Install the plugin locally using the steps below.
+
+### Check The Codex CLI
+
+The installation commands use the Codex CLI (`codex`). On macOS, run this in
+your terminal, or ask your desktop agent to run it before installing the plugin.
+It keeps an existing `codex` command and checks common desktop-app locations
+only when the command is missing:
+
+```bash
+if ! command -v codex >/dev/null 2>&1; then
+  for codex_dir in \
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "/Applications/Codex.app/Contents/Resources" \
+    "$HOME/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "$HOME/Applications/Codex.app/Contents/Resources"
+  do
+    if [ -x "$codex_dir/codex" ]; then
+      export PATH="$codex_dir:$PATH"
+      break
+    fi
+  done
+fi
+codex --version
+command -v codex
+```
+
+The PATH change lasts only for this terminal session; use the same terminal
+for the installation commands below. The block prints the version and CLI path.
+An agent using separate command sessions should use that executable's full path
+for subsequent commands, since a PATH change does not carry between shells.
+It does not edit shell startup files, Codex connections or Docker settings.
+For an app installed elsewhere, use its bundled CLI directory instead. OpenAI's
+[bundled CLI documentation](https://learn.chatgpt.com/docs/reference/troubleshooting#feature-is-working-in-the-codex-cli-but-not-in-the-chatgpt-desktop-app)
+also describes the older `Codex.app` location.
+
+If `codex` is still missing, follow OpenAI's
+[CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli#getting-started)
+to install it, then open a new terminal and run `codex --version` again.
+Continue only after it prints a version. If your CLI does not recognize the
+plugin commands below, update the desktop app or standalone CLI using OpenAI's
+instructions and retry. This prerequisite comes before plugin installation;
+the plugin's setup skill is not available to help until it is installed.
 
 ### Install In Codex
 
-These installation commands require the Codex CLI (`codex`) in your terminal.
 For a new checkout, run:
 
 ```bash

@@ -10,7 +10,8 @@ MCP tools.
 ## Requirements
 
 - Local Codex with permission to execute commands on your machine.
-- The Codex CLI (`codex`) available in your terminal for the installation commands below.
+- Access to the Codex CLI for the installation commands below; the desktop
+  app's bundled CLI can be used without installing another copy.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
 - A compatible POSIX shell; Git when the project needs to be cloned.
@@ -27,6 +28,14 @@ not need to edit the client's configuration yourself. Review any permissions
 requested by the client; scans require a separate request.
 
 ### Codex Local Installation
+
+First run `codex --version`. If the command is missing, follow
+[Check The Codex CLI](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#check-the-codex-cli)
+before continuing. It checks the macOS desktop app's bundled CLI before directing
+you to OpenAI's installation instructions. You can ask your desktop agent to
+help with this prerequisite before the plugin is installed. Keep the same
+terminal open if you use the temporary PATH adjustment. If your CLI does not
+recognize the plugin commands below, update the app or CLI as described there.
 
 For a new checkout, run:
 
@@ -52,8 +61,8 @@ and use **Try now** in a local conversation. If the skill is absent, start a
 new local conversation with the plugin enabled. See OpenAI's
 [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually)
 and [CLI commands](https://learn.chatgpt.com/docs/developer-commands#built-in-slash-commands).
-Codex setup and status verification have been tested locally; installation does
-not establish a public directory listing.
+Codex setup and status verification have been tested locally on Apple Silicon
+macOS; installation does not establish a public directory listing.
 
 ## Use In Codex
 

@@ -54,6 +54,13 @@ for the verified image digest and upgrade requirements. Existing settings and
 selected versions are preserved; set `IMAGE_TAG` in `.env` deliberately when
 upgrading an existing installation.
 
+Prefer to ask Codex to handle setup? Manually install the optional
+[MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
+then ask it to check prerequisites, start the Docker stack, configure your private
+MCP connection and verify status. This workflow has been tested locally in
+Codex. Docker and Compose must already be installed and running; scanning is
+a separate request. The commands below remain available without the plugin.
+
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
@@ -74,7 +81,7 @@ Connect your MCP client:
 
 - MCP endpoint for host-side clients: `http://localhost:7456/mcp`
 - Authentication: send `MCP_API_KEY` from `.env` in the `X-API-Key` header
-- [Client setup for Codex, Cursor, and other MCP clients](./docs/src/content/docs/getting-started/mcp-client-authentication.md)
+- [MCP client setup and authentication](./docs/src/content/docs/getting-started/mcp-client-authentication.md)
 
 The stack runs the MCP server, ZAP, and demo targets. Install and configure
 your preferred MCP client separately.

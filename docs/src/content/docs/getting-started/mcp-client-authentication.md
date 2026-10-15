@@ -29,9 +29,13 @@ The practical truth: API-key mode is still the easiest self-serve client setup. 
 If you are starting from a fresh clone, use [Self-Serve First Run](../self-serve-first-run/) before tuning client-specific details here.
 
 For agent-assisted Docker setup, the same guide covers
-[MCP ZAP Connect in Codex and Cursor](../self-serve-first-run/#guided-setup-in-codex-and-cursor).
-The plugin supplies one shared setup skill; it configures only the client you
-request and verifies the connection without starting a scan.
+[MCP ZAP Connect in Codex](../self-serve-first-run/#guided-setup-in-codex).
+Install the plugin locally, then ask its setup skill to start or reuse the
+Docker stack and configure your private Codex connection. This workflow has
+been tested locally. It verifies status without starting a scan, so you
+normally do not need to edit client settings yourself. Docker and Compose must
+already be installed and running.
+The manual configuration recipes below remain available without the plugin.
 
 ## Client Compatibility
 
@@ -49,6 +53,10 @@ may support.
 | Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
 | Claude Desktop with this guide's local `localhost` setup | Unsupported onboarding path | Remote connectors run from Anthropic's infrastructure. The repository does not supply a local desktop bridge or a tested Claude connector setup. |
 | Clients limited to stdio, legacy SSE, or no compatible authentication | Unsupported direct connection | This server's documented endpoint uses streamable HTTP with API-key or JWT authentication. No first-party transport/auth proxy is included. |
+
+The Cursor row records the earlier 12 October setup. The 13 October catalogue
+imports failed, and a fresh native Cursor connection retry remains pending;
+see the [dated results](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#cursor-import-limitations).
 
 For a compatibility report, include the client version, operating system,
 connection mode, and whether both tool discovery and the first scan below

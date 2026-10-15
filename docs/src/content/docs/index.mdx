@@ -41,12 +41,14 @@ editUrl: false
 
   <p>Released v0.16.0 adds scanner-aware findings and CI baselines, validated whole-plan Automation Framework limits, safer plan/report paths and preservation of root alert evidence in scoped reports. Linux AMD64 and ARM64 images are published on GHCR and Docker Hub, and MCP Registry 0.16.0 is active/latest. Read the <a href="./releases/0.16.0/">release and upgrade guide</a> for the verified image digest and requirements before upgrading the server and CI gate together.</p>
 
+  <p>Ask Codex to handle your local scanner setup. <a href="./getting-started/self-serve-first-run/#guided-setup-in-codex">Install MCP ZAP Connect locally</a>, then ask it to check prerequisites, start the Docker stack, configure your private MCP connection and verify status. This workflow has been tested locally in Codex. Docker and Compose must already be installed and running; scans are a separate request.</p>
+
   <span class="section-label">./execute_mission.sh</span>
 
   <div class="mission-grid">
     <a class="mission-card" href="./getting-started/self-serve-first-run/">
       <h3>&gt; [01] SELF_SERVE_FIRST_RUN</h3>
-      <p>Start the local server, connect your MCP client, and generate your first scan report.</p>
+      <p>Choose agent-guided setup or Docker commands, connect your MCP client, and generate your first scan report.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-surfaces/">
       <h3>&gt; [02] TOOL_SURFACES</h3>
@@ -86,7 +88,7 @@ editUrl: false
     </a>
     <a class="mission-card" href="./getting-started/form-login-target-authentication/">
       <h3>&gt; [OPTIONAL] TARGET_FORM_LOGIN</h3>
-      <p>Only when the authorized target requires it: let ZAP log in without exposing the password to Cursor.</p>
+      <p>Only when the authorized target requires it: let ZAP log in without exposing the password to your AI client.</p>
     </a>
   </div>
 

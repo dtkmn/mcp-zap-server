@@ -1,31 +1,90 @@
 # MCP ZAP Connect
 
 A skills-only plugin by [Daniel Tse](https://github.com/dtkmn) that guides local
-MCP ZAP Server setup in Codex or Cursor using the project's Docker Compose
-release images. It starts or reconnects the scanner when requested, configures
-the requested client's private MCP connection and verifies status without
+MCP ZAP Server setup in Codex using the project's Docker Compose release images.
+This workflow has been tested locally. It starts or reconnects the scanner when
+requested, configures your private Codex MCP connection and verifies status without
 starting a scan. Installing the plugin alone does not start Docker or register
 MCP tools.
 
 ## Requirements
 
-- Local Codex or Cursor with permission to execute commands on your machine.
+- Local Codex with permission to execute commands on your machine.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
 - A compatible POSIX shell; Git when the project needs to be cloned.
 
 Java and ZAP run in containers, so a separate Java installation is unnecessary.
-The recorded Cursor setup covers Apple Silicon macOS 27.0.1 and Cursor 3.24.12.
-Other platforms need validation. Web-only chats cannot reach the local scanner.
+Web-only chats cannot reach the local scanner.
 
 ## Install
 
-Cursor provides a disk-import route at **Customize → Plugins → Add → From Local
-Repository**. Select the MCP ZAP Server checkout's repository root. If the plugin
-appears, select MCP ZAP Connect and add it for yourself, then find
-`setup-local-scanner` in **Customize → Skills**. On 12 October 2026, this route
+Install the plugin locally in Codex using the steps below.
+After installation, ask its setup skill to check prerequisites, start or reuse
+the Docker stack, and configure your private client connection. You normally do
+not need to edit the client's configuration yourself. Review any permissions
+requested by the client; scans require a separate request.
+
+### Codex Local Installation
+
+Clone or reuse the public MCP ZAP Server checkout. With the Codex CLI available,
+run these commands from its repository root:
+
+```bash
+codex plugin marketplace add "$PWD"
+codex plugin add mcp-zap-connect@mcp-zap-local-preview
+```
+
+`mcp-zap-local-preview` is the repository's existing local marketplace identifier;
+the installed plugin is **MCP ZAP Connect**. Keep the checkout in place for that
+marketplace. Enable the plugin in a local Codex conversation and select its
+`setup-local-scanner` skill. If it is absent, start a new local conversation with
+the plugin enabled. See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
+Codex setup and status verification have been tested locally; installation does
+not establish a public directory listing.
+
+## Use In Codex
+
+Select `setup-local-scanner` and ask:
+
+```text
+Set up MCP ZAP Server in Codex using Docker Compose.
+Reuse any existing installation and preserve my other MCP connections.
+Verify with a status call only; do not run a scan.
+```
+
+The skill preserves unrelated settings and keeps keys in private local
+configuration. Codex may need reconnection before its tools load. Scanning
+requires a separate request identifying your authorized target and intended
+workflow. See the [canonical setup guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#guided-setup-in-codex)
+for the first demo scan after setup.
+
+## Cursor Preview Reference
+
+The following technical reference records unfinished Cursor validation; it is
+separate from the verified Codex setup above. Recorded Cursor checks used
+Apple Silicon macOS 27.0.1 and Cursor 3.24.12. Other platforms need validation.
+
+### Cursor Local Preview
+
+Cursor's [local development instructions](https://cursor.com/docs/plugins#test-plugins-locally)
+describe copying the complete `plugins/mcp-zap-connect` folder, including hidden
+files, into `~/.cursor/plugins/local/mcp-zap-connect`. Preserve any existing copy.
+Use **Developer: Reload Window**, check **Customize → Skills**, then invoke
+`/setup-local-scanner` in a local Agent chat. Local imports must be allowed by
+your policy; an installed marketplace plugin with the same name takes precedence.
+
+This folder-loading route is distinct from repository and disk catalogue imports.
+It is a documented alternative, not a newly verified installation: the latest
+catalogue imports failed and a fresh end-to-end Cursor connection check remains
+pending. Review the results below before choosing this preview.
+
+### Cursor Import Limitations
+
+On 12 October 2026, **Customize → Plugins → Add → From Local Repository**
 discovered and installed MCP ZAP Connect 0.3.0 with its single setup skill in
-Cursor 3.24.12. The latest retest below did not reproduce that import success.
+Cursor 3.24.12. Setup and recovery against an existing Docker stack passed.
+The 13 October retest did not reproduce that import success.
 
 Cursor repository imports use the repository-root
 `.cursor-plugin/marketplace.json` to locate this folder and its
@@ -48,15 +107,12 @@ manifests were published on the default branch. The `/add-plugin` command also
 returned **No result**. [Cursor issue #452](https://github.com/cursor/plugins/issues/452)
 reports a matching symptom; the cause of our result is unconfirmed.
 
-Public marketplace submission, approval and installation are separate checks;
-no public listing or verified marketplace installation is claimed here.
+Public marketplace approval and installation are separate checks; no public
+listing or verified marketplace installation is claimed here.
 
-See the [canonical setup guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#guided-setup-in-codex-and-cursor)
-for the shared workflow and client configuration details.
+### Cursor Connection Checks
 
-## Use
-
-In Cursor, invoke `/setup-local-scanner` with:
+For the Cursor preview, invoke `/setup-local-scanner` with:
 
 ```text
 Set up MCP ZAP Server in Cursor using Docker Compose.
@@ -64,12 +120,9 @@ Reuse any existing installation and preserve my Codex connection.
 Verify with a status call only; do not run a scan.
 ```
 
-In Codex, request the same setup for Codex. The skill preserves the other
-client's settings and keeps keys in private local configuration. A client may
-need reconnection before its tools load. After a Docker restart in Cursor, open
-the scanner under **Customize → MCPs**, select **Reload** and repeat the status
-call. Scanning requires a separate request identifying your authorized target
-and intended workflow.
+After a Docker restart in Cursor, open the scanner under **Customize → MCPs**,
+select **Reload** and repeat the status call. A fresh native connection check
+remains pending as described above.
 
 ## Privacy, terms, support and license
 

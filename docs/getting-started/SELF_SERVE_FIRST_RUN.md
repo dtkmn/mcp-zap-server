@@ -11,6 +11,10 @@ The defaults use published `v0.16.0`. Review the
 [release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
 when upgrading an existing installation.
 
+Prefer agent-guided setup? [Install MCP ZAP Connect locally in Codex](#guided-setup-in-codex),
+then ask Codex to start and connect the scanner. The manual Docker steps
+below are available without the plugin.
+
 <a id="1-bootstrap-local-settings"></a>
 <a id="2-start-the-stack"></a>
 
@@ -84,36 +88,50 @@ The [Scan-To-Evidence Guide](https://danieltse.org/mcp-zap-server/scanning/mcp-c
 covers optional active scanning, release evidence, and customer handoff.
 
 <a id="guided-setup-in-local-codex"></a>
+<a id="guided-setup-in-codex-and-cursor"></a>
 
-## Guided Setup In Codex And Cursor
+## Guided Setup In Codex
 
-MCP ZAP Connect `0.3.0` is a skills-only plugin that guides the same Docker Compose
-setup above. Docker and Compose must already be installed and running. Installing
-the plugin does not start the scanner or register MCP tools; ask its setup skill
-to start the release containers and configure your private connection. Public
-directory submission and approval are pending; local installation does not
-establish a public listing in either client's marketplace.
+MCP ZAP Connect `0.3.0` lets you ask Codex to handle the local Docker Compose
+setup above, including prerequisites, startup, private client configuration and
+a status check. You normally do not need to edit the client's configuration
+yourself. Docker and Compose must already be installed and running; review any
+permissions requested by your client. Installing this skills-only plugin does
+not start the scanner or register MCP tools until you request setup.
 
-For a local Cursor plugin test, copy the complete
-[`plugins/mcp-zap-connect`](https://github.com/dtkmn/mcp-zap-server/tree/main/plugins/mcp-zap-connect)
-directory into `~/.cursor/plugins/local/mcp-zap-connect`. Preserve an existing
-copy rather than overwriting it. Use **Developer: Reload Window**, then check
-**Customize → Skills** and invoke `/setup-local-scanner` in a local Agent chat:
+This setup and status-verification workflow has been tested locally in Codex.
+Install the plugin locally using the steps below.
 
-```text
-Set up MCP ZAP Server in Cursor using the existing Docker installation.
-Preserve my Codex connection. Verify with a status call only; do not run a scan.
+### Install In Codex
+
+Clone this repository or reuse an existing checkout. With the Codex CLI
+available, run these commands from the `mcp-zap-server` repository root:
+
+```bash
+codex plugin marketplace add "$PWD"
+codex plugin add mcp-zap-connect@mcp-zap-local-preview
 ```
 
-The plugin uses Cursor's private `~/.cursor/mcp.json` and Codex's private TOML
-configuration only when that client is requested. Cursor's
-[local plugin guide](https://cursor.com/docs/plugins#test-plugins-locally)
-documents installation and local-import policy restrictions. OpenAI's automatic
-onboarding entry point is specific to Codex; invoke the skill explicitly in Cursor.
+`mcp-zap-local-preview` is this repository's existing local marketplace
+identifier; the plugin installs as **MCP ZAP Connect**. Keep the checkout in place
+for the local marketplace. These commands install the skill, not the scanner.
+See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
+
+Enable MCP ZAP Connect in a local Codex conversation and select its
+`setup-local-scanner` skill. If it is not available in the current conversation,
+start a new local conversation with the plugin enabled. Ask:
+
+```text
+Set up MCP ZAP Server in Codex using Docker Compose.
+Reuse any existing installation and preserve my other MCP connections.
+Verify with a status call only; do not run a scan.
+```
 
 The skill checks server readiness before changing client settings and verifies
 the connection with a harmless status call when the client has loaded it. A
-client reconnection or restart may be needed. Scanning is a separate request.
+client reconnection or restart may be needed. Scanning is a separate request;
+after verification, use the [first-report prompt above](#3-generate-your-first-report)
+to try the bundled demo through your agent.
 
 For support, use the project's
 [GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues). Include versions

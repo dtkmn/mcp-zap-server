@@ -1,10 +1,27 @@
 # Release Notes and Upgrade Guide - Version 0.16.0
 
-These notes describe **MCP ZAP Server `v0.16.0`**. Release, image, Helm and MCP
-Registry publication are **pending**. Local preparation or a merge does not
-publish them. Before installing, check
-[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
-successful release-image workflow for your registry and architecture.
+**MCP ZAP Server `v0.16.0` is released.** The
+[GitHub release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.16.0) and
+[release-image workflow](https://github.com/dtkmn/mcp-zap-server/actions/runs/38648232124)
+use revision `0ebe11c3ae4c17de59fde0654e19b3e35e42ca20`. The workflow successfully
+published `v0.16.0` and `latest` images to GHCR and Docker Hub for **Linux AMD64
+and ARM64**. Chart `0.16.0` is included in the tagged source and selects the
+matching MCP image.
+
+Both registries published this multi-architecture image index digest:
+
+```text
+sha256:c62be3c0622a52cd5e81747dde3c32117e480853ae2733bb3f3281434618f673
+```
+
+For immutable deployment, use
+`ghcr.io/dtkmn/mcp-zap-server:v0.16.0@sha256:c62be3c0622a52cd5e81747dde3c32117e480853ae2733bb3f3281434618f673`
+or the same tag and digest with `docker.io/dtkmn/mcp-zap-server`.
+The [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
+published `0.16.0` as active/latest on **15 October 2026 in Sydney**
+(`2026-10-14T23:17:48.215193Z`). Its package records reference the versioned
+images. Image publication does not change the separate Mac preview or plugin
+directory status described below.
 
 ## What Changes For Users
 
@@ -24,7 +41,7 @@ successful release-image workflow for your registry and architecture.
 
 ## Upgrade From v0.15.0
 
-After publication, align the server image, chart `0.16.0`, copied CI action or
+Align the server image, chart `0.16.0`, copied CI action or
 helper, and external evidence readers. The chart and local Compose defaults
 select image `v0.16.0`; an existing `.env` image choice or Helm image override
 must be updated deliberately. For digest-pinned deployments, select the digest
@@ -169,12 +186,14 @@ compared with concrete findings evidence rather than assumed interchangeable.
   Public directory submission/approval is pending.
 - The maintainer-supplied Apple Silicon preview remains unsigned, with public
   signing/notarization and clean browser-download installation verification
-  pending. Previously built `v0.15.0` previews and recorded private Mac/ChatGPT
+  pending; no public Mac binary is attached to `v0.16.0`. Previously built
+  `v0.15.0` previews and recorded private Mac/ChatGPT
   tests are historical evidence; they do not validate a `v0.16.0` binary.
-  Mac packaging and its source companion remain a separate manual workflow.
+  Mac packaging and its source companion remain a separate manual workflow;
+  automatic Mac packaging is paused.
 - Recorded EC2 and EKS evaluations used `v0.15.0` or the explicitly documented
-  matched prerelease application/chart. Current instructions select `v0.16.0`
-  after publication; those older evaluations do not prove this version on AWS.
+  matched prerelease application/chart. Current instructions select published
+  `v0.16.0`; those older evaluations do not prove this version on AWS.
 
 The JDBC and Zod patches above do not clear the remaining native-library and
 docs cache advisories. Review the dated

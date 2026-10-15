@@ -103,7 +103,7 @@ Use them when:
 - you want to focus on net-new findings instead of total backlog size
 
 Snapshots from `v0.16.0` use version 3 and include measured scanner inventory.
-Publication is pending; see the
+See the
 [release and upgrade guide](/mcp-zap-server/releases/0.16.0/) before updating
 the server and gate together. Version 3 retains version 2 finding identity:
 comparisons prefer the full `nodeName`
@@ -166,7 +166,7 @@ JSON retains engine identity and generation timestamps. Scoped HTML uses the
 standard template's default appearance; light/dark themes apply to full-session
 HTML. A path filter remains a prefix filter, not a scan-ID boundary.
 
-The root-origin preservation fix is included in `v0.16.0` (publication pending):
+The root-origin preservation fix is included in released `v0.16.0`:
 reports generated with that version treat `https://target.example` and `https://target.example/`
 equally, including alerts ZAP records with an empty root path. Other hosts,
 schemes and ports remain excluded. Non-root path prefixes are case-sensitive.

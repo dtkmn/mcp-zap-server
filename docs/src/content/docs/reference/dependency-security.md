@@ -3,26 +3,30 @@ title: "Dependency Security Status"
 description: "Known upstream dependency findings, affected deployment layers, and the review process for MCP ZAP Server."
 ---
 
-Reviewed **15 October 2026** for the local `v0.16.0` candidate. The latest
-[main Snyk run](https://github.com/dtkmn/mcp-zap-server/actions/runs/38561648021)
+Dependency assessment recorded **15 October 2026** for `v0.16.0`, now
+[released](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.16.0). The
+[pre-patch main Snyk run](https://github.com/dtkmn/mcp-zap-server/actions/runs/38561648021)
 analyzed revision `19055b52d2bc3655514fa9f87827f0d2348a1a5c` on **14 October**,
 before the two dependency patches below. It reported eight high-severity
 results representing seven distinct advisories across its Gradle, docs and
 container categories. GitHub also retains older category records for some
 of those advisories; those records are not additional distinct vulnerabilities.
 
-The container results cover its **Linux AMD64** image. They do not establish
-an ARM64 assessment or a scan of the final `v0.16.0` release image. Local source
-changes, passing tests and a green scanner workflow do not close GitHub alerts
-or publish a release.
+The container results cover that run's **Linux AMD64** image. They do not
+establish an ARM64 assessment or a scan of the final `v0.16.0` release image.
+Release-image and Registry publication are verified separately in the
+[release guide](/mcp-zap-server/releases/0.16.0/); publication does not refresh
+this dated security assessment or close GitHub alerts.
 
 The maintainer **[@dtkmn](https://github.com/dtkmn)** owns follow-up. Review
 remaining findings again by **17 October 2026 UTC**, or sooner when a relevant
 upstream fix or deployment change becomes available.
 
-## Dependency patches in the v0.16.0 candidate
+<a id="dependency-patches-in-the-v0160-candidate"></a>
 
-| Component | Advisory and affected behavior | Candidate disposition |
+## Dependency patches shipped in v0.16.0
+
+| Component | Advisory and affected behavior | Release disposition |
 | --- | --- | --- |
 | PostgreSQL JDBC `42.7.12` → `42.7.14` | [GHSA-rhp9-mr79-r74h / CVE-2026-107314](https://github.com/pgjdbc/pgjdbc/security/advisories/GHSA-rhp9-mr79-r74h): an operator-supplied `requireAuth` value excluding every method, or naming none, silently allowed any authentication method. | Adopt the upstream patched driver. Supplied defaults do not set this property; deployment-specific exposure is unproven. Invalid restrictions now reject the connection; valid settings retain their behavior. Review JDBC URL overrides when upgrading. |
 | Docs Zod `4.6.5` → `4.6.7` | [SNYK-JS-ZOD-20510278](https://security.snyk.io/vuln/SNYK-JS-ZOD-20510278): excessive validation issue accumulation in containers. The [upstream patch](https://github.com/colinhacks/zod/pull/6652) checks leading container size limits before parsing elements. | Refresh the existing lockfile within Astro and Sitemap's compatible ranges; no direct dependency or override is needed. This does not impose limits on every unbounded schema. Zod is used by the static docs build and is absent from the Java runtime image. |
@@ -34,14 +38,19 @@ error after the Zod update, rather than an error for each invalid element;
 a valid bounded array still parsed. These scoped checks do not prove safety
 for every JDBC deployment or every Zod schema.
 
-A fresh local Snyk test of the root Gradle project reports no **high or critical**
-vulnerabilities at the configured high threshold. The docs Snyk test no longer
-reports Zod and retains the two cache advisories below. The complete local npm
-audit reports zero vulnerabilities, and `audit-ci.jsonc` has an empty allowlist.
+The local Snyk tests recorded during release preparation reported no **high or
+critical** vulnerabilities in the root Gradle project at the configured high
+threshold. The docs Snyk test no longer reported Zod and retained the two cache
+advisories below. The complete local npm audit reported zero vulnerabilities,
+and `audit-ci.jsonc` had an empty allowlist.
 No Snyk ignore, patch policy or new npm exception was added. GitHub alert closure
 and scanning both final release-image architectures remain separate checks.
 
 ## Remaining upstream findings
+
+The dated assessment retains five advisory records: three native-library
+findings from the selected AMD64 scan and two documentation-build findings.
+These records remain in scope until fresh evidence changes their disposition.
 
 | Component and reported version | Public advisory | Deployment scope and next action |
 | --- | --- | --- |
@@ -56,8 +65,8 @@ and scanning both final release-image architectures remain separate checks.
 The Dockerfile retains its signed, multi-architecture
 `gcr.io/distroless/java25-debian13:nonroot` index pin:
 `sha256:ca60da1345c0f17b6d019049e6749e15f10fd3c0da86dec938d2b4ec565d0629`.
-The upstream tag now resolves to a different index; this release preparation
-has not adopted or validated it. A newer digest does not establish that these
+The upstream tag resolved to a different index during the assessment;
+`v0.16.0` retains the pin above. A newer digest does not establish that these
 specific native findings are fixed. Nonroot execution and restricted container
 privileges reduce exposure and consequences; they do not patch libraries.
 Do not mix Debian generations or remove native runtime libraries without

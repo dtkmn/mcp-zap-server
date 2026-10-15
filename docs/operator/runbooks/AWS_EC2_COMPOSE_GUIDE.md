@@ -5,11 +5,10 @@ through AWS Session Manager, and verify scanning and report retrieval against an
 API supplied with the example. This path is useful when you have an AWS account
 and want to evaluate the server without creating a Kubernetes cluster.
 
-The [example configuration](../../../examples/aws-ec2/) targets MCP ZAP Server
-**v0.16.0** and ZAP **2.17.0**, with images pinned by digest. Publication is
-pending. First confirm
-[release-image publication](https://github.com/dtkmn/mcp-zap-server/releases),
-then select the MCP digest in step 4; release preparation does not publish it.
+The [example configuration](../../../examples/aws-ec2/) targets published MCP ZAP
+Server **v0.16.0** and ZAP **2.17.0**, with images pinned by digest. The
+[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
+records the published MCP digest; step 4 selects and verifies it for this instance.
 The reference configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an
 encrypted 40 GiB disk.
 These are a starting point for a small evaluation, not measured production
@@ -202,8 +201,8 @@ and [Docker installation](https://docs.aws.amazon.com/AmazonECS/latest/developer
 
 ## 4. Configure credentials and shared storage
 
-Confirm that the `v0.16.0` release image workflow succeeded before proceeding.
-Publication is pending; do not run this step until the image is available.
+The `v0.16.0` release image is published on GHCR and Docker Hub for Linux AMD64
+and ARM64; see the [publication evidence](https://danieltse.org/mcp-zap-server/releases/0.16.0/).
 The snippet below pulls that tag, reads the GHCR digest returned by Docker,
 validates its format and saves the immutable image reference as `MCP_ZAP_IMAGE`.
 If publication or digest selection fails, it stops before writing credentials.

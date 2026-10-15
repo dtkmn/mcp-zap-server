@@ -101,8 +101,8 @@ Recommended pattern:
    net-new findings in `findings-diff.txt`
 4. update the baseline only after an intentionally accepted security state change
 
-The provenance-aware contracts are included in `v0.16.0`; publication is
-pending. Upgrade the action and server together; see the
+The provenance-aware contracts are included in released `v0.16.0`.
+Upgrade the action and server together; see the
 [release and upgrade guide](../releases/RELEASE_NOTES_0.16.0.md). Snapshot v3
 records the running ZAP version and installed add-on inventory. Comparability is
 `matching` only when

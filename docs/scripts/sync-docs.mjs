@@ -61,6 +61,7 @@ const pages = [
       '../../helm/mcp-zap-server/values-aws.yaml': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/values-aws.yaml',
       '../aws-ec2/': 'https://github.com/dtkmn/mcp-zap-server/tree/main/examples/aws-ec2',
       '../../docs/src/content/docs/operations/production-checklist.md': '/mcp-zap-server/operations/production-checklist/',
+      '../../docs/releases/RELEASE_NOTES_0.16.0.md': '/mcp-zap-server/releases/0.16.0/',
     },
   },
   {

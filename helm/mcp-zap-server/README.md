@@ -4,11 +4,10 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.16.0` defaults to MCP image `v0.16.0`; publication is pending. Use the
-chart from the same release as your image, and confirm that the corresponding
-release workflow has published the image before installing.
-[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) is the source
-for publication status. Release preparation does not publish images.
+Chart `0.16.0` defaults to published MCP image `v0.16.0`, available on GHCR and
+Docker Hub for Linux AMD64 and ARM64. Use the chart from the same release as your
+image. The [release guide](../../docs/releases/RELEASE_NOTES_0.16.0.md) records
+the publication evidence and immutable image digest.
 
 Version `0.16.0` validates Automation Framework duration capabilities, enforces
 plan/artifact filesystem containment, validates report output paths, and corrects

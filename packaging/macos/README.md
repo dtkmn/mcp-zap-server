@@ -38,8 +38,8 @@ source mapping is reviewed; do not add it without updating the distribution inpu
 The **macOS Package** workflow is manual-only and builds this set on an Apple
 Silicon `macos-15` runner. Automatic pull-request builds are paused while public
 signing/notarization and clean browser-download installation remain unresolved.
-Run deliberate testing under **Actions → macOS Package → Run workflow** once
-the workflow change is merged to `main`.
+Run deliberate testing under **Actions → macOS Package → Run workflow** on the
+reviewed branch or tag. The manual workflow is included in `v0.16.0`.
 
 Leave `draft_release_tag` empty for a build of the selected branch without
 release attachment. The resulting Actions artifact contains a ZIP wrapper

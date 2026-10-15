@@ -20,7 +20,7 @@ team process: seed mode, artifact review, baseline acceptance, and enforcement.
 - Artifact contracts in the updated implementation: `ci_gate_result/v2`,
   `ci_gate_findings_snapshot/v3`, `ci_gate_findings_diff/v3`, and
   `ci_gate_artifact_manifest/v1`. These provenance contracts are included in
-  `v0.16.0`, with publication pending; upgrade the server and action together.
+  released `v0.16.0`; upgrade the server and action together.
   See the [release and upgrade guide](../../releases/RELEASE_NOTES_0.16.0.md).
 - Legacy v1/v2 snapshots remain readable and retain their identity mode when
   normalized into v3, but missing scanner provenance means unknown

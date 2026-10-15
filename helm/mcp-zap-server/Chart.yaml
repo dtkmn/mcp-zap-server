@@ -2,7 +2,7 @@ apiVersion: v2
 name: mcp-zap-server
 description: A Helm chart for MCP ZAP Server - Model Context Protocol server for ZAP security scanning
 type: application
-# Release preparation; v0.16.0 image publication is pending.
+# Matches the published v0.16.0 MCP image.
 version: 0.16.0
 appVersion: "v0.16.0"
 keywords:

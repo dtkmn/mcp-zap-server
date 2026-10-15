@@ -10,7 +10,7 @@ These notes describe each version. Check GitHub Releases above for publication
 status and dates, and verify that its release workflow has published the image
 before deploying it.
 
-- [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — publication pending
+- [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — released; includes image and Registry publication evidence
 - [0.15.0](./RELEASE_NOTES_0.15.0.md)
 - [0.14.0](./RELEASE_NOTES_0.14.0.md)
 - [0.13.0](./RELEASE_NOTES_0.13.0.md)

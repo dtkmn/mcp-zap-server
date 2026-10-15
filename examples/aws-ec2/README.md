@@ -1,7 +1,7 @@
 # Private EC2 example
 
-This example targets prepared MCP ZAP Server v0.16.0 and ZAP 2.17.0; v0.16.0
-publication is pending. It uses a dedicated Amazon Linux 2023 x86_64 instance
+This example targets published MCP ZAP Server v0.16.0 and ZAP 2.17.0.
+It uses a dedicated Amazon Linux 2023 x86_64 instance
 and serves one trusted MCP client through AWS Session Manager. It publishes no
 container ports. The included `smoke-target`
 is an owned API for checking crawling, OpenAPI import, automation and reports
@@ -9,9 +9,9 @@ without granting scanning containers Internet access.
 
 The [AWS deployment walkthrough](../../docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md)
 is the canonical guide for IAM, EC2, image selection, secrets, private client
-access, verification and cleanup. Wait for successful release-image publication,
-then set `MCP_ZAP_IMAGE` to the verified v0.16.0 digest reference in `.env`.
-Release preparation does not publish the image.
+access, verification and cleanup. Set `MCP_ZAP_IMAGE` to the verified v0.16.0
+digest reference in `.env`; the [release guide](../../docs/releases/RELEASE_NOTES_0.16.0.md)
+records its publication evidence and image digest.
 
 | File | Purpose |
 | --- | --- |

@@ -182,8 +182,8 @@ differ, for example MCP `/srv/mcp-imports` and ZAP `/zap/imports`, but must map 
 same files. A local write is not an upload to an unrelated remote ZAP filesystem.
 
 For **Helm**, chart `0.16.0` retains the sibling-directory storage option
-introduced in `0.15.0`, mounting staging read-only in ZAP (current publication
-pending):
+introduced in `0.15.0`, mounting staging read-only in ZAP with the published
+`v0.16.0` image:
 
 ```yaml
 zap:
@@ -315,6 +315,8 @@ Typical follow-up flow:
 2. run the appropriate crawl or attack path
 3. run `zap_passive_scan_wait`
 4. collect findings or generate reports
+
+Import and passive-scan wait do not create scan-history evidence; findings access requires a recorded crawl or active scan covering the requested target.
 
 ## Add-on Requirements
 

@@ -2,8 +2,9 @@
 
 This example creates a new, dedicated **standard EKS cluster** in your existing
 VPC, then hands application installation to the existing Helm chart. It targets
-the prepared chart and MCP image for `v0.16.0`; publication is pending. Confirm
-release-image publication before installing the application. CloudFormation
+chart `0.16.0` and the published MCP `v0.16.0` image. The
+[release guide](../../docs/releases/RELEASE_NOTES_0.16.0.md) records the image
+digest and upgrade requirements. CloudFormation
 does not install MCP, ZAP, application credentials, target access rules or a database.
 
 A live evaluation on 8 October 2026 using the published `v0.15.0` MCP image and
@@ -294,9 +295,8 @@ connection for initial MCP access, or configure authenticated TLS ingress before
 remote exposure. Never expose the ZAP API as a client endpoint.
 
 Use a chart and application image from the same **published** release. Verify the
-image workflow and registry digest; a version in this README or a stack output
-does not publish an image. The prepared chart defaults to `v0.16.0`, whose
-publication is pending. To pin MCP after publication,
+image workflow and registry digest. The chart defaults to published `v0.16.0`.
+To pin MCP,
 set `mcp.image.repository` to the verified registry repository and
 `mcp.image.tag` to `v0.16.0@sha256:` followed by its actual 64-character digest.
 For ZAP, set the chart's separate `zap.image.digest`. Record the rendered image

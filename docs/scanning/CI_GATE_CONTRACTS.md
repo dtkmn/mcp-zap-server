@@ -5,7 +5,7 @@ and baseline enforcement. Snapshot version 3 records the scanner that produced
 the export. A missing finding is only a comparable observation when the ZAP
 engine and complete add-on inventory match the baseline.
 
-These provenance contracts are included in `v0.16.0`; publication is pending.
+These provenance contracts are included in released `v0.16.0`.
 Upgrade the server and gate together, following the
 [release and upgrade guide](../releases/RELEASE_NOTES_0.16.0.md). A `v0.15.0`
 server does not export snapshot v3.

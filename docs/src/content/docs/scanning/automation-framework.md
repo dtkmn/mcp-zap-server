@@ -96,7 +96,7 @@ or workspaces. Use a separate MCP/ZAP deployment for independent clients in this
 single-client configuration. Keep plans and reports on writable persistent
 storage, and recreate the MCP container after changing its environment.
 
-**Workspace hardening in v0.16.0 (publication pending):** use ordinary
+**Workspace hardening in released v0.16.0:** use ordinary
 directories and regular files inside the configured automation workspace. Symbolic links in the automation
 root, plan paths, report directories or selected report files are rejected, as
 are paths whose actual filesystem location is outside the workspace. Files with
@@ -134,8 +134,8 @@ The returned `Plan File` path is the one to reuse with `zap_automation_plan_arti
 
 ### Whole-Plan Duration (v0.16.0)
 
-The whole-plan checks and status changes below are included in **v0.16.0**,
-with publication pending. They are not included in `v0.15.0`. See the
+The whole-plan checks and status changes below are included in released
+**v0.16.0**. They are not included in `v0.15.0`. See the
 [release and upgrade guide](/mcp-zap-server/releases/0.16.0/) and check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before relying
 on them.

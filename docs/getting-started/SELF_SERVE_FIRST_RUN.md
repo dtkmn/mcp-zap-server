@@ -7,9 +7,9 @@ You need Docker 20.10 or newer, Docker Compose with `--wait` and
 `--wait-timeout` support, and an MCP client supporting Streamable HTTP with
 custom headers. Start Docker before continuing.
 
-The prepared `v0.16.0` defaults are awaiting publication. Confirm the release and
-image are available before starting; see the
-[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/).
+The defaults use published `v0.16.0`. Review the
+[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
+when upgrading an existing installation.
 
 <a id="1-bootstrap-local-settings"></a>
 <a id="2-start-the-stack"></a>
@@ -28,8 +28,8 @@ downloads missing images, waits for MCP and ZAP health, and verifies
 the authenticated MCP connection. Continue after it reports ready; the doctor
 runs automatically.
 
-The default MCP image is `dtkmn/mcp-zap-server:v0.16.0`, with publication pending.
-Verify the published image supports your AMD64 or ARM64 host. Choose another
+The default MCP image is `dtkmn/mcp-zap-server:v0.16.0`, published for Linux AMD64
+and ARM64. Choose another
 published version with `IMAGE_TAG` in `.env`. An existing
 `latest` or development tag must be changed deliberately to a released version;
 startup will not overwrite that choice. Keep `.env` out of version control.

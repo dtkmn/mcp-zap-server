@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.16.0]
 
-Release, image, Helm and MCP Registry publication are pending. Preparing or
-merging this version does not publish its artifacts. Read the
+This version is [released](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.16.0),
+with Linux AMD64/ARM64 images published on GHCR and Docker Hub and MCP Registry
+`0.16.0` active/latest. Chart `0.16.0` is included in the tagged source. Read the
 [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md) before
-updating CI consumers or Automation Framework plans, and verify
-[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
-release-image workflow before installing.
+updating CI consumers or Automation Framework plans; it records publication
+evidence, the immutable image digest and separate Mac/plugin availability.
 
 ### Added
 
@@ -36,7 +36,7 @@ release-image workflow before installing.
 
 - Version CI snapshots/diffs as `/v3` and gate results as `/v2`, with nullable comparison counts. Preserve node identity and suppression behavior. Upgrade server and gate together; review a fresh v3 baseline before restoring enforcement against legacy v1/v2 evidence.
 - Set a 300-second whole-plan limit and explicit always-run report job in the canonical Automation Framework example. Document cooperative expiry, requestor/report work beyond the budget, passive analysis remaining active and possible Spider starts after expiry during slow seed preparation.
-- Start the local Docker quick start from versioned image `v0.16.0` after publication, preserving settings/keys and cached images. Generate settings atomically and require container health plus authenticated MCP probes before reporting readiness; retain source builds in the development override.
+- Start the local Docker quick start from published versioned image `v0.16.0`, preserving settings/keys and cached images. Generate settings atomically and require container health plus authenticated MCP probes before reporting readiness; retain source builds in the development override.
 - Use the current user's macOS service manager for preview processes so they survive terminal/agent completion. Explicit stop removes registrations; login startup and automatic crash restarts stay disabled. Bound doctor HTTP requests, keep keys out of process arguments and avoid raw server errors in diagnostics.
 - Keep Mac packaging/source archives in the manual workflow; owner-triggered `main` builds can attach the four-file set to an existing draft release after tag validation, while publication stays manual. Automatic PR package builds and public Mac distribution remain deferred. Exclude Import/Export while its source mapping remains unverified; HAR, packet-capture and ModSecurity import/export are unavailable in this preview.
 - Generate JaCoCo XML/HTML coverage from existing Java tests, combine Docker results when available and import through authenticated CI-based SonarQube analysis. Retain fork coverage artifacts without adding a minimum coverage gate.

@@ -2,11 +2,10 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example targets prepared `v0.16.0`; publication is pending.
-Before using it, confirm that
-[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
-corresponding release workflow show successful publication to your registry.
-Release preparation and a merge to `main` do not publish an image.
+The versioned image example uses published `v0.16.0`, available on GHCR and
+Docker Hub for Linux AMD64 and ARM64. The
+[release and upgrade guide](docs/releases/RELEASE_NOTES_0.16.0.md) records the
+verified image digest, publication evidence and upgrade requirements.
 
 ## What This Server Does
 

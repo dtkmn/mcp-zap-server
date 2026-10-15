@@ -104,8 +104,16 @@ Install the plugin locally using the steps below.
 
 ### Install In Codex
 
-Clone this repository or reuse an existing checkout. With the Codex CLI
-available, run these commands from the `mcp-zap-server` repository root:
+These installation commands require the Codex CLI (`codex`) in your terminal.
+For a new checkout, run:
+
+```bash
+git clone https://github.com/dtkmn/mcp-zap-server.git
+cd mcp-zap-server
+```
+
+If you already have a checkout, change into it instead. From the
+`mcp-zap-server` repository root, install the plugin:
 
 ```bash
 codex plugin marketplace add "$PWD"
@@ -117,9 +125,11 @@ identifier; the plugin installs as **MCP ZAP Connect**. Keep the checkout in pla
 for the local marketplace. These commands install the skill, not the scanner.
 See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
 
-Enable MCP ZAP Connect in a local Codex conversation and select its
-`setup-local-scanner` skill. If it is not available in the current conversation,
-start a new local conversation with the plugin enabled. Ask:
+In the Codex CLI, run `codex` from the checkout. Use `/plugins` to confirm
+MCP ZAP Connect is enabled, then `/skills` to select `setup-local-scanner`.
+In the desktop app, open **Plugins → MCP ZAP Connect** and use **Try now**
+in a local conversation. If the skill is absent, start a new local conversation
+with the plugin enabled. Ask:
 
 ```text
 Set up MCP ZAP Server in Codex using Docker Compose.

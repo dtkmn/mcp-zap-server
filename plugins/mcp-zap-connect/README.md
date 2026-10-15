@@ -10,6 +10,7 @@ MCP tools.
 ## Requirements
 
 - Local Codex with permission to execute commands on your machine.
+- The Codex CLI (`codex`) available in your terminal for the installation commands below.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
 - A compatible POSIX shell; Git when the project needs to be cloned.
@@ -27,8 +28,15 @@ requested by the client; scans require a separate request.
 
 ### Codex Local Installation
 
-Clone or reuse the public MCP ZAP Server checkout. With the Codex CLI available,
-run these commands from its repository root:
+For a new checkout, run:
+
+```bash
+git clone https://github.com/dtkmn/mcp-zap-server.git
+cd mcp-zap-server
+```
+
+If you already have a checkout, change into that directory instead. From its
+repository root, install the plugin:
 
 ```bash
 codex plugin marketplace add "$PWD"
@@ -37,9 +45,13 @@ codex plugin add mcp-zap-connect@mcp-zap-local-preview
 
 `mcp-zap-local-preview` is the repository's existing local marketplace identifier;
 the installed plugin is **MCP ZAP Connect**. Keep the checkout in place for that
-marketplace. Enable the plugin in a local Codex conversation and select its
-`setup-local-scanner` skill. If it is absent, start a new local conversation with
-the plugin enabled. See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
+marketplace. In the Codex CLI, run `codex` from the checkout, use `/plugins` to
+confirm MCP ZAP Connect is enabled, then use `/skills` to select
+`setup-local-scanner`. In the desktop app, open **Plugins → MCP ZAP Connect**
+and use **Try now** in a local conversation. If the skill is absent, start a
+new local conversation with the plugin enabled. See OpenAI's
+[local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually)
+and [CLI commands](https://learn.chatgpt.com/docs/developer-commands#built-in-slash-commands).
 Codex setup and status verification have been tested locally; installation does
 not establish a public directory listing.
 

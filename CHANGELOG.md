@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version; add bounded-array and MCPB manifest compatibility regressions. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
+
 ### Added
 
 - Prepare Claude Desktop MCPB GitHub preview downloads with a standalone installation/setup/demo-scan guide, matching bundle/guide checksums, and a separate draft-release attachment workflow. Public distribution remains pending; Desktop preview tags are separate from scanner Docker releases.

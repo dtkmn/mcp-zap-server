@@ -139,6 +139,15 @@ The setup guide is also inside the MCPB. The build checks package, manifest and
 lockfile versions before packaging, then verifies the actual archive contains
 the matching guide and unchanged shared scanner resources.
 
+Zod is pinned to `4.6.7` across the runtime SDK and build dependency graph to
+address `SNYK-JS-ZOD-20510278`. The explicit override is needed because MCPB
+`2.1.2` still declares Zod 3. Tests cover the SDK's bounded-array parser and
+the builder's manifest/record validation, packing and unpacking with Zod 4.
+The build rejects affected Zod resolutions and checks the actual archive's
+runtime version. Keep the override until the build tool supports a patched
+dependency without it. Rebuilt archives have new checksums; old CI artifacts
+containing Zod `3.25.76` should not be published.
+
 ## Prepare a GitHub download
 
 Use the **Claude Desktop MCPB** workflow. It builds/tests preview assets on

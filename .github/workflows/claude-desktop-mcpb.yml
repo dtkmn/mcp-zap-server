@@ -1,19 +1,8 @@
 name: Claude Desktop MCPB
 
 on:
-  pull_request:
-    branches: [main, dev]
-    paths:
-      - "packaging/claude-desktop/**"
-      - "docker-compose.yml"
-      - ".env.example"
-      - "bin/bootstrap-local.sh"
-      - "bin/self-serve-doctor.sh"
-      - "LICENSE"
-      - ".github/workflows/claude-desktop-mcpb.yml"
-      - "tests/python/test_claude_desktop_mcpb_workflow.py"
   push:
-    branches: [main, dev]
+    branches: [main]
     paths:
       - "packaging/claude-desktop/**"
       - "docker-compose.yml"

@@ -36,6 +36,21 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
 
+      - name: Set up Node 22 for Claude Desktop tests
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packaging/claude-desktop/package-lock.json
+
+      - name: Install Claude Desktop test dependencies
+        working-directory: packaging/claude-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Test Claude Desktop connector without building distribution assets
+        working-directory: packaging/claude-desktop
+        run: npm test
+
       - name: Run CI helper tests
         run: |
           python3 -m pip install PyYAML==6.0.3

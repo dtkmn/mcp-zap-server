@@ -150,10 +150,17 @@ containing Zod `3.25.76` should not be published.
 
 ## Prepare a GitHub download
 
-Use the **Claude Desktop MCPB** workflow. It builds/tests preview assets on
-relevant pull requests and can also be dispatched manually. With no draft tag,
-it produces maintainer-only Actions artifacts; those expire and are not the
-public download route.
+Use the **Claude Desktop MCPB** workflow. It builds preview assets automatically
+only on relevant pushes to `main`, and can also be dispatched manually for an
+explicit build or draft-release preparation. Ordinary CI runs connector and
+security regression tests on dev pushes and pull requests without building
+distribution assets. With no draft tag, the packaging workflow produces
+maintainer-only Actions artifacts; those expire and are not the public download
+route.
+
+Release packaging happens before publication through the manual draft-release
+flow below. Publishing an immutable release is not a packaging trigger; all
+assets must already be attached when the user publishes it.
 
 For a public preview, first merge the reviewed source and create an existing
 tag `claude-desktop-v<package-version>` on that source. Create a **draft**

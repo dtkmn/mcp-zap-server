@@ -1,0 +1,53 @@
+{
+  "manifest_version": "0.3",
+  "name": "mcp-zap-connect",
+  "display_name": "MCP ZAP Connect",
+  "version": "0.1.0",
+  "description": "Set up or reconnect your local Docker scanner with Claude, then verify its status.",
+  "long_description": "Provides local prerequisite, setup and readiness tools alongside the existing MCP ZAP Server tools. Ask Claude to set up the scanner; setup reuses the project's published Docker Compose images and bootstrap/doctor scripts. Existing installations and credentials are preserved. Installing the extension does not start Docker or scan targets. Docker installation and operating-system prompts require your interaction. Local macOS preview; native Claude Desktop Free verification is recorded separately from package tests.",
+  "author": { "name": "Daniel Tse", "url": "https://github.com/dtkmn" },
+  "repository": { "type": "git", "url": "https://github.com/dtkmn/mcp-zap-server" },
+  "homepage": "https://danieltse.org/mcp-zap-server/",
+  "documentation": "https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop",
+  "support": "https://github.com/dtkmn/mcp-zap-server/issues",
+  "license": "Apache-2.0",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "MCP_ZAP_INSTALL_DIR": "${user_config.installation_directory}",
+        "MCP_ZAP_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "tools": [
+    { "name": "scanner_check_prerequisites", "description": "Check local Docker requirements and detect an existing scanner without changing it." },
+    { "name": "scanner_setup", "description": "After an explicit setup request, reuse the existing scanner or run the bundled bootstrap in a private installation directory." },
+    { "name": "scanner_check_readiness", "description": "Run the existing authenticated doctor without invoking a scanner tool." }
+  ],
+  "tools_generated": true,
+  "user_config": {
+    "installation_directory": {
+      "type": "string",
+      "title": "Scanner directory (optional)",
+      "description": "Leave blank to detect the running Docker installation, or use ~/.mcp-zap-server for a new installation. An explicit directory must be an absolute path owned by you.",
+      "required": false,
+      "default": ""
+    },
+    "api_key": {
+      "type": "string",
+      "title": "Scanner API key override (optional)",
+      "description": "Usually leave blank: the local connector reads the existing scanner credential privately. An override must match the running installation.",
+      "required": false,
+      "default": "",
+      "sensitive": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin"],
+    "runtimes": { "node": ">=20.18.1" }
+  }
+}

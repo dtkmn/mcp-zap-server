@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Limit automatic Claude Desktop MCPB packaging to relevant pushes to `main`, retaining manual build/draft-release preparation. Ordinary dev/PR CI keeps the connector tests without generating distribution assets.
+- Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version; add bounded-array and MCPB manifest compatibility regressions. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
+
+### Added
+
+- Prepare Claude Desktop MCPB GitHub preview downloads with a standalone installation/setup/demo-scan guide, matching bundle/guide checksums, and a separate draft-release attachment workflow. Public distribution remains pending; Desktop preview tags are separate from scanner Docker releases.
+- Add an unreleased Claude Desktop MCPB preview with local prerequisite/setup/readiness tools, the official MCP SDK transport, and bundled copies of the existing Docker release bootstrap/doctor. Installation alone does not start containers; setup preserves existing credentials and other clients' settings. Bundle 0.1.0 installation and a native status-only call passed on Claude Desktop Free 2.42304.0 with the existing v0.15.0 scanner on 16 October 2026; fresh scanner startup remains fixture-tested.
+- Add Claude Code packaging and a marketplace index for MCP ZAP Connect `0.4.0`, reusing the existing Docker scanner and setup skill. Claude instructions preserve other clients' settings, configure a private HTTP API-key connection and require a native status-only check. Plugin and marketplace manifests passed validation with Claude Code `2.1.292`; plugin loading and live connection verification remain pending.
+
 ## [0.16.0]
 
 This version is [released](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.16.0),

@@ -1,0 +1,257 @@
+name: Claude Desktop MCPB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packaging/claude-desktop/**"
+      - "docker-compose.yml"
+      - ".env.example"
+      - "bin/bootstrap-local.sh"
+      - "bin/self-serve-doctor.sh"
+      - "LICENSE"
+      - ".github/workflows/claude-desktop-mcpb.yml"
+      - "tests/python/test_claude_desktop_mcpb_workflow.py"
+  workflow_dispatch:
+    inputs:
+      draft_release_tag:
+        description: "Optional existing claude-desktop-vVERSION tag: attach all four files to its existing draft release (main only)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-desktop-mcpb-${{ inputs.draft_release_tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and test Claude Desktop preview
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      package-base: ${{ steps.package.outputs.base }}
+      source-commit: ${{ steps.package.outputs.commit }}
+      draft-release-id: ${{ steps.package.outputs.release_id }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Validate requested release mode
+        id: release-mode
+        env:
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DRAFT_RELEASE_TAG" ]; then
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch && test "$GITHUB_REF" = refs/heads/main || {
+              echo "Draft attachment must be dispatched from main" >&2
+              exit 1
+            }
+            [[ "$DRAFT_RELEASE_TAG" =~ ^claude-desktop-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+              echo "Use an existing claude-desktop-vVERSION tag matching the package version" >&2
+              exit 1
+            }
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.draft_release_tag || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packaging/claude-desktop/package-lock.json
+
+      - name: Resolve and verify package source
+        id: package
+        env:
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          package_version="$(node -e '
+            const fs = require("node:fs");
+            const root = "packaging/claude-desktop/";
+            const pkg = JSON.parse(fs.readFileSync(root + "package.json", "utf8"));
+            const manifest = JSON.parse(fs.readFileSync(root + "manifest.json", "utf8"));
+            const lock = JSON.parse(fs.readFileSync(root + "package-lock.json", "utf8"));
+            if (typeof pkg.version !== "string" || manifest.version !== pkg.version || lock.version !== pkg.version || lock.packages?.[""]?.version !== pkg.version) {
+              throw new Error("Package, manifest and lockfile versions must match");
+            }
+            process.stdout.write(pkg.version);
+          ')"
+          [[ "$package_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+            echo "The package must declare one release version" >&2
+            exit 1
+          }
+          source_commit="$(git rev-parse HEAD)"
+          release_id=""
+          if [ -n "$DRAFT_RELEASE_TAG" ]; then
+            test "$DRAFT_RELEASE_TAG" = "claude-desktop-v${package_version}" || {
+              echo "Draft tag must match the checked-out Desktop package version" >&2
+              exit 1
+            }
+            test "$(git rev-parse --verify "refs/tags/${DRAFT_RELEASE_TAG}^{commit}")" = "$source_commit"
+            git merge-base --is-ancestor "$source_commit" refs/remotes/origin/main || {
+              echo "Draft tag must reference a commit reachable from origin/main" >&2
+              exit 1
+            }
+            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${DRAFT_RELEASE_TAG}" \
+              --jq 'select(.draft == true and .prerelease == true and .immutable != true) | .id')"
+            [[ "$release_id" =~ ^[0-9]+$ ]] || {
+              echo "An existing mutable draft prerelease is required; published releases cannot receive these files" >&2
+              exit 1
+            }
+          else
+            test "$source_commit" = "$GITHUB_SHA"
+          fi
+          printf 'version=%s\nbase=mcp-zap-connect-claude-desktop-%s\ncommit=%s\nrelease_id=%s\n' \
+            "$package_version" "$package_version" "$source_commit" "$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Install build and test dependencies
+        working-directory: packaging/claude-desktop
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run isolated package tests
+        working-directory: packaging/claude-desktop
+        run: npm test
+
+      - name: Build and validate the bundle and guide
+        working-directory: packaging/claude-desktop
+        run: npm run build
+
+      - name: Verify both asset checksums
+        id: checksums
+        working-directory: build/claude-desktop
+        env:
+          PACKAGE_BASE: ${{ steps.package.outputs.base }}
+        run: |
+          set -euo pipefail
+          for file in "${PACKAGE_BASE}.mcpb" "${PACKAGE_BASE}-setup.md"; do
+            test -f "$file" && test ! -L "$file"
+            test -f "${file}.sha256" && test ! -L "${file}.sha256"
+            checksum_line="$(cat "${file}.sha256")"
+            checksum="${checksum_line%%  *}"
+            [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] && test "$checksum_line" = "${checksum}  ${file}" || {
+              echo "The checksum must name its exact packaged asset" >&2
+              exit 1
+            }
+          done
+          sha256sum --check "${PACKAGE_BASE}.mcpb.sha256" "${PACKAGE_BASE}-setup.md.sha256"
+
+      - name: Upload the four-file Desktop preview set
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: ${{ steps.package.outputs.base }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/claude-desktop/${{ steps.package.outputs.base }}.mcpb
+            build/claude-desktop/${{ steps.package.outputs.base }}.mcpb.sha256
+            build/claude-desktop/${{ steps.package.outputs.base }}-setup.md
+            build/claude-desktop/${{ steps.package.outputs.base }}-setup.md.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Summarize Desktop preview build
+        env:
+          SOURCE_COMMIT: ${{ steps.package.outputs.commit }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          {
+            printf '### Claude Desktop local preview\n\n'
+            printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT"
+            printf '[Download the MCPB, matching setup guide and checksums](%s).\n\n' "$ARTIFACT_URL"
+            printf 'Isolated tests and packaging checks passed. This run did not access Docker, run scanner tools or verify Claude Desktop. No release was published.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  attach-draft:
+    name: Attach Desktop preview set to existing draft
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.draft_release_tag != ''
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      # Only downloaded build outputs are handled here; repository code is not executed.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: release-assets
+          merge-multiple: true
+
+      - name: Verify and attach all four files without publishing
+        id: attach
+        working-directory: release-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
+          RELEASE_ID: ${{ needs.build.outputs.draft-release-id }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.source-commit }}
+          PACKAGE_BASE: ${{ needs.build.outputs.package-base }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ && "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DRAFT_RELEASE_TAG" =~ ^claude-desktop-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+          test "$PACKAGE_BASE" = "mcp-zap-connect-claude-desktop-${DRAFT_RELEASE_TAG#claude-desktop-v}"
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DRAFT_RELEASE_TAG}" --jq .sha)" = "$SOURCE_COMMIT" || {
+            echo "Tag changed after the build; refusing attachment" >&2
+            exit 1
+          }
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_COMMIT}...main" --jq .merge_base_commit.sha)" = "$SOURCE_COMMIT" || {
+            echo "The build source is no longer reachable from main; refusing attachment" >&2
+            exit 1
+          }
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          jq -e --arg tag "$DRAFT_RELEASE_TAG" \
+            '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null || {
+            echo "The release must still be the same mutable draft prerelease" >&2
+            exit 1
+          }
+          files=("${PACKAGE_BASE}.mcpb" "${PACKAGE_BASE}.mcpb.sha256"
+                 "${PACKAGE_BASE}-setup.md" "${PACKAGE_BASE}-setup.md.sha256")
+          for file in "${files[@]}"; do
+            test -f "$file" && test ! -L "$file"
+            jq -e --arg name "$file" 'all(.assets[]; .name != $name)' <<< "$release" >/dev/null || {
+              echo "An asset named $file already exists; inspect the draft rather than overwriting it" >&2
+              exit 1
+            }
+          done
+          for file in "${PACKAGE_BASE}.mcpb" "${PACKAGE_BASE}-setup.md"; do
+            checksum_line="$(cat "${file}.sha256")"
+            checksum="${checksum_line%%  *}"
+            [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] && test "$checksum_line" = "${checksum}  ${file}" || {
+              echo "The checksum must name its exact packaged asset" >&2
+              exit 1
+            }
+          done
+          sha256sum --check "${PACKAGE_BASE}.mcpb.sha256" "${PACKAGE_BASE}-setup.md.sha256"
+          for file in "${files[@]}"; do
+            release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+            jq -e --arg tag "$DRAFT_RELEASE_TAG" --arg name "$file" \
+              '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag and all(.assets[]; .name != $name)' <<< "$release" >/dev/null || {
+              echo "The draft or its assets changed; refusing further attachment" >&2
+              exit 1
+            }
+            gh api --method POST --header 'Content-Type: application/octet-stream' \
+              --input "$file" --silent \
+              "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${file}"
+          done
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          jq -e --arg tag "$DRAFT_RELEASE_TAG" \
+            '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null
+          for file in "${files[@]}"; do
+            jq -e --arg name "$file" --argjson size "$(wc -c < "$file" | tr -d '[:space:]')" \
+              'any(.assets[]; .name == $name and .state == "uploaded" and .size == $size)' <<< "$release" >/dev/null
+          done
+          printf 'All four Desktop preview files are attached to draft `%s` from `%s`. Review the downloaded files before publishing the release.\n' \
+            "$DRAFT_RELEASE_TAG" "$SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"

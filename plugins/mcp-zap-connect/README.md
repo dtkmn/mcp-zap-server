@@ -1,17 +1,30 @@
 # MCP ZAP Connect
 
 A skills-only plugin by [Daniel Tse](https://github.com/dtkmn) that guides local
-MCP ZAP Server setup in Codex using the project's Docker Compose release images.
-This workflow has been tested locally. It starts or reconnects the scanner when
-requested, configures your private Codex MCP connection and verifies status without
-starting a scan. Installing the plugin alone does not start Docker or register
-MCP tools.
+MCP ZAP Server setup in Codex, Cursor or Claude Code using the project's Docker
+Compose release images. It starts or reconnects the same scanner when requested,
+configures the selected client's private MCP connection and verifies status
+without starting a scan. Installing the plugin alone does not start Docker or
+register MCP tools.
+
+This checkout contains plugin `0.4.0` with Claude Code packaging and shared setup
+instructions. Earlier Codex setup has been tested locally; Cursor evidence and
+remaining limitations are recorded below. Claude plugin installation and native
+status verification remain pending. Local changes must be published before a
+GitHub installation can fetch this version.
+
+Claude Desktop Chat uses the separate [MCPB preview](../../packaging/claude-desktop/README.md)
+with local agent-callable setup tools. It reuses the same Docker scripts and
+scanner; Desktop Free-account verification is tracked separately from this
+Claude Code plugin.
 
 ## Requirements
 
-- Local Codex with permission to execute commands on your machine.
-- Access to the Codex CLI for the installation commands below; the desktop
-  app's bundled CLI can be used without installing another copy.
+- A local Codex, Cursor or Claude Code session with permission to execute
+  commands on the scanner's machine.
+- The selected client's installation tools. Codex commands below require the
+  Codex CLI; its desktop app's bundled CLI can be used without another copy.
+  Claude Code commands require `claude`.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
 - Bash for the Docker setup scripts and Git for the GitHub installation.
@@ -92,6 +105,83 @@ requires a separate request identifying your authorized target and intended
 workflow. See the [canonical setup guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#guided-setup-in-codex)
 for the first demo scan after setup.
 
+## Claude Code Local Preview
+
+Claude Code uses `.claude-plugin/plugin.json` in this plugin folder and the
+same `skills/setup-local-scanner/SKILL.md` as Codex and Cursor. No MCP server is
+bundled: the skill first checks the existing scanner's readiness, then configures
+Claude's separate authenticated connection. Read Anthropic's
+[plugin documentation](https://code.claude.com/docs/en/plugins) for supported
+versions and client policy requirements. This flow requires local Claude Code;
+Claude web chat and cloud coding sessions cannot reach your Mac's loopback server.
+
+### Load From The Local Checkout
+
+Check `claude --version` first. If it is unavailable, follow the official
+[Claude Code setup instructions](https://code.claude.com/docs/en/setup) before
+continuing. From the repository root, validate the plugin and marketplace, then
+load the plugin for a local session:
+
+```bash
+claude plugin validate ./plugins/mcp-zap-connect
+claude plugin validate .
+claude --plugin-dir ./plugins/mcp-zap-connect
+```
+
+For a session in another project, pass the absolute path to the plugin folder
+instead. Session loading does not register a marketplace or install the plugin
+permanently. Inside Claude Code, invoke:
+
+```text
+/mcp-zap-connect:setup-local-scanner
+```
+
+Then ask:
+
+```text
+Set up MCP ZAP Server in Claude Code using Docker Compose.
+Reuse any existing scanner installation and preserve my Codex and Cursor settings.
+Verify with zap_passive_scan_status only; do not run a scan.
+```
+
+The skill reuses healthy containers and existing API keys, checks for conflicting
+Claude definitions and preserves unrelated settings and permissions. It uses an
+HTTP entry with `type: "http"` in private Claude configuration, normally
+`~/.claude.json`. It does not put credentials into shared `.mcp.json` files or
+command arguments. If `CLAUDE_CONFIG_DIR` is set, use that active profile's global
+configuration rather than creating a second default profile.
+
+Use `/mcp` to inspect the scanner connection. If tools have not loaded, reconnect
+that server when the panel offers it, or start a new local Claude Code session.
+Complete setup with `zap_passive_scan_status` through that Claude connection.
+Server readiness and another client's status call do not verify Claude Code.
+See [Claude Code MCP scopes and configuration](https://code.claude.com/docs/en/mcp).
+
+### Install From A Marketplace
+
+To install from this checkout instead of loading it for one session, register
+the repository root and install the plugin:
+
+```bash
+claude plugin marketplace add /absolute/path/to/mcp-zap-server
+claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
+```
+
+Replace the example path with your checkout. Once these files are published on
+the repository's default branch, the GitHub alternative is:
+
+```bash
+claude plugin marketplace add dtkmn/mcp-zap-server
+claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
+```
+
+The marketplace index at repository-root `.claude-plugin/marketplace.json`
+points to this existing plugin folder. These commands describe distribution
+through the project's own marketplace; they do not imply an Anthropic directory
+listing. Plugin and marketplace manifests passed native validation with Claude
+Code `2.1.292` on 16 October 2026. First plugin load and a Claude status call
+remain pending. No Claude scan workflow has been verified.
+
 ## Cursor Preview Reference
 
 The following technical reference records unfinished Cursor validation; it is
@@ -123,7 +213,7 @@ Cursor repository imports use the repository-root
 `.cursor-plugin/marketplace.json` to locate this folder and its
 `.cursor-plugin/plugin.json` for Cursor metadata. The portable `plugin.json`
 retains Codex metadata; both clients use the same `skills/` directory. Keep the
-shared name, version and metadata aligned when updating either manifest.
+shared name, version and description aligned across all three client manifests.
 
 **Disk import limitation:** on 13 October 2026, fresh imports in Cursor 3.24.12
 through **From Local Repository** and marketplace **Import from Disk** left the
@@ -169,4 +259,4 @@ with versions and a redacted error. Do not include keys, private configuration
 or sensitive reports.
 
 Licensed under [Apache-2.0](./LICENSE). This independent project is not affiliated
-with or endorsed by ZAP, OpenAI or Cursor.
+with or endorsed by ZAP, OpenAI, Cursor or Anthropic.

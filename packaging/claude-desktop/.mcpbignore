@@ -1,0 +1,3 @@
+# The CLI excludes .env* by default. Include only the public bootstrap template.
+!resources/scanner/.env.example
+!package-lock.json

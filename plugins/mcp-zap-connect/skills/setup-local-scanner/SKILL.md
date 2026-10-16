@@ -1,6 +1,6 @@
 ---
 name: setup-local-scanner
-description: Set up or reconnect local MCP ZAP Server in Codex or Cursor using the project's Docker Compose release setup. Use for local scanner installation, startup, connection troubleshooting, or stopping its containers. Help install missing prerequisites with approval, then recheck and continue setup.
+description: Set up or reconnect local MCP ZAP Server in Codex, Cursor or Claude Code using the project's Docker Compose release setup. Use for local scanner installation, startup, connection troubleshooting, or stopping its containers. Help install missing prerequisites with approval, then recheck and continue setup.
 ---
 
 # Set up the local scanner
@@ -10,8 +10,9 @@ Docker Compose setup. This skills-only plugin supplies instructions; installing
 it does not install Docker, start containers or register MCP tools. Explicit user
 instructions take precedence.
 
-Configure only the client the user requested. A Cursor setup must leave Codex
-settings unchanged, and a Codex setup must leave Cursor settings unchanged.
+Configure only the client the user requested. Leave the other clients' settings
+unchanged. Claude Code means a local session on the scanner's machine; a Claude
+web chat or cloud coding session cannot reach that machine's loopback endpoint.
 For a pure status-only request through an existing connection, go directly to
 that client's passive-status call; setup prerequisites must not block it.
 
@@ -134,15 +135,15 @@ that request. Installing this plugin alone does not authorize execution.
 2. Use a private MCP connection to `http://127.0.0.1:7456/mcp` with `X-API-Key`
    from this checkout's `.env` `MCP_API_KEY`. Read and transform secrets inside a local
    operation without printing them. Do not source an existing `.env` as shell
-   code. Do not use `codex mcp login`; this connection uses a header, not OAuth.
+   code. Do not use OAuth login commands; this connection uses an API-key header.
    If a configured deployment differs from the documented API-key setup, use its
    existing authentication instructions rather than silently changing them.
 3. Merge the entry into the requested client's private user configuration, preserving
    unrelated settings and formatting. Reuse the alias of an existing scanner
    connection to the same endpoint, including `localhost`/`127.0.0.1`
    equivalents. Keep its enabled state and tool restrictions. Update only the
-   URL and authentication fields. If a scanner entry uses a different endpoint,
-   clarify which to keep before replacing it.
+   transport, URL and authentication fields. If a scanner entry uses a different
+   endpoint, clarify which to keep before replacing it.
 
    - **Codex:** use its existing user configuration (`~/.codex/config.toml`, or
      its configured `CODEX_HOME`) and `mcp_servers.<alias>.url` with
@@ -160,6 +161,26 @@ that request. Installing this plugin alone does not authorize execution.
      inherits that variable. Use the private user header when that environment
      has not been established. Do not configure OAuth login for API-key mode.
      See [Cursor MCP configuration](https://cursor.com/docs/mcp#using-mcpjson).
+   - **Claude Code:** use its private user MCP configuration (normally
+     `~/.claude.json`), with `mcpServers.<alias>.type` set to `"http"`, `url`
+     set to the endpoint above and `headers` containing `X-API-Key`. An HTTP
+     entry requires the explicit `type`; a URL alone is treated as stdio.
+     Resolve any `CLAUDE_CONFIG_DIR` override using the installed client's
+     documented configuration location before editing; do not create a parallel
+     default configuration. Inspect the active Claude project, which may differ
+     from the scanner checkout: its shared `.mcp.json` and private local-scope
+     entries in `projects.<project-path>.mcpServers` can shadow a user entry.
+     Reuse a matching private local-scope connection in its existing scope;
+     otherwise add a user-scope entry. If a shared or managed definition
+     conflicts or duplicates the scanner, stop and clarify which connection to
+     use. Preserve project files, disabled-server choices and tool permissions.
+     Never enable a disabled connection or widen approvals automatically.
+     Read and merge the key inside a local operation; do not pass it in
+     `claude mcp add --header` or `add-json` arguments. `${MCP_API_KEY}` in
+     `headers` works only if the Claude process inherits that variable; the
+     scanner's `.env` is not loaded by an HTTP entry. When inheritance has not
+     been established, store the header only in the private configuration.
+     See [Claude Code MCP configuration](https://code.claude.com/docs/en/mcp).
 
    Before changing an existing file, make a private backup. Reject linked
    configuration paths, restrict secret files to the current user, and validate
@@ -178,7 +199,12 @@ that request. Installing this plugin alone does not authorize execution.
    the passive-status call. If that does not reconnect it, explain the remaining
    client step. Invoke the skill explicitly with `/setup-local-scanner`;
    OpenAI's plugin onboarding metadata does not establish Cursor skill activation.
-5. Once tools are loaded, make a harmless passive-status call through the scanner
+   In Claude Code, invoke `/mcp-zap-connect:setup-local-scanner` and use `/mcp`
+   to inspect the selected server. If the panel offers a reconnect action, use
+   it for this connection; otherwise ask the user to start a new local Claude
+   Code session. Do not treat `claude mcp list`, a doctor response or another
+   client's status call as native Claude tool verification.
+5. Once tools are loaded, call `zap_passive_scan_status` through the scanner
    connection just configured, not another preexisting connection. The launcher's
    doctor proves server readiness, not this client's connection. Finish setup
    without scanning a target.

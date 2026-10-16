@@ -1,0 +1,14 @@
+{
+  "name": "mcp-zap-connect",
+  "description": "Local MCP ZAP Server setup with the MCP ZAP Connect plugin.",
+  "owner": {
+    "name": "Daniel Tse"
+  },
+  "plugins": [
+    {
+      "name": "mcp-zap-connect",
+      "source": "./plugins/mcp-zap-connect",
+      "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex, Cursor or Claude Code."
+    }
+  ]
+}

@@ -62,6 +62,18 @@ Codex. The skill can help install missing prerequisites with your approval,
 then recheck and continue setup. Scanning is a separate request. The commands
 below remain available without the plugin.
 
+[Claude Code local preview](./plugins/mcp-zap-connect/README.md#claude-code-local-preview)
+uses the same scanner and setup skill. Claude installation and native connection
+verification remain pending.
+
+For Claude Desktop Free, follow the [download, setup and first-scan guide](./packaging/claude-desktop/SETUP.md).
+The macOS MCPB preview adds agent-callable setup tools around the same Docker
+scripts and reuses existing installations. Published Desktop previews will offer
+the `.mcpb` and matching guide under [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
+public distribution is pending. Installation and a native status-only call on
+Claude Desktop Free passed on 16 October 2026; fresh scanner startup remains
+fixture-tested. This is separate from the Claude Code plugin.
+
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server

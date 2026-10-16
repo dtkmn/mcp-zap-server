@@ -14,10 +14,15 @@ MCP tools.
   app's bundled CLI can be used without installing another copy.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
-- A compatible POSIX shell; Git when the project needs to be cloned.
+- Bash for the Docker setup scripts and Git for the GitHub installation.
 
 Java and ZAP run in containers, so a separate Java installation is unnecessary.
 Web-only chats cannot reach the local scanner.
+
+After plugin installation, the setup skill can help install missing scanner
+prerequisites with your approval, then recheck and continue. Codex CLI and Git
+must be available for the direct GitHub installation commands below; the CLI
+is not an additional requirement once the Desktop skill is loaded.
 
 ## Install
 
@@ -37,42 +42,49 @@ help with this prerequisite before the plugin is installed. Keep the same
 terminal open if you use the temporary PATH adjustment. If your CLI does not
 recognize the plugin commands below, update the app or CLI as described there.
 
-For a new checkout, run:
+Install directly from GitHub using your normal Codex installation. Run these
+commands from your home directory:
 
 ```bash
-git clone https://github.com/dtkmn/mcp-zap-server.git
-cd mcp-zap-server
-```
-
-If you already have a checkout, change into that directory instead. From its
-repository root, install the plugin:
-
-```bash
-codex plugin marketplace add "$PWD"
+cd "$HOME"
+codex plugin marketplace add dtkmn/mcp-zap-server --ref main
 codex plugin add mcp-zap-connect@mcp-zap-local-preview
 ```
 
-`mcp-zap-local-preview` is the repository's existing local marketplace identifier;
-the installed plugin is **MCP ZAP Connect**. Keep the checkout in place for that
-marketplace. In the Codex CLI, run `codex` from the checkout, use `/plugins` to
-confirm MCP ZAP Connect is enabled, then use `/skills` to select
-`setup-local-scanner`. In the desktop app, open **Plugins → MCP ZAP Connect**
-and use **Try now** in a local conversation. If the skill is absent, start a
-new local conversation with the plugin enabled. See OpenAI's
-[local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually)
-and [CLI commands](https://learn.chatgpt.com/docs/developer-commands#built-in-slash-commands).
-Codex setup and status verification have been tested locally on Apple Silicon
-macOS; installation does not establish a public directory listing.
+Codex downloads the repository and installs the plugin in its managed cache;
+you do not need to clone the repository manually. `mcp-zap-local-preview` is the
+existing marketplace identifier; the installed plugin is **MCP ZAP Connect**.
+See OpenAI's [Git-backed marketplace instructions](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
+
+When you request scanner setup, the skill reuses an existing project checkout
+or obtains one for the Docker configuration and bootstrap scripts. The server
+runs from published Docker images. Installing the plugin alone does not start
+the scanner. This GitHub installation does not require a public-directory listing.
 
 ## Use In Codex
 
-Select `setup-local-scanner` and ask:
+In the desktop app:
+
+1. Open **Plugins**, find **MCP ZAP Connect** among your installed or personal
+   plugins, and open its page.
+2. Confirm it is enabled, then select **Try now** to invoke its setup skill in
+   a local conversation on this machine.
+3. Send the setup request below.
+
+If the plugin or skill is missing, restart the desktop app and open a new local
+conversation with the plugin enabled. For CLI use, run `codex`, use `/plugins`
+to confirm the plugin is enabled, then `/skills` to select `setup-local-scanner`.
+
+Ask:
 
 ```text
 Set up MCP ZAP Server in Codex using Docker Compose.
 Reuse any existing installation and preserve my other MCP connections.
 Verify with a status call only; do not run a scan.
 ```
+
+GitHub installation, Desktop skill activation and status verification have been
+tested locally on Apple Silicon macOS with an existing Docker scanner.
 
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning

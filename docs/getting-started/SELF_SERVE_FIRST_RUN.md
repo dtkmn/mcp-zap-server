@@ -95,13 +95,15 @@ covers optional active scanning, release evidence, and customer handoff.
 MCP ZAP Connect `0.3.0` lets you ask Codex to handle the local Docker Compose
 setup above, including prerequisites, startup, private client configuration and
 a status check. You normally do not need to edit the client's configuration
-yourself. Docker and Compose must already be installed and running; review any
-permissions requested by your client. Installing this skills-only plugin does
-not start the scanner or register MCP tools until you request setup.
+yourself. Docker and Compose must be ready before scanner startup; the skill can
+help install missing prerequisites with your approval, recheck them and continue.
+Review any permissions requested by your client. Installing this skills-only
+plugin does not start the scanner or register MCP tools until you request setup.
 
-This setup and status-verification workflow has been tested locally in Codex on
-Apple Silicon macOS.
-Install the plugin locally using the steps below.
+GitHub installation, Desktop skill activation and status verification have been
+tested locally in Codex on Apple Silicon macOS with an existing Docker scanner.
+Install the plugin locally using the steps below. This route requires Git and
+Bash for the project's Docker setup scripts.
 
 ### Check The Codex CLI
 
@@ -147,31 +149,37 @@ the plugin's setup skill is not available to help until it is installed.
 
 ### Install In Codex
 
-For a new checkout, run:
+Install directly from GitHub using your normal Codex installation. Run these
+commands from your home directory:
 
 ```bash
-git clone https://github.com/dtkmn/mcp-zap-server.git
-cd mcp-zap-server
-```
-
-If you already have a checkout, change into it instead. From the
-`mcp-zap-server` repository root, install the plugin:
-
-```bash
-codex plugin marketplace add "$PWD"
+cd "$HOME"
+codex plugin marketplace add dtkmn/mcp-zap-server --ref main
 codex plugin add mcp-zap-connect@mcp-zap-local-preview
 ```
 
-`mcp-zap-local-preview` is this repository's existing local marketplace
-identifier; the plugin installs as **MCP ZAP Connect**. Keep the checkout in place
-for the local marketplace. These commands install the skill, not the scanner.
-See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
+Codex downloads the repository and installs the plugin in its managed cache;
+no manual repository checkout is required. `mcp-zap-local-preview` is the
+existing marketplace identifier; the plugin installs as **MCP ZAP Connect**.
+When you request scanner setup, the skill reuses an existing project checkout
+or obtains one for the Docker configuration and bootstrap scripts, then uses
+published release images. Installing the plugin alone does not start the
+scanner. This GitHub installation does not require a public-directory listing.
+See OpenAI's [Git-backed marketplace instructions](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
 
-In the Codex CLI, run `codex` from the checkout. Use `/plugins` to confirm
-MCP ZAP Connect is enabled, then `/skills` to select `setup-local-scanner`.
-In the desktop app, open **Plugins → MCP ZAP Connect** and use **Try now**
-in a local conversation. If the skill is absent, start a new local conversation
-with the plugin enabled. Ask:
+### Use In The Desktop App
+
+1. Open **Plugins**, find **MCP ZAP Connect** among your installed or personal
+   plugins, and open its page.
+2. Confirm it is enabled, then select **Try now** to invoke the setup skill in
+   a local conversation on this machine.
+3. Send the setup request below.
+
+If the plugin or skill is missing, restart the desktop app and open a new local
+conversation with the plugin enabled. For CLI use, run `codex`, use `/plugins`
+to confirm the plugin is enabled, then `/skills` to select `setup-local-scanner`.
+
+Ask:
 
 ```text
 Set up MCP ZAP Server in Codex using Docker Compose.

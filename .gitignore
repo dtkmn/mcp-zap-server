@@ -45,3 +45,7 @@ docs/reviews/
 zap-artifacts/
 .verify/
 zap-workplace/
+
+# Claude Desktop extension dependencies and packaged artifacts
+packaging/claude-desktop/node_modules/
+packaging/claude-desktop/*.mcpb

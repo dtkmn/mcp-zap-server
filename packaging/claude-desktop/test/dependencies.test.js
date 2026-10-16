@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { cp, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile, access } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, open, readFile, rm, symlink, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,8 +53,14 @@ test('the builder editor preserves temporary-file content, permissions and clean
   const editor = new ExternalEditor('initial text', { postfix: '.txt', mode: 0o600 });
   t.after(() => rm(editor.tempFile, { force: true }));
   assert.equal(await readFile(editor.tempFile, 'utf8'), 'initial text');
-  assert.equal((await stat(editor.tempFile)).mode & 0o777, 0o600);
-  await writeFile(editor.tempFile, 'updated text');
+  const file = await open(editor.tempFile, 'r+');
+  try {
+    assert.equal((await file.stat()).mode & 0o777, 0o600);
+    await file.truncate(0);
+    await file.writeFile('updated text');
+  } finally {
+    await file.close();
+  }
   editor.readTemporaryFile();
   assert.equal(editor.text, 'updated text');
   editor.cleanup();

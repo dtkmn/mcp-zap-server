@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-zap-connect",
-  "version": "0.3.0",
-  "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex or Cursor.",
+  "version": "0.4.0",
+  "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex, Cursor or Claude Code.",
   "author": {
     "name": "Daniel Tse",
     "url": "https://github.com/dtkmn"
@@ -29,7 +29,7 @@
         "logo": "./assets/icon.svg"
       },
       "publication": {
-        "release_notes": "Add Cursor connection instructions to the shared Docker Compose setup skill while retaining Codex onboarding. Reuse healthy running installations, preserve the other client's settings, and verify with a status call only. The plugin does not bundle an MCP server or run scans on installation."
+        "release_notes": "Add Claude Code plugin packaging and private HTTP connection instructions to the shared Docker Compose setup skill. Reuse the existing scanner, preserve other clients' settings, and verify with a status call only. The plugin does not bundle an MCP server or run scans on installation."
       }
     }
   }

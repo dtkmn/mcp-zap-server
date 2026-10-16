@@ -12,5 +12,5 @@
   },
   "dependencies": { "@modelcontextprotocol/sdk": "1.32.1", "zod": "4.6.7" },
   "devDependencies": { "@anthropic-ai/mcpb": "2.1.2" },
-  "overrides": { "zod": "$zod" }
+  "overrides": { "zod": "$zod", "tmp": "0.2.7" }
 }

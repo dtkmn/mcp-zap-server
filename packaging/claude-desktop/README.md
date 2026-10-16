@@ -148,6 +148,15 @@ runtime version. Keep the override until the build tool supports a patched
 dependency without it. Rebuilt archives have new checksums; old CI artifacts
 containing Zod `3.25.76` should not be published.
 
+The build-only `tmp` dependency is overridden to `0.2.7` to address the path
+traversal and symbolic-link advisories in older releases, including the
+non-string path bypass in `0.2.6`. MCPB `2.1.2` still pulls an old `tmp` through
+its editor prompt dependency. Tests check the resolved editor dependency,
+hostile path options, and normal temporary-file read/write/cleanup behavior.
+The build rejects affected root or nested lock resolutions and checks the
+embedded archive lockfile. `tmp` and the builder CLI are excluded from the
+production runtime. Rebuild earlier preview artifacts before publication.
+
 ## Prepare a GitHub download
 
 Use the **Claude Desktop MCPB** workflow. It builds preview assets automatically

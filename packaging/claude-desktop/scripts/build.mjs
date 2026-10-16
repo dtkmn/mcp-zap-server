@@ -24,6 +24,17 @@ const zodPackages = Object.entries(lock.packages || {}).filter(([name]) => name 
 if (!zodPackages.length || zodPackages.some(([, value]) => !patchedZod(value.version))) {
   throw new Error('Every locked Zod package must be a patched release (>=4.6.6).');
 }
+function assertPatchedTmp(lockfile) {
+  const packages = Object.entries(lockfile.packages || {}).filter(([name]) => name === 'node_modules/tmp' || name.endsWith('/node_modules/tmp'));
+  if (!packages.length || packages.some(([, value]) => {
+    if (!/^\d+\.\d+\.\d+$/.test(value.version)) return true;
+    const [major, minor, patch] = value.version.split('.').map(Number);
+    return !(major > 0 || minor > 2 || (minor === 2 && patch >= 7));
+  })) {
+    throw new Error('Every locked tmp package must be a patched release (>=0.2.7).');
+  }
+}
+assertPatchedTmp(lock);
 await rm(staging, { recursive: true, force: true });
 await mkdir(join(staging, 'resources/scanner/bin'), { recursive: true });
 for (const name of ['server', 'manifest.json', '.mcpbignore', 'package.json', 'package-lock.json', 'README.md', 'SETUP.md']) {
@@ -47,6 +58,7 @@ execFileSync(cli, ['pack', staging, artifact], { stdio: 'inherit' });
 const unpacked = join(output, 'unpacked');
 await rm(unpacked, { recursive: true, force: true });
 if (!await unpackExtension({ mcpbPath: artifact, outputDir: unpacked, silent: true })) throw new Error('The built archive could not be unpacked.');
+assertPatchedTmp(JSON.parse(await readFile(join(unpacked, 'package-lock.json'), 'utf8')));
 const archiveZod = JSON.parse(await readFile(join(unpacked, 'node_modules/zod/package.json'), 'utf8'));
 if (!patchedZod(archiveZod.version) || archiveZod.version !== pkg.dependencies.zod) {
   throw new Error('The actual MCPB must contain the pinned patched Zod runtime.');

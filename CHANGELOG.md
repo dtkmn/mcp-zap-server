@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Override the Claude Desktop MCPB builder's transitive `tmp` dependency to `0.2.7`, covering path traversal, symbolic-link handling and the `0.2.6` non-string path bypass. Add editor compatibility and malicious-path regressions; reject affected lockfile copies before packaging and in the rebuilt archive. The dependency remains build-only.
 - Limit automatic Claude Desktop MCPB packaging to relevant pushes to `main`, retaining manual build/draft-release preparation. Ordinary dev/PR CI keeps the connector tests without generating distribution assets.
 - Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version; add bounded-array and MCPB manifest compatibility regressions. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
 

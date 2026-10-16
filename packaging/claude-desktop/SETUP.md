@@ -7,17 +7,21 @@ Claude Code, Node.js, npm, Git, or a repository checkout.
 ## 1. Get the extension
 
 Open the [GitHub Releases page](https://github.com/dtkmn/mcp-zap-server/releases)
-and choose a published **Claude Desktop MCP ZAP Connect** preview with a tag
-starting `claude-desktop-v`.
+and choose a published normal scanner release (`vX.Y.Z`) with the Claude Desktop
+downloads under **Assets**. The extension and this guide ship with the scanner
+release in the same repository; there is no separate Desktop release.
 
 Under **Assets**, download:
 
-- `mcp-zap-connect-claude-desktop-<version>.mcpb` — the extension to install.
-- `mcp-zap-connect-claude-desktop-<version>-setup.md` — this matching guide.
+- `mcp-zap-connect-claude-desktop-0.1.0.mcpb` — the extension to install.
+- `mcp-zap-connect-claude-desktop-0.1.0-setup.md` — this matching guide.
 
-The adjacent `.sha256` files are checksums for these downloads. Choose the
-`.mcpb`, rather than GitHub's automatic **Source code** archives. If no published
-Desktop preview has these assets, the download has not been released yet.
+Use the connector version listed in that release if it differs from `0.1.0`;
+it can differ from the scanner release version. Download the matching guide
+and `.mcpb` together. The adjacent `.sha256` files are checksums for these
+downloads. Choose the `.mcpb`, rather than GitHub's automatic **Source code**
+archives. These downloads are planned for the next normal scanner release.
+If no published release has the assets, the download has not been released yet.
 
 This is a macOS preview. Installation and a status call have been verified on
 Apple Silicon with Claude Desktop Free; Intel Macs and other operating systems
@@ -78,6 +82,11 @@ uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
 starts the scanner and bundled demo applications. Initial image downloads may
 take a while. A healthy existing scanner is reused without replacing its keys
 or client settings.
+
+The extension bundles a snapshot of the scanner setup files and defaults.
+Connector `0.1.0` currently defaults a new installation to scanner `v0.16.0`;
+downloading it from a newer scanner release does not itself change that default.
+An existing scanner keeps its selected version and settings.
 
 If a prerequisite is missing, resolve it and ask Claude to check again. If it
 reports conflicting ports, credentials, ownership, or customized startup files,

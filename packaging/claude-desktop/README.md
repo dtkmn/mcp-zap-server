@@ -18,11 +18,14 @@ directory listing or approval.
 ## Install the local preview
 
 1. Open [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and
-   choose a published **Claude Desktop MCP ZAP Connect** preview, tagged
-   `claude-desktop-v<version>`. Download its `.mcpb` asset and matching
-   `-setup.md` guide. If no such assets are published, build the local preview
-   using the developer steps below. Public distribution is not complete merely
-   because local build files exist.
+   choose a published normal scanner release (`vX.Y.Z`) whose **Assets** include
+   the Claude Desktop downloads. Download
+   `mcp-zap-connect-claude-desktop-0.1.0.mcpb` and the matching
+   `mcp-zap-connect-claude-desktop-0.1.0-setup.md` guide, or the connector version
+   listed by that release. Both have adjacent `.sha256` files. These assets are
+   planned for the next normal scanner release in this repository; there is no
+   separate Desktop release or repository. If no published release has them,
+   public distribution is pending; developers can build the local preview below.
 2. In Claude Desktop, open **Settings → Extensions → Advanced settings**, choose
    **Install Extension**, and select the `.mcpb` file. Review the extension and
    complete the installation prompts.
@@ -126,6 +129,19 @@ scanner resources. It includes the public `.env.example` template, not a real
 from this checkout; source hashes are included in the bundle. Building this
 preview does not publish a release or rebuild the scanner images.
 
+Connector and scanner versions are independent. For example, a future scanner
+release `v0.17.0` can include connector `0.1.0`; the asset filenames use the
+connector version. Connector `0.1.0` remains unreleased, so this preparation does
+not bump it. After publication, bump the connector version when its packaged
+code, dependencies, scanner resources or setup guide change. Ordinary scanner
+changes outside the bundle do not require a connector version bump.
+
+Bundled Compose files, scripts and defaults are snapshots of the selected
+source, not a promise to install that release's newest scanner. The current
+packaged `.env.example` defaults to scanner `v0.16.0`. Update and validate those
+resources deliberately when changing the fresh-install scanner version; preserve
+the selected settings when reusing an existing scanner.
+
 The output is:
 
 ```text
@@ -157,7 +173,7 @@ The build rejects affected root or nested lock resolutions and checks the
 embedded archive lockfile. `tmp` and the builder CLI are excluded from the
 production runtime. Rebuild earlier preview artifacts before publication.
 
-## Prepare a GitHub download
+## Prepare downloads for a normal scanner release
 
 Use the **Claude Desktop MCPB** workflow. It builds preview assets automatically
 only on relevant pushes to `main`, and can also be dispatched manually for an
@@ -171,24 +187,57 @@ Release packaging happens before publication through the manual draft-release
 flow below. Publishing an immutable release is not a packaging trigger; all
 assets must already be attached when the user publishes it.
 
-For a public preview, first merge the reviewed source and create an existing
-tag `claude-desktop-v<package-version>` on that source. Create a **draft**
-prerelease titled **Claude Desktop MCP ZAP Connect <version> (macOS preview)**,
-with the setup guide or a link to its tagged source in the release notes.
-Dispatch the workflow from `main` with that tag in `draft_release_tag`. The tag
-must match the package version, its commit must be reachable from `main`, and
-the release must still be a mutable draft.
+Maintainers prepare the assets before publishing the normal scanner release:
 
-The workflow attaches the MCPB, guide and both checksums without overwriting
-existing assets. Review the attached files and validation boundaries before
-publishing the draft. Published immutable releases cannot receive new assets.
-The Desktop tag namespace is excluded from the scanner Docker publication job;
-it does not change the scanner release version or Docker images.
+1. Include the reviewed connector source and guide in the next normal scanner
+   release commit on `main`. Set the scanner `build.gradle` version for that
+   release. The existing immutable `v0.16.0` release stays untouched.
+2. Create the normal scanner tag, such as `v0.17.0`, and a **draft** GitHub
+   release for that existing tag in this repository. The usual scanner
+   prerelease tags are also supported; a stable release does not need to be
+   marked as a prerelease merely because its connector is a macOS preview.
+3. Dispatch **Claude Desktop MCPB** from `main`, setting `draft_release_tag` to
+   that scanner tag. The workflow checks out the tag's source, requires the
+   commit to be reachable from `main`, and validates that the scanner
+   `build.gradle` version matches the tag. It tests and builds the MCPB from
+   that source; it does not require the connector version to match the tag.
+4. Verify that the existing draft contains all four matching assets:
 
-After publication, link users to that specific release and its asset URLs.
-Do not use `/releases/latest/download` for Desktop previews: the repository's
-latest release is a separately versioned scanner release. Confirm the public
-downloaded checksums before claiming distribution is complete.
+   ```text
+   mcp-zap-connect-claude-desktop-0.1.0.mcpb
+   mcp-zap-connect-claude-desktop-0.1.0.mcpb.sha256
+   mcp-zap-connect-claude-desktop-0.1.0-setup.md
+   mcp-zap-connect-claude-desktop-0.1.0-setup.md.sha256
+   ```
+
+   Substitute the connector version if it changes. Review the guide, check
+   both downloaded checksums, and record the validation boundaries in the
+   normal scanner release notes. The workflow requires an existing mutable
+   draft and refuses to overwrite assets; it does not create or publish a
+   release. Resolve missing or conflicting assets while the release is still
+   a draft before proceeding.
+   A failed run can leave some files attached. Inspect the draft and remove
+   conflicting files yourself before retrying; the workflow does no automatic
+   cleanup or replacement.
+5. Publish the normal scanner release only after reviewing all four assets.
+   Publication then triggers the existing scanner Docker release workflow.
+   That workflow requires all four expected assets to be nonempty and uploaded
+   before building images; this check does not validate downloaded bytes and
+   cannot repair an incomplete release after immutable publication.
+   Verify that workflow's image publication separately before claiming that
+   the scanner images are available.
+
+All four assets must be attached **before publication** because published
+immutable releases cannot receive new assets. Use the normal scanner tag;
+do not create `claude-desktop-v*` tags, separate plugin releases or another
+repository for these downloads.
+
+After publication, link users to that specific normal release and its asset
+URLs. Do not promise `/releases/latest/download` until the published latest
+release actually contains the expected assets; a prerelease does not become
+the repository's latest stable release. Confirm the public downloaded checksums
+before claiming distribution is complete. Local package tests do not establish
+that GitHub attached the files or that public downloads work.
 
 Package tests and manifest validation establish only their stated boundaries.
 An external MCP client exercising the packaged connector is also separate from

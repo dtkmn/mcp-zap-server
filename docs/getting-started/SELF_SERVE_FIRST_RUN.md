@@ -19,9 +19,13 @@ without the plugin.
 
 Claude Desktop Free users can follow the separate
 [MCPB download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md).
-Published Desktop previews will provide the `.mcpb` and matching guide as
-[GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending.
+The `.mcpb`, matching guide and both checksums are planned as
+[GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases) on the
+next normal scanner release in this repository. Choose that release's Desktop
+assets; there is no separate Desktop release. The connector version in the
+filenames can differ from the scanner tag. Public distribution is pending until
+the assets are published. The bundled new-installation default is currently
+scanner `v0.16.0`, even if the containing release has a newer scanner tag.
 It exposes local setup tools that reuse these Docker scripts, so Claude can
 check prerequisites and guide setup after an explicit request. Installing the
 extension alone does not start containers. Installation and an existing-scanner

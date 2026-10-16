@@ -68,9 +68,13 @@ verification remain pending.
 
 For Claude Desktop Free, follow the [download, setup and first-scan guide](./packaging/claude-desktop/SETUP.md).
 The macOS MCPB preview adds agent-callable setup tools around the same Docker
-scripts and reuses existing installations. Published Desktop previews will offer
-the `.mcpb` and matching guide under [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending. Installation and a native status-only call on
+scripts and reuses existing installations. The `.mcpb`, matching setup guide and
+both checksums are planned as [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases)
+on the next normal scanner release in this repository. There is no separate
+Desktop release; connector `0.1.0` has its own version, independent of the
+scanner tag. Public distribution is pending until those assets are published.
+The bundled fresh-install default is currently scanner `v0.16.0`.
+Installation and a native status-only call on
 Claude Desktop Free passed on 16 October 2026; fresh scanner startup remains
 fixture-tested. This is separate from the Claude Code plugin.
 

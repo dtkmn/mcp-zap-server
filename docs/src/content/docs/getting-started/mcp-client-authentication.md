@@ -371,10 +371,16 @@ network. Validate with tool discovery and the first-scan prompt above.
 ## Claude Desktop
 
 Follow the [Claude Desktop download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md)
-for the macOS MCPB preview. Published Desktop previews will provide the `.mcpb`
-and matching guide as [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending. The [package README](https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop)
-contains the local developer build and draft-release procedure.
+for the macOS MCPB preview. The `.mcpb`, matching guide and both checksums are
+planned as [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases)
+on the next normal scanner release in this repository. Choose a published
+scanner release whose assets include those downloads; there is no separate
+Desktop release. The connector version in the filenames is independent of the
+scanner tag. Public distribution is pending until the assets are published.
+The bundled fresh-install default is currently scanner `v0.16.0` and does not
+automatically follow the containing release's scanner version.
+The [package README](https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop)
+contains the local developer build and normal-release draft procedure.
 It packages a local MCP server with agent-callable prerequisite, setup and
 readiness tools. These tools reuse `bootstrap-local.sh` and
 `self-serve-doctor.sh`; the official MCP SDK connects to the existing scanner's
@@ -385,7 +391,7 @@ native status call passed on a Free account using Desktop `2.42304.0` and its
 built-in Node `24.21.0`. The existing scanner and client settings were preserved.
 Fresh scanner startup has automated fixture coverage rather than live evidence.
 
-For a locally built bundle:
+For a downloaded or locally built bundle:
 
 1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
    Install Extension…** and select the `.mcpb` file.

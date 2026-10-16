@@ -13,6 +13,7 @@ permissions:
 jobs:
   docker-release:
     name: Publish release images and archive SBOM
+    if: ${{ !startsWith(github.event.release.tag_name, 'claude-desktop-v') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve release metadata

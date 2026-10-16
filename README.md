@@ -58,8 +58,9 @@ Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
 then ask it to check prerequisites, start the Docker stack, configure your private
 MCP connection and verify status. This workflow has been tested locally in
-Codex. Docker and Compose must already be installed and running; scanning is
-a separate request. The commands below remain available without the plugin.
+Codex. The skill can help install missing prerequisites with your approval,
+then recheck and continue setup. Scanning is a separate request. The commands
+below remain available without the plugin.
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git

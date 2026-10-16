@@ -95,31 +95,91 @@ covers optional active scanning, release evidence, and customer handoff.
 MCP ZAP Connect `0.3.0` lets you ask Codex to handle the local Docker Compose
 setup above, including prerequisites, startup, private client configuration and
 a status check. You normally do not need to edit the client's configuration
-yourself. Docker and Compose must already be installed and running; review any
-permissions requested by your client. Installing this skills-only plugin does
-not start the scanner or register MCP tools until you request setup.
+yourself. Docker and Compose must be ready before scanner startup; the skill can
+help install missing prerequisites with your approval, recheck them and continue.
+Review any permissions requested by your client. Installing this skills-only
+plugin does not start the scanner or register MCP tools until you request setup.
 
-This setup and status-verification workflow has been tested locally in Codex.
-Install the plugin locally using the steps below.
+GitHub installation, Desktop skill activation and status verification have been
+tested locally in Codex on Apple Silicon macOS with an existing Docker scanner.
+Install the plugin locally using the steps below. This route requires Git and
+Bash for the project's Docker setup scripts.
+
+### Check The Codex CLI
+
+The installation commands use the Codex CLI (`codex`). On macOS, run this in
+your terminal, or ask your desktop agent to run it before installing the plugin.
+It keeps an existing `codex` command and checks common desktop-app locations
+only when the command is missing:
+
+```bash
+if ! command -v codex >/dev/null 2>&1; then
+  for codex_dir in \
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "/Applications/Codex.app/Contents/Resources" \
+    "$HOME/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "$HOME/Applications/Codex.app/Contents/Resources"
+  do
+    if [ -x "$codex_dir/codex" ]; then
+      export PATH="$codex_dir:$PATH"
+      break
+    fi
+  done
+fi
+codex --version
+command -v codex
+```
+
+The PATH change lasts only for this terminal session; use the same terminal
+for the installation commands below. The block prints the version and CLI path.
+An agent using separate command sessions should use that executable's full path
+for subsequent commands, since a PATH change does not carry between shells.
+It does not edit shell startup files, Codex connections or Docker settings.
+For an app installed elsewhere, use its bundled CLI directory instead. OpenAI's
+[bundled CLI documentation](https://learn.chatgpt.com/docs/reference/troubleshooting#feature-is-working-in-the-codex-cli-but-not-in-the-chatgpt-desktop-app)
+also describes the older `Codex.app` location.
+
+If `codex` is still missing, follow OpenAI's
+[CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli#getting-started)
+to install it, then open a new terminal and run `codex --version` again.
+Continue only after it prints a version. If your CLI does not recognize the
+plugin commands below, update the desktop app or standalone CLI using OpenAI's
+instructions and retry. This prerequisite comes before plugin installation;
+the plugin's setup skill is not available to help until it is installed.
 
 ### Install In Codex
 
-Clone this repository or reuse an existing checkout. With the Codex CLI
-available, run these commands from the `mcp-zap-server` repository root:
+Install directly from GitHub using your normal Codex installation. Run these
+commands from your home directory:
 
 ```bash
-codex plugin marketplace add "$PWD"
+cd "$HOME"
+codex plugin marketplace add dtkmn/mcp-zap-server --ref main
 codex plugin add mcp-zap-connect@mcp-zap-local-preview
 ```
 
-`mcp-zap-local-preview` is this repository's existing local marketplace
-identifier; the plugin installs as **MCP ZAP Connect**. Keep the checkout in place
-for the local marketplace. These commands install the skill, not the scanner.
-See OpenAI's [local plugin instructions](https://developers.openai.com/plugins/build/plugins#install-a-local-plugin-manually).
+Codex downloads the repository and installs the plugin in its managed cache;
+no manual repository checkout is required. `mcp-zap-local-preview` is the
+existing marketplace identifier; the plugin installs as **MCP ZAP Connect**.
+When you request scanner setup, the skill reuses an existing project checkout
+or obtains one for the Docker configuration and bootstrap scripts, then uses
+published release images. Installing the plugin alone does not start the
+scanner. This GitHub installation does not require a public-directory listing.
+See OpenAI's [Git-backed marketplace instructions](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
 
-Enable MCP ZAP Connect in a local Codex conversation and select its
-`setup-local-scanner` skill. If it is not available in the current conversation,
-start a new local conversation with the plugin enabled. Ask:
+### Use In The Desktop App
+
+1. Open **Plugins**, find **MCP ZAP Connect** among your installed or personal
+   plugins, and open its page.
+2. Confirm it is enabled, then select **Try now** to invoke the setup skill in
+   a local conversation on this machine.
+3. Send the setup request below.
+
+If the plugin or skill is missing, restart the desktop app and open a new local
+conversation with the plugin enabled. For CLI use, run `codex`, use `/plugins`
+to confirm the plugin is enabled, then `/skills` to select `setup-local-scanner`.
+
+Ask:
 
 ```text
 Set up MCP ZAP Server in Codex using Docker Compose.

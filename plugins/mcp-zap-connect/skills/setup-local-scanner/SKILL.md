@@ -1,6 +1,6 @@
 ---
 name: setup-local-scanner
-description: Set up or reconnect local MCP ZAP Server in Codex or Cursor using the project's Docker Compose release setup. Use for local scanner installation, startup, connection troubleshooting, or stopping its containers. Requires Docker and Compose already installed and running.
+description: Set up or reconnect local MCP ZAP Server in Codex or Cursor using the project's Docker Compose release setup. Use for local scanner installation, startup, connection troubleshooting, or stopping its containers. Help install missing prerequisites with approval, then recheck and continue setup.
 ---
 
 # Set up the local scanner
@@ -20,11 +20,60 @@ that client's passive-status call; setup prerequisites must not block it.
 - Commands must execute on the user's machine, where the requested client can reach the
   scanner's loopback endpoint. A remote or web-only execution host does not
   establish access to the user's local scanner.
-- For setup or restart, check Docker is installed and its engine is running,
-  Compose supports `--wait` and `--wait-timeout`, and a compatible POSIX shell
-  is available. Check Git when cloning the project is needed.
-  Explain a missing prerequisite and stop; do not install Docker, Java or another
-  runtime as a substitute. Java and ZAP run inside the containers.
+- For setup or restart, identify the host OS and architecture. Check Bash,
+  Docker with a reachable engine, and Compose supporting `--wait` and
+  `--wait-timeout`. Check Git when cloning is needed, OpenSSL when creating new
+  settings, and the bootstrap/doctor utilities documented in the project.
+  Java and ZAP run inside containers; no host Java installation is required.
+- If a prerequisite check fails, follow the recovery steps below before
+  continuing. Preserve existing installations and the selected Docker context.
+
+### Resolve missing prerequisites
+
+- Distinguish missing software from a missing PATH entry, a stopped engine or
+  an access error. Locate an installed executable or Docker Desktop first;
+  use its full path or a session-only PATH adjustment before proposing another
+  installation. Do not change shell startup files or Docker contexts as a shortcut.
+- Explain the missing tool and propose the specific download, installation or
+  update, including any administrator access or Docker restart it requires.
+  Obtain approval before downloading or installing prerequisites, updating
+  software or restarting an existing engine. Reuse explicit approval already
+  given for those steps; a scanner setup request alone does not authorize
+  software installation. If approval is declined, leave setup incomplete and
+  provide the manual next step.
+- On macOS, follow the official [Docker Desktop installation guide](https://docs.docker.com/desktop/setup/install/mac-install/),
+  matching the host's chip and supported OS. Docker Desktop includes Compose;
+  do not install a competing engine to repair its CLI or Compose. For missing
+  Git, use the [official macOS installation options](https://git-scm.com/install/mac),
+  such as Apple's Command Line Tools or an existing package manager. Do not
+  install another package manager just to complete setup. For other systems,
+  use the vendor's platform-specific [Docker/Compose](https://docs.docker.com/compose/install/)
+  and [Git](https://git-scm.com/install/) instructions; state that this project's
+  verified onboarding is on Apple Silicon macOS.
+- Carry out only approved steps within the host's permissions. Leave license
+  acceptance, account sign-in, password entry and OS security prompts to the
+  user. If a step requires their interaction or an app restart, explain it and
+  wait for completion. Preserve macOS quarantine and security checks. A
+  download or installer exit is not proof that the tool is usable.
+- If Docker is installed but stopped, start the existing application as part
+  of the requested setup and wait a bounded time for its engine. For an access
+  error, diagnose the selected endpoint and permissions before proposing a
+  repair; do not run setup as root or change permissions automatically.
+- After approved changes or the user's manual step, rediscover executable
+  paths and recheck Bash, required utilities, Git when needed, `docker info`,
+  `docker compose version`, and both flags in `docker compose up --help`.
+  Continue the original setup below only when the needed checks pass. If they
+  still fail, explain the remaining blocker; retry after an identified fix,
+  rather than repeatedly installing software or changing client settings.
+- A loaded Desktop skill does not require a separate Codex CLI installation
+  for scanner setup. The direct GitHub plugin installation commands need the
+  CLI before this skill is available. For that prerequisite, follow
+  [Check The Codex CLI](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#check-the-codex-cli):
+  check the desktop app's bundled CLI first, then guide an approved installation
+  only if needed.
+
+### Reuse the project
+
 - Reuse a suitable existing `mcp-zap-server` checkout. Otherwise clone
   `https://github.com/dtkmn/mcp-zap-server.git` into a new user-owned directory;
   never overwrite a directory or reset existing changes. Read

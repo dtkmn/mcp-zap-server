@@ -33,8 +33,8 @@ For agent-assisted Docker setup, the same guide covers
 Install the plugin locally, then ask its setup skill to start or reuse the
 Docker stack and configure your private Codex connection. This workflow has
 been tested locally. It verifies status without starting a scan, so you
-normally do not need to edit client settings yourself. Docker and Compose must
-already be installed and running.
+normally do not need to edit client settings yourself. The skill can help
+install missing prerequisites with your approval, then recheck and continue setup.
 The manual configuration recipes below remain available without the plugin.
 
 ## Client Compatibility

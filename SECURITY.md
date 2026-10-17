@@ -179,7 +179,7 @@ This server tracks the [Model Context Protocol Security Best Practices](https://
 ### Upstream Dependency Findings
 
 Review the [dependency security status](https://danieltse.org/mcp-zap-server/reference/dependency-security/)
-for known upstream findings, deployment scope, owners and review dates. A green
+for known upstream findings, deployment scope and mitigation guidance. A green
 scanner workflow does not establish that its vulnerability report is empty.
 Temporary exceptions accept a specified risk and must be reviewed when they
 expire or the affected deployment behavior changes.

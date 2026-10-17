@@ -162,7 +162,7 @@ jobs:
             printf '### Claude Desktop local preview\n\n'
             printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT"
             printf '[Download the MCPB, matching setup guide and checksums](%s).\n\n' "$ARTIFACT_URL"
-            printf 'Isolated tests and packaging checks passed. This run did not access Docker, run scanner tools or verify Claude Desktop. No release was published.\n'
+            printf 'Install the extension using the matching setup guide. Verify the MCPB and guide with their adjacent SHA256 files before installation.\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
   attach-draft:

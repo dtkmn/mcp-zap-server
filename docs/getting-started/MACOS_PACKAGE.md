@@ -175,7 +175,7 @@ An SSH session without a logged-in desktop is not supported by this preview.
 ## Build and release instructions
 
 Contributors can use the [macOS maintainer guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/macos/README.md)
-for local builds and manual GitHub Actions test downloads. Automatic package
-builds are paused, and public Mac distribution is deferred until
-signing/notarization and clean browser-download installation are resolved.
-The package's source-delivery materials and dependency notices remain included.
+for local builds and manual GitHub Actions preview downloads. Public Mac
+downloads are not available; the supplied preview is unsigned. Keep the
+package's matching source-delivery materials and dependency notices together
+when building or redistributing it.

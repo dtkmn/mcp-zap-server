@@ -7,9 +7,8 @@ The short version:
 - today, the shipped scanner engine is ZAP
 - the product boundary is the MCP-native gateway runtime, not ZAP itself
 - extensions plug into public extension contracts
-- enterprise uses the same extension pattern privately
-- additional scanner engines are future adapter work, not shipped runtime
-  multi-engine support
+- private providers use the same extension pattern
+- the runtime supports ZAP; multi-engine execution is not available
 
 ## What The Current OSS Runtime Owns
 
@@ -31,10 +30,8 @@ The current OSS runtime owns:
 - extension contracts for engines, policy, selected access boundaries, and
   evidence metadata
 
-Some of those responsibilities now use public-preview `mcp-gateway-core`
-contracts and the Spring WebFlux adapter. Others are security-pack
-responsibilities that should remain with the ZAP/security distribution unless a
-later extraction ADR proves otherwise.
+These responsibilities use `mcp-gateway-core` contracts, the Spring WebFlux
+adapter and the ZAP/security distribution's runtime services.
 
 The current OSS runtime must run without enterprise installed. If removing an
 extension breaks the basic gateway, the boundary is wrong.
@@ -51,7 +48,6 @@ In practice, an extension usually does one of these:
   routing
 - adds a private provider for policy, tenant/workspace access, auth bootstrap,
   reporting, or evidence handling
-- adds future engine adapter behavior only after the engine ADR gates are met
 
 Extensions should not fork the current OSS runtime or require MCP clients to
 learn a different product.
@@ -79,11 +75,7 @@ flowchart TD
 
 Today, the supported engine is ZAP.
 
-The public `zap_*` MCP tools remain the supported client surface. Internally,
-the gateway is moving scan, findings, report, import, context, automation,
-inventory, passive-scan, and runtime behavior behind engine-facing contracts.
-
-That means the architecture is being prepared for more engines, but the current
+The public `zap_*` MCP tools are the supported client surface. The current
 product does not ship:
 
 - multiple active scanner engines
@@ -101,9 +93,9 @@ Use the existing extension points before adding new ones.
 
 Not every row below is part of `mcp-zap-extension-api` yet. The API artifact
 currently covers policy hooks, selected protection boundaries, evidence
-metadata enrichment, and extension metadata. Engine and auth-bootstrap rows
-describe current or future runtime boundaries, not a stable standalone-builder
-API.
+metadata enrichment and extension metadata. Engine and auth-bootstrap rows
+describe internal runtime boundaries; they are not exported by the standalone
+extension API.
 
 | Area | Core contracts | Intended extension use |
 | --- | --- | --- |
@@ -118,14 +110,12 @@ API.
 | Requester identity and access | `WorkspaceIdentityResolver`, `ScanJobAccessBoundary`, `ReportArtifactBoundary`, `PolicyBundleAccessBoundary`, `ScanHistoryAccessBoundary` | Add tenant/workspace-aware visibility and access checks around shared gateway data. |
 | Runtime defaults | `EngineRuntimeAccess` | Apply startup runtime defaults and expose engine health/version through a gateway contract. |
 
-These are contracts, not permission to add private logic to the current OSS
-runtime. If the extension behavior is not public-safe, keep it outside the OSS
-export.
+Keep private provider implementations and configuration outside the public
+runtime source and artifacts.
 
 ## Enterprise As A Private Extension Pack
 
-Enterprise should be implemented as a private extension pack on top of the same
-extension contracts. That is the point of the model.
+Use a separate private extension pack for organization-specific providers.
 
 Enterprise may add private providers for:
 
@@ -141,9 +131,9 @@ deliberately enables a private control that changes access decisions.
 
 ## What Community Builders Should Do
 
-Start with a narrow extension that proves one provider contract.
+Start with a narrow extension that implements one provider contract.
 
-The repository includes a compile-checked and wiring-tested sample:
+Start with these samples and build guides:
 
 - [Sample Policy Metadata Extension](../../examples/extensions/policy-metadata-extension/README.md)
 - [Standalone Policy Metadata Extension](../../examples/extensions/standalone-policy-metadata-extension/README.md)
@@ -157,17 +147,16 @@ gateway runtime. The standalone sample shows the external project shape that
 depends on `mcp-zap-extension-api` through Maven coordinates. Neither sample
 adds a scanner engine or a public MCP tool.
 
-That sample is an in-repo proof. The target external workflow is a standalone
-extension repository that depends on the dedicated `mcp-zap-extension-api`
+For an external extension, use a standalone repository that depends on the
+dedicated `mcp-zap-extension-api`
 artifact, registers through Spring Boot auto-configuration, and ships a
 separate extension JAR.
 
-The first API artifact intentionally exposes only stable-looking, boring
-contracts: policy hooks, selected access boundaries, metadata or evidence
-enrichment contracts, and version compatibility metadata. Queue/history
-visibility boundaries that still expose mutable core models remain internal
-until they have safe public view types. Engine adapter contracts remain internal
-until a real candidate second-engine design satisfies the ADR gates.
+The API artifact exposes policy hooks, selected access boundaries, metadata or
+evidence enrichment contracts and version compatibility metadata. Queue/history
+visibility boundaries that expose mutable core models and engine adapter
+contracts remain internal. Do not depend on those implementation types from an
+external extension.
 
 Good first extensions:
 
@@ -177,7 +166,7 @@ Good first extensions:
 
 Bad first extensions:
 
-- a full second scanner engine before the ADR gates are satisfied
+- a scanner engine adapter outside the exported API
 - a forked MCP tool surface
 - an extension that reads private files or secrets without operator allowlists
 - tenant isolation that claims SaaS-grade security without durable store,
@@ -196,19 +185,14 @@ Before calling something an extension, make sure:
 - tests prove the extension cannot see data outside its intended boundary
 - external builders can eventually build it without editing this repository
 
-## Engine Adapters Are The Later Step
+<a id="engine-adapters-are-the-later-step"></a>
 
-ZAP is the first engine because it already has the deepest implementation and
-test coverage in this project.
+## Scanner Engine Support
 
-Additional scanner engines should come through an adapter boundary. The current
-design fence is the accepted engine extension ADR. Until the ADR gates are met,
-engine work should be limited to mapping the current ZAP interfaces,
-documenting candidate-engine pressure, and fencing unsupported claims.
-
-Do not implement Nuclei, Semgrep, Burp, or runtime engine switching just to
-prove the extension story. That would add platform surface before the product
-has earned it.
+ZAP is the supported engine. The standalone extension API does not export engine
+adapter contracts or provide per-request engine selection. Use an exported
+policy, access or metadata contract for your extension; do not use internal
+engine types as a third-party compatibility surface.
 
 ## Runtime Loading Model
 
@@ -227,7 +211,7 @@ so extension beans actually wire into the gateway.
 
 Current limitations:
 
-- the in-repo sample proves packaging, not external binary compatibility
+- the samples demonstrate packaging and registration, not binary compatibility
 - the extension API artifact is experimental and not a binary compatibility
   promise yet
 - no runtime plugin discovery directory is promised

@@ -10,12 +10,13 @@ It reuses the shared MCP helper in [`.github/actions/zap-security-gate/mcp_zap_g
 
 The artifact contracts emitted by that helper are defined in [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md).
 
-## Current Status
+<a id="current-status"></a>
 
-GitHub Actions is the CI integration covered by this repository's hosted
-validation. The GitLab files are example templates that reuse the shared MCP
-helper. Validate runner permissions, service connectivity, secrets, and artifact
-handling in your own GitLab project before relying on them as a release gate.
+## Runner Preparation
+
+The GitLab files are example templates that reuse the shared MCP helper.
+Validate runner permissions, service connectivity, secrets and artifact handling
+in your own GitLab project before using them as a release gate.
 
 ## What The GitLab Template Does
 

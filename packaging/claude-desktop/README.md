@@ -219,8 +219,9 @@ Maintainers prepare the assets before publishing the normal scanner release:
    ```
 
    Substitute the connector version if it changes. Review the guide, check
-   both downloaded checksums, and record the validation boundaries in the
-   normal scanner release notes. The workflow requires an existing mutable
+   both downloaded checksums, and document user-relevant compatibility
+   requirements and limitations in the normal scanner release notes. Keep
+   internal validation records private. The workflow requires an existing mutable
    draft and refuses to overwrite assets; it does not create or publish a
    release. Resolve missing or conflicting assets while the release is still
    a draft before proceeding.

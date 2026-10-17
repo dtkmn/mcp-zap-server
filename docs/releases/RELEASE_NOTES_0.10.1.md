@@ -6,7 +6,7 @@
 
 - Restored reliable Streamable HTTP connections for Cursor and other MCP clients that answer server-initiated JSON-RPC requests.
 - Updated `mcp-gateway-core` and `mcp-gateway-spring-webflux` from `0.7.1` to `0.7.2`.
-- Kept the normal 30-second MCP keepalive enabled and verified successful Cursor responses with HTTP `202`.
+- Kept the normal 30-second MCP keepalive enabled; client responses receive HTTP `202`.
 - Preserved the `v0.10.0` tool schemas, authentication settings, Helm values, and database contract.
 
 ## Fixed
@@ -25,7 +25,8 @@ CodeQL now covers Java, JavaScript/TypeScript, Python, and GitHub Actions. Java 
 
 ## Maintenance
 
-Policy dry-run regression coverage now explicitly verifies the existing required-description rule, and partial-rule construction is aligned with that validation. The externally visible policy-validation contract is unchanged.
+Policy dry-run partial-rule construction follows the existing required-description
+rule. The externally visible policy-validation contract is unchanged.
 
 ## Upgrade Notes
 

@@ -53,7 +53,10 @@ The server selects direct or queued execution from the deployment configuration.
 
 Configure an operator-managed [`kind: browser` profile](../authenticated-scanning-best-practices/#browser-authentication-for-client-spider), with a credential reference, login URL, and logged-in indicator.
 
-For a fresh ZAP session, see the [tested home-page visit workaround](#browser-storage-alerts-missing-during-login) before browser login if you need to avoid the browser-storage alert-recording issue observed with Juice Shop. A full spider run is not needed for that workaround.
+If browser-storage findings are missing after login, follow the
+[browser-storage troubleshooting steps](#browser-storage-alerts-missing-during-login).
+A fresh ZAP session may need a saved page record before it can attach those
+observations to an alert.
 
 1. Call `zap_auth_session_prepare` with that `profileId` and a protected `targetUrl` whose response proves login.
 2. Call `zap_auth_session_validate`, passing the returned session ID as `sessionId`. Continue only after `Valid: true`.
@@ -99,9 +102,15 @@ There is currently no dedicated Client Spider results-list or Client Map export 
 
 ## Browser-Storage Alerts Missing During Login
 
-In a fresh ZAP session, browser login can succeed while ZAP logs `Failed to find history reference for URL ... unable to raise alert`. In our Juice Shop tests, this happened for `#/search` during login, before any crawl started. ZAP detected browser session-storage, local-storage, and JWT local-storage observations but could not attach them to a saved page record, so those alerts were not recorded.
+Browser login can succeed even when ZAP cannot attach a browser-storage
+observation to a saved page record. If storage findings are missing, inspect
+ZAP's logs for missing-history-reference or unable-to-raise-alert warnings.
+These warnings can affect session-storage, local-storage and JWT-storage
+findings independently of authentication success.
 
-### Tested workaround: visit the home page before login
+<a id="tested-workaround-visit-the-home-page-before-login"></a>
+
+### Visit the home page before login
 
 1. Ask the **same ZAP instance and session** that will handle login and crawling to visit the application's home page once. Wait for the request to complete and check that ZAP received the expected page successfully.
 2. Prepare and validate the browser-authentication session as described above. Continue only after `Valid: true` and positive evidence of the expected user.
@@ -123,8 +132,15 @@ Adjust the ZAP API address and target for your deployment. The target URL must b
 
 This is an operator step using ZAP's API. There is no standalone MCP `accessUrl` tool, and the guided browser-authentication/Client Spider workflow does not perform this previsit automatically. Apply it before browser login in a fresh session; it does not retroactively restore alerts that were already dropped.
 
-### Evidence and scope
+<a id="evidence-and-scope"></a>
 
-We tested Juice Shop `19.1.1` with ZAP `2.17.0`, Client Side Integration `0.31.0`, Authentication Helper `0.42.0`, and Selenium `15.56.0`. The same three warnings reproduced through the published MCP server `v0.12.0`'s expert browser-authentication tools and through ZAP alone. Visiting the home page before otherwise identical native browser login produced no such warnings and saved all three storage alerts. The new Client Spider implementation is not required to trigger the issue.
+### Troubleshooting scope
 
-This is a **workaround verified for that setup**, not a documented ZAP prerequisite or a guarantee for other applications. ZAP's [general testing guide](https://www.zaproxy.org/docs/desktop/start/pentest/) recommends exploration before active scanning, but its [Juice Shop authentication guide](https://www.zaproxy.org/docs/testapps/juiceshop/) does not prescribe this specific pre-login step. Review ZAP logs as well as the findings report; a finished crawl and an empty passive backlog do not prove that all browser-storage observations became findings.
+The previsit is a troubleshooting step, not a required authentication step or
+a guarantee that every browser-storage finding will be recorded. ZAP's
+[general testing guide](https://www.zaproxy.org/docs/desktop/start/pentest/)
+recommends exploration before active scanning; its
+[Juice Shop authentication guide](https://www.zaproxy.org/docs/testapps/juiceshop/)
+describes the application's login setup. Review ZAP logs alongside the
+findings report. A finished crawl and an empty passive backlog do not prove
+that every browser-storage observation became a finding.

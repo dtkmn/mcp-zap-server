@@ -49,8 +49,8 @@ that client's passive-status call; setup prerequisites must not block it.
   such as Apple's Command Line Tools or an existing package manager. Do not
   install another package manager just to complete setup. For other systems,
   use the vendor's platform-specific [Docker/Compose](https://docs.docker.com/compose/install/)
-  and [Git](https://git-scm.com/install/) instructions; state that this project's
-  verified onboarding is on Apple Silicon macOS.
+  and [Git](https://git-scm.com/install/) instructions. Check platform-specific
+  utility availability and container architecture compatibility before setup.
 - Carry out only approved steps within the host's permissions. Leave license
   acceptance, account sign-in, password entry and OS security prompts to the
   user. If a step requires their interaction or an app restart, explain it and

@@ -147,13 +147,10 @@ CloudFormation owns the infrastructure; the existing Helm chart installs MCP
 and ZAP. The shared repository/website walkthrough covers prerequisites, add-on
 selection, credentials, storage, network rules, image verification and cleanup.
 
-A live evaluation on EKS **1.36** with one **m7i.xlarge** worker and a matched
-prerelease application/chart verified bootstrap, encrypted storage, authenticated
-crawl/passive/report flows, report persistence after MCP replacement and settled
-network-policy paths. Trial resources were removed and cleanup verified.
-Published-image validation remains separate. This single-worker evaluation does
-not establish HA, production capacity or startup isolation; optional import and
-automation flows were outside its scope.
+The starter uses a single worker and is not a high-availability layout. Review
+storage, capacity and network-policy startup behavior before using it for your
+workloads. Configure optional content-import and automation storage separately
+as described in the Helm guidance below.
 
 ## Deployment and Upgrade Requirements
 
@@ -232,9 +229,7 @@ remains **3.2.3**, and plugin versions are unchanged. This targets build-tool
 dependency resolution rather than changing the application's runtime Jackson
 selection.
 
-Documentation dependency updates and their audit dispositions are recorded in
+Documentation dependency advisories and their deployment scope are described in
 the [dependency security status](../src/content/docs/reference/dependency-security.md).
-Its dated external scan baseline is separate from release publication and from
-the actual release image. Do not treat version preparation, a green workflow or
-these dependency changes as proof that all vulnerabilities are resolved. Review
-current findings and scan the published image for each supported architecture.
+These dependency updates do not resolve every upstream advisory. Review the
+published image and applicable advisories for each architecture before deployment.

@@ -9,15 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Override the Claude Desktop MCPB builder's transitive `tmp` dependency to `0.2.7`, covering path traversal, symbolic-link handling and the `0.2.6` non-string path bypass. Add editor compatibility and malicious-path regressions; reject affected lockfile copies before packaging and in the rebuilt archive. The dependency remains build-only.
+- Override the Claude Desktop MCPB builder's transitive `tmp` dependency to `0.2.7`, covering path traversal, symbolic-link handling and the `0.2.6` non-string path bypass. Reject affected lockfile copies before packaging and in the rebuilt archive. The dependency remains build-only.
 - Limit automatic Claude Desktop MCPB packaging to relevant pushes to `main`, retaining manual build/draft-release preparation. Ordinary dev/PR CI keeps the connector tests without generating distribution assets.
-- Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version; add bounded-array and MCPB manifest compatibility regressions. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
+- Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
 
 ### Added
 
-- Prepare Claude Desktop MCPB downloads and a standalone installation/setup/demo-scan guide as four assets on the next normal scanner GitHub release in this repository. Manual packaging attaches the bundle, guide and both checksums to an existing mutable draft before publication, without creating a release or overwriting assets. Connector `0.1.0` is independently versioned; no separate Desktop release or tag is needed. Public distribution remains pending, and bundled fresh-install defaults currently select scanner `v0.16.0`.
-- Add an unreleased Claude Desktop MCPB preview with local prerequisite/setup/readiness tools, the official MCP SDK transport, and bundled copies of the existing Docker release bootstrap/doctor. Installation alone does not start containers; setup preserves existing credentials and other clients' settings. Bundle 0.1.0 installation and a native status-only call passed on Claude Desktop Free 2.42304.0 with the existing v0.15.0 scanner on 16 October 2026; fresh scanner startup remains fixture-tested.
-- Add Claude Code packaging and a marketplace index for MCP ZAP Connect `0.4.0`, reusing the existing Docker scanner and setup skill. Claude instructions preserve other clients' settings, configure a private HTTP API-key connection and require a native status-only check. Plugin and marketplace manifests passed validation with Claude Code `2.1.292`; plugin loading and live connection verification remain pending.
+- Add Claude Desktop MCPB packaging with a standalone installation/setup/demo-scan guide and checksums for normal scanner releases in this repository. Manual packaging attaches the four assets to an existing mutable draft without creating a release or overwriting assets. Connector `0.1.0` is independently versioned; no separate Desktop release or tag is needed. Bundled fresh-install defaults select scanner `v0.16.0`.
+- Add a Claude Desktop MCPB preview with local prerequisite/setup/readiness tools, the official MCP SDK transport, and bundled copies of the existing Docker release bootstrap/doctor. Installation alone does not start containers; setup preserves existing credentials and other clients' settings.
+- Add Claude Code packaging and a marketplace index for MCP ZAP Connect `0.4.0`, reusing the existing Docker scanner and setup skill. Claude instructions preserve other clients' settings, configure a private HTTP API-key connection and include a native status-only check.
 
 ## [0.16.0]
 
@@ -25,16 +25,16 @@ This version is [released](https://github.com/dtkmn/mcp-zap-server/releases/tag/
 with Linux AMD64/ARM64 images published on GHCR and Docker Hub and MCP Registry
 `0.16.0` active/latest. Chart `0.16.0` is included in the tagged source. Read the
 [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md) before
-updating CI consumers or Automation Framework plans; it records publication
-evidence, the immutable image digest and separate Mac/plugin availability.
+updating CI consumers or Automation Framework plans; it includes the immutable
+image digest and separate Mac/plugin availability.
 
 ### Added
 
 - Record measured ZAP engine/add-on inventory and available server build identity in v3 findings snapshots, CI diffs and gate summaries. Legacy snapshots remain readable with unknown comparability; unavailable metadata is explicitly unknown.
 - Validate whole-plan Automation Framework durations and runtime capabilities before dispatch. Declaring `env.parameters.maxDuration` requires ZAP `2.17.0` and Automation Framework `0.61.0` or newer; invalid durations and unsupported authentication `pollMethod` configurations are rejected.
-- Add Cursor onboarding and native plugin metadata to MCP ZAP Connect's shared Docker setup skill, with private client configuration, status-only verification and terms linked from the first-run guide and listing metadata. Plugin `0.3.0` public directory submission/approval remains pending.
-- Add an unsigned maintainer-built Apple Silicon CLI preview with a private Java runtime, HTTP-focused ZAP, persistent private settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Add private Codex TOML output, packaged runtime notices and a checksum-linked source companion with documented library replacement. Public signing/notarization and fresh browser-download installation remain pending; existing `v0.15.0` preview inventory and tests are historical evidence.
-- Add optional private ChatGPT tunnel support with local API-key authentication and a shared connection guide. Recorded private HTTP crawl, passive/report readback, stop and tunnel-loss checks used the existing preview; they do not validate a `v0.16.0` binary or public distribution.
+- Add Cursor onboarding and native plugin metadata to MCP ZAP Connect's shared Docker setup skill, with private client configuration, status-only verification and linked terms. Use the source installation instructions when the plugin is unavailable in the public directory.
+- Add an unsigned Apple Silicon CLI preview with a private Java runtime, HTTP-focused ZAP, persistent private settings, generated credentials, owned-process lifecycle and authenticated doctor checks. Add private Codex TOML output, packaged runtime notices and a checksum-linked source companion with documented library replacement. No public Mac binary is attached to `v0.16.0`.
+- Add optional private ChatGPT tunnel support with local API-key authentication and a shared connection guide.
 
 ### Fixed
 
@@ -50,16 +50,16 @@ evidence, the immutable image digest and separate Mac/plugin availability.
 - Set a 300-second whole-plan limit and explicit always-run report job in the canonical Automation Framework example. Document cooperative expiry, requestor/report work beyond the budget, passive analysis remaining active and possible Spider starts after expiry during slow seed preparation.
 - Start the local Docker quick start from published versioned image `v0.16.0`, preserving settings/keys and cached images. Generate settings atomically and require container health plus authenticated MCP probes before reporting readiness; retain source builds in the development override.
 - Use the current user's macOS service manager for preview processes so they survive terminal/agent completion. Explicit stop removes registrations; login startup and automatic crash restarts stay disabled. Bound doctor HTTP requests, keep keys out of process arguments and avoid raw server errors in diagnostics.
-- Keep Mac packaging/source archives in the manual workflow; owner-triggered `main` builds can attach the four-file set to an existing draft release after tag validation, while publication stays manual. Automatic PR package builds and public Mac distribution remain deferred. Exclude Import/Export while its source mapping remains unverified; HAR, packet-capture and ModSecurity import/export are unavailable in this preview.
+- Keep Mac packaging/source archives in the manual workflow; owner-triggered `main` builds can attach the four-file set to an existing draft release after tag validation, while publication stays manual. Automatic PR package builds are disabled. HAR, packet-capture and ModSecurity import/export are unavailable in this preview.
 - Generate JaCoCo XML/HTML coverage from existing Java tests, combine Docker results when available and import through authenticated CI-based SonarQube analysis. Retain fork coverage artifacts without adding a minimum coverage gate.
-- Update PostgreSQL JDBC to `42.7.14` for its upstream security fixes and the docs lockfile's Zod to `4.6.7`. Refresh the macOS runtime notices for the JDBC update and its Checker Framework qualifier dependency; Mac distribution remains deferred.
+- Update PostgreSQL JDBC to `42.7.14` for its upstream security fixes and the docs lockfile's Zod to `4.6.7`. Refresh the macOS runtime notices for the JDBC update and its Checker Framework qualifier dependency.
 - Align current application, chart, registry metadata, local extension proof and installation references to `0.16.0` / `v0.16.0`. No database migration is added beyond V1–V8, and Gateway Core/WebFlux stays `0.11.0`.
 
 ### Documentation
 
-- Clarify crawler routing without changing it: `auto` uses HTTP, with AJAX fallback only after an unauthenticated direct start fails; JavaScript apps should explicitly select Client Spider. Document native scan IDs, the global AJAX lifecycle, Client `0.33.0` idle expiry and separate crawler/rule coverage; remove unsupported WAF-bypass and completion claims. Routing redesign #319 remains deferred.
+- Clarify crawler routing without changing it: `auto` uses HTTP, with AJAX fallback only after an unauthenticated direct start fails; JavaScript apps should explicitly select Client Spider. Document native scan IDs, the global AJAX lifecycle, Client `0.33.0` idle expiry and separate crawler/rule coverage; remove unsupported WAF-bypass and completion claims.
 - Consolidate Docker onboarding into start, connect and report steps, with source builds in the contributor guide. Document Mac data retention and private client/tunnel setup separately from build/release instructions.
-- Update cloud walkthroughs while retaining recorded `v0.15.0` EC2/EKS and matched prerelease evaluation evidence. Current `v0.16.0` instructions are not proof of a new AWS deployment test.
+- Update cloud walkthroughs for published versioned images, private access, storage preservation and operator-managed network boundaries.
 
 ## [0.15.0]
 
@@ -72,7 +72,7 @@ client changes.
 
 ### Added
 
-- Add an infrastructure-only CloudFormation starter for a dedicated single-worker EKS cluster in an existing VPC, with explicit operator access, managed networking/storage add-ons and an encrypted gp3 StorageClass. Its shared repository/website walkthrough covers Helm handoff, verification and retained-volume cleanup. A live single-worker evaluation with a matched prerelease application/chart verified bootstrap, encrypted storage, authenticated crawl/passive/report flows, report persistence after MCP replacement and settled network-policy paths.
+- Add an infrastructure-only CloudFormation starter for a dedicated single-worker EKS cluster in an existing VPC, with explicit operator access, managed networking/storage add-ons and an encrypted gp3 StorageClass. Its shared repository/website walkthrough covers Helm handoff, verification and retained-volume cleanup.
 - Add opt-in client-supplied OpenAPI content import through guided `zap_target_import` with `definitionType=openapi` and `sourceKind=content`. Validate bounded, self-contained Swagger/OpenAPI JSON or YAML and an explicit destination-policy-approved `hostOverride` before staging on a dedicated shared filesystem and dispatching to ZAP. The feature is disabled by default; attachment contents must be supplied by the MCP client.
 - Add `zap_report_read_chunk` on both MCP surfaces for complete paged UTF-8 report retrieval, Unicode-safe offsets and SHA-256 verification between pages. It uses the existing `zap:report:read` permission.
 - Add independent `ZAP_SPIDER_MAX_CHILDREN` configuration and Compose/Helm pass-through, defaulting to 10 alongside the depth limit; zero remains unlimited.
@@ -419,7 +419,7 @@ are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releas
 - Queue leadership coordination with single-node and Postgres advisory lock strategies for multi-replica deployments.
 - Flyway migrations and Postgres schema readiness validation for shared queue and token revocation state.
 - `TokenRevocationStore` backends plus `TokenBlacklistService` support for pluggable JWT revocation persistence.
-- `SecurityStartupValidator` and expanded test coverage for safer startup defaults and auth configuration validation.
+- `SecurityStartupValidator` for safer startup defaults and auth configuration validation.
 
 ### Changed
 - Reorganized core runtime classes under the `mcp.server.zap.core` package for clearer separation of concerns.
@@ -472,7 +472,7 @@ are recorded in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releas
 - **Security**: CSRF protection now disabled in `none` mode for MCP protocol compatibility
 - **Security**: CSRF protection enabled by default in `api-key` and `jwt` modes (Spring Security default)
 - **Security**: Changed default security mode to disabled (`MCP_SECURITY_ENABLED=false`) in docker-compose for development
-- **Performance**: Added GraalVM native image support with 10x faster startup time (0.6s vs 3-5s)
+- **Performance**: Added GraalVM native image support
 - **Docker**: Added healthcheck to Dockerfile.native for container orchestration
 - **Docker**: Added curl to runtime dependencies for healthcheck support
 - **Tests**: Removed deprecated `@AutoConfigureWebTestClient` annotation (auto-configured in Spring Boot 4.0.0)

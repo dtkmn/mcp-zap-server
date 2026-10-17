@@ -20,12 +20,12 @@ following migration steps before upgrading from `v0.13.0`.
 
 ### Known upstream dependency findings
 
-The reviewed build still reports four Debian 13 runtime-image findings and two
-documentation cache-library findings. No compatible fixed versions were listed
-on 3 October 2026. Their scopes, owner, review date and remediation criteria are
-recorded in the [dependency security status](../src/content/docs/reference/dependency-security.md).
-The docs dependencies are absent from the Java runtime image; the base-image
-findings remain present. A green security workflow does not mean these are fixed.
+This release does not resolve all Debian 13 runtime-image and documentation
+cache-library advisories. Review their affected versions, deployment scope and
+remediation guidance in the
+[dependency security status](../src/content/docs/reference/dependency-security.md).
+Documentation dependencies are absent from the Java runtime image; base-image
+advisories apply to the container deployment.
 
 ### Review Helm deployment values
 

@@ -18,10 +18,8 @@ For immutable deployment, use
 `ghcr.io/dtkmn/mcp-zap-server:v0.16.0@sha256:c62be3c0622a52cd5e81747dde3c32117e480853ae2733bb3f3281434618f673`
 or the same tag and digest with `docker.io/dtkmn/mcp-zap-server`.
 The [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
-published `0.16.0` as active/latest on **15 October 2026 in Sydney**
-(`2026-10-14T23:17:48.215193Z`). Its package records reference the versioned
-images. Image publication does not change the separate Mac preview or plugin
-directory status described below.
+package for `0.16.0` references the versioned images. Mac preview and plugin
+installation options are described below.
 
 ## What Changes For Users
 
@@ -175,28 +173,23 @@ compared with concrete findings evidence rather than assumed interchangeable.
 - Guided routing is unchanged: `auto` uses HTTP, with AJAX fallback only when an
   unauthenticated direct HTTP start fails. It does not detect JavaScript coverage
   or select Client Spider. Select `client` explicitly for JavaScript apps;
-  explicit AJAX compatibility remains available. The routing redesign in
-  [#319](https://github.com/dtkmn/mcp-zap-server/issues/319) is deferred.
+  explicit AJAX compatibility remains available.
 - Java **25**, the configured ZAP **2.17.0** baseline and Gateway Core/WebFlux
   **0.11.0** remain unchanged. Running add-on inventory must be measured.
   The extension API remains `experimental-local`; its local proof version
   follows `0.16.0` without a public binary compatibility promise.
 - MCP ZAP Connect remains plugin **0.3.0**. Codex and Cursor use the same Docker
-  setup skill with private client settings and status-only verification.
-  Public directory submission/approval is pending.
-- The maintainer-supplied Apple Silicon preview remains unsigned, with public
-  signing/notarization and clean browser-download installation verification
-  pending; no public Mac binary is attached to `v0.16.0`. Previously built
-  `v0.15.0` previews and recorded private Mac/ChatGPT
-  tests are historical evidence; they do not validate a `v0.16.0` binary.
-  Mac packaging and its source companion remain a separate manual workflow;
-  automatic Mac packaging is paused.
-- Recorded EC2 and EKS evaluations used `v0.15.0` or the explicitly documented
-  matched prerelease application/chart. Current instructions select published
-  `v0.16.0`; those older evaluations do not prove this version on AWS.
+  setup skill with private client settings and status-only verification. Follow
+  the source installation instructions when it is unavailable in the public
+  directory.
+- The Apple Silicon preview is unsigned; no public Mac binary is attached to
+  `v0.16.0`. Mac packaging and its source companion use a separate manual
+  workflow, with no automatic Mac package build.
+- EC2 and EKS walkthroughs select published `v0.16.0` images. Review the
+  infrastructure, storage and network requirements for your deployment.
 
 The JDBC and Zod patches above do not clear the remaining native-library and
-docs cache advisories. Review the dated
-[dependency security status](../src/content/docs/reference/dependency-security.md)
+docs cache advisories. Review the
+[dependency security guidance](../src/content/docs/reference/dependency-security.md)
 and verify release checks and the published artifacts separately before
 deployment.

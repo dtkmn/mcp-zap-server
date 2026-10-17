@@ -3,9 +3,9 @@
 This document defines the current compatibility contract for
 `mcp-zap-extension-api`.
 
-Blunt version: the artifact now exists, but it is experimental. It is good
-enough to prove the decoupled developer path. It is not yet a promise that any
-third-party binary extension will keep working across releases.
+The API is experimental. Build extensions against the selected API version and
+check runtime loading when upgrading; third-party binary compatibility across
+releases is not guaranteed.
 
 ## Artifact
 
@@ -21,10 +21,10 @@ The Maven publication is:
 io.github.dtkmn:mcp-zap-extension-api:<version>
 ```
 
-This is the planned public-preview coordinate, staged locally while the API is
-still experimental. It must not be published until the Maven Central
-namespace is verified and the release workflow can produce the required signed
-artifact set from the OSS-safe source tree.
+Use this coordinate with the locally staged repository while the API is
+experimental. Do not assume it is available from Maven Central. Public
+publication requires a verified namespace and a signed artifact set from the
+public source tree, following the release policy below.
 
 The release rules for moving beyond local staging live in
 [Extension API Release Policy](./EXTENSION_API_RELEASE_POLICY.md).
@@ -73,7 +73,7 @@ The API artifact must not expose:
 - ZAP-native APIs
 - MCP tool implementation classes
 - queue or history boundaries that require mutable core model objects
-- engine adapter contracts before the engine extension ADR gates are satisfied
+- engine adapter contracts
 
 ## Stability Level
 
@@ -87,16 +87,7 @@ Rules while experimental:
 - extension samples must register through Spring Boot auto-configuration
 - no public binary compatibility promise should be made
 
-Graduating this API requires:
-
-- a standalone sample extension repository or fixture
-- compatibility tests that use only the published API artifact
-- migration notes for any breaking API change
-- a public artifact repository and release workflow
-- explicit support policy for how long old API versions are supported
-
-Do not publish a public artifact or advertise compatibility until the release
-policy checklist is satisfied.
+See the release policy for publication requirements and compatibility checks.
 
 ## Internal Boundaries Not Yet Public
 
@@ -107,8 +98,5 @@ mutable gateway runtime implementation types. Exporting those signatures would
 force external builders to depend on implementation models. They should only
 move into the public API after safe view DTOs exist.
 
-Engine adapter contracts are also not part of the first API artifact. The ADR
-now exists, but that is not enough. Engine contracts stay internal until a real
-candidate second-engine design satisfies the ADR gates: capability matrix,
-fail-closed tests, target-scope filtering, queue/report fit, external-adapter
-compatibility proof, and release-policy graduation.
+Engine adapter contracts are not part of this API artifact. External extensions
+cannot add a supported scanner engine through the current standalone API.

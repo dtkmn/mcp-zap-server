@@ -5,9 +5,7 @@
 ## 🚀 Major Features
 
 ### GraalVM Native Image Support
-- **10x faster startup** (0.6s vs 3-5s) for production deployments
-- Reduced memory footprint (~200MB vs ~300MB)
-- Optimized for cloud and serverless environments
+- Added an ahead-of-time compiled runtime option
 - Separate Docker builds for development (JVM) and production (native)
 
 ### Spring Boot 4.0.0 Upgrade
@@ -32,8 +30,8 @@
 ## 🛠️ Infrastructure & DevOps
 
 ### Docker Compose Profiles
-- **Development profile** (`docker-compose.dev.yml`): Fast JVM builds (2-3 min)
-- **Production profile** (`docker-compose.prod.yml`): Optimized native builds (20-25 min)
+- **Development profile** (`docker-compose.dev.yml`): JVM builds
+- **Production profile** (`docker-compose.prod.yml`): Native builds
 - Quick start scripts: `dev.sh` and `prod.sh`
 
 ### Kubernetes Helm Charts
@@ -67,9 +65,7 @@
 ### New Documentation
 - `NATIVE_IMAGE_PERFORMANCE.md`: Build optimization strategies
 - `.env.example`: Comprehensive environment variable template
-- `IMPLEMENTATION_SUMMARY.md`: Security implementation details
 - `QUICK_START_SECURITY.md`: Security setup guide
-- `SECURITY_FIXES.md`: Security vulnerability resolutions
 - Helm chart README with deployment examples
 
 ### Updated Documentation
@@ -100,15 +96,6 @@
 - Separate Dockerfiles for JVM (`Dockerfile`) and native (`Dockerfile.native`)
 - Different build times and startup characteristics
 - Production deployments should use native images
-
-## 📊 Performance Improvements
-
-| Metric | JVM (Dev) | Native (Prod) | Improvement |
-|--------|-----------|---------------|-------------|
-| **Startup Time** | 3-5 sec | 0.6 sec | **10x faster** |
-| **Memory Usage** | ~300MB | ~200MB | **33% less** |
-| **Build Time** | 2-3 min | 20-25 min | Trade-off |
-| **Image Size** | 383MB | 391MB | Similar |
 
 ## 🔄 Migration Guide
 
@@ -152,14 +139,6 @@ helm upgrade --install mcp-zap ./helm/mcp-zap-server \
 3. Configure JWT authentication for production
 4. Test native image builds for your environment
 5. Update CI/CD pipelines for new Docker profiles
-
-### Future Enhancements (0.4.0 Roadmap)
-- Rate limiting for API endpoints
-- Enhanced audit logging
-- Scan result encryption at rest
-- Multi-tenancy support
-- OAuth2/OIDC integration
-- Webhook notifications for scan completion
 
 ## 📦 Artifacts
 

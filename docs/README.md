@@ -19,6 +19,7 @@ Do not keep these in the public docs tree:
 - SLO baselines, internal dashboards, or alert contracts
 - technical debt registers and backlog rankings
 - implementation summaries written for a single task or private rollout
+- internal testing progress, account history and validation logs
 
 Keep private reviews and advisor notes outside this repository. All tracked
 source, including drafts, metadata, and earlier commits, is publicly readable.
@@ -64,9 +65,10 @@ The complete npm audit report stays visible in the workflow log. Confirm the
 log contains an actual npm audit report: missing or empty output does not
 establish that dependencies were checked successfully.
 
-The public [dependency security status](src/content/docs/reference/dependency-security.md)
-records known upstream findings and their deployment scope, owner and review
-date. Keep it consistent with the actual scan reports and advisory status.
+The public [dependency security guide](src/content/docs/reference/dependency-security.md)
+explains known upstream findings, their deployment scope and mitigation steps.
+Keep its advice consistent with the affected versions and upstream advisories;
+keep internal scan logs and review records private.
 
 ## Maintaining Shared Pages
 

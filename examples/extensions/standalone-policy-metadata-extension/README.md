@@ -38,8 +38,8 @@ Normal builds do not stage or verify the Maven publication. The commands above
 perform local build operations, not custom publication-verification gates or
 remote uploads.
 
-This is still an experimental path. It proves the decoupled extension shape,
-not a public binary compatibility promise.
+This API is experimental and does not guarantee binary compatibility across
+gateway releases. Rebuild and check your extension when changing versions.
 
 The planned public-preview coordinate is already used in the staged repository.
 That artifact is not published yet; this sample should keep using the staged

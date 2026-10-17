@@ -12,10 +12,8 @@ records the published MCP digest; step 4 selects and verifies it for this instan
 The reference configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an
 encrypted 40 GiB disk.
 These are a starting point for a small evaluation, not measured production
-capacity or a minimum requirement. Recorded **v0.15.0** evaluation exercised
-crawl, bounded active scan, report readback, OpenAPI import, automation, container
-restart and EC2 reboot with this private deployment approach. It does not prove
-`v0.16.0` on AWS. Validate this version on your own instance before relying on it.
+capacity or a minimum requirement. Complete the connection, scan, report and
+recovery checks below on your own instance before relying on the deployment.
 
 The corrections introduced in MCP **v0.15.0** apply HTTP crawl depth and child
 limits independently, filter target-report metadata and expose
@@ -368,9 +366,9 @@ client access. Discover the container address again after recreation or reboot;
 do not assume it remains unchanged. See AWS's
 [remote-host forwarding requirements](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-sessions-start.html).
 
-A container attached only to an internal Docker network may not publish a
-requested host port on the tested Docker version. This example uses the direct
-private-container tunnel and does not depend on port publishing.
+This example uses a direct private-container tunnel and does not depend on
+Docker host-port publishing. Keep the services private instead of adding
+published ports to establish client access.
 
 ## 7. Verify a real scan and report
 
@@ -513,7 +511,7 @@ Do not treat a stopped instance as completed cleanup.
 | Symptom | Check |
 | --- | --- |
 | Instance unavailable in Session Manager | Instance role, agent status, outbound route/DNS and operator permissions |
-| Missing MCP image or failed image pull | Wait for successful v0.16.0 release-image publication and configure its verified digest as `MCP_ZAP_IMAGE` |
+| Missing MCP image or failed image pull | Check registry access and the selected published release, then configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
 | No automation tools | Inspect the actual surface; this example uses expert, while the main local Compose setup defaults to guided |

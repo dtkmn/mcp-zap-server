@@ -58,9 +58,8 @@ Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
 then ask it to check prerequisites, start the Docker stack, configure your private
 MCP connection and verify status. The skill can help install missing prerequisites
-with your approval,
-then recheck and continue setup. Scanning is a separate request. The commands
-below remain available without the plugin.
+with your approval, then recheck and continue setup. Scanning is a separate
+request. The commands below remain available without the plugin.
 
 For Cursor Desktop Free, follow the [guided Cursor setup](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
 Use a local Agent chat with available Cursor allowance to set up the scanner,
@@ -162,9 +161,9 @@ measured engine/add-on inventories, and target-scoped reports retain root alert
 evidence from the requested origin.
 
 The local Docker quick start uses an explicitly versioned release image and
-authenticated readiness checks. Apple Silicon packaging and private ChatGPT
-connection work remain previews with separate distribution and installation
-checks; their presence here does not establish public availability.
+authenticated readiness checks. The Apple Silicon package and private ChatGPT
+connection are optional preview paths; follow their guides for installation and
+network requirements.
 
 - [0.16.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.16.0.md)
 - [Release notes archive](./docs/releases/README.md)
@@ -256,8 +255,8 @@ For multi-replica queueing, durable Postgres state, claim recovery, and ingress 
 
 ### Extension Model
 
-ZAP is the first scanner engine, not the whole product boundary. The current
-public extension work is intentionally small:
+The extension API exposes selected contracts for policy, protection, evidence
+and metadata integrations:
 
 - `mcp-zap-extension-api` packages selected policy, protection, evidence, and
   metadata contracts without gateway runtime internals.
@@ -268,11 +267,10 @@ public extension work is intentionally small:
 - [Extension API release policy](./docs/extensions/EXTENSION_API_RELEASE_POLICY.md)
   explains publication stages and compatibility gates.
 - [Standalone sample extension](./examples/extensions/standalone-policy-metadata-extension/README.md)
-  proves a separate project can compile against the API artifact.
+  shows how a separate project depends on the API artifact.
 
-This is not runtime multi-engine support yet. Additional scanner engines need
-an adapter design and explicit fail-closed capability boundaries before they
-become product claims.
+Extensions do not add runtime multi-engine support. Additional scanner engines
+require their own adapters and explicit capability boundaries.
 
 ## Documentation Map
 

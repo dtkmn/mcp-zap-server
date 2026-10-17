@@ -126,7 +126,7 @@ jobs:
             printf '### Apple Silicon unsigned preview\n\n'
             printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT"
             printf '[Download the binary, matching source archive and checksums](%s).\n\n' "$ARTIFACT_URL"
-            printf 'Packaging checks passed. Clean-Mac browser installation and desktop runtime verification remain separate checks.\n'
+            printf 'Unsigned Apple Silicon macOS preview. Verify both download checksums and follow the [installation guide](https://danieltse.org/mcp-zap-server/getting-started/macos-package/).\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
   attach-draft:

@@ -23,10 +23,12 @@ downloads. Choose the `.mcpb`, rather than GitHub's automatic **Source code**
 archives. These downloads are planned for the next normal scanner release.
 If no published release has the assets, the download has not been released yet.
 
-This is a macOS preview. Installation and a status call have been verified on
-Apple Silicon with Claude Desktop Free; Intel Macs and other operating systems
-have not been verified. This is a custom extension, not an Anthropic directory
-listing or endorsement.
+This is a macOS preview. Installation, existing-scanner use and fresh scanner
+setup have been verified on Apple Silicon with Claude Desktop Free. The HTTP
+crawl and report workflow was verified with an existing scanner; fresh setup
+was verified through a status call with Docker already installed. Intel Macs
+and other operating systems have not been verified. This is a custom extension,
+not an Anthropic directory listing or endorsement.
 
 ## 2. Install the required apps
 
@@ -58,6 +60,11 @@ the extension starts the connector; scanner setup and scanning are separate
 requests. See [Claude's extension instructions](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop)
 if the installation menu has changed.
 
+If the extension is enabled but its tools are missing or a call times out,
+fully quit Claude with **⌘Q**, reopen it, and try a new chat with the connector
+enabled. This is a troubleshooting step, not a required restart after every
+installation. Keep the existing tool-approval settings.
+
 ## 4. Ask Claude to set up and verify the scanner
 
 Paste this message:
@@ -82,6 +89,11 @@ uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
 starts the scanner and bundled demo applications. Initial image downloads may
 take a while. A healthy existing scanner is reused without replacing its keys
 or client settings.
+
+A new installation generates its own credentials. Other clients' settings are
+left unchanged; this does not connect Codex or Cursor to a replacement scanner
+with a different key. Reuse the existing scanner when you want to keep those
+connections working without reconfiguration.
 
 The extension bundles a snapshot of the scanner setup files and defaults.
 Connector `0.1.0` currently defaults a new installation to scanner `v0.16.0`;
@@ -135,15 +147,32 @@ covers additional workflows.
 
 ## Preview validation and support
 
-MCPB 0.1.0 installation, tool discovery and one status-only call passed on
-16 October 2026 with Claude Desktop Free 2.42304.0, Apple Silicon macOS 27.0.1,
-and an existing v0.15.0 scanner. The original container state and Codex/Cursor
-settings were preserved. Fresh setup has automated fixture coverage; a fresh
-machine and the full scan/report flow have not been tested end to end in Claude.
-That native test used the original local archive. Documentation rebuilds and
-release downloads have their own checksums and require separate exact-artifact
-verification; a successful package build does not establish native verification
-of a new release asset. Claude Free usage limits still apply.
+On 17 October 2026, MCPB `0.1.0` passed native tests with Claude Desktop Free
+`2.42304.0`, Apple Silicon macOS `27.0.1` and Desktop's built-in Node `24.21.0`.
+Both optional scanner settings were blank.
+
+| Workflow | Verified result |
+| --- | --- |
+| Existing scanner `v0.15.0` | A status call succeeded. The separate guided HTTP crawl of Juice Shop completed, passive analysis finished, findings were summarized, and a target-scoped HTML report was generated and read back completely: 53,138 characters, untruncated. No active attack ran. |
+| Fresh scanner `v0.16.0` | With Docker and the extension already installed, prerequisites found no existing installation or scanner. Approved setup created `~/.mcp-zap-server` with new credentials, started the scanner and passed readiness. One status call returned Completed yes, Records remaining 0 and Active tasks 0; no crawl, scan or report generation ran on this new stack. |
+
+All 11 captured client/scanner configuration hashes and permissions stayed
+unchanged, including Codex and Cursor. Existing-scanner checks preserved the
+running stack; the fresh-setup test deliberately removed its containers first
+while retaining its files. Preserved client settings do not authenticate to a
+new scanner with different credentials.
+
+Missing-prerequisite installation on a clean machine, cold image downloads,
+public release downloads, Intel/other platforms and active attacks were not
+verified. The HTTP/report workflow was not repeated on the fresh stack.
+
+The exact native-tested local archive SHA256 is
+`457a656a4bdf60077006ccf231c247370c92580edc64bc28eca089128ff173eb`.
+All 2,379 installed archive files matched it. Documentation changes produce a
+different archive when rebuilt. A new build or release download needs its own
+checksum and exact-artifact verification; package tests alone do not establish
+native verification of changed archive bytes. Claude Free usage limits still
+apply.
 
 For help, open a [GitHub issue](https://github.com/dtkmn/mcp-zap-server/issues)
 with your extension version, Claude Desktop version, operating system and the

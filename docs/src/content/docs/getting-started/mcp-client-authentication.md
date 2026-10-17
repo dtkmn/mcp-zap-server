@@ -43,9 +43,9 @@ claimed to be published or verified in a native Claude session.
 
 ## Client Compatibility
 
-Local API-key setup is documented below for Codex, Cursor and Claude Code. The statuses
-describe this repository's onboarding coverage, not every capability a client
-may support.
+Local API-key setup is documented below for Codex, Cursor and Claude Code, with a
+local MCPB adapter for Claude Desktop. The statuses describe this repository's
+onboarding coverage, not every capability a client may support.
 
 | Client / connection | Status | Scope |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ may support.
 | ChatGPT through Secure MCP Tunnel | Private HTTP workflow verified on 8 October 2026 | The [private Mac connection guide](../chatgpt-local-tunnel/) records the tested Apple Silicon preview, authenticated forwarding and full report read-back. Requires Platform tunnel permissions and ChatGPT developer-mode access. Browser workflows and public distribution remain unverified; report-content limits are documented in the guide. |
 | Other streamable HTTP clients with custom headers | Expected to work, conditional | Must reach `/mcp`, send the configured auth header, and manage MCP sessions. Use the client's own configuration format and verify tool calls. |
 | Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
-| Claude Desktop local MCPB | Local installation and native Free-account status verified on 16 October 2026 | MCPB 0.1.0 installed in Desktop 2.42304.0 on Apple Silicon macOS 27.0.1, using built-in Node 24.21.0 and the existing scanner v0.15.0. Blank optional settings detected the installation privately. One approved `zap_passive_scan_status` call passed; client settings and scanner state were preserved. Fresh startup is fixture-tested; scans and public distribution were not tested. |
+| Claude Desktop local MCPB | Native Free-account fresh setup and existing-scanner HTTP workflow verified on 17 October 2026 | MCPB 0.1.0 in Desktop 2.42304.0 on Apple Silicon macOS 27.0.1, using built-in Node 24.21.0. The existing v0.15.0 scanner completed status, HTTP crawl, passive analysis, findings and full target-scoped HTML readback. Separately, fresh v0.16.0 provisioning created the default installation and passed one status call with Docker and the extension already installed. Codex/Cursor settings were preserved; their old credentials do not authenticate to the fresh scanner. Missing-prerequisite installation, cold image downloads, public distribution and other platforms remain unverified. |
 | Claude chat remote connector with this guide's local `localhost` setup | Unsupported direct loopback path | Remote connectors run from Anthropic's infrastructure and cannot reach this machine's loopback server. The local Desktop MCPB and Claude Code routes are separate mechanisms. |
 | Other clients limited to stdio, legacy SSE, or no compatible authentication | Unsupported direct connection | This server's endpoint uses streamable HTTP with API-key or JWT authentication. The Desktop MCPB is a client-specific local adapter; other clients need their own compatible transport. |
 
@@ -386,17 +386,34 @@ readiness tools. These tools reuse `bootstrap-local.sh` and
 `self-serve-doctor.sh`; the official MCP SDK connects to the existing scanner's
 Streamable HTTP endpoint. It does not require a Claude Code subscription.
 Anthropic documents local Desktop extensions for all users, including Free
-accounts. On 16 October 2026, MCPB `0.1.0` installation, tool discovery and one
-native status call passed on a Free account using Desktop `2.42304.0` and its
-built-in Node `24.21.0`. The existing scanner and client settings were preserved.
-Fresh scanner startup has automated fixture coverage rather than live evidence.
+accounts. On 17 October 2026, MCPB `0.1.0` passed two native Free-account
+workflows in Desktop `2.42304.0` on Apple Silicon macOS `27.0.1`, using built-in
+Node `24.21.0`:
+
+- With the existing scanner `v0.15.0`, status succeeded, followed by an HTTP
+  crawl of the bundled Juice Shop, passive-analysis completion, findings
+  summary, target-scoped HTML generation and complete, untruncated readback
+  of 53,138 characters. The actual report file matched that character count.
+  Scanner configuration and Codex/Cursor settings were preserved.
+- With no existing scanner or installation detected, prerequisite checks
+  passed, approved setup created `~/.mcp-zap-server` with new credentials and
+  started scanner `v0.16.0`. One status call returned Completed yes, Records
+  remaining 0 and Active tasks 0. No crawl, scan or report generation ran in
+  this fresh-setup test, and Codex/Cursor settings stayed unchanged.
+
+Docker and the extension were already installed for fresh provisioning, and
+images could be cached. Missing-prerequisite installation, cold image downloads,
+public release downloads, Intel/other platforms and active attacks were not
+verified. The HTTP workflow used the existing stack; it was not repeated against
+the freshly provisioned stack.
 
 For a downloaded or locally built bundle:
 
 1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
    Install Extension…** and select the `.mcpb` file.
-2. Leave the optional scanner directory and key override blank to detect the
-   existing Docker installation and read its credential privately.
+2. Leave the optional scanner directory and key override blank. The extension
+   reuses an existing scanner and reads its credential privately, or uses
+   `~/.mcp-zap-server` for a new installation.
 3. Ask Claude to set up the local scanner. It checks prerequisites and requests
    approval before setup changes. Missing Docker and OS prompts need your
    interaction. Installing the extension alone does not start the scanner.
@@ -413,6 +430,17 @@ state in its installed bundle. New installations use a private stable directory;
 existing healthy installations are reused. Customized startup files require
 manual review rather than being overwritten. See the package README for build,
 verification, removal and failure handling.
+
+A fresh installation generates new credentials. If it replaces an older
+scanner, preserved Codex/Cursor settings may still contain the old key and will
+not authenticate to the new scanner until separately reconnected. Preserving
+those settings does not verify their connection to the replacement scanner.
+
+If tools are missing or a call times out without showing an approval prompt,
+fully quit Claude Desktop, reopen it and try one status-only call in a new chat.
+This recovered the tested native session; restarting is a troubleshooting step,
+not a required installation step. Do not widen tool permissions to bypass a
+missing prompt.
 
 This is a local Desktop connection. Remote web connectors originate from
 Anthropic's infrastructure and cannot reach this machine's loopback endpoint.

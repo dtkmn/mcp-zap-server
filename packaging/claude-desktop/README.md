@@ -47,6 +47,11 @@ npm: the Node extension uses Claude Desktop's bundled runtime. The bundle
 requires Node.js `>=20.18.1`; the native test below used Desktop's built-in
 Node.js `24.21.0`.
 
+If the extension is installed but a tool call stalls or its approval prompt does
+not appear, fully quit and reopen Claude Desktop, then retry one status-only
+request in a new chat. This recovered the observed native approval/dispatch
+timeout; restarting is a troubleshooting step, not a required installation step.
+
 ## Ask Claude to set up the scanner
 
 Send this as one message, so the preservation and verification constraints apply
@@ -76,6 +81,12 @@ and doctor scripts there, then uses those scripts and the published release
 images. Keys and scanner workspace data belong to that installation rather than
 the extension's install directory. An existing healthy installation is reused;
 setup must not replace its settings or rotate its keys.
+
+A fresh installation generates new scanner credentials. Preserving Codex/Cursor
+settings does not reconnect those clients if they still hold another
+installation's key. Reuse or restore their original scanner to retain those
+connections without editing their settings; handle any credential migration
+separately and explicitly.
 
 Docker and the required host utilities still need to be available. If Docker is
 missing, follow the [official Docker Desktop installation instructions](https://docs.docker.com/desktop/setup/install/mac-install/).
@@ -245,24 +256,40 @@ Claude Desktop installation, account access, tool loading and a native status
 response. No scan or lifecycle operation is authorized merely by building or
 testing this package.
 
-On 16 October 2026, bundle `0.1.0` was installed and enabled in Claude Desktop
-`2.42304.0` on Apple Silicon macOS `27.0.1`, signed in to a Free account. Desktop
-reported its built-in Node.js `24.21.0` with the built-in runtime enabled. Both
-optional configuration fields were left blank. Claude discovered the connector
-and called `zap_passive_scan_status` once after **Allow once** approval. The
-actual tool response reported completed analysis, zero records remaining and
-zero active tasks. Only tool discovery and that status call were performed.
+## Verified Claude Desktop Free results
 
-The original native-tested artifact SHA256 is
-`809c33ec4fd1e550d27c41bd9e5a64d8c1c4dd07be1548ea8d6cb112bc2a56e4`.
-It reused the existing `v0.15.0` scanner without lifecycle changes. Later
-documentation/packaging rebuilds have their own checksums and do not inherit
-exact-artifact native verification. Before/after
-checks confirmed unchanged container identities, start times, credentials,
-ports and mounts, along with unchanged Codex, Cursor and existing Desktop
-configuration bytes and permissions. The 33 automated tests cover the setup
-branches; fresh scanner startup and prerequisite installation were not performed
-live. Distribution and full scan workflows remain separate validation work.
+On 17 October 2026, bundle `0.1.0` was verified natively in Claude Desktop
+`2.42304.0` on Apple Silicon macOS `27.0.1`, signed in to a Free account. Desktop
+used its built-in Node.js `24.21.0`; both optional scanner configuration fields
+were blank. The exact tested archive SHA256 is
+`457a656a4bdf60077006ccf231c247370c92580edc64bc28eca089128ff173eb`.
+All 2,379 installed archive files matched that bundle.
+
+| Workflow | Verified result |
+| --- | --- |
+| Existing scanner connection | Reused scanner `v0.15.0`; one native `zap_passive_scan_status` call returned completed analysis, zero records remaining and zero active tasks. |
+| Existing scanner demo | Guided HTTP crawl of Juice Shop completed, passive analysis drained, findings were summarized, and a target-scoped HTML report was generated and read back completely: 53,138 characters, untruncated. No active attack ran. |
+| Fresh scanner provisioning | With Docker and the extension already installed, prerequisites reported no existing installation or scanner. Approved `scanner_setup` created `~/.mcp-zap-server`, started scanner `v0.16.0`, and passed readiness. One native status call returned completed analysis, zero records remaining and zero active tasks. No crawl, scan or report generation ran on this new stack. |
+
+During the existing-scanner checks, container identities, start times,
+credentials, ports and mounts stayed unchanged. Fresh provisioning was a
+separate test after the user authorized removal of the original containers,
+while retaining their configuration and report files. All 11 protected
+client/scanner configuration files retained their hashes and permissions,
+including Codex and Cursor. Their retained keys differ from the fresh scanner's
+new keys, so these checks establish settings preservation, not Codex/Cursor
+connectivity to the new stack.
+
+These results do not cover installation of missing prerequisites, cold image
+downloads, public release downloads, other operating systems or architectures,
+or active attacks. The HTTP demo used the existing scanner; it does not prove
+scan/report behavior on the separately provisioned fresh stack. HTTP crawling
+also has limited coverage of JavaScript-driven routes.
+
+Documentation or packaging rebuilds produce a new archive checksum. The native
+results above apply to the named tested archive; a rebuilt bundle does not
+inherit exact-artifact native verification. Automated package tests, native
+workflow results and public distribution checks remain separate evidence.
 
 ## Remove the extension
 

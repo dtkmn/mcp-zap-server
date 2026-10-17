@@ -28,9 +28,15 @@ the assets are published. The bundled new-installation default is currently
 scanner `v0.16.0`, even if the containing release has a newer scanner tag.
 It exposes local setup tools that reuse these Docker scripts, so Claude can
 check prerequisites and guide setup after an explicit request. Installing the
-extension alone does not start containers. Installation and an existing-scanner
-status call on Claude Desktop Free passed on 16 October 2026; fresh scanner
-startup has fixture coverage rather than live verification. See the
+extension alone does not start containers. On 17 October 2026, Claude Desktop
+Free passed native installation, existing-scanner status and the existing
+`v0.15.0` scanner's HTTP crawl, passive-analysis and complete target-scoped HTML
+report workflow. A separate fresh setup created `~/.mcp-zap-server`, started
+scanner `v0.16.0` and passed one status call, with Docker and the extension
+already installed. No scan ran on that fresh stack. Codex/Cursor settings stayed
+unchanged; a new scanner's new key does not authenticate their retained
+connections. Clean-machine prerequisite installation, cold image downloads,
+public release downloads and other platforms remain unverified. See the
 [client guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#claude-desktop)
 for the existing-scanner status-only flow. The MCPB guide then walks through a
 separately requested demo crawl, passive analysis and complete HTML report.

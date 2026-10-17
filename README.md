@@ -74,9 +74,13 @@ on the next normal scanner release in this repository. There is no separate
 Desktop release; connector `0.1.0` has its own version, independent of the
 scanner tag. Public distribution is pending until those assets are published.
 The bundled fresh-install default is currently scanner `v0.16.0`.
-Installation and a native status-only call on
-Claude Desktop Free passed on 16 October 2026; fresh scanner startup remains
-fixture-tested. This is separate from the Claude Code plugin.
+On 17 October 2026, Claude Desktop Free passed native installation and
+existing-scanner status checks, plus the existing scanner's HTTP crawl,
+passive-analysis and complete HTML report workflow. A separate fresh setup
+started scanner `v0.16.0` and passed one status call with Docker and the extension
+already installed. Codex/Cursor settings stayed unchanged. Clean-machine
+prerequisite installation and public release downloads remain unverified.
+This is separate from the Claude Code plugin.
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git

@@ -35,7 +35,7 @@ tool permissions, and authenticated workflows.
 ### ZAP and browser prerequisites
 
 - Install ZAP Client Side Integration (`client`) **0.27.0 or newer**, Selenium, Firefox, and a compatible WebDriver. Supplied Compose and Helm configurations install `client`; the default ZAP image includes the browser and WebDriver.
-- Browser login additionally requires Authentication Helper. API configuration of browser authentication requires ZAP **2.16.1 or newer**; the project's configured and tested ZAP baseline remains **2.17.0**.
+- Browser login additionally requires Authentication Helper. API configuration of browser authentication requires ZAP **2.16.1 or newer**; the project's configured ZAP baseline remains **2.17.0**.
 - Set `ZAP_API_READ_TIMEOUT_MS=60000` for browser authentication (`mcp.zapClient.readTimeoutMs: 60000` in Helm). Browser login and validation can exceed the default 10-second API read timeout. This setting affects requests from the server to ZAP, not the total crawl duration.
 - The supported application runtime remains **Java 25**. This release does not introduce another runtime or change the ZAP baseline.
 
@@ -98,21 +98,15 @@ Client Spider discovery-list or per-crawl export tool, and AJAX Spider's
 
 A status of `100%` or a queue job marked `SUCCEEDED` means the crawl reached its
 terminal state; it does not prove complete coverage. Confirm actual discovered
-traffic and authenticated responses. No controlled comparison has established
-a coverage advantage over the other crawlers.
+traffic and authenticated responses. Choose a crawler based on the target's
+behavior rather than assuming one strategy always finds more content.
 
-During packaged validation with ZAP `2.17.0` and Client Side Integration `0.31.0`,
-browser login succeeded but ZAP could not find a history reference for Juice
-Shop's `#/search` route when raising session-storage, local-storage, and JWT
-local-storage alerts. Those observations were not recorded as alerts. The same
-failure reproduced during browser login through `v0.12.0`'s existing expert
-tools and through ZAP alone, before any crawl started.
-
-In a fresh-session control, asking ZAP to visit the home page once before login
-removed the warnings and allowed all three alerts to be saved. This tested
-workaround needs no full spider run, is not automatic in the guided Client
-Spider workflow, and is not a documented ZAP prerequisite. See the
-[workaround, tested versions, and native API example](../src/content/docs/scanning/client-spider.md#browser-storage-alerts-missing-during-login).
+ZAP `2.17.0` with Client Side Integration `0.31.0` can omit browser-storage
+alerts during login when the associated page has no history reference. If ZAP
+logs this warning, visit the target's home page once before login through ZAP
+and retry the authentication workflow. This workaround is not automatic in the
+guided Client Spider workflow. See the
+[browser-storage troubleshooting and native API example](../src/content/docs/scanning/client-spider.md#browser-storage-alerts-missing-during-login).
 Review ZAP's logs alongside the report: successful crawling and an empty passive
 backlog do not prove that every browser-storage observation was recorded as a
 finding.
@@ -126,14 +120,3 @@ publish the versioned release image.
 
 The extension API remains `experimental-local`, with local proof version
 `0.13.0`. The release workflow does not publish it to Maven Central.
-
-## Validation
-
-The release preparation passed 672 automated application tests, 47 CI-helper
-tests, the standalone extension build, Helm validation, and both documentation
-site builds. A local Linux ARM64 container built from the project Dockerfile
-reported MCP version `0.13.0` without an environment override and passed 20
-authenticated direct-crawl checks and 19 PostgreSQL-backed queue checks against
-Juice Shop `19.1.1`. Both modes produced fresh successful authenticated responses
-and product API traffic. These checks establish the tested workflows; the
-findings limitation above remains.

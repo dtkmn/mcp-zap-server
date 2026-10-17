@@ -31,38 +31,31 @@ If you are starting from a fresh clone, use [Self-Serve First Run](../self-serve
 For agent-assisted Docker setup, the same guide covers
 [MCP ZAP Connect in Codex](../self-serve-first-run/#guided-setup-in-codex).
 Install the plugin locally, then ask its setup skill to start or reuse the
-Docker stack and configure your private Codex connection. This workflow has
-been tested locally. It verifies status without starting a scan, so you
-normally do not need to edit client settings yourself. The skill can help
+Docker stack and configure your private Codex connection. It checks status
+without starting a scan, so you normally do not need to edit client settings
+yourself. The skill can help
 install missing prerequisites with your approval, then recheck and continue setup.
 The manual configuration recipes below remain available without the plugin.
 
-Claude Code also has an [unreleased local plugin preview](../self-serve-first-run/#guided-setup-in-claude-code).
-Load it from your checkout for testing; the new Claude marketplace files are not
-claimed to be published or verified in a native Claude session.
+Claude Code also has a [local plugin preview](../self-serve-first-run/#guided-setup-in-claude-code)
+that you can load from your checkout.
 
 ## Client Compatibility
 
-Local API-key setup is documented below for Codex, Cursor and Claude Code. The statuses
-describe this repository's onboarding coverage, not every capability a client
-may support.
+Choose the setup route for your client. Local clients must be able to reach the
+scanner's `/mcp` endpoint; cloud-hosted clients need a reachable remote endpoint.
 
-| Client / connection | Status | Scope |
+| Client / connection | Setup | Requirements |
 | --- | --- | --- |
-| Local Codex CLI with `X-API-Key` | Private HTTP workflow verified on 8 October 2026 | CLI 0.161.0 directly connected to the Apple Silicon Mac preview and completed controlled HTTP crawl/passive/report retrieval with independent checksum verification. The bounded test allowed seven workflow tools with automatic approval review. |
-| Local Codex desktop app with `X-API-Key` | Maintainer-reported HTTP workflow on 9 October 2026 | A second Mac (M4 Pro, macOS 27.0.1) completed the desktop HTTP/passive/report workflow. Screenshots show the connection and rendered report; Codex reported full MCP retrieval and checksum verification. Detailed tool traces were not independently reviewed, and the desktop version was not recorded. |
-| Local Cursor with `X-API-Key` | Setup and recovery verified on 12 October 2026 | Cursor 3.24.12 on Apple Silicon macOS 27.0.1 discovered MCP ZAP Connect 0.3.0, created its first connection to an existing Docker stack and verified `zap_passive_scan_status`. Failed readiness and an occupied port left settings unchanged. Owned stop/restart required reloading the Cursor MCP connection before status passed again. Fresh Docker installation, scanning and public marketplace distribution were not tested. |
-| Local Claude Code with `X-API-Key` | Native manifest validation passed; connection verification pending as of 16 October 2026 | MCP ZAP Connect 0.4.0 is a local, unreleased preview. Plugin and marketplace manifests passed validation with Claude Code 2.1.292. Fresh setup, plugin/skill loading and `zap_passive_scan_status` through Claude Code have not been tested. |
-| ChatGPT through Secure MCP Tunnel | Private HTTP workflow verified on 8 October 2026 | The [private Mac connection guide](../chatgpt-local-tunnel/) records the tested Apple Silicon preview, authenticated forwarding and full report read-back. Requires Platform tunnel permissions and ChatGPT developer-mode access. Browser workflows and public distribution remain unverified; report-content limits are documented in the guide. |
-| Other streamable HTTP clients with custom headers | Expected to work, conditional | Must reach `/mcp`, send the configured auth header, and manage MCP sessions. Use the client's own configuration format and verify tool calls. |
-| Independently installed Open WebUI | Expected to work, unverified here | Its documented native MCP integration supports streamable HTTP and custom headers. Install and configure it separately. |
-| Claude Desktop local MCPB | Local installation and native Free-account status verified on 16 October 2026 | MCPB 0.1.0 installed in Desktop 2.42304.0 on Apple Silicon macOS 27.0.1, using built-in Node 24.21.0 and the existing scanner v0.15.0. Blank optional settings detected the installation privately. One approved `zap_passive_scan_status` call passed; client settings and scanner state were preserved. Fresh startup is fixture-tested; scans and public distribution were not tested. |
-| Claude chat remote connector with this guide's local `localhost` setup | Unsupported direct loopback path | Remote connectors run from Anthropic's infrastructure and cannot reach this machine's loopback server. The local Desktop MCPB and Claude Code routes are separate mechanisms. |
-| Other clients limited to stdio, legacy SSE, or no compatible authentication | Unsupported direct connection | This server's endpoint uses streamable HTTP with API-key or JWT authentication. The Desktop MCPB is a client-specific local adapter; other clients need their own compatible transport. |
-
-The Cursor row records the earlier 12 October setup. The 13 October catalogue
-imports failed, and a fresh native Cursor connection retry remains pending;
-see the [dated results](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#cursor-import-limitations).
+| Codex app or CLI | [Guided setup](../self-serve-first-run/#guided-setup-in-codex) or [manual HTTP configuration](#codex) | Local scanner access and `X-API-Key`; model access follows your Codex plan. |
+| Cursor Desktop | [Guided setup](../self-serve-first-run/#guided-setup-in-cursor) or [manual HTTP configuration](#cursor) | Local scanner access, `X-API-Key`, and available Agent usage on Free or paid accounts. |
+| Claude Code | [Local plugin preview](../self-serve-first-run/#guided-setup-in-claude-code) or [manual HTTP configuration](#claude-code) | Local scanner access, `X-API-Key`, and access to Claude Code. |
+| Claude Desktop | [Local MCPB extension](#claude-desktop), macOS preview | Docker and Claude Desktop, including Free accounts; no Claude Code subscription required. |
+| ChatGPT | [Secure MCP Tunnel guide](../chatgpt-local-tunnel/) | Platform tunnel permissions and ChatGPT developer-mode access. A cloud client cannot connect directly to this machine's loopback endpoint. |
+| Open WebUI | [Native Streamable HTTP connection](#open-webui) | Separate Open WebUI installation with custom-header support and network access to the scanner. |
+| Other Streamable HTTP clients | [Generic connection values](#generic-streamable-http-clients) | MCP initialization, session handling and the configured authentication header. |
+| Claude chat remote connectors | Remote endpoint required | Cannot connect directly to this machine's `localhost` endpoint; use the local Desktop extension or Claude Code for a local scanner. |
+| Clients limited to stdio or legacy SSE | Compatible adapter required | The scanner endpoint uses Streamable HTTP. The Claude Desktop MCPB provides an adapter specifically for that client. |
 
 For a compatibility report, include the client version, operating system,
 connection mode, and whether both tool discovery and the first scan below
@@ -136,15 +129,8 @@ Expected result: tools such as `zap_crawl_start`, `zap_crawl_status`,
 authentication error. Then run the [first scan below](#first-scan-and-expected-result).
 If you receive `401`, check the key and whether the Codex process received
 the environment variable. If the connection is refused, check the stack and
-the `/mcp` address. A bounded direct CLI 0.161.0 test against the Mac preview
-completed HTTP crawl/passive analysis and full report read-back on 8 October 2026.
-The report checksum matched the local file. Separately, a maintainer reported
-the desktop HTTP/passive/report workflow working on a second Mac on 9 October 2026;
-the screenshots show the connection and rendered report, with complete retrieval
-and checksum verification reported by Codex. The desktop version was not recorded
-here, and detailed tool traces were not independently reviewed. These results do not establish
-browser workflows or report finding-count parity; the
-[Mac guide](../macos-package/) records the preview's remaining limits.
+the `/mcp` address. For the native Mac package, see the
+[Mac guide](../macos-package/).
 If Codex asks for tool approval, approve only your authorized target and workflow.
 A client-side denied approval does not indicate an MCP authentication failure.
 
@@ -153,6 +139,9 @@ A client-side denied approval does not indicate an MCP authentication failure.
 Cursor supports streamable HTTP connections with custom headers. Its
 [MCP documentation](https://cursor.com/docs/mcp) describes configuration
 locations and environment-variable interpolation.
+
+For agent-guided setup, follow [Guided Setup in Cursor](../self-serve-first-run/#guided-setup-in-cursor).
+The following manual configuration is also available.
 
 First complete [Self-Serve First Run](../self-serve-first-run/), including
 `./bin/self-serve-doctor.sh`. Then add the following server entry to
@@ -192,25 +181,18 @@ Call zap_passive_scan_status through mcp-zap-server only. Do not run a scan.
 ```
 
 Expected result: the server returns passive completion, remaining records and
-active tasks without an authentication error. The locally installed setup skill
-created a first Cursor connection to the existing Docker stack and verified
-status in Cursor 3.24.12 on Apple Silicon macOS 27.0.1 on 12 October 2026.
-Credentials, the Codex connection and saved reports were preserved through
-owned stop/restart. Compose recreated the containers using the same images and
-configuration; retained report files were verified unchanged.
+active tasks without an authentication error.
+
+Cursor Free accounts need available Agent usage to call MCP tools. A connected
+local scanner does not bypass model usage limits. If Cursor reports a usage
+limit before calling the tool, check your account's allowance before retrying.
 
 After a Docker restart, Cursor may retain a disconnected MCP session even when
 the server doctor passes. In **Customize → MCPs**, open **mcp-zap-server** and
-select **Reload**, then repeat the status call. This restored the connection in
-the tested version without restarting the app or editing credentials. If tools
-remain unavailable, client verification is pending; use **Developer: Reload
-Window** and check again.
-
-Missing prerequisites, startup timeout and rejected authentication were checked
-with controlled script fixtures, not by altering this Mac's Docker installation.
-A conflicting project configuration was inspected as a fixture; actual project
-configuration precedence was not tested. When you are ready to scan the bundled
-demo, make a separate request using the [first scan below](#first-scan-and-expected-result).
+select **Reload**, then repeat the status call. If tools remain unavailable,
+use **Developer: Reload Window** and check again. When you are ready to scan the
+bundled demo, make a separate request using the
+[first scan below](#first-scan-and-expected-result).
 
 If you deliberately configure JWT mode on the server, replace the API-key
 header with a pre-issued token:
@@ -229,7 +211,7 @@ header with a pre-issued token:
 ```
 
 Token issuance and refresh must be managed separately; this example is not an
-OAuth login flow. The recorded Cursor baseline covers API-key setup.
+OAuth login flow.
 
 The API key or bearer token in `mcp.json` is only the MCP access credential.
 Never add the target website username or password to this file.
@@ -303,11 +285,8 @@ Call zap_passive_scan_status through mcp-zap-server only. Do not run a scan.
 ```
 
 Expected result: passive completion, remaining records and active tasks without
-an authentication error. A doctor pass, valid JSON or a status call from another
-client does not verify Claude Code. On 16 October 2026, the 0.4.0 local plugin
-and marketplace manifests passed validation with Claude Code 2.1.292. Fresh
-setup, skill activation and native status verification remain pending. A scan is a separate
-request after a working connection has been established.
+an authentication error. Make the status request through Claude Code's own MCP
+connection. Request a scan separately after establishing the connection.
 
 ## First Scan And Expected Result
 
@@ -360,8 +339,7 @@ not start it, publish a UI at port 3000, or configure its connections.
 Open WebUI's [native MCP guide](https://docs.openwebui.com/features/extensibility/mcp/)
 documents an administrator-managed **MCP (Streamable HTTP)** connection with
 custom headers. In your own installation, add the reachable `/mcp` endpoint
-and an `X-API-Key` header using the values above. This integration has not
-been verified here.
+and an `X-API-Key` header using the values above.
 
 If Open WebUI runs in Docker, `localhost` refers to its own container. Use a
 host address or shared-network service name reachable from that container;
@@ -371,26 +349,30 @@ network. Validate with tool discovery and the first-scan prompt above.
 ## Claude Desktop
 
 Follow the [Claude Desktop download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md)
-for the macOS MCPB preview. Published Desktop previews will provide the `.mcpb`
-and matching guide as [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending. The [package README](https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop)
-contains the local developer build and draft-release procedure.
+for the macOS MCPB preview. Choose a
+[scanner release](https://github.com/dtkmn/mcp-zap-server/releases) whose assets
+include the `.mcpb`, matching guide and both checksums. MCPB assets belong to
+scanner releases; the connector's filename version is independent of the scanner
+tag. If a release has no MCPB assets, use the package README's local build
+instructions.
+The bundle uses a pinned scanner image for fresh installations; check the setup
+guide for its default rather than assuming it follows the containing release.
+The [package README](https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop)
+contains the local developer build and normal-release draft procedure.
 It packages a local MCP server with agent-callable prerequisite, setup and
 readiness tools. These tools reuse `bootstrap-local.sh` and
 `self-serve-doctor.sh`; the official MCP SDK connects to the existing scanner's
 Streamable HTTP endpoint. It does not require a Claude Code subscription.
 Anthropic documents local Desktop extensions for all users, including Free
-accounts. On 16 October 2026, MCPB `0.1.0` installation, tool discovery and one
-native status call passed on a Free account using Desktop `2.42304.0` and its
-built-in Node `24.21.0`. The existing scanner and client settings were preserved.
-Fresh scanner startup has automated fixture coverage rather than live evidence.
+accounts. Claude's account usage limits still apply when calling tools.
 
-For a locally built bundle:
+For a downloaded or locally built bundle:
 
 1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
    Install Extension…** and select the `.mcpb` file.
-2. Leave the optional scanner directory and key override blank to detect the
-   existing Docker installation and read its credential privately.
+2. Leave the optional scanner directory and key override blank. The extension
+   reuses an existing scanner and reads its credential privately, or uses
+   `~/.mcp-zap-server` for a new installation.
 3. Ask Claude to set up the local scanner. It checks prerequisites and requests
    approval before setup changes. Missing Docker and OS prompts need your
    interaction. Installing the extension alone does not start the scanner.
@@ -407,6 +389,16 @@ state in its installed bundle. New installations use a private stable directory;
 existing healthy installations are reused. Customized startup files require
 manual review rather than being overwritten. See the package README for build,
 verification, removal and failure handling.
+
+A fresh installation generates new credentials. If it replaces an older
+scanner, preserved Codex/Cursor settings may still contain the old key and will
+not authenticate to the new scanner until separately reconnected. Update only
+the intended client's private scanner entry when reconnecting it.
+
+If tools are missing or a call times out without showing an approval prompt,
+fully quit Claude Desktop, reopen it and try one status-only call in a new chat.
+Restarting is a troubleshooting step, not a required installation step. Do not
+widen tool permissions to bypass a missing prompt.
 
 This is a local Desktop connection. Remote web connectors originate from
 Anthropic's infrastructure and cannot reach this machine's loopback endpoint.

@@ -43,7 +43,7 @@ For source builds, use [contributor setup](CONTRIBUTING.md#local-stack).
 
 Use Streamable HTTP with the `X-API-Key` header from `MCP_API_KEY` in `.env`.
 Follow the [client compatibility and setup guide](docs/src/content/docs/getting-started/mcp-client-authentication.md)
-for the user's client and its validation status. Do not assume one client's
+for the user's client and its connection requirements. Do not assume one client's
 configuration schema or environment-variable syntax works in another client.
 The default `http://localhost:7456/mcp` endpoint requires a client running on
 the same host as Compose; web-only clients cannot reach that loopback address.
@@ -121,7 +121,7 @@ X-API-Key: $MCP_API_KEY
 
 The `mcp-zap-wrk:/zap/wrk` volume must be mounted into both containers. ZAP writes report artifacts there, and the MCP server reads those same paths back for report and evidence-handoff tools. The MCP container is run as UID/GID `1000:1000` to match the standard `zaproxy/zap-stable` container user, so report directories remain writable by both containers.
 
-This default guided standalone path has been smoke-tested with MCP `initialize`, `tools/list`, `zap_passive_scan_status`, `zap_report_generate`, and `zap_report_read` against a separate ZAP container. Keep `MCP_SERVER_TOOLS_SURFACE=guided` for normal report readback. Use `-e MCP_SERVER_TOOLS_SURFACE=expert` only when you need lower-level ZAP tools outside the guided surface.
+Keep `MCP_SERVER_TOOLS_SURFACE=guided` for normal crawl, status, findings and report workflows, including complete report readback. Use `-e MCP_SERVER_TOOLS_SURFACE=expert` only when you need lower-level ZAP tools outside the guided surface.
 
 ## Safe First Test
 

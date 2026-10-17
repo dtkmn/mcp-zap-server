@@ -30,9 +30,9 @@ Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap
 
 An experimental [headless Apple Silicon package](./docs/getting-started/MACOS_PACKAGE.md)
 bundles Java and ZAP for HTTP workflows. It is a maintainer-built local preview;
-public signing/notarization and fresh-Mac installation remain separate gates.
+public downloads are not available, and supplied previews are unsigned.
 The [private ChatGPT connection guide](./docs/getting-started/CHATGPT_LOCAL_TUNNEL.md)
-explains Secure MCP Tunnel prerequisites and the current verification boundary.
+explains Secure MCP Tunnel prerequisites and access to a local scanner.
 
 Watch the demo: [browser demo](https://danieltse.org/mcp-zap-server/demo.html) or [YouTube](https://www.youtube.com/watch?v=9_9VqsL0lNw)
 
@@ -57,22 +57,24 @@ upgrading an existing installation.
 Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
 then ask it to check prerequisites, start the Docker stack, configure your private
-MCP connection and verify status. This workflow has been tested locally in
-Codex. The skill can help install missing prerequisites with your approval,
-then recheck and continue setup. Scanning is a separate request. The commands
-below remain available without the plugin.
+MCP connection and verify status. The skill can help install missing prerequisites
+with your approval, then recheck and continue setup. Scanning is a separate
+request. The commands below remain available without the plugin.
+
+For Cursor Desktop Free, follow the [guided Cursor setup](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
+Use a local Agent chat with available Cursor allowance to set up the scanner,
+check status, then request a demo crawl and report separately.
 
 [Claude Code local preview](./plugins/mcp-zap-connect/README.md#claude-code-local-preview)
-uses the same scanner and setup skill. Claude installation and native connection
-verification remain pending.
+uses the same scanner and setup skill in a local Claude Code session.
 
 For Claude Desktop Free, follow the [download, setup and first-scan guide](./packaging/claude-desktop/SETUP.md).
 The macOS MCPB preview adds agent-callable setup tools around the same Docker
-scripts and reuses existing installations. Published Desktop previews will offer
-the `.mcpb` and matching guide under [GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending. Installation and a native status-only call on
-Claude Desktop Free passed on 16 October 2026; fresh scanner startup remains
-fixture-tested. This is separate from the Claude Code plugin.
+scripts and reuses existing installations. Choose a
+[scanner release](https://github.com/dtkmn/mcp-zap-server/releases) that includes
+the Desktop `.mcpb`, matching guide and checksum files. If those assets are not
+listed, use the [local build instructions](./packaging/claude-desktop/README.md#build-and-check-the-bundle).
+This extension is separate from the Claude Code plugin.
 
 ```bash
 git clone https://github.com/dtkmn/mcp-zap-server.git
@@ -159,9 +161,9 @@ measured engine/add-on inventories, and target-scoped reports retain root alert
 evidence from the requested origin.
 
 The local Docker quick start uses an explicitly versioned release image and
-authenticated readiness checks. Apple Silicon packaging and private ChatGPT
-connection work remain previews with separate distribution and installation
-checks; their presence here does not establish public availability.
+authenticated readiness checks. The Apple Silicon package and private ChatGPT
+connection are optional preview paths; follow their guides for installation and
+network requirements.
 
 - [0.16.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.16.0.md)
 - [Release notes archive](./docs/releases/README.md)
@@ -182,12 +184,9 @@ count, and health checks reapply mandatory outbound settings when ZAP starts
 late or its engine is replaced. Review the storage and configuration requirements
 before enabling content import or upgrading an existing deployment.
 
-It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and shared
-repository/website walkthrough. A live single-worker evaluation using the
-published `v0.15.0` image and matching chart verified bootstrap, MCP access with
-JWT authentication, crawl/passive/report flows against an owned target, report
-persistence after MCP replacement and settled network-policy paths; see the
-walkthrough for validation scope.
+It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and a
+walkthrough for deploying the Helm chart with JWT authentication, persistent
+report storage and network policies.
 
 - [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
 - [Release notes archive](./docs/releases/README.md)
@@ -201,8 +200,7 @@ ingress policy. It also adopts Gateway Core and the Spring WebFlux adapter
 `0.11.0`, including shared governance audits and active-tool validation.
 Read the upgrade notes before deploying: the legacy API-key property is removed,
 JWT backend failures fail closed, and accepted automation inputs and audit fields
-have changed. Preparing or merging this version does not publish its release or
-container images.
+have changed. Use published release images when upgrading.
 
 - [0.14.0 release notes and migration requirements](./docs/releases/RELEASE_NOTES_0.14.0.md)
 
@@ -225,10 +223,8 @@ For a first private AWS deployment without Kubernetes, use [AWS EC2 with Docker 
 
 For Kubernetes, use the [EKS infrastructure starter](./examples/aws-eks/) to
 create a dedicated evaluation cluster in an existing VPC, then deploy with the
-existing Helm chart. A live single-worker trial using the published `v0.15.0`
-image and matching chart verified bootstrap, MCP access with JWT authentication
-and crawl/report flows against an owned target; see the walkthrough for
-validation scope and your own deployment checks.
+existing Helm chart. Follow the walkthrough for network configuration, JWT
+authentication, persistent storage and deployment checks.
 
 Production and shared deployments should review:
 
@@ -259,8 +255,8 @@ For multi-replica queueing, durable Postgres state, claim recovery, and ingress 
 
 ### Extension Model
 
-ZAP is the first scanner engine, not the whole product boundary. The current
-public extension work is intentionally small:
+The extension API exposes selected contracts for policy, protection, evidence
+and metadata integrations:
 
 - `mcp-zap-extension-api` packages selected policy, protection, evidence, and
   metadata contracts without gateway runtime internals.
@@ -271,11 +267,10 @@ public extension work is intentionally small:
 - [Extension API release policy](./docs/extensions/EXTENSION_API_RELEASE_POLICY.md)
   explains publication stages and compatibility gates.
 - [Standalone sample extension](./examples/extensions/standalone-policy-metadata-extension/README.md)
-  proves a separate project can compile against the API artifact.
+  shows how a separate project depends on the API artifact.
 
-This is not runtime multi-engine support yet. Additional scanner engines need
-an adapter design and explicit fail-closed capability boundaries before they
-become product claims.
+Extensions do not add runtime multi-engine support. Additional scanner engines
+require their own adapters and explicit capability boundaries.
 
 ## Documentation Map
 

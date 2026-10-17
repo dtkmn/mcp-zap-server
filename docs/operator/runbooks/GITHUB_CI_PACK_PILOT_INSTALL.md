@@ -67,7 +67,7 @@ without custom engineering, the pack is not ready for that pilot yet.
 - [ ] Keep `baseline-mode: seed` until the first baseline is reviewed.
 - [ ] Keep `fail-on-new-findings: "false"` until the first baseline is reviewed.
 - [ ] Run the workflow manually.
-- [ ] Upload or attach `zap-artifacts` to the pilot issue.
+- [ ] Retain `zap-artifacts` in access-controlled CI storage for operator review.
 - [ ] Review `current-findings.json`, `gate-metadata.json`, and
   `artifact-manifest.json`.
 - [ ] Confirm the snapshot records the running ZAP version and complete
@@ -87,8 +87,8 @@ python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
 These tests cover helper behavior and execute both GitHub and GitLab gate
-entrypoints. The repository's Juice Shop workflow is the live end-to-end proof
-for the action, Compose stack, MCP server, ZAP, and generated artifacts.
+entrypoints. Use the Juice Shop workflow to check the action, Compose stack,
+MCP server, ZAP and generated artifacts in your environment.
 Use Python 3.9+, Helm and Docker Compose; PyYAML is only needed for these tests.
 The Compose checks render configuration without starting containers.
 
@@ -140,7 +140,7 @@ If the gate blocks unexpectedly:
 
 ## Evidence To Collect
 
-Attach these to the pilot issue or release note:
+Keep these in access-controlled operator or CI records:
 
 - workflow run URL
 - `gate-metadata.json`
@@ -148,6 +148,10 @@ Attach these to the pilot issue or release note:
 - `findings-diff.json` when a baseline was used
 - `artifact-manifest.json`
 - copied report artifact under `zap-artifacts/reports`
+
+These records can contain target-specific data. Do not copy raw results or
+internal testing history into public issues, release notes or documentation.
+Share only reviewed, redacted diagnostics when requesting support.
 
 ## Exit Criteria
 

@@ -128,19 +128,6 @@ A bare `curl http://localhost:7456/mcp` is not a valid protocol check.
 - Updated the README and root quick-start guidance to match the current runtime, auth flow, and queue behavior.
 - Preserved legacy `.html` routes in the docs site for older links and bookmarks.
 
-## Testing and Validation Coverage
-
-- Added architecture tests for service and tool-surface boundaries.
-- Added unit and Docker/Testcontainers coverage for:
-  - active-scan policy tools
-  - API schema imports
-  - Automation Framework plans
-  - direct scan services
-  - findings and reports
-  - passive scan behavior
-  - Postgres-backed queue recovery
-  - tool-surface registration
-
 ## Recommended Release Validation
 
 - `./gradlew test`

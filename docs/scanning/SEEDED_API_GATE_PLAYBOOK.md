@@ -232,7 +232,7 @@ For a team rollout, require these rules:
 - one owner for seed files
 - one owner for baseline acceptance
 - pull request review for seed and baseline changes
-- artifacts attached to the first pilot issue or release note
+- artifacts retained in access-controlled CI or operator storage
 - `seed` mode before `enforce`
 - `fail-on-new-findings: "false"` before `true`
 - no secrets in seed files

@@ -4,7 +4,7 @@
   "display_name": "MCP ZAP Connect",
   "version": "0.1.0",
   "description": "Set up or reconnect your local Docker scanner with Claude, then verify its status.",
-  "long_description": "Provides local prerequisite, setup and readiness tools alongside the existing MCP ZAP Server tools. Ask Claude to set up the scanner; setup reuses the project's published Docker Compose images and bootstrap/doctor scripts. Existing installations and credentials are preserved. Installing the extension does not start Docker or scan targets. Docker installation and operating-system prompts require your interaction. Local macOS preview; native Claude Desktop Free verification is recorded separately from package tests.",
+  "long_description": "Provides local prerequisite, setup and readiness tools alongside the existing MCP ZAP Server tools. Ask Claude to set up the scanner; setup reuses the project's published Docker Compose images and bootstrap/doctor scripts. Existing installations and credentials are preserved. Installing the extension does not start Docker or scan targets. Docker installation and operating-system prompts require your interaction. Local macOS preview for Claude Desktop Chat, including Free accounts.",
   "author": { "name": "Daniel Tse", "url": "https://github.com/dtkmn" },
   "repository": { "type": "git", "url": "https://github.com/dtkmn/mcp-zap-server" },
   "homepage": "https://danieltse.org/mcp-zap-server/",

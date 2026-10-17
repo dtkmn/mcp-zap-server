@@ -159,13 +159,16 @@ Public docs should help external users adopt and operate the project safely.
 - prefer concrete examples over abstract descriptions
 - document defaults, limits, and failure modes
 - avoid stale screenshots unless they add real value
-- keep private rollout notes out of the public docs tree
+- keep internal testing progress, account history, validation logs and rollout
+  notes out of public docs, metadata and bundled guides
 
 All tracked files, drafts, frontmatter, screenshots, and Git history are public.
 Keep private reviews, advisor notes, and rollout assessments outside this
-repository. A draft flag or a hidden navigation entry does not make source
-content private. Use factual, dated notices for archived documentation and
-verify copyable commands against the current configuration before publishing.
+repository. Turn what validation teaches you into user-facing instructions and
+troubleshooting; keep the underlying run records private. A draft flag or a
+hidden navigation entry does not make source content private. Use factual,
+dated notices for archived documentation and verify copyable commands against
+the current configuration before publishing.
 
 ## Security Contributions
 

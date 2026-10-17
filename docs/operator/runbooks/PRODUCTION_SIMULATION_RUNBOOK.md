@@ -6,6 +6,10 @@ Run this before recommending a deployment as production-ready for a client or de
 
 Prove that the current product can be operated safely and repeatably inside its real support boundary.
 
+Keep simulation results, validation logs and sign-off records in private
+operator storage. Public documentation and release notes should describe
+supported deployment behavior and requirements rather than individual runs.
+
 The deployment baseline is:
 
 - one trust boundary per deployment unit

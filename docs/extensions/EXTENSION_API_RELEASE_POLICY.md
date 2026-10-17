@@ -1,12 +1,8 @@
 # Extension API Release Policy
 
-This document explains how `mcp-zap-extension-api` should move from local proof
-to a public artifact builders can trust.
-
-Blunt version: publishing the API JAR is easy. Promising compatibility is the
-expensive part. Do not invite external builders to depend on this artifact
-until the release path, versioning rules, and compatibility proof are all in
-place.
+Use this policy when building, publishing or consuming
+`mcp-zap-extension-api`. It defines repository, versioning and compatibility
+requirements for each stability level.
 
 ## Current Status
 
@@ -22,15 +18,14 @@ That means:
 - no public artifact repository is promised
 - no third-party binary compatibility window is promised
 
-The staged coordinate is already the planned public-preview coordinate:
+The staged Maven coordinate is:
 
 ```text
 io.github.dtkmn:mcp-zap-extension-api:<version>
 ```
 
 Treat that coordinate as local-only until a public repository is declared. The
-coordinate is intentional: the optional standalone build uses the namespace
-builders will use later, even before Maven Central publication exists.
+standalone build resolves it from the local staging repository.
 
 To stage the API and compile the standalone sample, run:
 
@@ -51,12 +46,12 @@ remote uploads.
 
 | Stage | What It Means | Builder Promise |
 | --- | --- | --- |
-| `experimental-local` | API is staged locally and used by in-repo compatibility proof. | No public dependency. No binary compatibility promise. |
+| `experimental-local` | API is staged locally for extension builds and compatibility checks. | No public dependency. No binary compatibility promise. |
 | `public-preview` | API is published to a public artifact repository for early builders. | Best-effort source compatibility inside the same minor line. Breaking changes may still happen with release notes. |
 | `stable` | API has compatibility tests, migration notes, and a support window. | Semantic versioning applies to public API contracts. Breaking changes require a major version. |
 
-Do not skip stages. A public artifact without a compatibility gate creates
-support debt before the product has earned trust.
+Publish only with the repository access, compatibility checks and support
+terms required for the selected stage.
 
 ## Repository Policy
 
@@ -74,12 +69,14 @@ Allowed repositories by stage:
 - private enterprise-only artifacts: private registry is allowed, but those
   artifacts must not be required by OSS extensions
 
-The release workflow must not publish the API from any non-public source tree
-unless the OSS export has already proven the same source is public-safe.
+Publish the API only from the reviewed public source tree. Exclude private
+extensions, credentials and environment-specific records from all artifacts.
 
-## Public-Preview Publishing Decision
+<a id="public-preview-publishing-decision"></a>
 
-Decision for the first public preview:
+## Public-Preview Publication Requirements
+
+Use these publication settings:
 
 - target repository: Maven Central
 - target public coordinate: `io.github.dtkmn:mcp-zap-extension-api:<version>`
@@ -102,10 +99,9 @@ and must produce the Central-required publication shape:
 - artifact signatures or the active Central-required signing mechanism
 - release notes that mark the artifact as `public-preview`
 
-Use the Central Publisher Portal path, not GitHub Packages, for the public API
-artifact. GitHub Packages is fine for private experiments, but it teaches the
-wrong developer path because unauthenticated OSS builders should be able to
-resolve the API with normal Maven tooling.
+Use the Central Publisher Portal path for the public API artifact so
+unauthenticated builders can resolve it with normal Maven tooling. Keep private
+artifacts in a separate private registry.
 
 Preview wording must be exact:
 

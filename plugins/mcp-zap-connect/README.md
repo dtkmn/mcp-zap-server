@@ -7,16 +7,9 @@ configures the selected client's private MCP connection and verifies status
 without starting a scan. Installing the plugin alone does not start Docker or
 register MCP tools.
 
-This checkout contains plugin `0.4.0` with Claude Code packaging and shared setup
-instructions. Earlier Codex setup has been tested locally; Cursor evidence and
-remaining limitations are recorded below. Claude plugin installation and native
-status verification remain pending. Local changes must be published before a
-GitHub installation can fetch this version.
-
 Claude Desktop Chat uses the separate [MCPB preview](../../packaging/claude-desktop/README.md)
 with local agent-callable setup tools. It reuses the same Docker scripts and
-scanner; Desktop Free-account verification is tracked separately from this
-Claude Code plugin.
+scanner. Install the `.mcpb` in Desktop Chat; use the plugin below for Claude Code.
 
 ## Requirements
 
@@ -95,9 +88,6 @@ Set up MCP ZAP Server in Codex using Docker Compose.
 Reuse any existing installation and preserve my other MCP connections.
 Verify with a status call only; do not run a scan.
 ```
-
-GitHub installation, Desktop skill activation and status verification have been
-tested locally on Apple Silicon macOS with an existing Docker scanner.
 
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning
@@ -178,15 +168,14 @@ claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
 The marketplace index at repository-root `.claude-plugin/marketplace.json`
 points to this existing plugin folder. These commands describe distribution
 through the project's own marketplace; they do not imply an Anthropic directory
-listing. Plugin and marketplace manifests passed native validation with Claude
-Code `2.1.292` on 16 October 2026. First plugin load and a Claude status call
-remain pending. No Claude scan workflow has been verified.
+listing.
 
-## Cursor Preview Reference
+<a id="cursor-preview-reference"></a>
 
-The following technical reference records unfinished Cursor validation; it is
-separate from the verified Codex setup above. Recorded Cursor checks used
-Apple Silicon macOS 27.0.1 and Cursor 3.24.12. Other platforms need validation.
+## Cursor Desktop Free
+
+Use a local Cursor Agent chat on the scanner's machine. Free accounts require
+available Agent allowance; MCP access does not bypass model usage limits.
 
 ### Cursor Local Preview
 
@@ -197,17 +186,11 @@ Use **Developer: Reload Window**, check **Customize → Skills**, then invoke
 `/setup-local-scanner` in a local Agent chat. Local imports must be allowed by
 your policy; an installed marketplace plugin with the same name takes precedence.
 
-This folder-loading route is distinct from repository and disk catalogue imports.
-It is a documented alternative, not a newly verified installation: the latest
-catalogue imports failed and a fresh end-to-end Cursor connection check remains
-pending. Review the results below before choosing this preview.
+Follow
+the [canonical Cursor setup guide](../../docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor)
+for guided scanner setup and the first demo workflow.
 
 ### Cursor Import Limitations
-
-On 12 October 2026, **Customize → Plugins → Add → From Local Repository**
-discovered and installed MCP ZAP Connect 0.3.0 with its single setup skill in
-Cursor 3.24.12. Setup and recovery against an existing Docker stack passed.
-The 13 October retest did not reproduce that import success.
 
 Cursor repository imports use the repository-root
 `.cursor-plugin/marketplace.json` to locate this folder and its
@@ -215,23 +198,10 @@ Cursor repository imports use the repository-root
 retains Codex metadata; both clients use the same `skills/` directory. Keep the
 shared name, version and description aligned across all three client manifests.
 
-**Disk import limitation:** on 13 October 2026, fresh imports in Cursor 3.24.12
-through **From Local Repository** and marketplace **Import from Disk** left the
-catalogue empty, including repository-root and direct plugin-folder attempts.
-The original local plugin remained installed; a fresh indexed installation was
-not confirmed. Fresh native Cursor status verification also remains pending:
-agent requests were blocked by **Service Unavailable** and a usage limit before
-any observed MCP tool call. The cause of the empty catalogue is unconfirmed;
-the usage limit has not been established as the cause of the import failures.
-
-**GitHub import limitation:** on 12 October 2026, **From GitHub Repository**
-returned an empty plugin catalogue in Cursor 3.24.12 even after the index and
-manifests were published on the default branch. The `/add-plugin` command also
-returned **No result**. [Cursor issue #452](https://github.com/cursor/plugins/issues/452)
-reports a matching symptom; the cause of our result is unconfirmed.
-
-Public marketplace approval and installation are separate checks; no public
-listing or verified marketplace installation is claimed here.
+If **From Local Repository**, **Import from Disk**, or **From GitHub Repository**
+shows an empty catalogue, use the [local preview folder](#cursor-local-preview)
+route above. Check **Customize → Skills** for `setup-local-scanner` before
+requesting scanner setup.
 
 ### Cursor Connection Checks
 
@@ -239,13 +209,14 @@ For the Cursor preview, invoke `/setup-local-scanner` with:
 
 ```text
 Set up MCP ZAP Server in Cursor using Docker Compose.
-Reuse any existing installation and preserve my Codex connection.
+Reuse any existing installation and preserve my Codex and Claude settings.
 Verify with a status call only; do not run a scan.
 ```
 
 After a Docker restart in Cursor, open the scanner under **Customize → MCPs**,
-select **Reload** and repeat the status call. A fresh native connection check
-remains pending as described above.
+select **Reload** if reconnection is needed, then verify with the status call.
+Request a crawl or scan separately after setup succeeds, following the
+[canonical Cursor setup guide](../../docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
 
 ## Privacy, terms, support and license
 

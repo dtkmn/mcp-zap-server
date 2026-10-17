@@ -11,7 +11,7 @@
 - Added a first-timer Compose and Cursor guide for optional form-login target authentication.
 - Limited continuous image publication to successful `main` pushes.
 
-Spring AI remains at `2.0.0`; it was already included in `v0.9.1` and is now verified with Spring Boot `4.1.0`.
+Spring AI remains at `2.0.0`, as in `v0.9.1`, alongside Spring Boot `4.1.0`.
 
 ## Upgrade Notes
 

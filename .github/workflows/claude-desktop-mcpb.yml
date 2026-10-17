@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       draft_release_tag:
-        description: "Optional existing claude-desktop-vVERSION tag: attach all four files to its existing draft release (main only)"
+        description: "Optional existing scanner vVERSION tag: attach all four files to its existing draft release (main only)"
         required: false
         type: string
         default: ""
@@ -37,7 +37,6 @@ jobs:
     outputs:
       package-base: ${{ steps.package.outputs.base }}
       source-commit: ${{ steps.package.outputs.commit }}
-      draft-release-id: ${{ steps.package.outputs.release_id }}
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - name: Validate requested release mode
@@ -51,8 +50,8 @@ jobs:
               echo "Draft attachment must be dispatched from main" >&2
               exit 1
             }
-            [[ "$DRAFT_RELEASE_TAG" =~ ^claude-desktop-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
-              echo "Use an existing claude-desktop-vVERSION tag matching the package version" >&2
+            [[ "$DRAFT_RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+              echo "Use an existing scanner vMAJOR.MINOR.PATCH tag with an optional prerelease suffix" >&2
               exit 1
             }
           fi
@@ -74,7 +73,6 @@ jobs:
         id: package
         env:
           DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           package_version="$(node -e '
@@ -93,10 +91,10 @@ jobs:
             exit 1
           }
           source_commit="$(git rev-parse HEAD)"
-          release_id=""
           if [ -n "$DRAFT_RELEASE_TAG" ]; then
-            test "$DRAFT_RELEASE_TAG" = "claude-desktop-v${package_version}" || {
-              echo "Draft tag must match the checked-out Desktop package version" >&2
+            scanner_version="$(sed -n "s/^version = '\([^']*\)'$/\1/p" build.gradle)"
+            test -n "$scanner_version" && test "$DRAFT_RELEASE_TAG" = "v${scanner_version}" || {
+              echo "Draft tag must match the checked-out scanner project version" >&2
               exit 1
             }
             test "$(git rev-parse --verify "refs/tags/${DRAFT_RELEASE_TAG}^{commit}")" = "$source_commit"
@@ -104,17 +102,11 @@ jobs:
               echo "Draft tag must reference a commit reachable from origin/main" >&2
               exit 1
             }
-            release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${DRAFT_RELEASE_TAG}" \
-              --jq 'select(.draft == true and .prerelease == true and .immutable != true) | .id')"
-            [[ "$release_id" =~ ^[0-9]+$ ]] || {
-              echo "An existing mutable draft prerelease is required; published releases cannot receive these files" >&2
-              exit 1
-            }
           else
             test "$source_commit" = "$GITHUB_SHA"
           fi
-          printf 'version=%s\nbase=mcp-zap-connect-claude-desktop-%s\ncommit=%s\nrelease_id=%s\n' \
-            "$package_version" "$package_version" "$source_commit" "$release_id" >> "$GITHUB_OUTPUT"
+          printf 'version=%s\nbase=mcp-zap-connect-claude-desktop-%s\ncommit=%s\n' \
+            "$package_version" "$package_version" "$source_commit" >> "$GITHUB_OUTPUT"
 
       - name: Install build and test dependencies
         working-directory: packaging/claude-desktop
@@ -170,11 +162,11 @@ jobs:
             printf '### Claude Desktop local preview\n\n'
             printf 'Source commit: `%s`\n\n' "$SOURCE_COMMIT"
             printf '[Download the MCPB, matching setup guide and checksums](%s).\n\n' "$ARTIFACT_URL"
-            printf 'Isolated tests and packaging checks passed. This run did not access Docker, run scanner tools or verify Claude Desktop. No release was published.\n'
+            printf 'Install the extension using the matching setup guide. Verify the MCPB and guide with their adjacent SHA256 files before installation.\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
   attach-draft:
-    name: Attach Desktop preview set to existing draft
+    name: Attach Desktop assets to existing scanner draft
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.draft_release_tag != ''
     needs: build
     runs-on: ubuntu-24.04
@@ -195,26 +187,36 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DRAFT_RELEASE_TAG: ${{ inputs.draft_release_tag }}
-          RELEASE_ID: ${{ needs.build.outputs.draft-release-id }}
           SOURCE_COMMIT: ${{ needs.build.outputs.source-commit }}
           PACKAGE_BASE: ${{ needs.build.outputs.package-base }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_ID" =~ ^[0-9]+$ && "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$DRAFT_RELEASE_TAG" =~ ^claude-desktop-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
-          test "$PACKAGE_BASE" = "mcp-zap-connect-claude-desktop-${DRAFT_RELEASE_TAG#claude-desktop-v}"
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/${DRAFT_RELEASE_TAG}" --jq .sha)" = "$SOURCE_COMMIT" || {
-            echo "Tag changed after the build; refusing attachment" >&2
-            exit 1
+          [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DRAFT_RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+          [[ "$PACKAGE_BASE" =~ ^mcp-zap-connect-claude-desktop-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+          # The published-by-tag endpoint cannot find drafts. List releases using
+          # this job's write-scoped token, and require exactly one matching draft.
+          RELEASE_ID="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" |
+            jq -er --arg tag "$DRAFT_RELEASE_TAG" '
+              [.[][] | select(.tag_name == $tag)] |
+              if length == 1 and .[0].draft == true and .[0].immutable != true
+              then .[0].id else error("Exactly one existing mutable scanner draft is required") end')"
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          verify_source() {
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/commits/refs%2Ftags%2F${DRAFT_RELEASE_TAG}" --jq .sha)" = "$SOURCE_COMMIT" || {
+              echo "Tag changed after the build; refusing attachment" >&2
+              exit 1
+            }
+            test "$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_COMMIT}...main" --jq .merge_base_commit.sha)" = "$SOURCE_COMMIT" || {
+              echo "The build source is no longer reachable from main; refusing attachment" >&2
+              exit 1
+            }
           }
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SOURCE_COMMIT}...main" --jq .merge_base_commit.sha)" = "$SOURCE_COMMIT" || {
-            echo "The build source is no longer reachable from main; refusing attachment" >&2
-            exit 1
-          }
+          verify_source
           release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
           jq -e --arg tag "$DRAFT_RELEASE_TAG" \
-            '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null || {
-            echo "The release must still be the same mutable draft prerelease" >&2
+            '.draft == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null || {
+            echo "The release must still be the same mutable scanner draft" >&2
             exit 1
           }
           files=("${PACKAGE_BASE}.mcpb" "${PACKAGE_BASE}.mcpb.sha256"
@@ -238,7 +240,7 @@ jobs:
           for file in "${files[@]}"; do
             release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
             jq -e --arg tag "$DRAFT_RELEASE_TAG" --arg name "$file" \
-              '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag and all(.assets[]; .name != $name)' <<< "$release" >/dev/null || {
+              '.draft == true and .immutable != true and .tag_name == $tag and all(.assets[]; .name != $name)' <<< "$release" >/dev/null || {
               echo "The draft or its assets changed; refusing further attachment" >&2
               exit 1
             }
@@ -248,10 +250,11 @@ jobs:
           done
           release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
           jq -e --arg tag "$DRAFT_RELEASE_TAG" \
-            '.draft == true and .prerelease == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null
+            '.draft == true and .immutable != true and .tag_name == $tag' <<< "$release" >/dev/null
           for file in "${files[@]}"; do
             jq -e --arg name "$file" --argjson size "$(wc -c < "$file" | tr -d '[:space:]')" \
               'any(.assets[]; .name == $name and .state == "uploaded" and .size == $size)' <<< "$release" >/dev/null
           done
-          printf 'All four Desktop preview files are attached to draft `%s` from `%s`. Review the downloaded files before publishing the release.\n' \
+          verify_source
+          printf 'All four Desktop files are attached to scanner draft `%s` from `%s`. Review the downloaded files before publishing the release.\n' \
             "$DRAFT_RELEASE_TAG" "$SOURCE_COMMIT" >> "$GITHUB_STEP_SUMMARY"

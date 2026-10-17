@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/claude-desktop-mcpb.yml"
 SOURCE = "a" * 40
 OTHER_SOURCE = "b" * 40
-TAG = "claude-desktop-v0.1.0"
+TAG = "v0.17.0"
 BASE = "mcp-zap-connect-claude-desktop-0.1.0"
 FILES = [f"{BASE}.mcpb", f"{BASE}.mcpb.sha256",
          f"{BASE}-setup.md", f"{BASE}-setup.md.sha256"]
@@ -29,10 +29,12 @@ def load_workflow(path):
 
 
 WORKFLOW_DATA = load_workflow(WORKFLOW)
+RELEASE_WORKFLOW_DATA = load_workflow(ROOT / ".github/workflows/release.yml")
 
 
 def step(job, step_id):
-    return next(item for item in WORKFLOW_DATA["jobs"][job]["steps"]
+    workflow = RELEASE_WORKFLOW_DATA if job == "docker-release" else WORKFLOW_DATA
+    return next(item for item in workflow["jobs"][job]["steps"]
                 if item.get("id") == step_id)
 
 
@@ -51,13 +53,14 @@ else:
 
 
 FAKE_GH = """#!{python}
-import json, os, pathlib, subprocess, sys
+import json, os, pathlib, sys
 from urllib.parse import parse_qs, urlparse
 args = sys.argv[1:]
 state_path = pathlib.Path(os.environ['FIXTURE_GH_STATE'])
 state = json.loads(state_path.read_text())
 if not args or args[0] != 'api':
     raise SystemExit('Unexpected gh fixture request: ' + repr(args))
+endpoint_arg = next((arg for arg in args[1:] if arg.startswith(('repos/', 'https://'))), '')
 if '--method' in args:
     assert args[args.index('--method') + 1] == 'POST'
     endpoint = urlparse(args[-1])
@@ -71,16 +74,19 @@ if '--method' in args:
     if os.environ.get('FIXTURE_PUBLISH_AFTER_UPLOAD') == 'true':
         state['draft'] = False
     state_path.write_text(json.dumps(state))
-elif '/commits/' in args[1]:
-    print(os.environ.get('FIXTURE_REMOTE_TAG_SOURCE', os.environ['FIXTURE_SOURCE']))
-elif '/compare/' in args[1]:
+elif '/commits/' in endpoint_arg:
+    assert '/commits/refs%2Ftags%2F' in endpoint_arg
+    after_upload = os.environ.get('FIXTURE_REMOTE_TAG_SOURCE_AFTER_UPLOAD') if state['uploads'] else None
+    print(after_upload or os.environ.get('FIXTURE_REMOTE_TAG_SOURCE', os.environ['FIXTURE_SOURCE']))
+elif '/compare/' in endpoint_arg:
     print(os.environ.get('FIXTURE_REMOTE_MAIN_BASE', os.environ['FIXTURE_SOURCE']))
-elif '/releases/tags/' in args[1]:
-    query = args[args.index('--jq') + 1]
-    result = subprocess.run(['jq', '-r', query], input=json.dumps(state), text=True,
-                            capture_output=True, check=True)
-    print(result.stdout, end='')
-elif args[1] == 'repos/example/scanner/releases/42':
+elif endpoint_arg == 'repos/example/scanner/releases?per_page=100':
+    assert '--paginate' in args and '--slurp' in args
+    mode = os.environ.get('FIXTURE_RELEASE_LOOKUP', 'found')
+    releases = [] if mode == 'missing' else [state] * (2 if mode == 'duplicate' else 1)
+    # Put the matching draft on a later page, including unrelated releases.
+    print(json.dumps([[{{'tag_name': 'v0.1.0', 'draft': False}}], releases]))
+elif endpoint_arg == 'repos/example/scanner/releases/42':
     print(json.dumps(state))
 else:
     raise SystemExit('Unexpected gh fixture request: ' + repr(args))
@@ -113,6 +119,7 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
             "SOURCE_COMMIT": SOURCE,
             "PACKAGE_BASE": BASE,
             "RELEASE_ID": "42",
+            "RELEASE_VERSION": TAG,
             "GH_TOKEN": "unused-fixture-token",
             "FIXTURE_SOURCE": SOURCE,
             "FIXTURE_GH_STATE": str(self.state_path),
@@ -125,12 +132,12 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
                 f"{hashlib.sha256(content).hexdigest()}  {filename}\n")
 
     def write_state(self, **overrides):
-        state = {"id": 42, "tag_name": TAG, "draft": True, "prerelease": True, "immutable": False,
+        state = {"id": 42, "tag_name": TAG, "draft": True, "prerelease": False, "immutable": False,
                  "assets": [], "uploads": []}
         state.update(overrides)
         self.state_path.write_text(json.dumps(state))
 
-    def write_versions(self, manifest_version="0.1.0", lock_version="0.1.0"):
+    def write_versions(self, manifest_version="0.1.0", lock_version="0.1.0", scanner_version="0.17.0"):
         package = self.directory / "packaging/claude-desktop"
         package.mkdir(parents=True, exist_ok=True)
         (package / "package.json").write_text(json.dumps({"version": "0.1.0"}))
@@ -138,6 +145,7 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
         (package / "package-lock.json").write_text(json.dumps({
             "version": lock_version, "packages": {"": {"version": lock_version}},
         }))
+        (self.directory / "build.gradle").write_text(f"version = '{scanner_version}'\n")
 
     def run_step(self, job, step_id, *, success=True, environment=None):
         env = self.environment | (environment or {})
@@ -157,6 +165,8 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
     def test_build_permissions_and_privileged_job_boundary(self):
         self.assertEqual(WORKFLOW_DATA["permissions"], {"contents": "read"})
         self.assertEqual(WORKFLOW_DATA["jobs"]["build"]["permissions"], {"contents": "read"})
+        self.assertNotIn("GH_TOKEN", step("build", "package").get("env", {}))
+        self.assertNotIn("gh api", step("build", "package")["run"])
         attach = WORKFLOW_DATA["jobs"]["attach-draft"]
         self.assertEqual(attach["permissions"], {"contents": "write"})
         self.assertEqual(attach["needs"], "build")
@@ -169,7 +179,7 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
         self.assertEqual(download["with"]["artifact-ids"], "${{ needs.build.outputs.artifact-id }}")
         self.assertEqual(download["with"]["merge-multiple"], "true")
         self.assertNotRegex(step("attach-draft", "attach")["run"], r"(?m)^\s*(npm|node|docker|git)\s")
-        for job in WORKFLOW_DATA["jobs"].values():
+        for job in list(WORKFLOW_DATA["jobs"].values()) + list(RELEASE_WORKFLOW_DATA["jobs"].values()):
             for item in job["steps"]:
                 if "uses" in item:
                     self.assertRegex(item["uses"], r"@[0-9a-f]{40}$")
@@ -212,7 +222,7 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
             self.assertNotIn("build/claude-desktop", item.get("with", {}).get("path", ""))
 
     def test_every_shell_block_has_valid_bash_syntax(self):
-        for job in WORKFLOW_DATA["jobs"].values():
+        for job in list(WORKFLOW_DATA["jobs"].values()) + list(RELEASE_WORKFLOW_DATA["jobs"].values()):
             for item in job["steps"]:
                 if "run" in item:
                     with self.subTest(step=item.get("name")):
@@ -220,26 +230,26 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
                                                 text=True, capture_output=True, timeout=5)
                         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_release_mode_requires_manual_main_and_desktop_namespace(self):
+    def test_release_mode_requires_manual_main_and_scanner_namespace(self):
         self.run_step("build", "release-mode")
         self.run_step("build", "release-mode", environment={"DRAFT_RELEASE_TAG": ""})
         cases = [{"GITHUB_EVENT_NAME": "push"}, {"GITHUB_REF": "refs/heads/dev"},
-                 {"DRAFT_RELEASE_TAG": "v0.1.0"}, {"DRAFT_RELEASE_TAG": "claude-desktop-v00.1.0"},
-                 {"DRAFT_RELEASE_TAG": "claude-desktop-v0.1.0/other"}]
+                 {"DRAFT_RELEASE_TAG": "claude-desktop-v0.1.0"},
+                 {"DRAFT_RELEASE_TAG": "v00.17.0"}, {"DRAFT_RELEASE_TAG": "v0.17.0/other"}]
         for env in cases:
             with self.subTest(environment=env):
                 self.run_step("build", "release-mode", success=False, environment=env)
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
-    def test_source_guard_accepts_exact_versioned_main_source(self):
+    def test_source_guard_accepts_scanner_tag_independent_of_bundle_version(self):
         self.run_step("build", "package")
-        self.assertIn(f"base={BASE}\ncommit={SOURCE}\nrelease_id=42\n",
+        self.assertIn(f"base={BASE}\ncommit={SOURCE}\n",
                       (self.directory / "output").read_text())
         self.run_step("build", "package", environment={"DRAFT_RELEASE_TAG": ""})
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
     def test_source_guard_rejects_mismatched_version_tag_source_or_main(self):
-        for env in ({"DRAFT_RELEASE_TAG": "claude-desktop-v0.2.0"},
+        for env in ({"DRAFT_RELEASE_TAG": "v0.18.0"},
                     {"FIXTURE_TAG_SOURCE": OTHER_SOURCE}, {"FIXTURE_ON_MAIN": "false"},
                     {"DRAFT_RELEASE_TAG": "", "GITHUB_SHA": OTHER_SOURCE}):
             with self.subTest(environment=env):
@@ -249,12 +259,17 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
                 self.write_versions(manifest_version, lock_version)
                 self.run_step("build", "package", success=False)
 
-    @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
-    def test_source_guard_rejects_published_stable_and_immutable_releases(self):
-        for overrides in ({"draft": False}, {"prerelease": False}, {"immutable": True}):
-            with self.subTest(state=overrides):
-                self.write_state(**overrides)
-                self.run_step("build", "package", success=False)
+    @unittest.skipUnless(shutil.which("node") and shutil.which("jq") and shutil.which("sha256sum"),
+                         "Node, jq and sha256sum required")
+    def test_scanner_prerelease_uses_the_same_draft_preparation_flow(self):
+        tag = "v0.17.0-rc.1"
+        self.write_versions(scanner_version=tag[1:])
+        self.write_state(tag_name=tag, prerelease=True)
+        env = {"DRAFT_RELEASE_TAG": tag}
+        self.run_step("build", "release-mode", environment=env)
+        self.run_step("build", "package", environment=env)
+        self.run_step("attach-draft", "attach", environment=env)
+        self.assertEqual(self.uploads(), FILES)
 
     @unittest.skipUnless(shutil.which("sha256sum"), "sha256sum is required for asset checks")
     def test_asset_check_rejects_tampering_and_misdirected_checksum(self):
@@ -276,11 +291,18 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which("jq") and shutil.which("sha256sum"), "jq and sha256sum required")
     def test_attachment_refuses_existing_assets_and_non_draft_releases_before_upload(self):
         for overrides in ({"assets": [{"name": FILES[2]}]}, {"draft": False},
-                          {"prerelease": False}, {"immutable": True},
-                          {"tag_name": "claude-desktop-v9.9.9"}):
+                          {"immutable": True}, {"tag_name": "v9.9.9"}):
             with self.subTest(state=overrides):
                 self.write_state(**overrides)
                 self.run_step("attach-draft", "attach", success=False)
+                self.assertEqual(self.uploads(), [])
+
+    @unittest.skipUnless(shutil.which("jq"), "jq required")
+    def test_attachment_requires_exactly_one_matching_draft_across_all_pages(self):
+        for lookup in ("missing", "duplicate"):
+            with self.subTest(lookup=lookup):
+                self.run_step("attach-draft", "attach", success=False,
+                              environment={"FIXTURE_RELEASE_LOOKUP": lookup})
                 self.assertEqual(self.uploads(), [])
 
     @unittest.skipUnless(shutil.which("jq") and shutil.which("sha256sum"), "jq and sha256sum required")
@@ -290,6 +312,13 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
             with self.subTest(environment=env):
                 self.run_step("attach-draft", "attach", success=False, environment=env)
                 self.assertEqual(self.uploads(), [])
+
+    @unittest.skipUnless(shutil.which("jq") and shutil.which("sha256sum"), "jq and sha256sum required")
+    def test_attachment_does_not_report_success_if_tag_changes_during_upload(self):
+        self.run_step("attach-draft", "attach", success=False,
+                      environment={"FIXTURE_REMOTE_TAG_SOURCE_AFTER_UPLOAD": OTHER_SOURCE})
+        self.assertEqual(self.uploads(), FILES)
+        self.assertFalse((self.directory / "summary").exists())
 
     @unittest.skipUnless(shutil.which("jq") and shutil.which("sha256sum"), "jq and sha256sum required")
     def test_attachment_stops_if_release_is_published_between_uploads(self):
@@ -303,10 +332,32 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
         self.run_step("attach-draft", "attach", success=False)
         self.assertEqual(self.uploads(), [])
 
-    def test_scanner_release_job_excludes_desktop_release_namespace(self):
-        release = load_workflow(ROOT / ".github/workflows/release.yml")
-        self.assertEqual(release["jobs"]["docker-release"]["if"],
-                         "${{ !startsWith(github.event.release.tag_name, 'claude-desktop-v') }}")
+    def test_scanner_release_checks_assets_before_building_or_publishing_images(self):
+        release = RELEASE_WORKFLOW_DATA
+        self.assertEqual(release["on"]["release"]["types"], ["published"])
+        job = release["jobs"]["docker-release"]
+        self.assertNotIn("if", job)
+        steps = job["steps"]
+        guard = next(i for i, item in enumerate(steps) if item.get("id") == "desktop-assets")
+        build = next(i for i, item in enumerate(steps) if item.get("run", "").startswith("./gradlew build"))
+        self.assertLess(guard, build)
+        self.assertNotIn("--method", step("docker-release", "desktop-assets")["run"])
+
+    @unittest.skipUnless(shutil.which("jq") and shutil.which("python3"), "jq and Python required")
+    def test_scanner_publication_requires_complete_uploaded_four_asset_set(self):
+        assets = [{"name": name, "state": "uploaded", "size": 128} for name in FILES]
+        self.write_state(draft=False, immutable=True, assets=assets)
+        self.run_step("docker-release", "desktop-assets")
+        for overrides in ([{"assets": [item for item in assets if item["name"] != name]} for name in FILES] +
+                         [{"assets": assets + [assets[0]]},
+                          {"assets": [dict(item, size=0) for item in assets]},
+                          {"assets": [dict(item, state="starter") for item in assets]},
+                          {"draft": True}, {"immutable": False}, {"tag_name": "v9.9.9"}]):
+            with self.subTest(state=overrides):
+                state = {"draft": False, "immutable": True, "assets": assets} | overrides
+                self.write_state(**state)
+                self.run_step("docker-release", "desktop-assets", success=False)
+        self.assertEqual(self.uploads(), [])
 
 
 if __name__ == "__main__":

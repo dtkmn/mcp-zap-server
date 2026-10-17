@@ -12,24 +12,23 @@ The defaults use published `v0.16.0`. Review the
 when upgrading an existing installation.
 
 Prefer agent-guided setup? [Install MCP ZAP Connect locally in Codex](#guided-setup-in-codex),
-then ask Codex to start and connect the scanner. A
+then ask Codex to start and connect the scanner. Cursor Desktop Free users can
+follow the [guided Cursor setup](#guided-setup-in-cursor) with available Agent
+allowance. A
 [local Claude Code preview](#guided-setup-in-claude-code) is also available for
-testing from your checkout. The manual Docker steps below are available
+loading from your checkout. The manual Docker steps below are available
 without the plugin.
 
 Claude Desktop Free users can follow the separate
 [MCPB download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md).
-Published Desktop previews will provide the `.mcpb` and matching guide as
-[GitHub Release assets](https://github.com/dtkmn/mcp-zap-server/releases);
-public distribution is pending.
-It exposes local setup tools that reuse these Docker scripts, so Claude can
-check prerequisites and guide setup after an explicit request. Installing the
-extension alone does not start containers. Installation and an existing-scanner
-status call on Claude Desktop Free passed on 16 October 2026; fresh scanner
-startup has fixture coverage rather than live verification. See the
-[client guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#claude-desktop)
-for the existing-scanner status-only flow. The MCPB guide then walks through a
-separately requested demo crawl, passive analysis and complete HTML report.
+Choose a [scanner release](https://github.com/dtkmn/mcp-zap-server/releases)
+with Desktop assets and download its `.mcpb`, matching guide and checksum files.
+If the assets are not listed, follow the
+[local build instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md#build-and-check-the-bundle).
+The macOS extension exposes local setup tools around the same Docker scripts.
+It can reuse a running scanner or create a local installation after your setup
+request; installing the extension alone does not start containers. The guide
+covers setup, a status check, and a separately requested demo crawl and report.
 
 <a id="1-bootstrap-local-settings"></a>
 <a id="2-start-the-stack"></a>
@@ -87,13 +86,16 @@ Ask your connected client:
 Run only a guided HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish, summarize findings for this target,
-generate an HTML report scoped to that target, and read it back through MCP.
+generate an HTML report scoped to that target, and read the complete report
+through MCP, including every chunk if needed.
 Do not start an active scan.
 ```
 
 Expect a completed crawl, drained passive analysis, a target-scoped findings
-summary, and an HTML report returned through MCP. Finding counts vary; completed
-operations and report readback demonstrate a working setup.
+summary, and the complete HTML report returned through MCP. If the report is
+truncated, read its chunks until the end; a preview alone is not complete
+readback. Finding counts vary; completed operations and report readback
+demonstrate a working setup.
 
 Use container URLs for scans: `http://juice-shop:3000` or
 `http://petstore:8080`. The host ports `http://localhost:3001` and
@@ -108,7 +110,7 @@ covers optional active scanning, release evidence, and customer handoff.
 
 ## Guided Setup In Codex
 
-MCP ZAP Connect `0.3.0` lets you ask Codex to handle the local Docker Compose
+MCP ZAP Connect lets you ask Codex to handle the local Docker Compose
 setup above, including prerequisites, startup, private client configuration and
 a status check. You normally do not need to edit the client's configuration
 yourself. Docker and Compose must be ready before scanner startup; the skill can
@@ -116,8 +118,6 @@ help install missing prerequisites with your approval, recheck them and continue
 Review any permissions requested by your client. Installing this skills-only
 plugin does not start the scanner or register MCP tools until you request setup.
 
-GitHub installation, Desktop skill activation and status verification have been
-tested locally in Codex on Apple Silicon macOS with an existing Docker scanner.
 Install the plugin locally using the steps below. This route requires Git and
 Bash for the project's Docker setup scripts.
 
@@ -214,14 +214,45 @@ For support, use the project's
 and a redacted description of the failing step. Do not upload `.env`, client
 configuration, credentials, raw private logs or sensitive scan reports.
 
+## Guided Setup In Cursor
+
+Use Cursor Desktop on the scanner's machine with available Agent allowance.
+Free accounts need available Agent allowance. A working MCP connection does not
+bypass Cursor's usage limits. If a usage-limit error blocks the request, wait
+until allowance is available; changing scanner credentials does not resolve it.
+
+Install the local MCP ZAP Connect preview using the
+[Cursor plugin instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#cursor-local-preview).
+This skills-only plugin uses a project checkout and the existing Docker scripts.
+
+1. Start a local **This Mac** Agent chat and invoke `/setup-local-scanner`.
+2. Send the setup request below. Keep the scanner on the same machine as Cursor.
+3. After the native status response succeeds, make a separate request using the
+   [first-report prompt](#3-generate-your-first-report).
+
+```text
+Set up MCP ZAP Server in Cursor using Docker Compose and the project's
+first-run guide. Check prerequisites, container ownership and required ports.
+Reuse any existing installation; create private settings only when absent.
+Use published release images and the existing bootstrap scripts.
+Configure only my private Cursor mcp-zap-server connection. Preserve Codex,
+Claude, unrelated Cursor settings and permissions, existing keys and reports.
+After readiness succeeds, call zap_passive_scan_status exactly once with {}
+through Cursor, show the actual response, then stop.
+Do not crawl, scan, generate reports, expose credentials or make remote changes.
+```
+
+The skill checks readiness before configuring Cursor's private `~/.cursor/mcp.json`.
+It preserves an existing installation and its keys. Do not remove a working
+scanner or clear client settings as a normal setup step. A successful doctor
+proves server readiness; the status response must come through Cursor to verify
+that client's connection. For connection recovery after a restart, see the
+[Cursor client guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#cursor).
+
 ## Guided Setup In Claude Code
 
-Claude Code support in MCP ZAP Connect `0.4.0` is a local, unreleased preview.
-It uses the existing setup skill and Docker Compose workflow. On 16 October
-2026, the plugin and marketplace manifests passed native validation with Claude
-Code `2.1.292`. Fresh Claude setup, skill activation and a native Claude status
-call remain pending. The
-earlier Codex and Cursor results do not verify this new client.
+Claude Code uses the same setup skill and Docker Compose workflow through a
+local plugin preview.
 
 Use **local Claude Code on the same machine as the scanner**. A web or remote
 session cannot reach this machine's loopback endpoint. This route does not
@@ -229,12 +260,14 @@ configure Claude chat remote connectors or add a stdio bridge. See Anthropic's
 [plugin overview](https://code.claude.com/docs/en/plugins) and
 [MCP connection documentation](https://code.claude.com/docs/en/mcp).
 
-### Test The Local Preview
+<a id="test-the-local-preview"></a>
+
+### Load The Local Preview
 
 Use an existing Claude Code CLI. If it is missing, follow Anthropic's
 [Claude Code setup instructions](https://code.claude.com/docs/en/setup) before
-continuing; installing this plugin does not install Claude Code. With your
-checkout containing the `0.4.0` preview, replace the absolute path below:
+continuing; installing this plugin does not install Claude Code. Replace the
+absolute path below with your checkout:
 
 ```bash
 claude --version
@@ -269,15 +302,15 @@ file or a command argument. The
 describes the header and configuration scope.
 
 After the connection is configured, inspect `/mcp` in Claude Code and make the
-status call there. A successful server doctor or a call from Codex proves only
-that other connection. If Claude has not loaded the tools, leave native client
-verification pending; do not treat written settings as a working connection.
+status call there. If tools are missing, reconnect the scanner in `/mcp` or start
+a new local Claude Code session before running a scan.
 
-### Install From GitHub After Publication
+<a id="install-from-github-after-publication"></a>
 
-The following route applies only after the Claude marketplace files and plugin
-version have been published to GitHub. The local `0.4.0` preview does not establish
-that those files are available remotely:
+### Install From GitHub
+
+Use the GitHub route when the repository version you install includes the
+Claude marketplace files:
 
 ```bash
 claude plugin marketplace add dtkmn/mcp-zap-server

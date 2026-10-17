@@ -7,18 +7,11 @@ chart `0.16.0` and the published MCP `v0.16.0` image. The
 digest and upgrade requirements. CloudFormation
 does not install MCP, ZAP, application credentials, target access rules or a database.
 
-A live evaluation on 8 October 2026 using the published `v0.15.0` MCP image and
-matching chart on EKS `1.36` with one `m7i.xlarge` worker verified cluster
-bootstrap, all five pinned add-ons, operator access and encrypted EBS
-provisioning. It also verified MCP access with JWT authentication, HTTP crawls,
-passive analysis and complete report retrieval against an owned internal target,
-unchanged report readback and a fresh scan after MCP replacement, and
-permitted/denied network paths after policies settled.
-
-This single-worker evaluation does not establish HA, production capacity,
-deny-at-startup isolation or protection from hosting-node access. Optional import
-and automation flows were outside its scope. Verify your selected published
-image and complete the checks below in your own environment.
+The single-worker configuration does not provide HA or define production scan
+capacity. NetworkPolicy enforcement has startup and hosting-node limitations
+described below. Complete the infrastructure, network, scan, report and recovery
+checks for your selected image in your own environment, including any optional
+import and automation flows you enable.
 
 | File | Purpose |
 | --- | --- |

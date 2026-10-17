@@ -5,14 +5,8 @@ Server, ZAP and a private Java runtime. Its launcher needs no Docker, system
 Java, Git, Gradle, Python or source compilation. Connect an existing MCP client;
 the package does not include a chat UI or model.
 
-Recorded runtime verification used the **v0.15.0** preview on Apple Silicon
-with macOS 27.0.1. Its package inventory and private connection tests are
-historical evidence, not validation of a `v0.16.0` package. Other macOS
-versions still require runtime verification.
-
-Public Mac downloads are not yet available. This preview is unsigned and has
-not completed clean browser-download installation verification. Follow macOS's
-normal security controls when opening a supplied preview.
+Public Mac downloads are not yet available. This preview is unsigned.
+Follow macOS's normal security controls when opening a supplied preview.
 
 ## Install and run a preview supplied by a maintainer
 
@@ -143,8 +137,8 @@ Known report limitation: root-URL filtering can omit findings from HTML reports;
 see [issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294).
 Complete report retrieval does not establish finding-count parity.
 
-HAR, packet-capture and ModSecurity import/export are also unavailable. OpenAPI,
-automation and active-scanning workflows require separate package verification.
+HAR, packet-capture and ModSecurity import/export are also unavailable. Use the
+Docker distribution for OpenAPI, automation and active-scanning workflows.
 
 Automatic ZAP/add-on downloads are disabled. Update through a new verified
 package rather than enabling additional add-ons independently.
@@ -181,7 +175,7 @@ An SSH session without a logged-in desktop is not supported by this preview.
 ## Build and release instructions
 
 Contributors can use the [macOS maintainer guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/macos/README.md)
-for local builds and manual GitHub Actions test downloads. Automatic package
-builds are paused, and public Mac distribution is deferred until
-signing/notarization and clean browser-download installation are resolved.
-The package's source-delivery materials and dependency notices remain included.
+for local builds and manual GitHub Actions preview downloads. Public Mac
+downloads are not available; the supplied preview is unsigned. Keep the
+package's matching source-delivery materials and dependency notices together
+when building or redistributing it.

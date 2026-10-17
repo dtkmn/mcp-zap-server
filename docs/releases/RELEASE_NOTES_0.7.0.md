@@ -157,13 +157,6 @@ Flyway migration resources now live under `classpath:db/migration`. If you overr
 - Updated production checklist, observability docs, JWT quick start, tool-scope authorization docs, security modes, and security policy reference.
 - Added or refreshed contribution, issue, vulnerability, and repository hygiene docs through the post-`v0.6.1` work.
 
-## Testing and Validation Coverage
-
-- Added integration coverage for MCP request body limits, rate limiting, workspace quotas, backpressure, runtime policy dry-run/enforcement, streamable HTTP protocol behavior, API-key authorization, JWT authorization, and observability actuators.
-- Added unit coverage for credential reference resolution, guided auth sessions, policy bundles, gateway records, ZAP engine boundaries, scan history ledger behavior, and protection services.
-- Added architecture tests for gateway execution boundaries and edition boundaries.
-- Added runbook validation tests for production simulation guidance.
-
 ## Recommended Release Validation
 
 - `./gradlew clean build`

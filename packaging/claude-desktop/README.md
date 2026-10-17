@@ -18,11 +18,14 @@ directory listing or approval.
 ## Install the local preview
 
 1. Open [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and
-   choose a published **Claude Desktop MCP ZAP Connect** preview, tagged
-   `claude-desktop-v<version>`. Download its `.mcpb` asset and matching
-   `-setup.md` guide. If no such assets are published, build the local preview
-   using the developer steps below. Public distribution is not complete merely
-   because local build files exist.
+   choose a published normal scanner release (`vX.Y.Z`) whose **Assets** include
+   the Claude Desktop downloads. Download
+   `mcp-zap-connect-claude-desktop-0.1.0.mcpb` and the matching
+   `mcp-zap-connect-claude-desktop-0.1.0-setup.md` guide, or the connector version
+   listed by that release. Both have adjacent `.sha256` files. These assets are
+   distributed with normal scanner releases in this repository; there is no
+   separate Desktop release or repository. If no published release has them,
+   developers can build the local preview below.
 2. In Claude Desktop, open **Settings → Extensions → Advanced settings**, choose
    **Install Extension**, and select the `.mcpb` file. Review the extension and
    complete the installation prompts.
@@ -41,8 +44,12 @@ passwords or unrelated credentials in either field.
 Installing the extension starts its local connector, but does not authorize
 scanner setup, Docker startup or a scan. Users do not need to install Node.js or
 npm: the Node extension uses Claude Desktop's bundled runtime. The bundle
-requires Node.js `>=20.18.1`; the native test below used Desktop's built-in
-Node.js `24.21.0`.
+requires Node.js `>=20.18.1`.
+
+If the extension is installed but a tool call stalls or its approval prompt does
+not appear, fully quit and reopen Claude Desktop, then retry one status-only
+request in a new chat. Restarting is a troubleshooting step, not a required
+installation step.
 
 ## Ask Claude to set up the scanner
 
@@ -73,6 +80,12 @@ and doctor scripts there, then uses those scripts and the published release
 images. Keys and scanner workspace data belong to that installation rather than
 the extension's install directory. An existing healthy installation is reused;
 setup must not replace its settings or rotate its keys.
+
+A fresh installation generates new scanner credentials. Preserving Codex/Cursor
+settings does not reconnect those clients if they still hold another
+installation's key. Reuse or restore their original scanner to retain those
+connections without editing their settings; handle any credential migration
+separately and explicitly.
 
 Docker and the required host utilities still need to be available. If Docker is
 missing, follow the [official Docker Desktop installation instructions](https://docs.docker.com/desktop/setup/install/mac-install/).
@@ -126,6 +139,18 @@ scanner resources. It includes the public `.env.example` template, not a real
 from this checkout; source hashes are included in the bundle. Building this
 preview does not publish a release or rebuild the scanner images.
 
+Connector and scanner versions are independent. For example, a future scanner
+release `v0.17.0` can include connector `0.1.0`; the asset filenames use the
+connector version. After publication, bump the connector version when its packaged
+code, dependencies, scanner resources or setup guide change. Ordinary scanner
+changes outside the bundle do not require a connector version bump.
+
+Bundled Compose files, scripts and defaults are snapshots of the selected
+source, not a promise to install that release's newest scanner. The current
+packaged `.env.example` defaults to scanner `v0.16.0`. Update and validate those
+resources deliberately when changing the fresh-install scanner version; preserve
+the selected settings when reusing an existing scanner.
+
 The output is:
 
 ```text
@@ -145,8 +170,7 @@ address `SNYK-JS-ZOD-20510278`. The explicit override is needed because MCPB
 the builder's manifest/record validation, packing and unpacking with Zod 4.
 The build rejects affected Zod resolutions and checks the actual archive's
 runtime version. Keep the override until the build tool supports a patched
-dependency without it. Rebuilt archives have new checksums; old CI artifacts
-containing Zod `3.25.76` should not be published.
+dependency without it.
 
 The build-only `tmp` dependency is overridden to `0.2.7` to address the path
 traversal and symbolic-link advisories in older releases, including the
@@ -155,9 +179,9 @@ its editor prompt dependency. Tests check the resolved editor dependency,
 hostile path options, and normal temporary-file read/write/cleanup behavior.
 The build rejects affected root or nested lock resolutions and checks the
 embedded archive lockfile. `tmp` and the builder CLI are excluded from the
-production runtime. Rebuild earlier preview artifacts before publication.
+production runtime.
 
-## Prepare a GitHub download
+## Prepare downloads for a normal scanner release
 
 Use the **Claude Desktop MCPB** workflow. It builds preview assets automatically
 only on relevant pushes to `main`, and can also be dispatched manually for an
@@ -171,49 +195,58 @@ Release packaging happens before publication through the manual draft-release
 flow below. Publishing an immutable release is not a packaging trigger; all
 assets must already be attached when the user publishes it.
 
-For a public preview, first merge the reviewed source and create an existing
-tag `claude-desktop-v<package-version>` on that source. Create a **draft**
-prerelease titled **Claude Desktop MCP ZAP Connect <version> (macOS preview)**,
-with the setup guide or a link to its tagged source in the release notes.
-Dispatch the workflow from `main` with that tag in `draft_release_tag`. The tag
-must match the package version, its commit must be reachable from `main`, and
-the release must still be a mutable draft.
+Maintainers prepare the assets before publishing the normal scanner release:
 
-The workflow attaches the MCPB, guide and both checksums without overwriting
-existing assets. Review the attached files and validation boundaries before
-publishing the draft. Published immutable releases cannot receive new assets.
-The Desktop tag namespace is excluded from the scanner Docker publication job;
-it does not change the scanner release version or Docker images.
+1. Include the reviewed connector source and guide in the next normal scanner
+   release commit on `main`. Set the scanner `build.gradle` version for that
+   release. The existing immutable `v0.16.0` release stays untouched.
+2. Create the normal scanner tag, such as `v0.17.0`, and a **draft** GitHub
+   release for that existing tag in this repository. The usual scanner
+   prerelease tags are also supported; a stable release does not need to be
+   marked as a prerelease merely because its connector is a macOS preview.
+3. Dispatch **Claude Desktop MCPB** from `main`, setting `draft_release_tag` to
+   that scanner tag. The workflow checks out the tag's source, requires the
+   commit to be reachable from `main`, and validates that the scanner
+   `build.gradle` version matches the tag. It tests and builds the MCPB from
+   that source; it does not require the connector version to match the tag.
+4. Verify that the existing draft contains all four matching assets:
 
-After publication, link users to that specific release and its asset URLs.
-Do not use `/releases/latest/download` for Desktop previews: the repository's
-latest release is a separately versioned scanner release. Confirm the public
-downloaded checksums before claiming distribution is complete.
+   ```text
+   mcp-zap-connect-claude-desktop-0.1.0.mcpb
+   mcp-zap-connect-claude-desktop-0.1.0.mcpb.sha256
+   mcp-zap-connect-claude-desktop-0.1.0-setup.md
+   mcp-zap-connect-claude-desktop-0.1.0-setup.md.sha256
+   ```
 
-Package tests and manifest validation establish only their stated boundaries.
-An external MCP client exercising the packaged connector is also separate from
-Claude Desktop installation, account access, tool loading and a native status
-response. No scan or lifecycle operation is authorized merely by building or
-testing this package.
+   Substitute the connector version if it changes. Review the guide, check
+   both downloaded checksums, and document user-relevant compatibility
+   requirements and limitations in the normal scanner release notes. Keep
+   internal validation records private. The workflow requires an existing mutable
+   draft and refuses to overwrite assets; it does not create or publish a
+   release. Resolve missing or conflicting assets while the release is still
+   a draft before proceeding.
+   A failed run can leave some files attached. Inspect the draft and remove
+   conflicting files yourself before retrying; the workflow does no automatic
+   cleanup or replacement.
+5. Publish the normal scanner release only after reviewing all four assets.
+   Publication then triggers the existing scanner Docker release workflow.
+   That workflow requires all four expected assets to be nonempty and uploaded
+   before building images; this check does not validate downloaded bytes and
+   cannot repair an incomplete release after immutable publication.
+   Verify that workflow's image publication separately before claiming that
+   the scanner images are available.
 
-On 16 October 2026, bundle `0.1.0` was installed and enabled in Claude Desktop
-`2.42304.0` on Apple Silicon macOS `27.0.1`, signed in to a Free account. Desktop
-reported its built-in Node.js `24.21.0` with the built-in runtime enabled. Both
-optional configuration fields were left blank. Claude discovered the connector
-and called `zap_passive_scan_status` once after **Allow once** approval. The
-actual tool response reported completed analysis, zero records remaining and
-zero active tasks. Only tool discovery and that status call were performed.
+All four assets must be attached **before publication** because published
+immutable releases cannot receive new assets. Use the normal scanner tag;
+do not create `claude-desktop-v*` tags, separate plugin releases or another
+repository for these downloads.
 
-The original native-tested artifact SHA256 is
-`809c33ec4fd1e550d27c41bd9e5a64d8c1c4dd07be1548ea8d6cb112bc2a56e4`.
-It reused the existing `v0.15.0` scanner without lifecycle changes. Later
-documentation/packaging rebuilds have their own checksums and do not inherit
-exact-artifact native verification. Before/after
-checks confirmed unchanged container identities, start times, credentials,
-ports and mounts, along with unchanged Codex, Cursor and existing Desktop
-configuration bytes and permissions. The 33 automated tests cover the setup
-branches; fresh scanner startup and prerequisite installation were not performed
-live. Distribution and full scan workflows remain separate validation work.
+After publication, link users to that specific normal release and its asset
+URLs. Do not promise `/releases/latest/download` until the published latest
+release actually contains the expected assets; a prerelease does not become
+the repository's latest stable release. Confirm the public downloaded checksums
+before claiming distribution is complete. Local package tests do not establish
+that GitHub attached the files or that public downloads work.
 
 ## Remove the extension
 

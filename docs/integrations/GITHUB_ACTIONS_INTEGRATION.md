@@ -4,11 +4,11 @@ This guide shows how to run `mcp-zap-server` as a GitHub Actions security gate w
 
 The integration ships as a reusable composite action in [`.github/actions/zap-security-gate`](../../.github/actions/zap-security-gate/action.yml) plus a copyable workflow example in [`examples/github-actions/zap-security-gate.yml`](../../examples/github-actions/zap-security-gate.yml).
 
-This repository also carries a repo-local validation workflow in [`.github/workflows/zap-security-gate-juice-shop.yml`](../../.github/workflows/zap-security-gate-juice-shop.yml). That workflow builds the current image, starts Juice Shop on the same compose network, and runs the local action twice so contract artifacts are exercised inside real GitHub Actions.
-
-GitHub Actions is the CI integration covered by this repository's hosted
-validation. The GitLab examples require validation in your own GitLab project;
-they do not have the same hosted validation coverage.
+The [Juice Shop workflow](../../.github/workflows/zap-security-gate-juice-shop.yml)
+provides a runnable example that builds the image, starts Juice Shop on the same
+Compose network and runs the action twice. Review runner permissions, target
+connectivity, secrets and artifact access in your own repository before enabling
+a release gate.
 
 The artifact contracts emitted by that helper are defined in [CI Gate Contracts](../scanning/CI_GATE_CONTRACTS.md).
 For the team operating model around seed mode, artifact review, baseline
@@ -71,8 +71,8 @@ python3 -m unittest discover -s tests/python -p 'test_*.py'
 ```
 
 These tests cover the gate helper behavior and execute both GitHub and GitLab
-gate entrypoints. The repository's Juice Shop workflow provides the live
-container end-to-end coverage. Run them with Python 3.9+, Helm and Docker Compose
+gate entrypoints. Use the Juice Shop workflow to check container integration in
+your environment. Run the helper tests with Python 3.9+, Helm and Docker Compose
 available; the Compose checks render configuration without starting containers.
 PyYAML is a test-only dependency for checking rendered Helm resources.
 
@@ -84,7 +84,7 @@ If you are calling the action from another repository, replace the local action 
 uses: dtkmn/mcp-zap-server/.github/actions/zap-security-gate@<release-tag>
 ```
 
-Pin to a real release tag once the next release is cut.
+Replace the placeholder with an existing published release tag.
 
 ## Baseline Strategy
 
@@ -282,17 +282,23 @@ That keeps the app, ZAP, and the MCP server on the same compose network, so ZAP 
 
 This repo's Juice Shop validation workflow uses the same pattern via [`.github/zap/docker-compose.juice-shop.yml`](../../.github/zap/docker-compose.juice-shop.yml).
 
-## What Juice Shop Proves
+<a id="what-juice-shop-proves"></a>
+
+## Choosing A CI Target
 
 Juice Shop is a good CI smoke target because it exercises a real web app with enough surface area to stress the artifact contracts.
 
-It is not a clean determinism target for a strict zero-drift quality gate. In local validation, repeated crawl-only runs still produced net-new findings. Use Juice Shop to prove:
+Dynamic application content and crawl coverage can change findings between
+runs, so Juice Shop is unsuitable for assuming a strict zero-drift result.
+Use it to check:
 
 - the GitHub Action wiring works
 - the action can start a caller-owned app service on the same compose network
 - `current-findings.json`, `findings-diff.json`, `artifact-manifest.json`, and copied report artifacts are emitted in CI
 
-Use Petstore or another lower-noise target when you want to prove rerun stability with `max-new-findings=0`.
+For `max-new-findings=0`, select a controlled target with stable content, seeds,
+scanner inventory and scan settings, and review repeated runs before enforcing
+the baseline.
 
 ## Queue Versus Direct Mode In CI
 

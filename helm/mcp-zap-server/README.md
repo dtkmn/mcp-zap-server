@@ -503,11 +503,9 @@ disabling all network controls is not a remedy.
 If you need a new cluster, the optional
 [EKS infrastructure starter](../../examples/aws-eks/) provides CloudFormation
 and a walkthrough for a dedicated single-worker cluster in an existing VPC.
-It creates AWS infrastructure separately from this chart. A live single-worker
-trial using the published `v0.15.0` image and matching chart verified bootstrap,
-MCP access with JWT authentication and crawl/report flows against an owned
-target; follow the walkthrough's checks for your own environment and selected
-published application version.
+It creates AWS infrastructure separately from this chart. Follow the
+walkthrough's infrastructure, authentication, scan, report and recovery checks
+for your own environment and selected published application version.
 
 This guidance assumes an existing EKS cluster. Start from
 [values-aws.yaml](values-aws.yaml), keep both services private and select an

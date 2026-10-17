@@ -13,7 +13,6 @@ permissions:
 jobs:
   docker-release:
     name: Publish release images and archive SBOM
-    if: ${{ !startsWith(github.event.release.tag_name, 'claude-desktop-v') }}
     runs-on: ubuntu-24.04
     steps:
       - name: Resolve release metadata
@@ -90,6 +89,30 @@ jobs:
             echo "Release tag must be v${project_version}" >&2
             exit 1
           }
+
+      - name: Require Desktop bundle and setup guide on the published release
+        id: desktop-assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          RELEASE_VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]]
+          package_version="$(python3 -c 'import json; print(json.load(open("packaging/claude-desktop/package.json"))["version"])')"
+          [[ "$package_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]
+          base="mcp-zap-connect-claude-desktop-${package_version}"
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          jq -e --arg tag "$RELEASE_VERSION" \
+            '.draft == false and .immutable == true and .tag_name == $tag' <<< "$release" >/dev/null
+          for file in "${base}.mcpb" "${base}.mcpb.sha256" "${base}-setup.md" "${base}-setup.md.sha256"; do
+            jq -e --arg name "$file" \
+              '[.assets[] | select(.name == $name)] | length == 1 and .[0].state == "uploaded" and .[0].size > 0' \
+              <<< "$release" >/dev/null || {
+              echo "Missing complete Desktop asset: $file. Attach all four files to the draft before publication." >&2
+              exit 1
+            }
+          done
 
       - name: Verify Distroless runtime signature
         run: ./scripts/verify-distroless-signature.sh

@@ -1,6 +1,6 @@
 # Sample Policy Metadata Extension
 
-This is a minimal OSS-safe extension proof.
+This minimal extension adds metadata to policy dry-run summaries.
 
 It does not add a scanner engine, MCP tool, secret reader, report generator, or
 tenant model. It only demonstrates the extension pattern:
@@ -10,8 +10,7 @@ tenant model. It only demonstrates the extension pattern:
 - register through Spring Boot auto-configuration
 - package extension classes and metadata separately from the gateway runtime
 
-This sample lives inside the repository so CI can prove the packaging and
-runtime wiring boundary. A real third-party extension should live in its own
+The sample lives inside the repository. A third-party extension should live in its own
 repository and compile against the dedicated extension API artifact, not the
 full gateway runtime.
 
@@ -68,19 +67,23 @@ external JAR on the runtime classpath. It also uses
 `@ConditionalOnMissingBean(PolicyBundleAccessBoundary.class)` so it does not
 replace a real access-boundary provider when one already exists.
 
-## What This Proves
+<a id="what-this-proves"></a>
 
-This sample proves the extension model, not a product feature:
+## Packaging And Loading
+
+The sample uses these extension mechanisms:
 
 - public extensions can compile against the extension API artifact
 - extension artifacts can be packaged separately
 - extension artifacts can register through Spring Boot auto-configuration
 - extension metadata can describe how the provider loads
-- the gateway build can verify the sample without importing enterprise code
+- the sample has no dependency on enterprise code
 
-## Target External Developer Path
+<a id="target-external-developer-path"></a>
 
-The intended future path is:
+## External Developer Setup
+
+For your own extension:
 
 1. create a standalone extension repository
 2. depend on the small `mcp-zap-extension-api` artifact
@@ -97,9 +100,11 @@ Do not assume classpath presence alone is enough. A third-party package outside
 the gateway application package will not be discovered by component scanning
 unless the runtime has a supported registration mechanism.
 
-## What This Does Not Prove
+<a id="what-this-does-not-prove"></a>
 
-This sample does not prove:
+## Limitations
+
+This sample does not provide:
 
 - runtime plugin discovery
 - third-party binary compatibility
@@ -107,4 +112,5 @@ This sample does not prove:
 - tenant isolation
 - enterprise policy enforcement
 
-Those are separate product decisions and must not be implied by this example.
+Do not use this metadata provider as an access-control or tenant-isolation
+mechanism.

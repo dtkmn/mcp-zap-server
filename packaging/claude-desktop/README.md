@@ -23,9 +23,9 @@ directory listing or approval.
    `mcp-zap-connect-claude-desktop-0.1.0.mcpb` and the matching
    `mcp-zap-connect-claude-desktop-0.1.0-setup.md` guide, or the connector version
    listed by that release. Both have adjacent `.sha256` files. These assets are
-   planned for the next normal scanner release in this repository; there is no
+   distributed with normal scanner releases in this repository; there is no
    separate Desktop release or repository. If no published release has them,
-   public distribution is pending; developers can build the local preview below.
+   developers can build the local preview below.
 2. In Claude Desktop, open **Settings → Extensions → Advanced settings**, choose
    **Install Extension**, and select the `.mcpb` file. Review the extension and
    complete the installation prompts.
@@ -44,13 +44,12 @@ passwords or unrelated credentials in either field.
 Installing the extension starts its local connector, but does not authorize
 scanner setup, Docker startup or a scan. Users do not need to install Node.js or
 npm: the Node extension uses Claude Desktop's bundled runtime. The bundle
-requires Node.js `>=20.18.1`; the native test below used Desktop's built-in
-Node.js `24.21.0`.
+requires Node.js `>=20.18.1`.
 
 If the extension is installed but a tool call stalls or its approval prompt does
 not appear, fully quit and reopen Claude Desktop, then retry one status-only
-request in a new chat. This recovered the observed native approval/dispatch
-timeout; restarting is a troubleshooting step, not a required installation step.
+request in a new chat. Restarting is a troubleshooting step, not a required
+installation step.
 
 ## Ask Claude to set up the scanner
 
@@ -142,8 +141,7 @@ preview does not publish a release or rebuild the scanner images.
 
 Connector and scanner versions are independent. For example, a future scanner
 release `v0.17.0` can include connector `0.1.0`; the asset filenames use the
-connector version. Connector `0.1.0` remains unreleased, so this preparation does
-not bump it. After publication, bump the connector version when its packaged
+connector version. After publication, bump the connector version when its packaged
 code, dependencies, scanner resources or setup guide change. Ordinary scanner
 changes outside the bundle do not require a connector version bump.
 
@@ -172,8 +170,7 @@ address `SNYK-JS-ZOD-20510278`. The explicit override is needed because MCPB
 the builder's manifest/record validation, packing and unpacking with Zod 4.
 The build rejects affected Zod resolutions and checks the actual archive's
 runtime version. Keep the override until the build tool supports a patched
-dependency without it. Rebuilt archives have new checksums; old CI artifacts
-containing Zod `3.25.76` should not be published.
+dependency without it.
 
 The build-only `tmp` dependency is overridden to `0.2.7` to address the path
 traversal and symbolic-link advisories in older releases, including the
@@ -182,7 +179,7 @@ its editor prompt dependency. Tests check the resolved editor dependency,
 hostile path options, and normal temporary-file read/write/cleanup behavior.
 The build rejects affected root or nested lock resolutions and checks the
 embedded archive lockfile. `tmp` and the builder CLI are excluded from the
-production runtime. Rebuild earlier preview artifacts before publication.
+production runtime.
 
 ## Prepare downloads for a normal scanner release
 
@@ -249,47 +246,6 @@ release actually contains the expected assets; a prerelease does not become
 the repository's latest stable release. Confirm the public downloaded checksums
 before claiming distribution is complete. Local package tests do not establish
 that GitHub attached the files or that public downloads work.
-
-Package tests and manifest validation establish only their stated boundaries.
-An external MCP client exercising the packaged connector is also separate from
-Claude Desktop installation, account access, tool loading and a native status
-response. No scan or lifecycle operation is authorized merely by building or
-testing this package.
-
-## Verified Claude Desktop Free results
-
-On 17 October 2026, bundle `0.1.0` was verified natively in Claude Desktop
-`2.42304.0` on Apple Silicon macOS `27.0.1`, signed in to a Free account. Desktop
-used its built-in Node.js `24.21.0`; both optional scanner configuration fields
-were blank. The exact tested archive SHA256 is
-`457a656a4bdf60077006ccf231c247370c92580edc64bc28eca089128ff173eb`.
-All 2,379 installed archive files matched that bundle.
-
-| Workflow | Verified result |
-| --- | --- |
-| Existing scanner connection | Reused scanner `v0.15.0`; one native `zap_passive_scan_status` call returned completed analysis, zero records remaining and zero active tasks. |
-| Existing scanner demo | Guided HTTP crawl of Juice Shop completed, passive analysis drained, findings were summarized, and a target-scoped HTML report was generated and read back completely: 53,138 characters, untruncated. No active attack ran. |
-| Fresh scanner provisioning | With Docker and the extension already installed, prerequisites reported no existing installation or scanner. Approved `scanner_setup` created `~/.mcp-zap-server`, started scanner `v0.16.0`, and passed readiness. One native status call returned completed analysis, zero records remaining and zero active tasks. No crawl, scan or report generation ran on this new stack. |
-
-During the existing-scanner checks, container identities, start times,
-credentials, ports and mounts stayed unchanged. Fresh provisioning was a
-separate test after the user authorized removal of the original containers,
-while retaining their configuration and report files. All 11 protected
-client/scanner configuration files retained their hashes and permissions,
-including Codex and Cursor. Their retained keys differ from the fresh scanner's
-new keys, so these checks establish settings preservation, not Codex/Cursor
-connectivity to the new stack.
-
-These results do not cover installation of missing prerequisites, cold image
-downloads, public release downloads, other operating systems or architectures,
-or active attacks. The HTTP demo used the existing scanner; it does not prove
-scan/report behavior on the separately provisioned fresh stack. HTTP crawling
-also has limited coverage of JavaScript-driven routes.
-
-Documentation or packaging rebuilds produce a new archive checksum. The native
-results above apply to the named tested archive; a rebuilt bundle does not
-inherit exact-artifact native verification. Automated package tests, native
-workflow results and public distribution checks remain separate evidence.
 
 ## Remove the extension
 

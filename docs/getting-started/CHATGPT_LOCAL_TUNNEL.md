@@ -125,17 +125,16 @@ active scan.
 Follow the tool results until the crawl and passive analysis finish. A truncated
 report preview is incomplete; use `zap_report_read_chunk` until EOF for the full
 report. The root-origin filtering omission is fixed in `v0.16.0`
-([issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294)). The recorded
-`v0.15.0` preview remains affected; those private tests
-do not validate a `v0.16.0` package. Report templates group alert
+([issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294)); earlier
+versions remain affected. Report templates group alert
 families and instances, so their totals do not necessarily equal individual
 alert records returned by the findings API. Compare the underlying evidence
 when counts differ; complete retrieval alone does not establish report completeness.
 
 The native preview's target protections may reject localhost or private-network
 demo targets by default. Use its local settings to allow only your intended
-authorized target, then restart the bundled services. This HTTP preview does
-not establish browser/AJAX crawling or active-scan support.
+authorized target, then restart the bundled services. Use the Docker
+distribution for browser/AJAX crawling or active scanning.
 
 ## Errors, data, and disconnecting
 

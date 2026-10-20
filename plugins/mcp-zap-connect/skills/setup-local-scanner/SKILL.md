@@ -56,8 +56,10 @@ that client's passive-status call; setup prerequisites must not block it.
   user. If a step requires their interaction or an app restart, explain it and
   wait for completion. Preserve macOS quarantine and security checks. A
   download or installer exit is not proof that the tool is usable.
-- If Docker is installed but stopped, start the existing application as part
-  of the requested setup and wait a bounded time for its engine. For an access
+- If Docker is installed but stopped, explain that blocker and offer to open
+  the existing application. Start it only after the user approves that action,
+  then wait a bounded time for its engine. Never change startup-at-login settings.
+  For an access
   error, diagnose the selected endpoint and permissions before proposing a
   repair; do not run setup as root or change permissions automatically.
 - After approved changes or the user's manual step, rediscover executable
@@ -233,6 +235,22 @@ Local installation evidence does not establish public-directory approval.
 Scans require the user's target and intended workflow; active scanning is never
 a setup check.
 
+## Hand off later scan requests
+
+For every new local crawl or scan request after setup, use the sibling
+`scan-local-target` skill. Installation success, a previous status response and
+container restart policies do not establish current readiness. That skill checks
+the selected installation without changing it and verifies the selected client's
+connection before starting the requested workflow. In Codex select
+`scan-local-target` from `/skills`; in Cursor invoke `/scan-local-target`; in
+Claude Code invoke `/mcp-zap-connect:scan-local-target`.
+
+A scan request does not authorize Docker startup, scanner recovery, credential
+replacement or client-setting changes. Explain and obtain approval for a required
+recovery action, preserve the original target and workflow, then recheck readiness.
+For a pure status-only request, keep using the client's passive-status call
+directly without running setup or the scan preflight.
+
 ## Offer the first demo workflow
 
 After a setup request finishes with a verified client connection, offer one
@@ -242,6 +260,8 @@ troubleshooting or stop requests; leave it pending if client verification is
 incomplete.
 
 ```text
+Use the scan-local-target skill to check the existing scanner and this client's
+connection first. If recovery is needed, explain it and wait for my approval.
 Run only a guided HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish, summarize findings for this target,

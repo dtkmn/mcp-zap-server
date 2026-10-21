@@ -162,6 +162,34 @@ def validate_archive_coverage(inventory, packages):
     return matched
 
 
+def application_dependency_packages(result, inventory):
+    """Separate the fingerprinted outer application from its bundled dependencies."""
+    packages = dependency_packages(result, "maven")
+    path = inventory.get("path") if isinstance(inventory, dict) else None
+    marker = "unknown:" + path if isinstance(path, str) else None
+    application = [package for package in packages
+                   if package.get("name") == marker and package.get("version") == "unknown"]
+    if not application:
+        return packages, None
+    if (len(application) != 1 or path != "/app/app.jar" or
+            not isinstance(inventory.get("sha256"), str) or
+            not re.fullmatch(r"[0-9a-f]{64}", inventory["sha256"]) or
+            not isinstance(inventory.get("libraries"), list) or not inventory["libraries"] or
+            result.get("projectName") != "mcp-zap-server:snyk-scan:/app" or
+            result.get("targetFile") != "/app"):
+        raise ValueError("unidentified outer application does not match the validated image archive")
+    graph = result["depGraph"]
+    package = [package for package in graph["pkgs"] if package["info"] == application[0]]
+    nodes = [node for node in graph["graph"]["nodes"] if node["pkgId"] == package[0]["id"]]
+    root = next(node for node in graph["graph"]["nodes"]
+                if node["nodeId"] == graph["graph"]["rootNodeId"])
+    if (len(package) != 1 or len(nodes) != 1 or nodes[0].get("deps") or
+            nodes[0].get("info", {}).get("labels", {}).get("location") != path or
+            sum(dep["nodeId"] == nodes[0]["nodeId"] for dep in root.get("deps", [])) != 1):
+        raise ValueError("unidentified outer application lacks a unique archive-location fingerprint")
+    return [package for package in packages if package is not application[0]], {"name": marker, "path": path}
+
+
 class Reports:
     def __init__(self, root, output):
         self.root, self.output = root, output
@@ -305,13 +333,19 @@ def container_reports(reports, image):
         reports.error("container: one or more expected SARIF layers are missing")
     try:
         items = [data, *data.get("applications", [])]
-        by_name = {}
+        by_name, dependency_layers = {}, {}
         for item in items:
             project = item.get("projectName")
             if project not in CONTAINER_PROJECTS or project in by_name:
                 raise ValueError("unknown or duplicate JSON dependency layer")
             by_name[project] = item
-            packages = dependency_packages(item, CONTAINER_PROJECTS[project][1])
+            if CONTAINER_PROJECTS[project][1] == "maven":
+                packages, application = application_dependency_packages(item, inventory)
+                if application:
+                    reports.checks[-1]["application_archive"] = application
+            else:
+                packages = dependency_packages(item, CONTAINER_PROJECTS[project][1])
+            dependency_layers[project] = packages
             if not packages:
                 raise ValueError(f"expected image dependencies missing from layer: {project}")
             unknown = [package.get("name", "<unnamed>") for package in packages
@@ -322,8 +356,7 @@ def container_reports(reports, image):
             raise ValueError("one or more expected JSON dependency layers are missing")
         if not inventory:
             raise ValueError("the tested image archive could not be inventoried")
-        java = by_name["mcp-zap-server:snyk-scan:/app"]
-        packages = dependency_packages(java, "maven")
+        packages = dependency_layers["mcp-zap-server:snyk-scan:/app"]
         matched = validate_archive_coverage(inventory, packages)
         write_json(reports.output / "runtime-coverage.json", matched)
     except (AttributeError, KeyError, TypeError, ValueError) as error:

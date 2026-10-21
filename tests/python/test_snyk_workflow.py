@@ -123,6 +123,17 @@ class SnykReportingTest(unittest.TestCase):
                 SNYK.iac_reports(reports)
         return reports, reports.finish()
 
+    def application_marker_data(self, additional=None):
+        data = graph_result("deb", "docker-image|mcp-zap-server")
+        java = graph_result("maven", "mcp-zap-server:snyk-scan:/app", packages=[
+            {"name": "example:library", "version": "1.0"},
+            {"name": "unknown:/app/app.jar", "version": "unknown"}, *(additional or [])])
+        java["targetFile"] = "/app"
+        java["depGraph"]["graph"]["nodes"][2]["info"] = {"labels": {
+            "location": "/app/app.jar", "digest": "a" * 40}}
+        data["applications"] = [java, graph_result("gomodules", "github.com/dtkmn/mcp-zap-server/tools/healthcheck")]
+        return data
+
     def test_five_explicit_source_targets_preserve_default_and_compile_only_scope(self):
         reports, result = self.execute()
         self.assertEqual(result, 0, reports.errors)
@@ -243,6 +254,80 @@ class SnykReportingTest(unittest.TestCase):
     def test_unknown_dependency_is_not_hidden_by_matching_dependency_count(self):
         with self.assertRaisesRegex(ValueError, "unidentified application package"):
             SNYK.validate_archive_coverage({"libraries": ["library-1.0.jar"]}, [{"name": "app.jar", "version": "unknown"}])
+
+    def test_validated_outer_application_is_classified_without_changing_reports(self):
+        data = self.application_marker_data()
+        self.overrides["container"] = {"json": data}
+        reports, result = self.execute("container")
+        self.assertEqual(result, 0, reports.errors)
+        self.assertEqual(reports.checks[-1]["application_archive"], {
+            "name": "unknown:/app/app.jar", "path": "/app/app.jar"})
+        self.assertEqual(json.loads((self.output / "container.json").read_text()), data)
+        self.assertEqual(json.loads((self.output / "runtime-coverage.json").read_text()), {
+            "library-1.0.jar": "example:library@1.0"})
+        self.assertTrue(any(run["results"] for run in reports.runs))
+
+    def test_outer_marker_does_not_exempt_other_unknowns_or_missing_libraries(self):
+        cases = []
+        for path in ("/app/other.jar", "/app/app.jar/BOOT-INF/lib/nested.jar"):
+            data = self.application_marker_data()
+            java = data["applications"][0]
+            java["depGraph"]["pkgs"][2]["info"]["name"] = "unknown:" + path
+            java["depGraph"]["graph"]["nodes"][2]["info"]["labels"]["location"] = path
+            cases.append(data)
+        cases.append(self.application_marker_data([{"name": "example:unidentified", "version": "unknown"}]))
+        missing = self.application_marker_data()
+        missing["applications"][0]["depGraph"]["pkgs"][1]["info"]["name"] = "example:other-library"
+        cases.append(missing)
+        for data in cases:
+            with self.subTest(data=data):
+                self.overrides["container"] = {"json": data}
+                reports, result = self.execute("container")
+                self.assertEqual(result, 1)
+                self.assertEqual(len(reports.runs), 3)
+
+    def test_outer_marker_requires_image_inventory_proof(self):
+        self.overrides["container"] = {"json": self.application_marker_data()}
+        valid = {"path": "/app/app.jar", "sha256": "a" * 64, "libraries": ["library-1.0.jar"]}
+        for field, value in (("path", "/app/other.jar"), ("sha256", None),
+                             ("sha256", "invalid"), ("libraries", [])):
+            with self.subTest(field=field, value=value):
+                inventory = valid | {field: value}
+                with patch.object(SNYK, "image_inventory", return_value=inventory):
+                    reports, result = self.execute("container")
+                self.assertEqual(result, 1)
+                self.assertEqual(len(reports.runs), 3)
+        with patch.object(SNYK, "image_inventory", return_value=None):
+            self.assertEqual(self.execute("container")[1], 1)
+
+    def test_outer_marker_requires_unique_leaf_node_with_exact_root_and_location(self):
+        cases = []
+        for location in (None, "/app/other.jar", "/app/app.jar/BOOT-INF/lib/nested.jar"):
+            data = self.application_marker_data()
+            data["applications"][0]["depGraph"]["graph"]["nodes"][2]["info"]["labels"]["location"] = location
+            cases.append(data)
+        nonleaf = self.application_marker_data()
+        nonleaf["applications"][0]["depGraph"]["graph"]["nodes"][2]["deps"] = [{"nodeId": "0"}]
+        cases.append(nonleaf)
+        indirect = self.application_marker_data()
+        nodes = indirect["applications"][0]["depGraph"]["graph"]["nodes"]
+        nodes[0]["deps"] = [{"nodeId": "0"}]
+        nodes[1]["deps"] = [{"nodeId": "1"}]
+        cases.append(indirect)
+        duplicate = self.application_marker_data([{"name": "unknown:/app/app.jar", "version": "unknown"}])
+        cases.append(duplicate)
+        wrong_target = self.application_marker_data()
+        wrong_target["applications"][0]["targetFile"] = "/another-directory"
+        cases.append(wrong_target)
+        missing_label = self.application_marker_data()
+        del missing_label["applications"][0]["depGraph"]["graph"]["nodes"][2]["info"]
+        cases.append(missing_label)
+        for data in cases:
+            with self.subTest(data=data):
+                self.overrides["container"] = {"json": data}
+                reports, result = self.execute("container")
+                self.assertEqual(result, 1)
+                self.assertEqual(len(reports.runs), 3)
 
     def test_missing_or_unknown_os_dependencies_fail_and_keep_findings(self):
         for packages in ([], [{"name": "libc", "version": "unknown"}]):

@@ -37,7 +37,34 @@ const pages = [
     description: 'Start the local server, connect your MCP client, and generate your first scan report.',
     links: {
       '../../examples/cursor/mcp.json': 'https://github.com/dtkmn/mcp-zap-server/blob/main/examples/cursor/mcp.json',
+      'MCP_ZAP_CONNECT_TERMS.md': '/mcp-zap-server/getting-started/mcp-zap-connect-terms/',
+      'MCP_ZAP_CONNECT_PRIVACY.md': '/mcp-zap-server/getting-started/mcp-zap-connect-privacy/',
     },
+  },
+  {
+    source: 'plugins/mcp-zap-connect/README.md',
+    slug: 'getting-started/agent-guided-setup',
+    title: 'Agent-Guided Setup',
+    description: 'Install MCP ZAP Connect in your local AI client and request scanner setup.',
+    links: {
+      '../../packaging/claude-desktop/README.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md',
+      './LICENSE': 'https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/LICENSE',
+    },
+  },
+  {
+    source: 'docs/getting-started/MCP_ZAP_CONNECT_TERMS.md',
+    slug: 'getting-started/mcp-zap-connect-terms',
+    title: 'MCP ZAP Connect Terms of Service',
+    description: 'Terms for the local MCP ZAP Connect setup plugin.',
+    links: {
+      'MCP_ZAP_CONNECT_PRIVACY.md': '/mcp-zap-server/getting-started/mcp-zap-connect-privacy/',
+    },
+  },
+  {
+    source: 'docs/getting-started/MCP_ZAP_CONNECT_PRIVACY.md',
+    slug: 'getting-started/mcp-zap-connect-privacy',
+    title: 'MCP ZAP Connect Privacy Policy',
+    description: 'How local setup handles credentials, scan data and local storage.',
   },
   {
     source: 'docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md',
@@ -116,6 +143,7 @@ async function generatePages() {
     for (const [from, to] of Object.entries(page.links ?? {})) {
       body = body.replaceAll(`](${from})`, `](${to})`);
     }
+    body = body.replaceAll('](https://danieltse.org/mcp-zap-server/', '](/mcp-zap-server/');
     return {
       path: join(generatedRoot, `${page.slug}.md`),
       content: [

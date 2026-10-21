@@ -15,6 +15,7 @@ import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
+import mcp.server.zap.core.service.authz.GuidedToolActions;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +51,7 @@ public class GuidedScanWorkflowService {
     private final GuidedAuthSessionService guidedAuthSessionService;
     private final EngineAdapter engineAdapter;
     private final GatewayRecordFactory gatewayRecordFactory;
+    private final GuidedToolActions guidedToolActions;
     private ClientWorkspaceResolver clientWorkspaceResolver;
 
     @Value("${mcp.server.guided.operation-signing-secret:${JWT_SECRET:}}")
@@ -63,7 +65,8 @@ public class GuidedScanWorkflowService {
                                      ScanJobQueueService scanJobQueueService,
                                      GuidedAuthSessionService guidedAuthSessionService,
                                      EngineAdapter engineAdapter,
-                                     GatewayRecordFactory gatewayRecordFactory) {
+                                     GatewayRecordFactory gatewayRecordFactory,
+                                     GuidedToolActions guidedToolActions) {
         this.executionModeResolver = executionModeResolver;
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
@@ -73,6 +76,7 @@ public class GuidedScanWorkflowService {
         this.guidedAuthSessionService = guidedAuthSessionService;
         this.engineAdapter = engineAdapter;
         this.gatewayRecordFactory = gatewayRecordFactory;
+        this.guidedToolActions = guidedToolActions;
     }
 
     @Autowired(required = false)
@@ -432,24 +436,29 @@ public class GuidedScanWorkflowService {
         GuidedOperation operation = started.operation();
         String statusTool = statusToolFor(operation.kind());
         String stopTool = stopToolFor(operation.kind());
-        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER)
-                .append('\n')
-                .append("- Poll: call ").append(statusTool).append(" with this operation ID: ").append(operationId).append('\n')
-                .append("- Stop if needed: call ").append(stopTool).append(" with the same operation ID.").append('\n');
+        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, statusTool, "- Poll: call " + statusTool + " with this operation ID: " + operationId);
+        appendAction(output, stopTool, "- Stop if needed: call " + stopTool + " with the same operation ID.");
         if (started.preparedAuthSession() != null
                 && started.preparedAuthSession().authKind() == AuthBootstrapKind.BROWSER) {
-            output.append("- When crawl stops: call zap_passive_scan_wait, then review findings and crawl coverage.\n")
-                    .append("- This browser session supports Client Spider only. Authenticated active testing currently requires a prepared form-login session.");
+            appendAction(output, "zap_passive_scan_wait", "- When crawl stops: call zap_passive_scan_wait, then review crawl coverage.");
+            output.append("- This browser session supports Client Spider only. Authenticated active testing currently requires a prepared form-login session.\n");
         } else if (operation.kind() == OperationKind.CRAWL
                 && (STRATEGY_CLIENT.equals(operation.strategy()) || STRATEGY_BROWSER.equals(operation.strategy()))) {
-            output.append("- When crawl stops: call zap_passive_scan_wait, then review findings and crawl coverage.\n")
-                    .append("- Call zap_attack_start only if active testing is approved.");
+            appendAction(output, "zap_passive_scan_wait", "- When crawl stops: call zap_passive_scan_wait, then review crawl coverage.");
+            appendAction(output, "zap_attack_start", "- After the crawl stops and coverage is reviewed: call zap_attack_start only if active testing is approved.");
         } else if (operation.kind() == OperationKind.CRAWL) {
-            output.append("- When crawl is complete: call zap_attack_start if active testing is approved, or zap_passive_scan_wait before findings/report if crawl-only evidence is enough.");
+            appendAction(output, "zap_attack_start", "- When crawl is complete: call zap_attack_start if active testing is approved.");
+            appendAction(output, "zap_passive_scan_wait", "- Crawl-only path: when the crawl is complete, call zap_passive_scan_wait before reviewing available evidence.");
         } else {
-            output.append("- When attack is complete: call zap_passive_scan_wait before zap_findings_summary or zap_report_generate.");
+            appendAction(output, "zap_passive_scan_wait", "- When attack is complete: call zap_passive_scan_wait before reviewing available evidence.");
         }
-        return output.toString();
+        String completionPrerequisite = operation.kind() == OperationKind.CRAWL
+                ? (STRATEGY_CLIENT.equals(operation.strategy()) || STRATEGY_BROWSER.equals(operation.strategy())
+                        ? "the crawl has stopped" : "the crawl is complete")
+                : "the attack is complete";
+        appendEvidenceActions(output, completionPrerequisite + " and passive analysis has drained");
+        return finishNextActions(output);
     }
 
     private String nextActionsForLifecycle(String action,
@@ -478,18 +487,19 @@ public class GuidedScanWorkflowService {
         return switch (state) {
             case SUCCEEDED -> {
                 if (operation.kind() == OperationKind.CRAWL) {
-                    output.append("- Continue security testing: call zap_attack_start for the same target if active testing is approved.\n")
-                            .append("- Crawl-only path: call zap_passive_scan_wait before zap_findings_summary or zap_report_generate.");
+                    appendAction(output, "zap_attack_start", "- Continue security testing: call zap_attack_start for the same target if active testing is approved.");
+                    appendAction(output, "zap_passive_scan_wait", "- Crawl-only path: call zap_passive_scan_wait before reviewing available evidence.");
                 } else {
-                    output.append("- Settle passive analysis: call zap_passive_scan_wait.\n")
-                            .append("- Then review: call zap_findings_summary for the same target, then zap_report_generate when you need an artifact.");
+                    appendAction(output, "zap_passive_scan_wait", "- Settle passive analysis: call zap_passive_scan_wait.");
                 }
-                yield output.toString();
+                appendEvidenceActions(output);
+                yield finishNextActions(output);
             }
             case STOPPED -> {
-                output.append("- The browser crawl is no longer running; successful completion is unconfirmed.\n")
-                        .append("- Call zap_passive_scan_wait before reviewing available findings; check crawl coverage before continuing security testing.");
-                yield output.toString();
+                output.append("- The browser crawl is no longer running; successful completion is unconfirmed.\n");
+                appendAction(output, "zap_passive_scan_wait", "- Call zap_passive_scan_wait before reviewing available findings; check crawl coverage before continuing security testing.");
+                appendEvidenceActions(output);
+                yield finishNextActions(output);
             }
             case FAILED, CANCELLED -> {
                 output.append("- Review the status/error above before trusting this scan as evidence.\n")
@@ -497,21 +507,42 @@ public class GuidedScanWorkflowService {
                 yield output.toString();
             }
             case RUNNING, QUEUED, UNKNOWN -> {
-                output.append("- Continue: call ").append(statusTool).append(" with this operation ID until the scan is complete: ").append(operationId).append('\n')
-                        .append("- Stop if needed: call ").append(stopTool).append(" with the same operation ID.");
-                yield output.toString();
+                appendAction(output, statusTool, "- Continue: call " + statusTool + " with this operation ID until the scan is complete: " + operationId);
+                appendAction(output, stopTool, "- Stop if needed: call " + stopTool + " with the same operation ID.");
+                yield finishNextActions(output);
             }
         };
     }
 
     private String nextActionsForStoppedOperation(GuidedOperation operation, String operationId) {
-        return new StringBuilder(NEXT_ACTIONS_HEADER)
-                .append('\n')
-                .append("- Confirm if needed: call ").append(statusToolFor(operation.kind()))
-                .append(" with this operation ID: ").append(operationId).append('\n')
-                .append("- Start a new guided ").append(operation.kind().wireValue())
-                .append(" only after the target and policy are ready.")
-                .toString();
+        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
+        String statusTool = statusToolFor(operation.kind());
+        appendAction(output, statusTool, "- Confirm if needed: call " + statusTool + " with this operation ID: " + operationId);
+        appendAction(output, "zap_" + operation.kind().wireValue() + "_start",
+                "- Start a new guided " + operation.kind().wireValue() + " only after the target and policy are ready.");
+        return finishNextActions(output);
+    }
+
+    private void appendEvidenceActions(StringBuilder output) {
+        appendEvidenceActions(output, "passive analysis has drained");
+    }
+
+    private void appendEvidenceActions(StringBuilder output, String prerequisite) {
+        appendAction(output, "zap_findings_summary", "- Then review: call zap_findings_summary for the same target after " + prerequisite + ".");
+        appendAction(output, "zap_report_generate", "- Report: call zap_report_generate after " + prerequisite + " when you need an artifact.");
+    }
+
+    private void appendAction(StringBuilder output, String toolName, String action) {
+        if (guidedToolActions.canCall(toolName)) {
+            output.append(action).append('\n');
+        }
+    }
+
+    private String finishNextActions(StringBuilder output) {
+        if (output.toString().equals(NEXT_ACTIONS_HEADER + "\n")) {
+            output.append("- No further guided actions are available for this client.");
+        }
+        return output.toString().trim();
     }
 
     private OperationState inferOperationState(String delegateResponse) {

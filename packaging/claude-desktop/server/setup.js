@@ -11,13 +11,45 @@ const DOCKER_INSTALL = 'https://docs.docker.com/get-docker/';
 const INSPECT_FORMAT = '{"Id":{{json .Id}},"Config":{"Image":{{json .Config.Image}},"Labels":{{json .Config.Labels}},"Env":{{json .Config.Env}}},"State":{{json .State}},"NetworkSettings":{"Ports":{{json .NetworkSettings.Ports}}},"HostConfig":{"PortBindings":{{json .HostConfig.PortBindings}}}}';
 const OVERRIDES = ['ZAP_API_KEY', 'MCP_SECURITY_MODE', 'MCP_SECURITY_ENABLED', 'JWT_ENABLED', 'MCP_ZAP_BIND_ADDRESS', 'IMAGE_TAG', 'ZAP_IMAGE', 'LOCAL_ZAP_WORKPLACE_FOLDER', 'COMPOSE_PROJECT_NAME'];
 
+const RECOVERY = {
+  DOCKER_MISSING: ['Install Docker using its official instructions, then open your local engine.', 'install_docker'],
+  DOCKER_UNAVAILABLE: ['Open your existing local Docker engine and wait for it to be ready. Then check readiness again; Docker login settings are unchanged.', 'start_docker'],
+  DOCKER_CONTEXT_UNAVAILABLE: ['Review the selected local Docker context, then check readiness again. No context or Docker settings were changed.', 'select_local_context'],
+  REMOTE_DOCKER_UNSUPPORTED: ['Select your existing local Docker context yourself, then check readiness again. No Docker context was changed.', 'select_local_context'],
+  SCANNER_MISSING: ['No supported scanner was found. Ask the user whether to create an installation; a failed scan request does not approve installation.', 'confirm_setup'],
+  SCANNER_REMOVED: ['The installation files remain but its scanner container is missing. Ask the user to approve recreating the known installation with scanner_setup(confirm=true). Preserve its private settings and keys.', 'confirm_setup'],
+  SCANNER_STOPPED: ['The known scanner is stopped. Ask the user to approve resuming it with scanner_setup(confirm=true), or let them start it themselves. Preserve its settings and keys.', 'confirm_setup'],
+  SCANNER_UNHEALTHY: ['The scanner is running but unhealthy. Inspect its private local diagnostics and resolve the cause before checking readiness again. Do not restart or recreate it automatically.', 'manual_review'],
+  CREDENTIAL_CONFLICT: ['Resolve the scanner and private configuration credential mismatch privately. Do not rotate keys or edit client settings without separate approval.', 'review_credentials'],
+  AUTHENTICATION_FAILED: ['Authentication failed. Compare the selected scanner credential and private configuration locally; do not print credentials or rotate keys.', 'review_credentials'],
+  PORT_CONFLICT: ['Another application owns a required port. Let the user choose how to resolve the conflict; do not stop or replace that application.', 'resolve_port_conflict'],
+  CONFIRMATION_REQUIRED: ['Ask the user to approve the specific local setup or resume action before scanner_setup(confirm=true). Declining leaves files, containers and settings unchanged.', 'confirm_setup'],
+  SETUP_BUSY: ['Wait for the current setup or readiness operation to finish, then request readiness again.', 'wait'],
+  SETUP_FAILED: ['Inspect private local diagnostics before another explicit setup attempt. Existing files and containers were retained; no automatic retry was performed.', 'manual_review'],
+  DOCTOR_FAILED: ['Authenticated readiness failed. Inspect private local diagnostics and resolve the cause before a fresh readiness check. Do not start the requested workflow.', 'manual_review'],
+  NATIVE_STATUS_FAILED: ['The harmless native status check failed or returned an invalid/error result. Resolve readiness or authentication, then check again before requesting the original target and scope.', 'check_readiness'],
+  SCANNER_CONNECTION_FAILED: ['Check prerequisites and readiness for the selected local installation, then reconnect. Do not start Docker, resume containers or change credentials without the user approving that action.', 'check_readiness'],
+  TOOL_DISCOVERY_FAILED: ['Reconnect and refresh the available tools after readiness succeeds. Do not substitute another tool or target.', 'check_readiness'],
+  TOOL_CALL_FAILED: ['The tool may have been accepted before the connection failed. Do not retry or replay it automatically. Inspect read-only status before asking the user what to do next.', 'inspect_last_call'],
+  UNKNOWN_TOOL: ['Refresh the tool list after readiness succeeds and retain the requested target and scope. Do not substitute a different operation.', 'refresh_tools'],
+  INVALID_ARGUMENTS: ['Use only the documented arguments. No requested scanner operation was sent.', 'correct_arguments'],
+};
+const KNOWN_CODES = new Set([...Object.keys(RECOVERY), 'PLATFORM_UNSUPPORTED', 'ENVIRONMENT_CONFLICT', 'UNSAFE_INSTALL_DIRECTORY', 'INSTALLATION_INCOMPLETE', 'UNSAFE_INSTALL_FILE', 'INSECURE_ENV_FILE', 'DOCKER_INVENTORY_UNAVAILABLE', 'DUPLICATE_SCANNERS', 'OWNERSHIP_UNKNOWN', 'OWNERSHIP_CONFLICT', 'COMPOSE_PROJECT_INVALID', 'COMPOSE_LAYOUT_UNSUPPORTED', 'UNSAFE_BINDING', 'AUTH_UNSUPPORTED', 'BASH_MISSING', 'COMPOSE_MISSING', 'CURL_MISSING', 'OPENSSL_MISSING', 'COMPOSE_TOO_OLD', 'BUNDLE_INCOMPLETE', 'SCRIPT_MISMATCH', 'START_MANUALLY', 'SCANNER_NOT_READY', 'CHECK_FAILED']);
+
+// Only known codes and static recovery text cross the MCP boundary. Never expose
+// arbitrary exception messages, command output, environment values or headers.
+export function recoveryFailure(code = 'CHECK_FAILED') {
+  const safeCode = KNOWN_CODES.has(code) ? code : 'CHECK_FAILED';
+  const [instructions, action] = RECOVERY[safeCode] ?? ['Review the selected installation and its private local diagnostics. Resolve the conflict manually without replacing files, settings or credentials, then check readiness again.', 'manual_review'];
+  return { ok: false, code: safeCode, message: instructions, recovery: { action, instructions, needsConfirmation: action === 'confirm_setup', automaticRetry: false, preserveSettings: true } };
+}
+
 class SetupError extends Error {
   constructor(code, message) { super(message); this.code = code; }
 }
 const fail = (code, message) => { throw new SetupError(code, message); };
 const publicError = (error) => ({
-  ok: false,
-  code: error instanceof SetupError ? error.code : 'CHECK_FAILED',
+  ...recoveryFailure(error instanceof SetupError ? error.code : 'CHECK_FAILED'),
   message: error instanceof SetupError ? error.message : 'The local check failed. Review the installation privately and retry.',
   ...(error?.code === 'DOCKER_MISSING' ? { helpUrl: DOCKER_INSTALL } : {}),
 });
@@ -133,7 +165,7 @@ export function createSetupController({ env = process.env, platform = process.pl
 
   async function inventory() {
     const listing = await run('docker', ['ps', '-a', '--no-trunc', '--format', '{{.ID}}']);
-    if (listing.code !== 0) fail('DOCKER_UNAVAILABLE', 'Docker could not list containers. Start your existing local Docker engine and retry.');
+    if (listing.code !== 0 || listing.timedOut || listing.outputLimit) fail('DOCKER_UNAVAILABLE', 'Docker could not list containers. Start your existing local Docker engine and retry.');
     const ids = listing.stdout.trim().split(/\s+/).filter(Boolean);
     if (ids.some((id) => !/^[a-f0-9]{12,64}$/.test(id)) || ids.length > 256) fail('DOCKER_INVENTORY_UNAVAILABLE', 'Docker ownership could not be established safely. Review the local container inventory.');
     if (!ids.length) return [];
@@ -155,7 +187,9 @@ export function createSetupController({ env = process.env, platform = process.pl
     const dockerContext = await run('docker', ['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}']);
     let endpoint;
     try { endpoint = JSON.parse(dockerContext.stdout); } catch {}
-    if (dockerContext.code !== 0 || typeof endpoint !== 'string' || !endpoint.startsWith('unix://')) fail('REMOTE_DOCKER_UNSUPPORTED', 'This extension requires a local Docker engine using a Unix socket. Keep remote Docker deployments on their existing setup path.');
+    if (dockerContext.code === 127) fail('DOCKER_MISSING', 'Install Docker using its official instructions, then start the local engine.');
+    if (dockerContext.code !== 0 || dockerContext.timedOut || dockerContext.outputLimit || typeof endpoint !== 'string') fail('DOCKER_CONTEXT_UNAVAILABLE', 'The selected local Docker context could not be checked. Review it manually; no context was changed.');
+    if (!endpoint.startsWith('unix://')) fail('REMOTE_DOCKER_UNSUPPORTED', 'This extension requires a local Docker engine using a Unix socket. Keep remote Docker deployments on their existing setup path.');
     const containers = await inventory();
     // A generic Compose service name is not product identity: unrelated apps can
     // also name a service mcp-server. Their published ports remain conflicts.
@@ -204,12 +238,19 @@ export function createSetupController({ env = process.env, platform = process.pl
     }
     if (settings.MCP_ZAP_BIND_ADDRESS && settings.MCP_ZAP_BIND_ADDRESS !== '127.0.0.1') fail('UNSAFE_BINDING', 'The private .env selects a non-loopback binding. Review that deployment manually before using this extension.');
     if (!effective && ((settings.MCP_SECURITY_MODE && settings.MCP_SECURITY_MODE !== 'api-key') || settings.MCP_SECURITY_ENABLED === 'false' || settings.JWT_ENABLED === 'true')) fail('AUTH_UNSUPPORTED', 'The selected installation does not use the supported authenticated API-key configuration. Use its existing authentication instructions.');
-    return { directory, exists, project, scanner, containers, settings, envBytes, apiKey, healthy };
+    return { directory, exists, project, scanner, containers, settings, envBytes, apiKey, healthy, endpoint };
+  }
+
+  function requireReady(ctx) {
+    if (!ctx.scanner) fail(ctx.envBytes ? 'SCANNER_REMOVED' : 'SCANNER_MISSING', 'No supported scanner container is present. Setup or recreation needs the user’s explicit approval.');
+    if (!ctx.scanner.State.Running) fail('SCANNER_STOPPED', 'The existing scanner is stopped. Resuming it requires the user’s explicit approval.');
+    if (!ctx.healthy) fail('SCANNER_UNHEALTHY', 'The existing scanner is running but unhealthy. Diagnose it without automatically restarting it.');
+    if (!ctx.apiKey) fail('AUTH_UNSUPPORTED', 'The existing scanner has no supported effective API-key credential. Review its authentication privately.');
   }
 
   async function prerequisitesInternal() {
     checkPlatform();
-    const commands = [['/bin/bash', ['--version'], 'BASH_MISSING', 'Bash is required for the existing scanner setup scripts.'], ['docker', ['--version'], 'DOCKER_MISSING', 'Install Docker using its official instructions, then start the engine and retry.'], ['docker', ['info'], 'DOCKER_UNAVAILABLE', 'Start the existing local Docker engine and retry.'], ['docker', ['compose', 'version'], 'COMPOSE_MISSING', 'Docker Compose is required. Update your existing Docker installation using its official instructions.'], ['curl', ['--version'], 'CURL_MISSING', 'curl is required by the existing readiness script.'], ['openssl', ['version'], 'OPENSSL_MISSING', 'OpenSSL is required for securely generating new scanner keys.']];
+    const commands = [['/bin/bash', ['--version'], 'BASH_MISSING', 'Bash is required for the existing scanner setup scripts.'], ['docker', ['--version'], 'DOCKER_MISSING', 'Install Docker using its official instructions, then start the engine and retry.'], ['docker', ['compose', 'version'], 'COMPOSE_MISSING', 'Docker Compose is required. Update your existing Docker installation using its official instructions.'], ['curl', ['--version'], 'CURL_MISSING', 'curl is required by the existing readiness script.'], ['openssl', ['version'], 'OPENSSL_MISSING', 'OpenSSL is required for securely generating new scanner keys.']];
     for (const [command, args, code, message] of commands) {
       const result = await run(command, args);
       if (result.code !== 0 || result.timedOut || result.outputLimit) fail(code, message);
@@ -233,9 +274,9 @@ export function createSetupController({ env = process.env, platform = process.pl
     return bytes;
   }
 
-  async function verifyScripts(directory) {
+  async function verifyScripts(directory, scripts = FILES.filter((file) => file.startsWith('bin/'))) {
     await safeDirectory(path.join(directory, 'bin'));
-    for (const relative of FILES.filter((file) => file.startsWith('bin/'))) {
+    for (const relative of scripts) {
       if (!(await readFile(path.join(directory, relative))).equals(await trustedFile(relative))) fail('SCRIPT_MISMATCH', 'The installation scripts differ from this extension’s packaged scripts. Do not execute them through this extension; review or update the installation manually.');
     }
   }
@@ -249,8 +290,10 @@ export function createSetupController({ env = process.env, platform = process.pl
   }
 
   async function doctorInternal(ctx) {
-    if (!ctx.healthy || !ctx.apiKey) fail('SCANNER_NOT_READY', 'The selected scanner is not healthy and authenticated. Start or diagnose it through its existing setup before checking readiness.');
-    await verifyScripts(ctx.directory);
+    requireReady(ctx);
+    // Healthy reuse executes only the doctor. A newer packaged bootstrap must
+    // not block an existing scanner whose trusted doctor is unchanged.
+    await verifyScripts(ctx.directory, ['bin/self-serve-doctor.sh']);
     const result = await run('/bin/bash', [path.join(ctx.directory, 'bin/self-serve-doctor.sh'), '--skip-tool-call'], { cwd: ctx.directory, env: { ...runtimeEnv, MCP_API_KEY: ctx.apiKey }, timeoutMs: 150_000 });
     if (result.code !== 0 || result.timedOut || result.outputLimit) fail('DOCTOR_FAILED', 'Authenticated readiness did not pass. Existing settings and containers were preserved. Review private local diagnostics before retrying.');
     return success('READY', 'Authenticated readiness passed. No scanner tool was called.', { readinessVerified: true });
@@ -276,7 +319,8 @@ export function createSetupController({ env = process.env, platform = process.pl
           return success('SCANNER_REUSED', 'The existing scanner was reused and authenticated readiness passed. No lifecycle changes or scan were performed.', { changed: false, readinessVerified: true });
         }
         if (ctx.scanner?.State.Running) fail('SCANNER_UNHEALTHY', 'The existing scanner is running but unhealthy. Preserve it and diagnose it manually; this extension will not restart it.');
-        if (ctx.scanner && !ctx.envBytes) fail('START_MANUALLY', 'The stopped installation has no private .env file. Restore its settings and start it manually to avoid rotating existing keys.');
+        if (ctx.exists && !ctx.envBytes) fail('START_MANUALLY', 'The existing directory has no private .env file. Restore or review its settings manually to avoid replacing unknown credentials.');
+        if (ctx.envBytes && (!ctx.settings.MCP_API_KEY || !ctx.settings.ZAP_API_KEY)) fail('START_MANUALLY', 'The existing private .env has incomplete scanner credentials. Restore them privately; this extension will not generate replacement keys.');
         if (!ctx.exists) { await stage(ctx.directory); ctx = await prerequisitesInternal(); }
         await verifyScripts(ctx.directory);
         if (!(await readFile(path.join(ctx.directory, 'docker-compose.yml'))).equals(await trustedFile('docker-compose.yml'))) fail('START_MANUALLY', 'The existing Compose file differs from this extension’s template. Start that customized deployment manually; a healthy owned scanner can then be reused without changing its Compose settings.');
@@ -296,8 +340,8 @@ export function createSetupController({ env = process.env, platform = process.pl
       try {
         if (busy) fail('SETUP_BUSY', 'Wait for local setup to finish before connecting.');
         const ctx = await context();
-        if (!ctx.healthy || !ctx.apiKey) fail('SCANNER_NOT_READY', 'A healthy authenticated local scanner is required before connecting.');
-        return { url: URL, apiKey: ctx.apiKey };
+        requireReady(ctx);
+        return { url: URL, apiKey: ctx.apiKey, identity: `${ctx.endpoint}\0${ctx.scanner.Id}` };
       } catch (error) { const safe = publicError(error); throw new SetupError(safe.code, safe.message); }
     },
   };

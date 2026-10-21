@@ -85,7 +85,11 @@ cd mcp-zap-server
 
 This creates missing settings, preserves existing keys and workspace data,
 and starts a versioned release image. It reports ready after container health
-and authenticated MCP checks pass.
+and authenticated MCP checks pass. The packaged client uses `*` for the curated
+guided tools; run scans only when requested. Existing settings retain their
+permissions. See
+[quick-start permissions](./docs/src/content/docs/getting-started/tool-scope-authorization.md#quick-start-permissions)
+for the default and optional per-client restrictions.
 
 Use [Self-Serve First Run](./docs/getting-started/SELF_SERVE_FIRST_RUN.md) for
 version selection, configuration, stopping/restarting, startup timeouts,

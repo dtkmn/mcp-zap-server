@@ -38,10 +38,52 @@ the Docker stack, and configure your private client connection. You normally do
 not need to edit the client's configuration yourself. Review any permissions
 requested by the client; scans require a separate request.
 
+### Check The Codex CLI
+
+The installation commands use the Codex CLI (`codex`). On macOS, run this in
+your terminal, or ask your desktop agent to run it before installing the plugin.
+It keeps an existing `codex` command and checks common desktop-app locations
+only when the command is missing:
+
+```bash
+if ! command -v codex >/dev/null 2>&1; then
+  for codex_dir in \
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "/Applications/Codex.app/Contents/Resources" \
+    "$HOME/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
+    "$HOME/Applications/Codex.app/Contents/Resources"
+  do
+    if [ -x "$codex_dir/codex" ]; then
+      export PATH="$codex_dir:$PATH"
+      break
+    fi
+  done
+fi
+codex --version
+command -v codex
+```
+
+The PATH change lasts only for this terminal session; use the same terminal
+for the installation commands below. The block prints the version and CLI path.
+An agent using separate command sessions should use that executable's full path
+for subsequent commands, since a PATH change does not carry between shells.
+It does not edit shell startup files, Codex connections or Docker settings.
+For an app installed elsewhere, use its bundled CLI directory instead. OpenAI's
+[bundled CLI documentation](https://learn.chatgpt.com/docs/reference/troubleshooting#feature-is-working-in-the-codex-cli-but-not-in-the-chatgpt-desktop-app)
+also describes the older `Codex.app` location.
+
+If `codex` is still missing, follow OpenAI's
+[CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli#getting-started)
+to install it, then open a new terminal and run `codex --version` again.
+Continue only after it prints a version. If your CLI does not recognize the
+plugin commands below, update the desktop app or standalone CLI using OpenAI's
+instructions and retry. This prerequisite comes before plugin installation;
+the plugin's setup skill is not available to help until it is installed.
+
 ### Codex Local Installation
 
 First run `codex --version`. If the command is missing, follow
-[Check The Codex CLI](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#check-the-codex-cli)
+[Check The Codex CLI](#check-the-codex-cli)
 before continuing. It checks the macOS desktop app's bundled CLI before directing
 you to OpenAI's installation instructions. You can ask your desktop agent to
 help with this prerequisite before the plugin is installed. Keep the same
@@ -92,8 +134,43 @@ Verify with a status call only; do not run a scan.
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning
 requires a separate request identifying your authorized target and intended
-workflow. See the [canonical setup guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#guided-setup-in-codex)
+workflow. The packaged local client uses `*` for the curated guided tools,
+including active attacks, authentication setup and imports. Run only the
+requested workflow. Existing settings and scopes are preserved; installing or
+reconnecting this plugin does not change permissions.
+See [Quick-Start Permissions](https://danieltse.org/mcp-zap-server/getting-started/tool-scope-authorization/#quick-start-permissions)
+for optional per-client restrictions. Crawling still sends target traffic.
+See the [first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report)
 for the first demo scan after setup.
+
+## Check Readiness Before A Crawl Or Scan
+
+For each new scan workflow, select **scan-local-target** from Codex's `/skills`,
+invoke `/scan-local-target` in Cursor, or invoke
+`/mcp-zap-connect:scan-local-target` in Claude Code. Supply your authorized target
+and intended workflow. For example:
+
+```text
+Check my existing local scanner and this client's connection before starting.
+If recovery is needed, explain the required action and wait for my approval.
+Run only a guided HTTP crawl against http://juice-shop:3000, wait for passive
+analysis, summarize this target's findings, and return its complete HTML report.
+Do not start an active attack or change client settings or target restrictions.
+```
+
+The skill runs `./bin/scanner-readiness.sh` from the selected scanner checkout,
+then verifies the selected connection with one native passive-status call. If
+Docker is unavailable, the scanner is stopped, ownership conflicts or
+authentication fails, it stops before starting the requested workflow and
+explains recovery. Starting Docker or the scanner requires your approval;
+credentials and client settings are preserved. Recovery does not change Docker's
+startup-at-login settings. After a successful approved recovery, the skill
+rechecks readiness and resumes only your original request.
+
+These checks are an agent-guided workflow. The skills-only plugin cannot
+intercept calls sent directly to a separately configured MCP server. Invoke
+the scan skill to use this flow. A pure status-only request goes directly to
+the selected client's status tool without setup or recovery.
 
 ## Claude Code Local Preview
 
@@ -186,9 +263,9 @@ Use **Developer: Reload Window**, check **Customize → Skills**, then invoke
 `/setup-local-scanner` in a local Agent chat. Local imports must be allowed by
 your policy; an installed marketplace plugin with the same name takes precedence.
 
-Follow
-the [canonical Cursor setup guide](../../docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor)
-for guided scanner setup and the first demo workflow.
+After setup, follow the
+[first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report)
+for the demo crawl and complete report.
 
 ### Cursor Import Limitations
 
@@ -200,8 +277,8 @@ shared name, version and description aligned across all three client manifests.
 
 If **From Local Repository**, **Import from Disk**, or **From GitHub Repository**
 shows an empty catalogue, use the [local preview folder](#cursor-local-preview)
-route above. Check **Customize → Skills** for `setup-local-scanner` before
-requesting scanner setup.
+route above. Check **Customize → Skills** for `setup-local-scanner` and
+`scan-local-target` before requesting setup or a new scan workflow.
 
 ### Cursor Connection Checks
 
@@ -215,15 +292,16 @@ Verify with a status call only; do not run a scan.
 
 After a Docker restart in Cursor, open the scanner under **Customize → MCPs**,
 select **Reload** if reconnection is needed, then verify with the status call.
-Request a crawl or scan separately after setup succeeds, following the
-[canonical Cursor setup guide](../../docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
+Invoke `/scan-local-target` for each separately requested crawl or scan after
+setup succeeds, following the
+[first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report).
 
 ## Privacy, terms, support and license
 
 Settings, keys and reports remain in your installation; prompts and MCP results
 are processed by your AI provider. Read the
-[privacy policy](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#privacy-policy-for-local-scan-companion).
-The [terms of service](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#terms-of-service-for-mcp-zap-connect)
+[privacy policy](https://danieltse.org/mcp-zap-server/getting-started/mcp-zap-connect-privacy/).
+The [terms of service](https://danieltse.org/mcp-zap-server/getting-started/mcp-zap-connect-terms/)
 explain local use, authorized scanning, third-party services and community support.
 Report problems through [GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues)
 with versions and a redacted error. Do not include keys, private configuration

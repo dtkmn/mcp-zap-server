@@ -80,7 +80,7 @@ test('healthy installation is discovered and credentials stay internal', async (
   assert.equal(prerequisites.ok, true);
   assert.equal(prerequisites.healthy, true);
   assert.equal(JSON.stringify(prerequisites).includes(KEY), false);
-  assert.deepEqual(await f.controller.connection(), { url: 'http://127.0.0.1:7456/mcp', apiKey: KEY });
+  assert.deepEqual(await f.controller.connection(), { url: 'http://127.0.0.1:7456/mcp', apiKey: KEY, identity: `unix:///private/docker.sock\0${'a'.repeat(64)}` });
   const result = await f.controller.setup({ confirm: true });
   assert.equal(result.code, 'SCANNER_REUSED');
   assert.equal(result.changed, false);
@@ -215,11 +215,56 @@ test('private env symlinks and shared-readable credentials are rejected', async 
   assert.equal((await f.controller.prerequisites()).code, 'UNSAFE_INSTALL_FILE');
 });
 
-test('modified scripts are never executed even for healthy reuse', async (t) => {
+test('healthy reuse accepts an older unused bootstrap without changing private settings', async (t) => {
+  const f = await fixture(t);
+  const bootstrap = path.join(f.directory, 'bin/bootstrap-local.sh');
+  const olderBootstrap = '#!/bin/bash\n# previous release bootstrap fixture\n';
+  await fs.writeFile(bootstrap, olderBootstrap);
+  const settings = await fs.readFile(path.join(f.directory, '.env'));
+  const mode = (await fs.stat(path.join(f.directory, '.env'))).mode;
+  assert.equal((await f.controller.doctor()).code, 'READY');
+  const reused = await f.controller.setup({ confirm: true });
+  assert.equal(reused.code, 'SCANNER_REUSED');
+  assert.equal(reused.changed, false);
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), settings);
+  assert.equal((await fs.stat(path.join(f.directory, '.env'))).mode, mode);
+  assert.equal(await fs.readFile(bootstrap, 'utf8'), olderBootstrap);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+});
+
+test('resuming an older bootstrap requires manual review and preserves the installation', async (t) => {
+  const f = await fixture(t);
+  const bootstrap = path.join(f.directory, 'bin/bootstrap-local.sh');
+  const olderBootstrap = '#!/bin/bash\n# previous release bootstrap fixture\n';
+  await fs.writeFile(bootstrap, olderBootstrap);
+  f.state.containers[0].State.Running = false;
+  const settings = await fs.readFile(path.join(f.directory, '.env'));
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), settings);
+  assert.equal(await fs.readFile(bootstrap, 'utf8'), olderBootstrap);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
+});
+
+test('modified doctor scripts are never executed during healthy reuse or resume', async (t) => {
   const f = await fixture(t);
   await fs.writeFile(path.join(f.directory, 'bin/self-serve-doctor.sh'), '#!/bin/bash\nmalicious-command\n');
+  assert.equal((await f.controller.doctor()).code, 'SCRIPT_MISMATCH');
   assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
-  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('self-serve-doctor.sh')), false);
+  f.state.containers[0].State.Running = false;
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
+});
+
+test('a linked doctor is rejected even when it contains the trusted bytes', async (t) => {
+  const f = await fixture(t);
+  const doctor = path.join(f.directory, 'bin/self-serve-doctor.sh');
+  const external = path.join(f.home, 'external-doctor.sh');
+  await fs.writeFile(external, TRUSTED['bin/self-serve-doctor.sh']);
+  await fs.unlink(doctor);
+  await fs.symlink(external, doctor);
+  assert.equal((await f.controller.doctor()).code, 'UNSAFE_INSTALL_FILE');
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'UNSAFE_INSTALL_FILE');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
 });
 
 test('custom Compose settings are preserved for reuse but never started', async (t) => {
@@ -293,6 +338,88 @@ test('connection also rejects a remote selected Docker context before reading co
   const f = await fixture(t, { runnerOverride: (command, args) => command === 'docker' && args[0] === 'context' ? ok(JSON.stringify('ssh://remote.invalid')) : undefined });
   await assert.rejects(f.controller.connection(), { code: 'REMOTE_DOCKER_UNSUPPORTED' });
   assert.equal(f.state.calls.some((call) => call.args[0] === 'inspect'), false);
+});
+
+test('Docker can stop or change contexts after an earlier healthy connection without causing recovery side effects', async (t) => {
+  let available = true;
+  let endpoint = 'unix:///private/docker.sock';
+  const f = await fixture(t, { runnerOverride: (command, args) => {
+    if (command === 'docker' && args[0] === 'context') return ok(JSON.stringify(endpoint));
+    if (command === 'docker' && args[0] === 'ps' && !available) return { code: 1, stdout: KEY, stderr: ZAP_KEY };
+    return undefined;
+  } });
+  await f.controller.connection();
+  available = false;
+  await assert.rejects(f.controller.connection(), { code: 'DOCKER_UNAVAILABLE' });
+  const offline = await f.controller.doctor();
+  assert.equal(offline.code, 'DOCKER_UNAVAILABLE');
+  assert.equal(offline.recovery.action, 'start_docker');
+  assert.equal(offline.recovery.automaticRetry, false);
+  assert.doesNotMatch(JSON.stringify(offline), /private-scanner-key|private-zap-key/);
+  endpoint = 'ssh://remote.invalid';
+  const before = f.state.calls.length;
+  await assert.rejects(f.controller.connection(), { code: 'REMOTE_DOCKER_UNSUPPORTED' });
+  assert.equal(f.state.calls.slice(before).some((call) => ['ps', 'inspect', 'info'].includes(call.args[0])), false);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+});
+
+test('readiness distinguishes stopped, unhealthy and removed installations without starting them', async (t) => {
+  const f = await fixture(t, { env: {} });
+  const explicit = createSetupController({ home: f.home, bundleRoot: f.bundleRoot, platform: 'darwin', runner: f.runner, probePort: async () => false, env: { MCP_ZAP_INSTALL_DIR: f.directory } });
+  const before = await fs.readFile(path.join(f.directory, '.env'));
+  f.state.containers[0].State.Running = false;
+  assert.equal((await explicit.doctor()).code, 'SCANNER_STOPPED');
+  f.state.containers[0].State.Running = true;
+  f.state.containers[0].State.Health.Status = 'unhealthy';
+  assert.equal((await explicit.doctor()).code, 'SCANNER_UNHEALTHY');
+  f.state.containers = [];
+  const removed = await explicit.doctor();
+  assert.equal(removed.code, 'SCANNER_REMOVED');
+  assert.equal(removed.recovery.needsConfirmation, true);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), before);
+});
+
+test('explicitly approved resume preserves private settings and never replaces keys', async (t) => {
+  const f = await fixture(t);
+  f.state.containers[0].State.Running = false;
+  const before = await fs.readFile(path.join(f.directory, '.env'));
+  const mode = (await fs.stat(path.join(f.directory, '.env'))).mode;
+  assert.equal((await f.controller.doctor()).code, 'SCANNER_STOPPED');
+  assert.equal((await f.controller.setup({ confirm: false })).code, 'CONFIRMATION_REQUIRED');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+  f.state.onBootstrap = () => { f.state.containers[0].State.Running = true; return ok(); };
+  const resumed = await f.controller.setup({ confirm: true });
+  assert.equal(resumed.code, 'SCANNER_STARTED');
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), before);
+  assert.equal((await fs.stat(path.join(f.directory, '.env'))).mode, mode);
+  const bootstrap = f.state.calls.filter((call) => call.args[0]?.endsWith('bootstrap-local.sh'));
+  assert.equal(bootstrap.length, 1);
+  assert.deepEqual(bootstrap[0].args.slice(1), ['--start']);
+});
+
+test('missing or incomplete private settings are never regenerated during recovery', async (t) => {
+  const f = await fixture(t);
+  f.state.containers[0].State.Running = false;
+  await fs.unlink(path.join(f.directory, '.env'));
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'START_MANUALLY');
+  await assert.rejects(fs.stat(path.join(f.directory, '.env')), { code: 'ENOENT' });
+  await fs.writeFile(path.join(f.directory, '.env'), `MCP_API_KEY=${KEY}\n`, { mode: 0o600 });
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'START_MANUALLY');
+  assert.equal(await fs.readFile(path.join(f.directory, '.env'), 'utf8'), `MCP_API_KEY=${KEY}\n`);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+});
+
+test('each connection checks current container identity and credential consistency', async (t) => {
+  const f = await fixture(t);
+  const first = await f.controller.connection();
+  f.state.containers[0].Id = 'b'.repeat(64);
+  const replaced = await f.controller.connection();
+  assert.notEqual(replaced.identity, first.identity);
+  f.state.containers[0].Config.Env.push('MCP_API_KEY=changed-private-key');
+  await assert.rejects(f.controller.connection(), { code: 'CREDENTIAL_CONFLICT' });
+  assert.equal((await f.controller.doctor()).code, 'CREDENTIAL_CONFLICT');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
 });
 
 // These processes are only Node timers. Both ignore SIGTERM so the tests prove

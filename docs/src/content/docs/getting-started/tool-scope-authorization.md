@@ -8,7 +8,7 @@ MCP ZAP Server separates authentication from authorization:
 - authentication answers who is calling
 - authorization answers which MCP actions that caller may use
 
-That distinction matters. A valid API key or JWT should not automatically grant the whole tool surface.
+A valid API key or JWT identifies the caller; the configured scopes determine which exposed tools that caller can use.
 
 ## Authorization Modes
 
@@ -36,7 +36,7 @@ Modes:
 - `warn`: log missing-scope usage but still allow it
 - `enforce`: reject insufficient-scope requests with HTTP `403`
 
-`allowWildcard=true` keeps legacy `*` clients working as a super-scope. Turn it off once your client inventory is explicit.
+`allowWildcard=true` lets a client with `*` call the exposed tools. Keep it enabled for the standard local default. Restricted deployments can turn it off after assigning explicit scopes to every intended client.
 
 ## Scope Flow
 
@@ -56,6 +56,43 @@ mcp:
 ```
 
 In JWT mode, the access token inherits the same scopes from the source client. JWT does not magically widen permissions.
+
+## Quick-Start Permissions
+
+The packaged local API-key client defaults to `*` with wildcard acceptance
+enabled. This permits every tool exposed by the selected surface. The default
+`guided` surface includes crawling, active attacks, target authentication, API
+imports, findings, history and reports. Selecting `expert` also exposes expert
+tools to that wildcard client; a grant never enables a disabled tool.
+
+Run only the target and workflow the user requests. MCP grants do not establish
+permission to scan a system, authenticate ZAP to a website or replace target
+URL/network restrictions. Keep target credentials server-side.
+
+Bootstrap preserves existing `.env` files, keys, workspace identities and custom
+client registrations. Plugin installation or reconnection does not change their
+grants.
+
+### Optional Per-Client Restrictions
+
+For restricted or shared deployments, set explicit `scopes` on each client's
+existing `mcp.server.auth.apiKeys` entry using the native configuration shown
+above. Preserve its `clientId`, `workspaceId`, key and the other client entries,
+including existing Compose overrides and `env_file` registrations. Apply changes
+through that deployment's configuration procedure; recreating a service may be
+needed to reload environment settings. Do not regenerate settings or keys to
+change scopes.
+
+Use the scope inventory below for the intended workflow. Guided active attacks
+use `zap:scan:attack:run`; direct and queued active scans use
+`zap:scan:active:run`. These are distinct grants. Before disabling wildcard
+acceptance, give every intended client its complete explicit scope list,
+including discovery and status where required.
+
+A restricted client may still discover tools it cannot call. Follow-up guidance
+and discovery do not override enforced grants. If an operation returns
+`insufficient_scope`, stop that operation and let the operator decide whether
+to change permissions. Do not widen grants or disable enforcement automatically.
 
 ## Core Scope Families
 

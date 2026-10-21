@@ -209,7 +209,7 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
         ci = load_workflow(ROOT / ".github/workflows/ci.yml")
         self.assertIn("dev", ci["on"]["pull_request"]["branches"])
         self.assertIn("main", ci["on"]["pull_request"]["branches"])
-        self.assertEqual(ci["on"]["push"]["branches"], ["**"])
+        self.assertEqual(ci["on"]["push"]["branches"], ["main"])
         steps = ci["jobs"]["build"]["steps"]
         node = next(item for item in steps if item.get("uses", "").startswith("actions/setup-node@"))
         self.assertEqual(node["with"]["node-version"], "22")

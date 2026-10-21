@@ -3,6 +3,7 @@
 /bin/*
 !/bin/bootstrap-local.sh
 !/bin/self-serve-doctor.sh
+!/bin/scanner-readiness.sh
 .gradle/
 **/build/
 **/.gradle/

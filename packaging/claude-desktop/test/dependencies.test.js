@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { cp, mkdir, mkdtemp, open, readFile, rm, symlink, writeFile, access } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, open, readFile, realpath, rm, symlink, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +34,7 @@ test('the builder tmp rejects traversal strings and non-string path options', as
     assert.throws(() => tmp.tmpNameSync({ tmpdir: base, [field]: value }));
   }
   const normal = tmp.tmpNameSync({ tmpdir: base, prefix: 'safe-', postfix: '.txt' });
-  assert.equal(dirname(normal), resolve(base));
+  assert.equal(dirname(normal), await realpath(base));
 });
 
 test('the builder tmp rejects a symlink directory outside its temporary root', async (t) => {

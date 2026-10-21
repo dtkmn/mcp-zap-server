@@ -1,34 +1,18 @@
 # Self-Serve First Run
 
-Start the local Docker stack, connect your MCP client, and generate a report
-from a bundled demo target. This is the complete local installation workflow.
+Start a local scanner, connect your AI client and retrieve a complete HTML
+report from a bundled demo target. Follow the three steps below for manual
+Docker setup.
 
-You need Docker 20.10 or newer, Docker Compose with `--wait` and
-`--wait-timeout` support, and an MCP client supporting Streamable HTTP with
-custom headers. Start Docker before continuing.
+You need Docker 20.10 or newer with its engine running, Docker Compose with
+`--wait` and `--wait-timeout` support, Git, and an MCP client supporting
+Streamable HTTP with custom headers. The default image is `v0.16.0`; see the
+[upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
+for an existing installation.
 
-The defaults use published `v0.16.0`. Review the
-[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
-when upgrading an existing installation.
-
-Prefer agent-guided setup? [Install MCP ZAP Connect locally in Codex](#guided-setup-in-codex),
-then ask Codex to start and connect the scanner. Cursor Desktop Free users can
-follow the [guided Cursor setup](#guided-setup-in-cursor) with available Agent
-allowance. A
-[local Claude Code preview](#guided-setup-in-claude-code) is also available for
-loading from your checkout. The manual Docker steps below are available
-without the plugin.
-
-Claude Desktop Free users can follow the separate
-[MCPB download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md).
-Choose a [scanner release](https://github.com/dtkmn/mcp-zap-server/releases)
-with Desktop assets and download its `.mcpb`, matching guide and checksum files.
-If the assets are not listed, follow the
-[local build instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md#build-and-check-the-bundle).
-The macOS extension exposes local setup tools around the same Docker scripts.
-It can reuse a running scanner or create a local installation after your setup
-request; installing the extension alone does not start containers. The guide
-covers setup, a status check, and a separately requested demo crawl and report.
+**Prefer guided setup?** Use [MCP ZAP Connect in Codex, Cursor or Claude Code](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/),
+or the [Claude Desktop setup guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md).
+Return to step 3 after your client connects.
 
 <a id="1-bootstrap-local-settings"></a>
 <a id="2-start-the-stack"></a>
@@ -46,6 +30,14 @@ settings are absent. It preserves existing settings, keys, and workspace data,
 downloads missing images, waits for MCP and ZAP health, and verifies
 the authenticated MCP connection. Continue after it reports ready; the doctor
 runs automatically.
+
+The packaged local client uses the `*` grant for the curated `guided` tools,
+including active testing, authentication setup and API imports. The first-report
+workflow below requests only an HTTP crawl, passive analysis and a report.
+Existing `.env` files and custom client grants are preserved. See
+[Quick-Start Permissions](https://danieltse.org/mcp-zap-server/getting-started/tool-scope-authorization/#quick-start-permissions)
+for the default and optional per-client restrictions. Tool access does not
+replace authorization to scan a target; crawling also sends traffic.
 
 The default MCP image is `dtkmn/mcp-zap-server:v0.16.0`, published for Linux AMD64
 and ARM64. Choose another
@@ -80,9 +72,21 @@ server startup; no browser chat UI is bundled.
 
 ## 3. Generate Your First Report
 
-Ask your connected client:
+Check scanner readiness before each new workflow. If you use MCP ZAP Connect,
+invoke its [scan skill](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#check-readiness-before-a-crawl-or-scan)
+first. The plugin cannot intercept direct MCP calls. Without that skill, run
+this from your selected scanner checkout:
+
+```bash
+./bin/scanner-readiness.sh
+```
+
+Continue only when it reports `READY`. Ask your connected client:
 
 ```text
+Check my existing scanner's current readiness and verify this connection with
+zap_passive_scan_status once before starting. If recovery is needed, explain
+the required action and wait for my approval. Preserve all client settings.
 Run only a guided HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish, summarize findings for this target,
@@ -105,309 +109,6 @@ demo containers.
 The [Scan-To-Evidence Guide](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
 covers optional active scanning, release evidence, and customer handoff.
 
-<a id="guided-setup-in-local-codex"></a>
-<a id="guided-setup-in-codex-and-cursor"></a>
-
-## Guided Setup In Codex
-
-MCP ZAP Connect lets you ask Codex to handle the local Docker Compose
-setup above, including prerequisites, startup, private client configuration and
-a status check. You normally do not need to edit the client's configuration
-yourself. Docker and Compose must be ready before scanner startup; the skill can
-help install missing prerequisites with your approval, recheck them and continue.
-Review any permissions requested by your client. Installing this skills-only
-plugin does not start the scanner or register MCP tools until you request setup.
-
-Install the plugin locally using the steps below. This route requires Git and
-Bash for the project's Docker setup scripts.
-
-### Check The Codex CLI
-
-The installation commands use the Codex CLI (`codex`). On macOS, run this in
-your terminal, or ask your desktop agent to run it before installing the plugin.
-It keeps an existing `codex` command and checks common desktop-app locations
-only when the command is missing:
-
-```bash
-if ! command -v codex >/dev/null 2>&1; then
-  for codex_dir in \
-    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
-    "/Applications/Codex.app/Contents/Resources" \
-    "$HOME/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS" \
-    "$HOME/Applications/Codex.app/Contents/Resources"
-  do
-    if [ -x "$codex_dir/codex" ]; then
-      export PATH="$codex_dir:$PATH"
-      break
-    fi
-  done
-fi
-codex --version
-command -v codex
-```
-
-The PATH change lasts only for this terminal session; use the same terminal
-for the installation commands below. The block prints the version and CLI path.
-An agent using separate command sessions should use that executable's full path
-for subsequent commands, since a PATH change does not carry between shells.
-It does not edit shell startup files, Codex connections or Docker settings.
-For an app installed elsewhere, use its bundled CLI directory instead. OpenAI's
-[bundled CLI documentation](https://learn.chatgpt.com/docs/reference/troubleshooting#feature-is-working-in-the-codex-cli-but-not-in-the-chatgpt-desktop-app)
-also describes the older `Codex.app` location.
-
-If `codex` is still missing, follow OpenAI's
-[CLI installation instructions](https://learn.chatgpt.com/docs/codex/cli#getting-started)
-to install it, then open a new terminal and run `codex --version` again.
-Continue only after it prints a version. If your CLI does not recognize the
-plugin commands below, update the desktop app or standalone CLI using OpenAI's
-instructions and retry. This prerequisite comes before plugin installation;
-the plugin's setup skill is not available to help until it is installed.
-
-### Install In Codex
-
-Install directly from GitHub using your normal Codex installation. Run these
-commands from your home directory:
-
-```bash
-cd "$HOME"
-codex plugin marketplace add dtkmn/mcp-zap-server --ref main
-codex plugin add mcp-zap-connect@mcp-zap-local-preview
-```
-
-Codex downloads the repository and installs the plugin in its managed cache;
-no manual repository checkout is required. `mcp-zap-local-preview` is the
-existing marketplace identifier; the plugin installs as **MCP ZAP Connect**.
-When you request scanner setup, the skill reuses an existing project checkout
-or obtains one for the Docker configuration and bootstrap scripts, then uses
-published release images. Installing the plugin alone does not start the
-scanner. This GitHub installation does not require a public-directory listing.
-See OpenAI's [Git-backed marketplace instructions](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
-
-### Use In The Desktop App
-
-1. Open **Plugins**, find **MCP ZAP Connect** among your installed or personal
-   plugins, and open its page.
-2. Confirm it is enabled, then select **Try now** to invoke the setup skill in
-   a local conversation on this machine.
-3. Send the setup request below.
-
-If the plugin or skill is missing, restart the desktop app and open a new local
-conversation with the plugin enabled. For CLI use, run `codex`, use `/plugins`
-to confirm the plugin is enabled, then `/skills` to select `setup-local-scanner`.
-
-Ask:
-
-```text
-Set up MCP ZAP Server in Codex using Docker Compose.
-Reuse any existing installation and preserve my other MCP connections.
-Verify with a status call only; do not run a scan.
-```
-
-The skill checks server readiness before changing client settings and verifies
-the connection with a harmless status call when the client has loaded it. A
-client reconnection or restart may be needed. Scanning is a separate request;
-after verification, use the [first-report prompt above](#3-generate-your-first-report)
-to try the bundled demo through your agent.
-
-For support, use the project's
-[GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues). Include versions
-and a redacted description of the failing step. Do not upload `.env`, client
-configuration, credentials, raw private logs or sensitive scan reports.
-
-## Guided Setup In Cursor
-
-Use Cursor Desktop on the scanner's machine with available Agent allowance.
-Free accounts need available Agent allowance. A working MCP connection does not
-bypass Cursor's usage limits. If a usage-limit error blocks the request, wait
-until allowance is available; changing scanner credentials does not resolve it.
-
-Install the local MCP ZAP Connect preview using the
-[Cursor plugin instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#cursor-local-preview).
-This skills-only plugin uses a project checkout and the existing Docker scripts.
-
-1. Start a local **This Mac** Agent chat and invoke `/setup-local-scanner`.
-2. Send the setup request below. Keep the scanner on the same machine as Cursor.
-3. After the native status response succeeds, make a separate request using the
-   [first-report prompt](#3-generate-your-first-report).
-
-```text
-Set up MCP ZAP Server in Cursor using Docker Compose and the project's
-first-run guide. Check prerequisites, container ownership and required ports.
-Reuse any existing installation; create private settings only when absent.
-Use published release images and the existing bootstrap scripts.
-Configure only my private Cursor mcp-zap-server connection. Preserve Codex,
-Claude, unrelated Cursor settings and permissions, existing keys and reports.
-After readiness succeeds, call zap_passive_scan_status exactly once with {}
-through Cursor, show the actual response, then stop.
-Do not crawl, scan, generate reports, expose credentials or make remote changes.
-```
-
-The skill checks readiness before configuring Cursor's private `~/.cursor/mcp.json`.
-It preserves an existing installation and its keys. Do not remove a working
-scanner or clear client settings as a normal setup step. A successful doctor
-proves server readiness; the status response must come through Cursor to verify
-that client's connection. For connection recovery after a restart, see the
-[Cursor client guide](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#cursor).
-
-## Guided Setup In Claude Code
-
-Claude Code uses the same setup skill and Docker Compose workflow through a
-local plugin preview.
-
-Use **local Claude Code on the same machine as the scanner**. A web or remote
-session cannot reach this machine's loopback endpoint. This route does not
-configure Claude chat remote connectors or add a stdio bridge. See Anthropic's
-[plugin overview](https://code.claude.com/docs/en/plugins) and
-[MCP connection documentation](https://code.claude.com/docs/en/mcp).
-
-<a id="test-the-local-preview"></a>
-
-### Load The Local Preview
-
-Use an existing Claude Code CLI. If it is missing, follow Anthropic's
-[Claude Code setup instructions](https://code.claude.com/docs/en/setup) before
-continuing; installing this plugin does not install Claude Code. Replace the
-absolute path below with your checkout:
-
-```bash
-claude --version
-claude plugin validate /absolute/path/to/mcp-zap-server/plugins/mcp-zap-connect
-claude plugin validate /absolute/path/to/mcp-zap-server
-claude --plugin-dir /absolute/path/to/mcp-zap-server/plugins/mcp-zap-connect
-```
-
-The validation commands check packaging. `--plugin-dir` loads the local plugin
-for that Claude Code session without registering a marketplace. Inside that
-session, invoke:
-
-```text
-/mcp-zap-connect:setup-local-scanner
-```
-
-Then request:
-
-```text
-Set up MCP ZAP Server in local Claude Code using Docker Compose.
-Reuse my existing scanner and preserve my Codex, Cursor and other MCP connections.
-Verify with zap_passive_scan_status only; do not run a scan.
-```
-
-The skill must prove authenticated server readiness before merging a separate
-HTTP connection into Claude Code's private user configuration. Reuse the existing
-scanner alias and preserve disabled states, tool restrictions and approval
-settings. If a project or local connection shadows the user connection, resolve
-which one to use before changing it. Never write the key into a shared project
-file or a command argument. The
-[manual Claude Code recipe](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#claude-code)
-describes the header and configuration scope.
-
-After the connection is configured, inspect `/mcp` in Claude Code and make the
-status call there. If tools are missing, reconnect the scanner in `/mcp` or start
-a new local Claude Code session before running a scan.
-
-<a id="install-from-github-after-publication"></a>
-
-### Install From GitHub
-
-Use the GitHub route when the repository version you install includes the
-Claude marketplace files:
-
-```bash
-claude plugin marketplace add dtkmn/mcp-zap-server
-claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
-```
-
-Review the installation result and invoke the same namespaced skill above in a
-local session. See Anthropic's
-[marketplace guide](https://code.claude.com/docs/en/plugin-marketplaces) and
-[installation scopes](https://code.claude.com/docs/en/discover-plugins#choose-an-install-scope).
-Installing the skills-only plugin does not start containers, register an MCP
-connection or authorize a scan.
-
-## Terms Of Service For MCP ZAP Connect
-
-Last updated: 12 October 2026. MCP ZAP Connect is an open-source plugin
-maintained by [Daniel Tse](https://github.com/dtkmn). It supplies instructions
-for local MCP ZAP Server setup. The maintainer does not provide a hosted
-scanner through this plugin.
-
-**Software license.** The plugin is licensed under
-[Apache-2.0](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/LICENSE).
-That license governs use, modification and distribution, including its warranty
-disclaimer and limitation of liability, subject to applicable law. This page
-does not replace or restrict the rights granted by that license.
-
-**Local setup and scanning.** Installing the plugin alone does not start a
-scanner. A setup request can download project files and images, start local
-containers and update the requested client's private MCP settings. Review the
-actions and permissions requested by your AI client. Scanning requires a
-separate request; use it only against targets you own or have permission to test.
-Findings do not establish that an application is secure or replace a complete
-security assessment. You are responsible for choosing authorized targets,
-the scan scope and how you use the results.
-
-**Dependencies and data.** Docker, ZAP, your AI client and download services
-have their own licenses, terms and privacy policies. Read the
-[privacy policy](#privacy-policy-for-local-scan-companion) before providing
-sensitive targets or reports. This independent project is not affiliated with
-or endorsed by ZAP, OpenAI or Cursor.
-
-**Support.** Community support is available through
-[GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues); response times
-and resolution are not guaranteed. Share redacted diagnostics only. Use the
-project's [private vulnerability reporting process](https://github.com/dtkmn/mcp-zap-server/security/policy)
-for security concerns.
-
-<a id="privacy-policy-for-local-scan-companion"></a>
-
-## Privacy Policy For MCP ZAP Connect
-
-Last updated: 12 October 2026. This policy covers MCP ZAP Connect, maintained
-by [Daniel Tse](https://github.com/dtkmn), and the local setup it guides. The plugin
-contains setup instructions. The maintainer does not operate a hosted scanner
-or collect scanner telemetry through this plugin. Setup does not transmit local
-credentials or reports to the maintainer. Support receives only information
-you choose to submit; do not include credentials or sensitive reports.
-
-**Local data and purpose.** Setup checks installation paths, software versions,
-container state and configuration to start and connect your scanner. API keys are
-generated or reused locally for authentication and stored in private local
-settings; they must not be pasted into chat or support reports. Settings, local
-logs, configuration backups and any subsequently generated scan reports remain
-in your installation. Setup uses a harmless status call; scanning requires a
-separate request. Scan data can contain URLs, HTTP traffic, application content
-and findings from your chosen targets.
-
-**Recipients and network access.** Setup downloads project files, container images
-and any required ZAP add-ons from their publishers and hosting services. Those
-services receive ordinary network request information, such as your IP address
-and requested resource, under their own policies. An authorized scan sends
-requests to your chosen targets. Your AI client/provider processes prompts,
-selected command output and MCP responses under its own data policies. A report
-retrieved through MCP can therefore reach that provider. Local storage does not
-mean that information returned to an AI client stays on your machine. Review
-your provider's settings before using sensitive targets or reports.
-
-**Retention and controls.** The plugin has no maintainer-hosted store of scanner
-data and no automatic deletion schedule for your local installation. Local data
-and private backups remain until you delete them or apply your own retention
-policy. Stopping containers preserves settings and reports. Uninstalling the
-plugin does not remove Docker containers, local files or the separate client MCP
-connection. To stop using the setup, stop its containers, disable or remove that
-MCP connection, and delete the installation's files and backups when no longer
-needed. Deletion of reports or settings is a separate action and requires your
-instruction. Your AI provider and download services govern retention of data
-they receive; their controls are separate from local deletion.
-
-**Support information.** Information you submit in
-[GitHub issues](https://github.com/dtkmn/mcp-zap-server/issues), including your
-GitHub identity, versions and description, is public and used to investigate the
-reported problem. Its retention and deletion controls follow GitHub's policies;
-deletion cannot recall copies others have made. Share only redacted diagnostics.
-For security concerns, use the project's
-[private vulnerability reporting process](https://github.com/dtkmn/mcp-zap-server/security/policy).
-Use GitHub issues for non-sensitive questions about this policy.
-
 ## Stop And Restart
 
 From the repository directory:
@@ -424,6 +125,38 @@ set `IMAGE_TAG` to the published version you want, then rerun `--start`. Use
 `docker compose pull` when you deliberately want to refresh cached images.
 Do not use `--force` to restart or recover: it replaces `.env` and rotates
 both API keys, invalidating existing client credentials.
+
+## Readiness And Recovery After Environment Changes
+
+Users can stop Docker, change its selected context or remove containers at any
+time. Check current readiness before each new crawl or scan; a previous
+installation, container restart policy or successful status response does not
+establish readiness now.
+
+`./bin/scanner-readiness.sh` is read-only. It checks the local Docker endpoint,
+Compose ownership, private settings, scanner state and authenticated readiness
+without calling a scan tool. It does not start Docker, recreate containers,
+change client settings or rotate keys. Its `READY` result establishes server
+readiness. One successful `zap_passive_scan_status` through the intended client
+then confirms that client's loaded connection.
+
+| Blocker | Recovery |
+| --- | --- |
+| Docker is stopped | Open your existing Docker application and wait for its engine. An agent can offer to open it after your approval; your login-startup preferences stay unchanged. |
+| This installation's containers are stopped or missing, and its settings remain intact | After checking ownership and conflicts, approve `./bin/bootstrap-local.sh --start` from the same checkout. It preserves keys and reports and may obtain missing published images. |
+| Private settings are missing | Treat this as setup requiring separate approval. Do not generate new credentials merely to reconnect an existing client. |
+| Another Docker context, installation or application owns the endpoint or ports | Resolve the reported conflict before continuing. Do not stop unrelated resources or switch contexts as a shortcut. |
+| Credentials or the client connection differ | Diagnose the selected installation and alias. Approve any specific credential repair separately; leave other clients and permissions unchanged. |
+| The scanner is customized or unhealthy | Follow its existing startup instructions or diagnose the reported failure before retrying. |
+
+After an approved repair, run readiness again, reconnect the selected client if
+needed, and make one native status call. Continue only the original target and
+workflow. A pure status-only request goes directly to that client's status tool;
+it does not authorize setup or recovery.
+
+If a connection fails while a crawl or scan is starting, do not automatically
+repeat the start call: the server may already have accepted it. Check current
+state and establish what happened before starting anything again.
 
 <a id="3-run-the-doctor"></a>
 <a id="7-if-it-breaks"></a>
@@ -468,3 +201,38 @@ website password in client configuration or an MCP prompt.
 Contributor builds use the existing development override. Follow
 [Development Setup](https://github.com/dtkmn/mcp-zap-server/blob/main/CONTRIBUTING.md#local-stack)
 to build your checkout instead of running the published image.
+
+## Client Setup And Policies
+
+<a id="guided-setup-in-codex"></a>
+<a id="guided-setup-in-local-codex"></a>
+<a id="guided-setup-in-codex-and-cursor"></a>
+<a id="check-the-codex-cli"></a>
+<a id="install-in-codex"></a>
+<a id="use-in-the-desktop-app"></a>
+
+- **Codex:** [Check the CLI](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#check-the-codex-cli),
+  [install the plugin](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#codex-local-installation)
+  and [use it in the app](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#use-in-codex).
+
+<a id="guided-setup-in-cursor"></a>
+
+- **Cursor:** [Install the local plugin and request setup](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#cursor-desktop-free).
+
+<a id="guided-setup-in-claude-code"></a>
+<a id="test-the-local-preview"></a>
+<a id="load-the-local-preview"></a>
+<a id="install-from-github-after-publication"></a>
+<a id="install-from-github"></a>
+
+- **Claude Code:** [Load the plugin](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#claude-code-local-preview)
+  or [install from a marketplace](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/#install-from-a-marketplace).
+
+<a id="terms-of-service-for-mcp-zap-connect"></a>
+
+- [MCP ZAP Connect terms of service](MCP_ZAP_CONNECT_TERMS.md).
+
+<a id="privacy-policy-for-mcp-zap-connect"></a>
+<a id="privacy-policy-for-local-scan-companion"></a>
+
+- [MCP ZAP Connect privacy policy](MCP_ZAP_CONNECT_PRIVACY.md).

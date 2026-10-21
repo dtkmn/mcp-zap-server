@@ -111,12 +111,15 @@ The standard fresh setup includes OWASP Juice Shop, a deliberately vulnerable
 local demo. Send a separate message:
 
 ```text
+Check scanner_check_readiness first, then verify this connection with one
+zap_passive_scan_status call. If recovery is needed, explain it and wait for
+my approval before starting Docker or containers. Preserve all client settings.
 Run only a guided HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish and summarize findings for this target.
 Generate an HTML report scoped to this target and read the complete report
 through MCP, including all chunks if paginated.
-Do not start an active scan or change container lifecycle or target restrictions.
+Do not start an active scan or change target restrictions.
 ```
 
 Approve the relevant tool requests. **Allow once** is sufficient. This starts
@@ -129,6 +132,37 @@ inside Docker. You can preview the demo in your Mac's browser at
 
 An existing scanner may not have the demo running. If the target is unavailable,
 ask Claude to diagnose it and explain what is needed before changing containers.
+
+### If Docker Or The Scanner Has Changed
+
+The connector checks readiness before forwarding a new crawl or scan start.
+When blocked, it returns recovery guidance instead of starting that workflow.
+It does not open Docker, restart containers or repair settings automatically.
+
+- If Docker is stopped, open your existing Docker Desktop and wait for its
+  engine. Ask Claude to check readiness again. Your Docker startup-at-login
+  preferences stay unchanged.
+- If the known scanner's containers are stopped or removed and its private
+  settings remain, ask Claude to explain the recovery and approve
+  `scanner_setup` with `confirm=true` to start that installation. Keep its keys,
+  reports and target restrictions. Do not remove the installation or request
+  fresh credentials.
+- If settings are missing, ownership or ports conflict, or credentials differ,
+  stop and resolve the reported issue. Starting a different installation or
+  replacing client credentials requires a separate, specific decision.
+- If a customized installation needs manual startup, use its own documented
+  procedure, then ask Claude to check readiness again.
+- After a connector update, an older or modified startup template can return
+  `SCRIPT_MISMATCH` or `START_MANUALLY`. Start that installation using its
+  existing instructions, preserving its settings and keys. A healthy scanner
+  can be reused when its doctor script still matches; an unused older bootstrap
+  script does not block readiness checks. Do not replace templates or reset
+  credentials just to bypass the check.
+
+After recovery, verify this Claude connection with one passive-status call
+before resuming the same target and requested workflow. If a crawl or scan
+start loses its connection, do not immediately repeat it: the first request
+may have been accepted. Ask Claude to check the current state first.
 
 ## 6. Read the result and scan your own application
 

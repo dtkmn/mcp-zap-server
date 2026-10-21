@@ -1,8 +1,8 @@
 {
   "name": "mcp-zap-connect",
   "displayName": "MCP ZAP Connect",
-  "version": "0.4.0",
-  "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex, Cursor or Claude Code.",
+  "version": "0.5.0",
+  "description": "Guided local MCP ZAP setup, pre-scan readiness checks and explicit recovery for Codex, Cursor and Claude Code.",
   "author": {
     "name": "Daniel Tse"
   },

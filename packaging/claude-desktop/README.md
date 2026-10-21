@@ -11,7 +11,7 @@ prompts, and the first demo report. No repository checkout or host Node/npm is
 required to use a published bundle.
 
 This bundle is separate from the [Claude Code skills-only plugin](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#claude-code-local-preview),
-version `0.4.0`. Install the `.mcpb` in Claude Desktop; Claude Code plugin commands
+version `0.5.0`. Install the `.mcpb` in Claude Desktop; Claude Code plugin commands
 do not install this extension. This preview does not establish an Anthropic
 directory listing or approval.
 
@@ -97,12 +97,48 @@ permission prompts yourself as required. The extension does not silently install
 software, approve OS prompts or bypass security controls. After resolving a
 prerequisite, ask Claude to check it again before continuing.
 
-Automatic startup is limited to the packaged scripts and Compose configuration.
+Approved startup uses only the packaged scripts and Compose configuration.
 For a customized installation, the connector may return `START_MANUALLY` instead
 of changing or starting it. Follow that installation's own startup procedure,
 then ask Claude to check readiness and verify status. Conflicting ports,
 credentials or ownership require resolution; they do not authorize replacing an
 existing scanner.
+
+Readiness checks and healthy reuse verify the doctor script they execute; an
+older unused bootstrap script does not prevent reuse. Startup still verifies
+both setup scripts and the Compose template. If an older or modified template
+returns `SCRIPT_MISMATCH` or `START_MANUALLY`, start that installation through
+its existing instructions, preserve its settings and keys, then check readiness
+again. The connector does not replace templates automatically.
+
+## Readiness Before A Crawl Or Scan
+
+The connector checks readiness before forwarding a new crawl or scan start. If
+Docker or the scanner is unavailable, it returns the blocker and recovery
+guidance without forwarding that start request. It does not start Docker,
+recover containers, generate credentials or change any client settings
+automatically. A successful installation or earlier scan does not replace this
+current-state check.
+
+Ask Claude to run `scanner_check_readiness` and verify this connection with
+`zap_passive_scan_status` before each new workflow. If Docker is stopped, open
+the existing Docker application and wait for its engine, then recheck. If the
+standard installation's containers are stopped or removed but its private
+settings remain intact, review and approve `scanner_setup` with `confirm=true`
+to start that same installation. The existing bootstrap may obtain missing
+published images; it preserves keys and reports. Do not use recovery to create
+a replacement installation or rotate credentials.
+
+Ownership, port, Docker-context, configuration or credential conflicts require
+diagnosis before recovery. Customized installations may need their documented
+manual startup. After the identified repair, recheck readiness and the native
+status, then resume only the original target and requested workflow. Preserve
+Docker login-startup preferences, scanner restrictions and all client settings.
+
+If a mutating start request fails after forwarding, do not automatically retry
+it: the scanner may have accepted it before the connection failed. Establish
+its current state before another start. A pure status-only request remains a
+direct status call and does not trigger setup or recovery.
 
 ## Check an existing connection only
 

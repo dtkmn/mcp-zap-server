@@ -626,6 +626,59 @@ site-search dialog {
 	border-color: var(--sl-color-accent);
 }
 
+.mission-entry {
+	margin-bottom: 1.5rem;
+}
+
+.mission-entry p {
+	margin: 0 0 1rem;
+	max-width: 60ch;
+}
+
+.mission-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.75rem 1.5rem;
+}
+
+.mission-cta {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.75rem;
+	max-width: 100%;
+	min-height: 2.75rem;
+	padding: 0.65rem 1rem;
+	border: 1px solid rgba(214, 45, 32, 0.4);
+	border-inline-start: 2px solid var(--sl-color-accent);
+	background:
+		linear-gradient(100deg, rgba(214, 45, 32, 0.12), transparent 80%),
+		rgba(9, 8, 7, 0.9);
+	color: var(--sl-color-white);
+	font-weight: 500;
+	text-decoration: none;
+	transition:
+		border-color 160ms ease,
+		box-shadow 160ms ease;
+}
+
+.mission-cta-prompt {
+	color: var(--sl-color-accent-high);
+	font-weight: 700;
+}
+
+.mission-cta:hover,
+.mission-cta:focus-visible {
+	border-color: var(--sl-color-accent-high);
+	color: var(--sl-color-white);
+	box-shadow: 0 0 24px rgba(214, 45, 32, 0.12);
+}
+
+.mission-cta:focus-visible {
+	outline: 2px solid var(--sl-color-accent-high);
+	outline-offset: 4px;
+}
+
 .mission-terminal {
 	position: relative;
 	isolation: isolate;

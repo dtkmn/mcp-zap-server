@@ -107,4 +107,4 @@ policy GitHub reads. `npm run preview` serves the last build.
 - The old Jekyll site was replaced by this Astro app.
 - Legacy public URLs such as `SECURITY_MODES.html` are redirected to the new route structure.
 - GitHub Pages builds this directory via [`.github/workflows/pages.yml`](../.github/workflows/pages.yml).
-- Pushes to `dev` validate and build the docs without publishing them. Publishing runs only for pushes or manual workflow runs on `main` or `master`; a green `dev` build does not mean the public site has changed.
+- Pull requests targeting `main` or `master` validate and build the docs, including updates to an open pull request. Publishing runs only for pushes or manual workflow runs on `main` or `master`. Pushes to `dev` and feature branches do not separately run the Pages workflow.

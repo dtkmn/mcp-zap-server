@@ -5,7 +5,7 @@ on:
     types: [opened, reopened, synchronize, edited]
     branches: ["main", "dev"]
   push:
-    branches: ["**"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:

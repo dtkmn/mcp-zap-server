@@ -103,6 +103,14 @@ Run the smallest meaningful set locally before opening a PR:
 - `./gradlew dockerTest` for Docker/Testcontainers changes
 - `cd docs && npm run check && npm run build` for docs-site changes
 
+CI validates pull requests targeting `main` or `dev`, pushes to `main`, and
+manual workflow runs. Snyk uses the same branch events for trusted contributions,
+plus weekly and manual runs. Docs validation runs for pull requests targeting
+`main` or `master`; Pages publishing runs for pushes or manual runs on those
+branches. Run relevant checks locally before pushing development or feature
+branches, which do not trigger CI, Snyk, or Pages on push. Updates to an open
+qualifying pull request still run its pull-request checks.
+
 The normal build excludes Docker-tagged tests. CI runs them for pull requests targeting `main`, pushes to `main` before image publication, manual workflow runs, and releases. Development and feature pushes skip them.
 
 ### Java test coverage

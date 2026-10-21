@@ -60,39 +60,38 @@ jobs:
             exit 1
           fi
 
-      - name: Run Snyk Open Source test
-        continue-on-error: true
+      - name: Stage local extension API for dependency analysis
+        run: ./gradlew publishExtensionApiPublicPreviewPublicationToExtensionApiPublicPreviewStagingRepository --no-scan --no-daemon
+
+      - name: Run Snyk Open Source test and verify dependency coverage
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          snyk test \
-            --all-projects \
-            --org="${SNYK_ORG}" \
-            --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-open-source.sarif
-
-      - name: Require Snyk Open Source SARIF
-        run: |
-          if [ ! -s snyk-open-source.sarif ]; then
-            echo "::error::Snyk Open Source scan did not produce snyk-open-source.sarif."
-            exit 1
-          fi
+          python3 scripts/ci/snyk_report.py source
 
       - name: Upload Snyk Open Source SARIF
-        if: always() && hashFiles('snyk-open-source.sarif') != ''
+        if: always() && hashFiles('build/snyk-reports/source/report.sarif') != ''
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
-          sarif_file: snyk-open-source.sarif
+          sarif_file: build/snyk-reports/source/report.sarif
           category: snyk-open-source
+
+      - name: Upload Snyk Open Source diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: snyk-source-diagnostics
+          path: build/snyk-reports/source/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Monitor open-source dependencies
         if: github.event_name != 'pull_request'
-        continue-on-error: true
         timeout-minutes: 10
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          snyk monitor --all-projects --org="${SNYK_ORG}"
+          python3 scripts/ci/snyk_report.py monitor-source
 
   container:
     name: Container image
@@ -123,35 +122,30 @@ jobs:
       - name: Build image for container scan
         run: docker build --pull -t "${IMAGE_REF}" .
 
-      - name: Run Snyk Container test
-        continue-on-error: true
+      - name: Run Snyk Container test and verify runtime coverage
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          snyk container test "${IMAGE_REF}" \
-            --file=Dockerfile \
-            --app-vulns \
-            --org="${SNYK_ORG}" \
-            --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-container.sarif
-
-      - name: Require Snyk Container SARIF
-        run: |
-          if [ ! -s snyk-container.sarif ]; then
-            echo "::error::Snyk Container scan did not produce snyk-container.sarif."
-            exit 1
-          fi
+          python3 scripts/ci/snyk_report.py container --image "${IMAGE_REF}"
 
       - name: Upload Snyk Container SARIF
-        if: always() && hashFiles('snyk-container.sarif') != ''
+        if: always() && hashFiles('build/snyk-reports/container/report.sarif') != ''
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
-          sarif_file: snyk-container.sarif
+          sarif_file: build/snyk-reports/container/report.sarif
           category: snyk-container
+
+      - name: Upload Snyk Container diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: snyk-container-diagnostics
+          path: build/snyk-reports/container/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Monitor container image
         if: github.event_name != 'pull_request'
-        continue-on-error: true
         timeout-minutes: 10
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
@@ -194,26 +188,24 @@ jobs:
             --values helm/mcp-zap-server/values-ci.yaml \
             --output-dir snyk-rendered-helm
 
-      - name: Run Snyk IaC test
-        continue-on-error: true
+      - name: Run Snyk IaC test and verify execution
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
-          snyk iac test snyk-rendered-helm \
-            --org="${SNYK_ORG}" \
-            --severity-threshold="${SNYK_SEVERITY_THRESHOLD}" \
-            --sarif-file-output=snyk-iac.sarif
-
-      - name: Require Snyk IaC SARIF
-        run: |
-          if [ ! -s snyk-iac.sarif ]; then
-            echo "::error::Snyk IaC scan did not produce snyk-iac.sarif."
-            exit 1
-          fi
+          python3 scripts/ci/snyk_report.py iac
 
       - name: Upload Snyk IaC SARIF
-        if: always() && hashFiles('snyk-iac.sarif') != ''
+        if: always() && hashFiles('build/snyk-reports/iac/report.sarif') != ''
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
-          sarif_file: snyk-iac.sarif
+          sarif_file: build/snyk-reports/iac/report.sarif
           category: snyk-iac
+
+      - name: Upload Snyk IaC diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: snyk-iac-diagnostics
+          path: build/snyk-reports/iac/
+          retention-days: 7
+          if-no-files-found: ignore

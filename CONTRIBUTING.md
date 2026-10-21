@@ -163,6 +163,37 @@ files or build scans.
 
 If you cannot run something locally, say so in the PR and explain why.
 
+### Snyk dependency checks
+
+Snyk checks source dependencies, the built container and rendered Helm manifests
+separately. Source checks retain the root Gradle build's compile, runtime, test
+and sample-extension dependency scopes. The independent extension example needs
+its own compile-classpath check after the local API publication is staged. The
+docs and Claude Desktop npm lockfiles and Go healthcheck are separate targets.
+When adding a manifest, update the configured scan targets and coverage checks.
+
+A successful scan job does not mean the project has no known vulnerabilities.
+[Snyk's test exit codes](https://docs.snyk.io/developer-tools/snyk-cli/commands/test)
+distinguish findings from execution failures. Finding-related exits preserve the
+reports and produce a warning. Execution, dependency-extraction,
+report-validation, upload and monitoring failures must fail the job. Inspect the
+uploaded Snyk diagnostics to distinguish findings from
+missing coverage before deciding what to fix.
+
+Container application coverage is checked against the executable JAR extracted
+from the image. Operating-system results, a dependency count or the embedded
+SBOM alone cannot establish that every bundled runtime library was identified.
+Treat unmatched libraries and unidentified external dependencies as coverage
+gaps; investigate their reported names and versions rather than suppressing the
+check.
+
+Result categories identify configured projects and container layers consistently
+across branches using [GitHub's SARIF categories](https://docs.github.com/en/code-security/reference/code-scanning/sarif-files/sarif-support).
+A category migration needs a matching main-branch baseline before pull-request
+comparison can be established. Historical configurations are
+not automatically deleted: verify replacement findings and coverage first, then
+handle any specifically approved retirement separately.
+
 ## Documentation Standards
 
 Public docs should help external users adopt and operate the project safely.

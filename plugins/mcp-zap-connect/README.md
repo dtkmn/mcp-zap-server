@@ -296,30 +296,6 @@ Invoke `/scan-local-target` for each separately requested crawl or scan after
 setup succeeds, following the
 [first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report).
 
-## Optional setup-completion reporting
-
-Reporting is off by default. If the installed distribution has a collection
-destination configured, the setup skill can offer to send one confirmation
-after the selected client's native status check succeeds. It shows the exact
-destination and data first; declining does not affect setup. The bundled default
-has no collection destination, so it sends nothing and does not offer reporting.
-
-An approved report contains only the event/schema version, plugin version and
-client family (`codex`, `cursor` or `claude_code`). It contains no names, accounts,
-machine or installation IDs, scanner URLs, paths, targets, credentials, tool
-responses or reports. The receiving network infrastructure still sees the source
-IP; see the privacy policy for the distinction between event data and network
-metadata. Python 3 is needed only for this optional step. The skill skips it if
-Python is unavailable.
-
-Reporting never runs during plugin installation, ordinary status checks, scanner
-startup/recovery or scanning. Each report requires a separate explicit yes.
-There are no background reports, automatic retries or saved opt-in preferences.
-A private local receipt suppresses another report for the same scanner checkout,
-client and plugin version. Reinstalls, deleted receipts or uncertain delivery can
-still cause duplicates, so counts represent accepted confirmations rather than
-unique users or independently verified installations.
-
 ## Privacy, terms, support and license
 
 Settings, keys and reports remain in your installation; prompts and MCP results

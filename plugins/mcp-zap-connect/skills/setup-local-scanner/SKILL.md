@@ -221,53 +221,6 @@ that request. Installing this plugin alone does not authorize execution.
    wildcard grants, widen permissions or change client credentials as an
    automatic connection repair.
 
-## Optional setup-completion reporting
-
-Reporting is off by default. This step applies only after a setup request has
-finished with the native client verification in step 5 above. Skip it for pure
-status checks, troubleshooting, restarts, recovery, stop requests and scan
-workflows. Never run it from bootstrap, doctor, readiness checks or a hook.
-Successful setup does not require reporting.
-
-1. Use the bundled `scripts/setup_completion.py` beside this skill, with an
-   existing Python 3 interpreter. Do not download another runtime or create a
-   replacement script just for reporting. Resolve the helper from this skill's
-   installed directory, not from an unrelated working directory. Run its
-   `preview` command with `--client codex`, `--client cursor` or
-   `--client claude_code`, and `--installation` pointing to the scanner checkout.
-   The preview only reads local files. If its status is not `ready`, skip the
-   offer. In particular, `disabled` means no collector is configured, and
-   `already_reported` means this installation/client/plugin-version already has
-   an accepted local receipt. Never enable reporting or invent a destination.
-2. Show the preview's exact `endpoint` and `payload`. Explain that this sends
-   one setup-completion confirmation containing only schema version, event name,
-   plugin version and client family; it excludes names, accounts, machine or
-   installation IDs, paths, targets, keys, tool output and reports. The receiving
-   network service still sees the source IP. Link the plugin's privacy policy.
-   Ask whether the user wants to send this one optional report, with **No** as
-   the default. Setup authorization, silence, remembered preferences, an
-   environment variable or a previous report is not consent. Respect any
-   local-only or no-network restriction; obtain a specific exception or skip.
-3. Only after an explicit yes, preserve the successful native tool result from
-   step 5 as a private, regular JSON file in an existing private temporary
-   directory (owner-only permissions). Do not run another tool call or substitute
-   doctor output. Use the same helper's `report` command with the same client
-   and installation, `--consent yes`, `--native-client-verified`,
-   `--status-file` pointing to that result and `--approval` equal to the preview's
-   approval token. This flag attests that the result came from the selected
-   client's actual connection; the helper cannot independently prove its origin.
-   The helper rechecks the consent gates, destination, payload and native result.
-   Keep `--allow-loopback` out of user setup; it is only for an explicitly
-   requested local collector test.
-4. Delete the temporary result on success, failure or interruption. Keep raw
-   results and credentials out of arguments and logs. Reporting makes one
-   bounded-timeout request, without redirects, retries or background work.
-   Missing Python, missing consent, delivery failure or any helper error must
-   leave setup successful. Do not retry, repair the scanner or change client
-   settings because reporting failed. Do not claim a report was sent unless the
-   helper returns `sent`. Private receipts only suppress repeated confirmations;
-   accepted reports are not unique-user or independently verified-install counts.
-
 ## Stop, restart and report
 
 Containers should remain usable after the startup command returns. If the command

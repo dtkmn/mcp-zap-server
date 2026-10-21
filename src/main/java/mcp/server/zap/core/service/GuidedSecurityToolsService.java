@@ -6,6 +6,7 @@ import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.TargetDescriptor;
+import mcp.server.zap.core.service.authz.GuidedToolActions;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
@@ -27,19 +28,22 @@ public class GuidedSecurityToolsService {
     private final OpenApiService openApiService;
     private final EngineAdapter engineAdapter;
     private final GatewayRecordFactory gatewayRecordFactory;
+    private final GuidedToolActions guidedToolActions;
 
     public GuidedSecurityToolsService(GuidedScanWorkflowService guidedScanWorkflowService,
                                       ReportService reportService,
                                       FindingsService findingsService,
                                       OpenApiService openApiService,
                                       EngineAdapter engineAdapter,
-                                      GatewayRecordFactory gatewayRecordFactory) {
+                                      GatewayRecordFactory gatewayRecordFactory,
+                                      GuidedToolActions guidedToolActions) {
         this.guidedScanWorkflowService = guidedScanWorkflowService;
         this.reportService = reportService;
         this.findingsService = findingsService;
         this.openApiService = openApiService;
         this.engineAdapter = engineAdapter;
         this.gatewayRecordFactory = gatewayRecordFactory;
+        this.guidedToolActions = guidedToolActions;
     }
 
     @Tool(
@@ -50,7 +54,7 @@ public class GuidedSecurityToolsService {
                     Requires a reachable, configured ZAP instance with the matching OpenAPI, GraphQL, or SOAP add-on.
                     Import changes the current ZAP session and may send requests to the definition source and API targets;
                     use only authorized targets. It does not start an active scan: after reviewing import messages,
-                    call zap_attack_start with the API target URL when active testing is needed.
+                    call zap_attack_start with the API target URL only when active testing is permitted and approved.
                     Content mode accepts actual OpenAPI JSON/YAML text with a required full HTTP(S) hostOverride
                     and an explicitly enabled shared filesystem; it cannot read chat attachments automatically.
                     Returns plain text containing definition type, source kind, and import status. URL/file mode
@@ -235,16 +239,15 @@ public class GuidedSecurityToolsService {
     ) {
         String normalizedReportPath = requireText(reportPath, "reportPath");
         String report = reportService.readReport(normalizedReportPath, maxChars);
-        return new StringBuilder()
+        StringBuilder output = new StringBuilder()
                 .append("Guided report readback.\n")
                 .append("Path: ").append(normalizedReportPath).append('\n')
                 .append("Use: review the generated artifact before attaching it to internal or customer-facing evidence.\n")
-                .append(NEXT_ACTIONS_HEADER).append('\n')
-                .append("- Complete report: if truncated, call zap_report_read_chunk from offset 0, then follow nextOffset with the returned artifactSha256 until endOfFile is true.\n")
-                .append("- Internal evidence: call zap_scan_history_release_evidence for the same target or evidence window.\n")
-                .append("- Customer summary: call zap_scan_history_customer_handoff only after reviewing report content and release-evidence warnings.\n\n")
-                .append(report)
-                .toString();
+                .append(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, "zap_report_read_chunk", "- Complete report: if truncated, call zap_report_read_chunk from offset 0, then follow nextOffset with the returned artifactSha256 until endOfFile is true.");
+        appendAction(output, "zap_scan_history_release_evidence", "- Internal evidence: call zap_scan_history_release_evidence for the same target or evidence window.");
+        appendAction(output, "zap_scan_history_customer_handoff", "- Customer summary: call zap_scan_history_customer_handoff only after reviewing report content and release-evidence warnings.");
+        return output.append('\n').append(report).toString();
     }
 
     @Tool(
@@ -304,15 +307,14 @@ public class GuidedSecurityToolsService {
     }
 
     private String formatGuidedFindingsSummary(String baseUrl, String delegateResponse) {
-        return new StringBuilder()
+        StringBuilder output = new StringBuilder()
                 .append("Guided findings summary.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')
                 .append("Use: first-pass triage before drilldown or report generation.\n")
-                .append(NEXT_ACTIONS_HEADER).append('\n')
-                .append("- Drill down: call zap_findings_details for one alert family or concrete instances when you need evidence.\n")
-                .append("- Report: call zap_report_generate after passive analysis has drained and the summary is ready to share.\n\n")
-                .append(delegateResponse)
-                .toString();
+                .append(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, "zap_findings_details", "- Drill down: call zap_findings_details for one alert family or concrete instances when you need evidence.");
+        appendAction(output, "zap_report_generate", "- Report: call zap_report_generate after passive analysis has drained and the summary is ready to share.");
+        return output.append('\n').append(delegateResponse).toString();
     }
 
     private String formatGuidedFindingsDetails(String baseUrl,
@@ -340,12 +342,11 @@ public class GuidedSecurityToolsService {
                         : "inspect grouped detail before expanding into raw per-occurrence evidence.")
                 .append('\n')
                 .append(NEXT_ACTIONS_HEADER)
-                .append('\n')
-                .append("- Report: call zap_report_generate when you need a human-shareable artifact.")
-                .append('\n')
-                .append("- Handoff: after a report exists, call zap_scan_history_release_evidence for internal review, then zap_scan_history_customer_handoff for the curated external summary.")
-                .append("\n\n")
-                .append(delegateResponse);
+                .append('\n');
+        appendAction(output, "zap_report_generate", "- Report: call zap_report_generate when you need a human-shareable artifact.");
+        appendAction(output, "zap_scan_history_release_evidence", "- Handoff: after a report exists, call zap_scan_history_release_evidence for internal review.");
+        appendAction(output, "zap_scan_history_customer_handoff", "- Customer summary: call zap_scan_history_customer_handoff for the curated external summary after reviewing the report and release-evidence warnings.");
+        output.append('\n').append(delegateResponse);
         return output.toString();
     }
 
@@ -353,13 +354,18 @@ public class GuidedSecurityToolsService {
         String targetAdvice = hasText(scope) && !"All targets".equals(scope)
                 ? " with target filter " + scope
                 : " with a target filter when you need scoped evidence";
-        return new StringBuilder(NEXT_ACTIONS_HEADER)
-                .append('\n')
-                .append("- Report readback: call zap_report_read with the Path above before creating evidence or sharing the artifact.\n")
-                .append("- Large report: use zap_report_read_chunk when the preview is truncated; follow nextOffset with the first artifactSha256.\n")
-                .append("- Internal evidence: call zap_scan_history_release_evidence").append(targetAdvice).append(".\n")
-                .append("- Customer summary: call zap_scan_history_customer_handoff after reviewing release-evidence warnings.")
-                .toString();
+        StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, "zap_report_read", "- Report readback: call zap_report_read with the Path above before creating evidence or sharing the artifact.");
+        appendAction(output, "zap_report_read_chunk", "- Large report: use zap_report_read_chunk when the preview is truncated; follow nextOffset with the first artifactSha256.");
+        appendAction(output, "zap_scan_history_release_evidence", "- Internal evidence: call zap_scan_history_release_evidence" + targetAdvice + ".");
+        appendAction(output, "zap_scan_history_customer_handoff", "- Customer summary: call zap_scan_history_customer_handoff after reviewing release-evidence warnings.");
+        return output.toString().trim();
+    }
+
+    private void appendAction(StringBuilder output, String toolName, String action) {
+        if (guidedToolActions.canCall(toolName)) {
+            output.append(action).append('\n');
+        }
     }
 
     private String normalizeDefinitionType(String definitionType) {

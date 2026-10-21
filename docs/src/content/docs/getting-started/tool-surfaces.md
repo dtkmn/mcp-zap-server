@@ -40,6 +40,15 @@ guided surface. Change the surface configuration and restart the server to
 change the registered tool set. Startup validation rejects registered tools
 without permission mappings.
 
+The packaged local client uses `*` to permit the curated guided surface,
+including active attacks, target authentication and API imports. Run only the
+target and workflow the user requests. Operators can configure explicit scopes
+for restricted clients; discovery may then include tools that caller cannot use.
+Existing credentials retain their configured grants. See
+[Quick-Start Permissions](../tool-scope-authorization/#quick-start-permissions)
+for the default and optional restrictions. With `*`, selecting `expert` also
+makes expert tools callable; explicit scopes still apply to restricted clients.
+
 **In v0.11.1 and later**, calls to unknown tools and tools disabled
 by the selected surface receive the same generic MCP error before scope checks.
 This error contract is not included in v0.11.0. See

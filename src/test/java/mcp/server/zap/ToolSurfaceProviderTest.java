@@ -42,6 +42,7 @@ import mcp.server.zap.core.service.ScanHistoryMcpToolsService;
 import mcp.server.zap.core.service.ScanJobQueueService;
 import mcp.server.zap.core.service.SpiderScanService;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.authz.GuidedToolActions;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.core.service.policy.PolicyDryRunService;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,13 +72,15 @@ class ToolSurfaceProviderTest {
                         mock(ScanJobQueueService.class),
                         mock(GuidedAuthSessionService.class),
                         new ZapEngineAdapter(),
-                        new GatewayRecordFactory()
+                        new GatewayRecordFactory(),
+                        mock(GuidedToolActions.class)
                 ),
                 mock(ReportService.class),
                 mock(FindingsService.class),
                 mock(OpenApiService.class),
                 new ZapEngineAdapter(),
-                new GatewayRecordFactory()
+                new GatewayRecordFactory(),
+                mock(GuidedToolActions.class)
         );
         guidedAuthSessionMcpToolsService = new GuidedAuthSessionMcpToolsService(
                 mock(GuidedAuthSessionService.class)

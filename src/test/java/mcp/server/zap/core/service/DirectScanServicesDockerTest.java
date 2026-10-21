@@ -14,6 +14,7 @@ import mcp.server.zap.core.service.auth.bootstrap.AuthProfileResolver;
 import mcp.server.zap.core.service.auth.bootstrap.CredentialReferenceResolver;
 import mcp.server.zap.core.service.auth.bootstrap.FormLoginAuthBootstrapProvider;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.authz.GuidedToolActions;
 import mcp.server.zap.core.service.auth.bootstrap.InMemoryPreparedAuthSessionRegistry;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
@@ -215,7 +216,8 @@ class DirectScanServicesDockerTest {
                 false, store, new SingleNodeQueueLeadershipCoordinator());
         GuidedScanWorkflowService guided = new GuidedScanWorkflowService(
                 executionMode, spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
-                queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory());
+                queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(),
+                mock(GuidedToolActions.class));
         String operationId = null;
         try {
             String started = guided.startCrawl(targetUrl, strategy, null, null);
@@ -456,7 +458,7 @@ class DirectScanServicesDockerTest {
         GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(executionMode,
                 mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
                 mock(ActiveScanService.class), queue, authSessions,
-                new ZapEngineAdapter(), new GatewayRecordFactory());
+                new ZapEngineAdapter(), new GatewayRecordFactory(), mock(GuidedToolActions.class));
         try {
             String started = guidedScans.startCrawl(targetUrl, "client", null, sessionId);
             String operationId = started.lines().filter(line -> line.startsWith("Operation ID: "))

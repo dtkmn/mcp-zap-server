@@ -28,6 +28,21 @@ are for an isolated lab and need review before shared deployment.
   login credentials authenticate ZAP to a website; keep those credentials
   server-side and out of MCP prompts and client settings.
 
+## Quick-Start Permissions
+
+The packaged local client uses the `*` grant for the curated `guided` tool
+surface. This includes crawling, active attacks, target authentication, API
+imports, findings, history and reports. Run only the target and operations the
+user requests; the grant does not authorize a scan by itself. Target URL and
+network restrictions remain separate controls.
+
+Bootstrap preserves existing `.env` files, keys and custom client grants.
+Operators can configure explicit per-client scopes for restricted or shared
+deployments. Follow
+[Quick-Start Permissions](docs/src/content/docs/getting-started/tool-scope-authorization.md#quick-start-permissions)
+for the default and optional restrictions. A denied operation does not
+authorize widening that client's grants or disabling enforcement.
+
 ## Client Setup
 
 Use the [MCP client guide](docs/src/content/docs/getting-started/mcp-client-authentication.md)

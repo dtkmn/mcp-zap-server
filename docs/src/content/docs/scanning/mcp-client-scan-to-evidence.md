@@ -33,6 +33,14 @@ local setup uses `http://localhost:7456/mcp` with an `X-API-Key` header.
 Other clients need Streamable HTTP and custom-header support; no browser chat
 UI is bundled.
 
+The packaged local client's `*` grant permits the exposed guided tools for the
+steps below. Request active testing, imports or authentication setup only when
+needed for the authorized workflow. Operators using explicit per-client scopes
+must grant each selected step; see
+[Quick-Start Permissions](../../getting-started/tool-scope-authorization/#quick-start-permissions).
+Existing installations keep their configured scopes. A denied optional step is
+not a reason to widen grants or disable authorization automatically.
+
 For local Compose, scan the container-reachable target URL, not the browser
 preview URL:
 

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
@@ -16,6 +17,10 @@ import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
 import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.HttpOrigin;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
+import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.authz.ToolAuthorizationService;
+import mcp.server.zap.core.service.authz.ToolScopeRegistry;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,6 +28,9 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -68,6 +76,8 @@ class GuidedSecurityToolsServiceTest {
     private OpenApiService openApiService;
     private EngineAdapter engineAdapter;
     private GatewayRecordFactory gatewayRecordFactory;
+    private GuidedToolActions guidedToolActions;
+    private ToolAuthorizationProperties authorizationProperties;
     private GuidedScanWorkflowService guidedScanWorkflowService;
     private GuidedSecurityToolsService service;
 
@@ -85,6 +95,9 @@ class GuidedSecurityToolsServiceTest {
         openApiService = mock(OpenApiService.class);
         engineAdapter = new ZapEngineAdapter();
         gatewayRecordFactory = new GatewayRecordFactory();
+        authorizationProperties = new ToolAuthorizationProperties();
+        guidedToolActions = new GuidedToolActions(new ToolAuthorizationService(new ToolScopeRegistry(), authorizationProperties), true, "api-key");
+        useScopes("*");
         guidedScanWorkflowService = new GuidedScanWorkflowService(
                 executionModeResolver,
                 spiderScanService,
@@ -94,7 +107,8 @@ class GuidedSecurityToolsServiceTest {
                 scanJobQueueService,
                 guidedAuthSessionService,
                 engineAdapter,
-                gatewayRecordFactory
+                gatewayRecordFactory,
+                guidedToolActions
         );
         service = new GuidedSecurityToolsService(
                 guidedScanWorkflowService,
@@ -102,8 +116,14 @@ class GuidedSecurityToolsServiceTest {
                 findingsService,
                 openApiService,
                 engineAdapter,
-                gatewayRecordFactory
+                gatewayRecordFactory,
+                guidedToolActions
         );
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -239,10 +259,13 @@ class GuidedSecurityToolsServiceTest {
             .contains("Execution Mode: queue")
             .contains("Next Actions:")
             .contains("Poll: call zap_attack_status")
-            .contains("When attack is complete: call zap_passive_scan_wait");
+            .contains("When attack is complete: call zap_passive_scan_wait")
+            .contains("zap_findings_summary for the same target after the attack is complete and passive analysis has drained")
+            .contains("zap_report_generate after the attack is complete and passive analysis has drained");
         assertThat(statusResponse).contains("Guided attack status.")
             .contains("Job ID: job-7")
-            .contains("Continue: call zap_attack_status");
+            .contains("Continue: call zap_attack_status")
+            .doesNotContain("zap_findings_summary", "zap_report_generate");
     }
 
     @Test
@@ -793,7 +816,8 @@ class GuidedSecurityToolsServiceTest {
                 scanJobQueueService,
                 guidedAuthSessionService,
                 unsupportedEngineAdapter,
-                new GatewayRecordFactory()
+                new GatewayRecordFactory(),
+                guidedToolActions
         );
 
         assertThatThrownBy(() -> localWorkflow.startAttack("https://example.com", "true", "Baseline", null, null))
@@ -840,8 +864,136 @@ class GuidedSecurityToolsServiceTest {
                 findingsService,
                 openApiService,
                 localEngineAdapter,
-                new GatewayRecordFactory()
+                new GatewayRecordFactory(),
+                guidedToolActions
         );
+    }
+
+    @Test
+    void quickStartScopesKeepCrawlLifecycleAndReportPathWithoutSuggestingAttack() {
+        useScopes("mcp:tools:list", "zap:scan:crawl:run", "zap:scan:read", "zap:scan:stop",
+                "zap:alerts:read", "zap:report:read", "zap:report:generate");
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: scoped-crawl");
+        when(spiderScanService.getSpiderScanStatus("scoped-crawl")).thenReturn("Progress: 100%");
+        when(spiderScanService.stopSpiderScan("scoped-crawl")).thenReturn("Stop requested");
+
+        String started = service.startCrawl("https://example.com", "http", null, null);
+        String operationId = extractOperationId(started);
+        assertThat(started).contains("zap_crawl_status", "zap_crawl_stop", "zap_passive_scan_wait",
+                "zap_findings_summary", "zap_report_generate").doesNotContain("zap_attack_start");
+        assertThat(service.getCrawlStatus(operationId)).contains("zap_passive_scan_wait",
+                "zap_findings_summary", "zap_report_generate").doesNotContain("zap_attack_start");
+        assertThat(service.stopCrawl(operationId)).contains("zap_crawl_status", "Start a new guided crawl")
+                .doesNotContain("zap_attack_start");
+        useScopes("zap:scan:read", "zap:scan:attack:run");
+        assertThat(service.getCrawlStatus(operationId)).contains("zap_attack_start")
+                .doesNotContain("zap_findings_summary", "zap_report_generate");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"quickstart,http", "wildcard,http", "quickstart,browser", "wildcard,browser"})
+    void crawlStartEvidenceAdviceRequiresCrawlTerminationBeforePassiveDrain(String grant, String strategy) {
+        if ("quickstart".equals(grant)) {
+            useScopes("mcp:tools:list", "zap:scan:crawl:run", "zap:scan:read", "zap:scan:stop",
+                    "zap:alerts:read", "zap:report:read", "zap:report:generate");
+        }
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: running-crawl");
+        when(spiderScanService.getSpiderScanStatus("running-crawl")).thenReturn("Progress: 45%\nCompleted: no");
+        when(ajaxSpiderService.startAjaxSpider("https://example.com")).thenReturn("AJAX Spider started");
+        when(ajaxSpiderService.getAjaxSpiderStatus()).thenReturn("AJAX Spider Status: running");
+
+        String started = service.startCrawl("https://example.com", strategy, null, null);
+        String completion = "http".equals(strategy) ? "the crawl is complete" : "the crawl has stopped";
+        assertThat(started)
+                .contains("zap_findings_summary for the same target after " + completion + " and passive analysis has drained")
+                .contains("zap_report_generate after " + completion + " and passive analysis has drained")
+                .doesNotContain("zap_report_generate after passive analysis has drained");
+        if ("http".equals(strategy)) {
+            assertThat(started).contains("when the crawl is complete, call zap_passive_scan_wait");
+        } else {
+            assertThat(started).contains("When crawl stops: call zap_passive_scan_wait, then review crawl coverage");
+        }
+        if ("quickstart".equals(grant)) {
+            assertThat(started).doesNotContain("zap_attack_start");
+        } else {
+            assertThat(started).contains("zap_attack_start");
+        }
+        assertThat(service.getCrawlStatus(extractOperationId(started)))
+                .contains("Continue: call zap_crawl_status")
+                .doesNotContain("zap_findings_summary", "zap_report_generate");
+    }
+
+    @Test
+    void crawlFollowupsOmitMissingStatusStopAndReportPermissions() {
+        useScopes("zap:scan:crawl:run");
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: no-followups");
+        when(spiderScanService.getSpiderScanStatus("no-followups")).thenReturn("Progress: 45%");
+        when(spiderScanService.stopSpiderScan("no-followups")).thenReturn("Stop requested");
+
+        String started = service.startCrawl("https://example.com", "http", null, null);
+        String operationId = extractOperationId(started);
+        assertThat(started).contains("No further guided actions are available")
+                .doesNotContain("zap_crawl_status", "zap_crawl_stop", "zap_attack_start", "zap_passive_scan_wait",
+                        "zap_findings_summary", "zap_report_generate");
+        assertThat(service.getCrawlStatus(operationId)).contains("No further guided actions are available")
+                .doesNotContain("zap_crawl_status", "zap_crawl_stop");
+        useScopes("zap:scan:stop");
+        assertThat(service.stopCrawl(operationId)).doesNotContain("zap_crawl_status", "Start a new guided crawl");
+    }
+
+    @Test
+    void browserCrawlFollowupsDoNotRecommendUnpermittedAttack() {
+        useScopes("zap:scan:crawl:run", "zap:scan:read");
+        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
+        when(ajaxSpiderService.startAjaxSpider("https://example.com")).thenReturn("AJAX Spider started");
+
+        assertThat(service.startCrawl("https://example.com", "browser", null, null))
+                .contains("zap_crawl_status", "zap_passive_scan_wait")
+                .doesNotContain("zap_attack_start", "zap_crawl_stop", "zap_report_generate", "zap_findings_summary");
+    }
+
+    @Test
+    void findingsFollowupsOmitUnpermittedDrilldownReportsAndHistory() {
+        useScopes("zap:report:read");
+        when(findingsService.getFindingsSummary("https://example.com")).thenReturn("Findings: 0");
+        when(findingsService.getAlertDetails("https://example.com", "", "")).thenReturn("Details: 0");
+        assertThat(service.getGuidedFindingsSummary("https://example.com"))
+                .doesNotContain("zap_findings_details", "zap_report_generate");
+        useScopes("zap:alerts:read");
+        assertThat(service.getGuidedFindingsDetails("https://example.com", null, null, false, null))
+                .doesNotContain("zap_report_generate", "zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
+    }
+
+    @Test
+    void reportFollowupsRespectIndependentReadbackAndHistoryPermissions() {
+        when(reportService.generateReport("traditional-html-plus", "light", "https://example.com"))
+                .thenReturn("/tmp/report.html");
+        when(reportService.readReport("/tmp/report.html", 1000)).thenReturn("Report content");
+
+        useScopes("zap:report:generate");
+        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+                .doesNotContain("zap_report_read", "zap_report_read_chunk", "zap_scan_history_release_evidence",
+                        "zap_scan_history_customer_handoff");
+        useScopes("zap:report:generate", "zap:report:read");
+        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+                .contains("zap_report_read", "zap_report_read_chunk")
+                .doesNotContain("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
+        assertThat(service.readGuidedReport("/tmp/report.html", 1000))
+                .contains("zap_report_read_chunk", "Report content")
+                .doesNotContain("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
+        useScopes("zap:scan:read");
+        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+                .contains("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff")
+                .doesNotContain("zap_report_read", "zap_report_read_chunk");
+    }
+
+    private void useScopes(String... scopes) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "guided-client", "credentials", Arrays.stream(scopes)
+                .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope)).toList()));
     }
 
     private String extractOperationId(String response) {

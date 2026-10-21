@@ -138,7 +138,10 @@ When Docker integration testing is appropriate, use
 report task itself does not start Docker tests. Use a clean build when comparing
 coverage baselines so earlier Docker execution data cannot inflate the result.
 
-The existing CI workflow generates and uploads coverage after its test stages.
+CI runs a clean build, any required Docker tests, coverage generation, and
+eligible Sonar analysis in one Gradle invocation so the unit suite runs once.
+Build scans are disabled for this invocation. CI attempts to upload available
+test reports even when a build or analysis fails.
 Sonar analysis runs only for trusted events with a `SONAR_TOKEN` repository
 secret; fork and Dependabot pull requests still generate local coverage artifacts.
 Missing credentials produce an explicit notice rather than a false claim that

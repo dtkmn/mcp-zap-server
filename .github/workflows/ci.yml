@@ -56,32 +56,36 @@ jobs:
           python3 -m pip install PyYAML==6.0.3
           python3 -m unittest discover -s tests/python -p 'test_*.py'
 
-      - name: Build with Gradle
-        run: ./gradlew build --scan --no-daemon --stacktrace --info
-
-      - name: Run Docker-backed integration tests
-        if: >-
-          github.event_name == 'workflow_dispatch' ||
-          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'pull_request' && github.base_ref == 'main')
-        run: ./gradlew dockerTest --scan --no-daemon --stacktrace --info
-
-      - name: Generate Java coverage report
-        run: ./gradlew jacocoTestReport --no-daemon
-
-      - name: Analyze coverage in SonarQube Cloud
-        if: >-
-          github.actor != 'dependabot[bot]' &&
-          (github.event_name != 'pull_request' ||
-          github.event.pull_request.head.repo.full_name == github.repository)
+      - name: Build, test, and analyze with Gradle
+        shell: bash
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          RUN_DOCKER_TESTS: >-
+            ${{ github.event_name == 'workflow_dispatch' ||
+                (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+                (github.event_name == 'pull_request' && github.base_ref == 'main') }}
+          SONAR_ELIGIBLE: >-
+            ${{ github.actor != 'dependabot[bot]' &&
+                (github.event_name != 'pull_request' ||
+                github.event.pull_request.head.repo.full_name == github.repository) }}
+          SONAR_TOKEN: >-
+            ${{ github.actor != 'dependabot[bot]' &&
+                (github.event_name != 'pull_request' ||
+                github.event.pull_request.head.repo.full_name == github.repository) &&
+                secrets.SONAR_TOKEN || '' }}
         run: |
-          if [ -z "$SONAR_TOKEN" ]; then
-            echo "::notice::Sonar analysis skipped: configure the SONAR_TOKEN repository secret and CI analysis mode. The coverage report is available in test-reports."
-            exit 0
+          gradle_tasks=(clean build)
+          if [ "$RUN_DOCKER_TESTS" = "true" ]; then
+            gradle_tasks+=(dockerTest)
           fi
-          ./gradlew sonar --no-daemon
+          gradle_tasks+=(jacocoTestReport)
+          if [ "$SONAR_ELIGIBLE" = "true" ]; then
+            if [ -n "$SONAR_TOKEN" ]; then
+              gradle_tasks+=(sonar)
+            else
+              echo "::notice::Sonar analysis skipped: configure the SONAR_TOKEN repository secret and CI analysis mode. Java coverage generation remains enabled for this build."
+            fi
+          fi
+          ./gradlew "${gradle_tasks[@]}" --no-scan --no-daemon --stacktrace --info
 
       - name: Upload test reports
         if: always()

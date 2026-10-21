@@ -152,6 +152,12 @@ It does not open Docker, restart containers or repair settings automatically.
   replacing client credentials requires a separate, specific decision.
 - If a customized installation needs manual startup, use its own documented
   procedure, then ask Claude to check readiness again.
+- After a connector update, an older or modified startup template can return
+  `SCRIPT_MISMATCH` or `START_MANUALLY`. Start that installation using its
+  existing instructions, preserving its settings and keys. A healthy scanner
+  can be reused when its doctor script still matches; an unused older bootstrap
+  script does not block readiness checks. Do not replace templates or reset
+  credentials just to bypass the check.
 
 After recovery, verify this Claude connection with one passive-status call
 before resuming the same target and requested workflow. If a crawl or scan

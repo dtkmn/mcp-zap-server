@@ -134,7 +134,13 @@ Verify with a status call only; do not run a scan.
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning
 requires a separate request identifying your authorized target and intended
-workflow. See the [first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report)
+workflow. The packaged local client uses `*` for the curated guided tools,
+including active attacks, authentication setup and imports. Run only the
+requested workflow. Existing settings and scopes are preserved; installing or
+reconnecting this plugin does not change permissions.
+See [Quick-Start Permissions](https://danieltse.org/mcp-zap-server/getting-started/tool-scope-authorization/#quick-start-permissions)
+for optional per-client restrictions. Crawling still sends target traffic.
+See the [first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report)
 for the first demo scan after setup.
 
 ## Check Readiness Before A Crawl Or Scan
@@ -289,6 +295,30 @@ select **Reload** if reconnection is needed, then verify with the status call.
 Invoke `/scan-local-target` for each separately requested crawl or scan after
 setup succeeds, following the
 [first-report guide](https://danieltse.org/mcp-zap-server/getting-started/self-serve-first-run/#3-generate-your-first-report).
+
+## Optional setup-completion reporting
+
+Reporting is off by default. If the installed distribution has a collection
+destination configured, the setup skill can offer to send one confirmation
+after the selected client's native status check succeeds. It shows the exact
+destination and data first; declining does not affect setup. The bundled default
+has no collection destination, so it sends nothing and does not offer reporting.
+
+An approved report contains only the event/schema version, plugin version and
+client family (`codex`, `cursor` or `claude_code`). It contains no names, accounts,
+machine or installation IDs, scanner URLs, paths, targets, credentials, tool
+responses or reports. The receiving network infrastructure still sees the source
+IP; see the privacy policy for the distinction between event data and network
+metadata. Python 3 is needed only for this optional step. The skill skips it if
+Python is unavailable.
+
+Reporting never runs during plugin installation, ordinary status checks, scanner
+startup/recovery or scanning. Each report requires a separate explicit yes.
+There are no background reports, automatic retries or saved opt-in preferences.
+A private local receipt suppresses another report for the same scanner checkout,
+client and plugin version. Reinstalls, deleted receipts or uncertain delivery can
+still cause duplicates, so counts represent accepted confirmations rather than
+unique users or independently verified installations.
 
 ## Privacy, terms, support and license
 

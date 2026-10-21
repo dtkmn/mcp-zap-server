@@ -215,11 +215,56 @@ test('private env symlinks and shared-readable credentials are rejected', async 
   assert.equal((await f.controller.prerequisites()).code, 'UNSAFE_INSTALL_FILE');
 });
 
-test('modified scripts are never executed even for healthy reuse', async (t) => {
+test('healthy reuse accepts an older unused bootstrap without changing private settings', async (t) => {
+  const f = await fixture(t);
+  const bootstrap = path.join(f.directory, 'bin/bootstrap-local.sh');
+  const olderBootstrap = '#!/bin/bash\n# previous release bootstrap fixture\n';
+  await fs.writeFile(bootstrap, olderBootstrap);
+  const settings = await fs.readFile(path.join(f.directory, '.env'));
+  const mode = (await fs.stat(path.join(f.directory, '.env'))).mode;
+  assert.equal((await f.controller.doctor()).code, 'READY');
+  const reused = await f.controller.setup({ confirm: true });
+  assert.equal(reused.code, 'SCANNER_REUSED');
+  assert.equal(reused.changed, false);
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), settings);
+  assert.equal((await fs.stat(path.join(f.directory, '.env'))).mode, mode);
+  assert.equal(await fs.readFile(bootstrap, 'utf8'), olderBootstrap);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('bootstrap-local.sh')), false);
+});
+
+test('resuming an older bootstrap requires manual review and preserves the installation', async (t) => {
+  const f = await fixture(t);
+  const bootstrap = path.join(f.directory, 'bin/bootstrap-local.sh');
+  const olderBootstrap = '#!/bin/bash\n# previous release bootstrap fixture\n';
+  await fs.writeFile(bootstrap, olderBootstrap);
+  f.state.containers[0].State.Running = false;
+  const settings = await fs.readFile(path.join(f.directory, '.env'));
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
+  assert.deepEqual(await fs.readFile(path.join(f.directory, '.env')), settings);
+  assert.equal(await fs.readFile(bootstrap, 'utf8'), olderBootstrap);
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
+});
+
+test('modified doctor scripts are never executed during healthy reuse or resume', async (t) => {
   const f = await fixture(t);
   await fs.writeFile(path.join(f.directory, 'bin/self-serve-doctor.sh'), '#!/bin/bash\nmalicious-command\n');
+  assert.equal((await f.controller.doctor()).code, 'SCRIPT_MISMATCH');
   assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
-  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('self-serve-doctor.sh')), false);
+  f.state.containers[0].State.Running = false;
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'SCRIPT_MISMATCH');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
+});
+
+test('a linked doctor is rejected even when it contains the trusted bytes', async (t) => {
+  const f = await fixture(t);
+  const doctor = path.join(f.directory, 'bin/self-serve-doctor.sh');
+  const external = path.join(f.home, 'external-doctor.sh');
+  await fs.writeFile(external, TRUSTED['bin/self-serve-doctor.sh']);
+  await fs.unlink(doctor);
+  await fs.symlink(external, doctor);
+  assert.equal((await f.controller.doctor()).code, 'UNSAFE_INSTALL_FILE');
+  assert.equal((await f.controller.setup({ confirm: true })).code, 'UNSAFE_INSTALL_FILE');
+  assert.equal(f.state.calls.some((call) => call.args[0]?.endsWith('.sh')), false);
 });
 
 test('custom Compose settings are preserved for reuse but never started', async (t) => {

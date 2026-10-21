@@ -116,7 +116,14 @@ Once preflight and the client's native status succeed, use the server's guided
 tools and Next Actions for the requested target and operations. Poll an already
 started crawl or scan as directed; do not start a duplicate workflow. Generate
 or retrieve reports only when requested. Preserve target restrictions and
-client settings throughout.
+client settings throughout. The packaged local client uses `*` for the curated
+guided tools; an available tool does not authorize work outside the requested
+target and workflow. Preserve any explicit per-client restrictions.
+If a required tool returns `insufficient_scope`, stop that operation and explain
+its missing permission using the checkout's scope guide. A scan request, a tool
+appearing in discovery or a Next Action does not authorize widening scopes,
+adding `*`, changing the tool surface or disabling enforcement. Do not substitute
+an active attack for a permitted crawl or retry the denied operation in a loop.
 
 If Docker, authentication or transport fails during the workflow, stop and
 diagnose the new state. Never automatically retry a mutating tool such as

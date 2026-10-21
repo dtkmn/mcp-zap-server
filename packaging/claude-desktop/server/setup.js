@@ -274,9 +274,9 @@ export function createSetupController({ env = process.env, platform = process.pl
     return bytes;
   }
 
-  async function verifyScripts(directory) {
+  async function verifyScripts(directory, scripts = FILES.filter((file) => file.startsWith('bin/'))) {
     await safeDirectory(path.join(directory, 'bin'));
-    for (const relative of FILES.filter((file) => file.startsWith('bin/'))) {
+    for (const relative of scripts) {
       if (!(await readFile(path.join(directory, relative))).equals(await trustedFile(relative))) fail('SCRIPT_MISMATCH', 'The installation scripts differ from this extension’s packaged scripts. Do not execute them through this extension; review or update the installation manually.');
     }
   }
@@ -291,7 +291,9 @@ export function createSetupController({ env = process.env, platform = process.pl
 
   async function doctorInternal(ctx) {
     requireReady(ctx);
-    await verifyScripts(ctx.directory);
+    // Healthy reuse executes only the doctor. A newer packaged bootstrap must
+    // not block an existing scanner whose trusted doctor is unchanged.
+    await verifyScripts(ctx.directory, ['bin/self-serve-doctor.sh']);
     const result = await run('/bin/bash', [path.join(ctx.directory, 'bin/self-serve-doctor.sh'), '--skip-tool-call'], { cwd: ctx.directory, env: { ...runtimeEnv, MCP_API_KEY: ctx.apiKey }, timeoutMs: 150_000 });
     if (result.code !== 0 || result.timedOut || result.outputLimit) fail('DOCTOR_FAILED', 'Authenticated readiness did not pass. Existing settings and containers were preserved. Review private local diagnostics before retrying.');
     return success('READY', 'Authenticated readiness passed. No scanner tool was called.', { readinessVerified: true });

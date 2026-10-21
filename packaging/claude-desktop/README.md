@@ -104,6 +104,13 @@ then ask Claude to check readiness and verify status. Conflicting ports,
 credentials or ownership require resolution; they do not authorize replacing an
 existing scanner.
 
+Readiness checks and healthy reuse verify the doctor script they execute; an
+older unused bootstrap script does not prevent reuse. Startup still verifies
+both setup scripts and the Compose template. If an older or modified template
+returns `SCRIPT_MISMATCH` or `START_MANUALLY`, start that installation through
+its existing instructions, preserve its settings and keys, then check readiness
+again. The connector does not replace templates automatically.
+
 ## Readiness Before A Crawl Or Scan
 
 The connector checks readiness before forwarding a new crawl or scan start. If

@@ -231,6 +231,7 @@ jacoco {
 
 tasks.named('jacocoTestReport') {
     dependsOn tasks.named('test')
+    mustRunAfter tasks.named('dockerTest')
     // Include Docker coverage when it exists, without starting Docker tests.
     executionData tasks.named('dockerTest').get()
     reports {

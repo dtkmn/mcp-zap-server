@@ -165,8 +165,11 @@ class ScannerReadinessTest(unittest.TestCase):
         def cleanup_fixture_child():
             pid_file = self.directory / 'orphan.pid'
             if pid_file.exists():
-                try: os.kill(int(pid_file.read_text()), signal.SIGKILL)
-                except ProcessLookupError: pass
+                try:
+                    os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    # An already-exited fixture child needs no further cleanup.
+                    pass
         self.addCleanup(cleanup_fixture_child)
         self.state['docker_orphan'] = True
         self.run_preflight('DOCKER_UNAVAILABLE', ['--timeout-seconds', '1'])

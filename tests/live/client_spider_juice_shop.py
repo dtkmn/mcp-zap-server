@@ -60,6 +60,7 @@ def content_text(result):
             if isinstance(decoded, str):
                 value = decoded
         except (ValueError, TypeError):
+            # Plain tool text is not JSON; preserve its original value.
             pass
         items.append(value)
     return "\n".join(items)

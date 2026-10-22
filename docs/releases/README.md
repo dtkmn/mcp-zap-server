@@ -35,6 +35,7 @@ for exact filenames and package version rules, and the
 
 ## Version Archive
 
+- [0.17.0 release and upgrade guide](./RELEASE_NOTES_0.17.0.md) — explicit-deny migration, client defaults and publication checks
 - [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — includes immutable image references and upgrade requirements
 - [0.15.0](./RELEASE_NOTES_0.15.0.md)
 - [0.14.0](./RELEASE_NOTES_0.14.0.md)

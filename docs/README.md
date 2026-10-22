@@ -78,6 +78,7 @@ directory; do not maintain a second copy of their bodies in the website tree.
 
 | Page | Canonical source | Website route |
 | --- | --- | --- |
+| v0.17.0 Release and Upgrade Guide | [RELEASE_NOTES_0.17.0.md](releases/RELEASE_NOTES_0.17.0.md) | `/releases/0.17.0/` |
 | v0.16.0 Release and Upgrade Guide | [RELEASE_NOTES_0.16.0.md](releases/RELEASE_NOTES_0.16.0.md) | `/releases/0.16.0/` |
 | Self-Serve First Run | [SELF_SERVE_FIRST_RUN.md](getting-started/SELF_SERVE_FIRST_RUN.md) | `/getting-started/self-serve-first-run/` |
 | Agent-Guided Setup | [MCP ZAP Connect README](../plugins/mcp-zap-connect/README.md) | `/getting-started/agent-guided-setup/` |

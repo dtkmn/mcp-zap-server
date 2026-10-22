@@ -9,8 +9,20 @@ architecture and deployment configuration. Image publication and a successful
 workflow do not establish that all dependency findings are fixed.
 
 Consult the linked upstream advisories and the packages in your deployed image
-before making an upgrade decision. The [release guide](/mcp-zap-server/releases/0.16.0/)
+before making an upgrade decision. The [release guide](/mcp-zap-server/releases/0.17.0/)
 describes the scanner's version and image requirements.
+
+## Dependency updates in v0.17.0 source
+
+Verify publication before selecting a `v0.17.0` image. These source dependency
+updates do not establish that an existing deployment or a published artifact
+has been upgraded.
+
+| Component | Advisory and scope | Source update |
+| --- | --- | --- |
+| Go healthcheck standard library | [GO-2026-6809 / CVE-2026-111943](https://pkg.go.dev/vuln/GO-2026-6809) affects `crypto/x509.Certificate.Verify` before Go `1.27.3` on the 1.27 branch. The configured probe uses fixed loopback HTTP, disables proxies and rejects redirects; that operation does not perform TLS certificate verification. | Build the static helper with Go `1.27.3`. Keep the Docker builder and the source module's preferred toolchain aligned. A compiler declaration alone does not update an already built binary. |
+| Debian 13 `libexpat1` | [DSA-6566-1](https://security-tracker.debian.org/tracker/DSA-6566-1) provides a fixed Trixie security package, `2.9.0-1~deb13u1`. Java XML parsing alone does not establish a path to native Expat. | The selected Java 25 / Debian 13 nonroot base contains `2.9.0-1~deb13u1` for Linux AMD64 and ARM64. This does not fix the separate zlib finding below. |
+| Standalone extension sample Spring dependencies | [Spring data-binding advisory](https://spring.io/security/cve-2026-59282/) affects Framework `7.0.0`–`7.0.8` under its stated data-binding conditions. | Align the example's `compileOnly` Boot dependency to `4.1.1`, matching the application's Framework `7.0.9` baseline. The metadata example does not bundle Spring implementation libraries or provide an untrusted data-binding or expression-evaluation service. |
 
 <a id="dependency-patches-in-the-v0160-candidate"></a>
 
@@ -30,19 +42,18 @@ later image build.
 
 | Component and reported version | Public advisory | Deployment scope and next action |
 | --- | --- | --- |
-| Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Inherited native compression library. The vulnerable nonblocking gzip operation has no demonstrated application call path here; this is a proof gap, not a remediation claim. Debian's tracker lists no fixed Trixie package. Retain the finding and review a compatible patched base image. |
-| Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-93990](https://security-tracker.debian.org/tracker/CVE-2026-93990) | Native XML surrogate-handling issue. Java XML parsing alone does not establish a path to this library. Fixes in other Debian releases do not establish a compatible Debian 13 fix; keep the runtime finding visible. |
-| Debian 13 `libexpat1`, `2.8.3-1~deb13u1` | [CVE-2026-77214](https://security-tracker.debian.org/tracker/CVE-2026-77214) | Separate native buffer over-read requiring the affected parse-buffer API and invalid caller-supplied length. No application-to-operation path is demonstrated. Debian lists a fixed unstable package, but no fixed Trixie package. Await a compatible patched runtime. |
+| Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Inherited native compression library. The vulnerable nonblocking gzip operation has no demonstrated application call path here; this is a proof gap, not a remediation claim. Retain the finding and consult Debian's tracker when selecting a compatible patched base image. |
 | Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93748 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Snyk lists the cache-reuse advisory without a fixed version. The [npm/GitHub advisory](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) limits its affected range to `<= 4.2.0`; the maintainer disputes the report in [upstream #56](https://github.com/kornelski/http-cache-semantics/issues/56), now closed. Those sources disagree; a clean npm audit or the closed issue does not clear the Snyk record. |
 | Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93750 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate `Vary` cache-matching advisory. Snyk lists all versions as affected without a fixed version. Keep it recorded and reassess before adding a publicly reachable cache or remote asset processing service. |
 
 ## Deployment boundaries
 
-The Dockerfile retains its signed, multi-architecture
+The Dockerfile selects the signed, multi-architecture
 `gcr.io/distroless/java25-debian13:nonroot` index pin:
-`sha256:ca60da1345c0f17b6d019049e6749e15f10fd3c0da86dec938d2b4ec565d0629`.
-A newer digest does not establish that these specific native findings are
-fixed; inspect its package versions before replacing the pin. Nonroot execution
+`sha256:69514ce1edfe8759f5169870e8f9d4c9f2b831fb0b305a6809a269a25c515a2f`.
+This is the base-image index, not the published MCP application image digest.
+Inspect the packages in the actual application image before a deployment; a newer
+digest alone does not establish that every native finding is fixed. Nonroot execution
 and restricted container privileges reduce exposure and consequences; they do
 not patch libraries.
 Do not mix Debian generations or remove native runtime libraries without

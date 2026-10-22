@@ -108,7 +108,7 @@ runtime if Spring has no registration metadata or import hook.
 An external extension should depend on the API artifact instead of depending on
 the full application.
 
-Local extension API dependency example (version `0.16.0`, resolved from a locally
+Local extension API dependency example (version `0.17.0`, resolved from a locally
 staged Maven repository):
 
 ```gradle
@@ -117,7 +117,7 @@ plugins {
 }
 
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion')
-        .orElse('0.16.0')
+        .orElse('0.17.0')
         .get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup')
         .orElse('io.github.dtkmn')
@@ -142,7 +142,7 @@ repositories {
 
 dependencies {
     compileOnly "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"
-    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.1.0'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.1.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:6.0.1'
     testImplementation 'org.assertj:assertj-core:3.27.6'

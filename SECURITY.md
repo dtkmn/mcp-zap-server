@@ -36,6 +36,40 @@ All security vulnerabilities in this project should be reported responsibly and 
 - **Localhost Protection**: Blocks localhost scanning unless explicitly enabled
 - **Protocol Validation**: Only HTTP/HTTPS protocols are allowed
 
+With URL validation enabled, explicit `ZAP_URL_BLACKLIST` rules take precedence
+over `ZAP_URL_WHITELIST`, `ZAP_ALLOW_LOCALHOST` and
+`ZAP_ALLOW_PRIVATE_NETWORKS`. The blacklist accepts comma-separated host patterns
+and IPv4/IPv6 CIDRs and is empty by default. Built-in address checks remain
+independent: localhost and private targets require their respective opt-ins;
+unspecified, multicast and link-local addresses remain blocked. Disabling URL
+validation retains its existing behavior of bypassing these checks.
+
+When upgrading an existing configuration, an explicitly supplied blacklist stays
+authoritative, including entries copied from an older default safety list. To
+allow a development target, enable the appropriate opt-in and remove only the
+explicit deny entries you intend to lift. Do not discard custom restrictions.
+The property `zap.scan.url.blacklist` and Helm value `mcp.scan.url.blacklist`
+follow the same precedence.
+
+For Docker Compose, the interpolation `.env` file alone does not forward
+`ZAP_URL_BLACKLIST` to the MCP container. Use a custom service `env_file` or
+explicit `environment` override. Keep existing `env_file` rules; adding a blank
+`environment` value would override them. For example, keep restrictions in a
+private `target-policy.env` file and use this additional Compose file:
+
+```yaml
+services:
+  mcp-server:
+    env_file:
+      - target-policy.env
+```
+
+Load it alongside the base file with
+`docker compose -f docker-compose.yml -f target-policy-compose.yml config` to
+check the effective configuration before operating the stack. Bare Java
+processes read the runtime environment directly. URL preflight checks do not
+provide engine-side network isolation.
+
 ### Resource Management
 
 - **Scan Timeouts**: Configurable duration limits for active and spider scans

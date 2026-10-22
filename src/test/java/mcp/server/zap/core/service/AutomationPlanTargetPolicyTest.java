@@ -34,7 +34,7 @@ class AutomationPlanTargetPolicyTest {
         engine = mock(EngineAutomationAccess.class);
         policy = new UrlValidationService();
         ReflectionTestUtils.setField(policy, "whitelist", List.of());
-        ReflectionTestUtils.setField(policy, "blacklist", List.of("localhost", "127.0.0.1", "0.0.0.0"));
+        ReflectionTestUtils.setField(policy, "blacklist", List.of());
         service = new AutomationPlanService(engine, policy);
         ReflectionTestUtils.setField(service, "automationLocalDirectory", root.toString());
         ReflectionTestUtils.setField(service, "automationZapDirectory", "/zap/automation");

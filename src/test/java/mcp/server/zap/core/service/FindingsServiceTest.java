@@ -21,8 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 class FindingsServiceTest {
     private EngineFindingAccess findingAccess;
@@ -74,6 +76,20 @@ class FindingsServiceTest {
         assertTrue(markdown.contains("## 🔴 High Risk"));
         assertTrue(markdown.contains("**SQL Injection** (2 instances)"));
         assertTrue(markdown.contains("## 🔴 Medium Risk"));
+    }
+
+    @Test
+    void emptyFindingsReadDoesNotConsultLifecycleOrScannerMetadata() {
+        when(findingAccess.loadAlerts("http://target")).thenReturn(List.of());
+
+        String summary = service.getFindingsSummary("http://target");
+
+        assertTrue(summary.contains("No alerts are currently recorded for this target."));
+        assertTrue(summary.contains("does not establish scan completion, coverage, or safety"));
+        assertFalse(summary.contains("Scan Complete"));
+        verify(scanHistoryLedgerService).hasVisibleScanEvidenceForTarget("http://target");
+        verifyNoMoreInteractions(scanHistoryLedgerService);
+        verifyNoInteractions(runtimeAccess);
     }
 
     @Test

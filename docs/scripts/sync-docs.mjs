@@ -7,11 +7,38 @@ const generatedRoot = join(repoRoot, 'docs/src/content/docs/generated');
 
 const pages = [
   {
+    source: 'docs/releases/RELEASE_NOTES_0.17.1.md',
+    slug: 'releases/0.17.1',
+    title: 'v0.17.1 Release and Upgrade Guide',
+    description: 'Review distribution requirements, release preflight and inherited upgrade requirements before installing.',
+    links: {
+      '../src/content/docs/reference/dependency-security.md': '/mcp-zap-server/reference/dependency-security/',
+      'RELEASE_NOTES_0.17.0.md#upgrade-from-v0160': '/mcp-zap-server/releases/0.17.0/#upgrade-from-v0160',
+      '../getting-started/SELF_SERVE_FIRST_RUN.md': '/mcp-zap-server/getting-started/self-serve-first-run/',
+      '../../plugins/mcp-zap-connect/README.md': '/mcp-zap-server/getting-started/agent-guided-setup/',
+      '../../packaging/claude-desktop/SETUP.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md',
+      'PUBLISHING.md': '/mcp-zap-server/releases/publishing/',
+    },
+  },
+  {
+    source: 'docs/releases/PUBLISHING.md',
+    slug: 'releases/publishing',
+    title: 'Publishing a Scanner Release',
+    description: 'Prepare a draft, verify the tagged Desktop downloads and run preflight before immutable publication.',
+    links: {
+      'README.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/README.md',
+      '../../packaging/claude-desktop/README.md#prepare-downloads-for-a-normal-scanner-release': 'https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md#prepare-downloads-for-a-normal-scanner-release',
+      '../../scripts/verify-release-draft.py': 'https://github.com/dtkmn/mcp-zap-server/blob/main/scripts/verify-release-draft.py',
+      'RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
+    },
+  },
+  {
     source: 'docs/releases/RELEASE_NOTES_0.17.0.md',
     slug: 'releases/0.17.0',
     title: 'v0.17.0 Release and Upgrade Guide',
     description: 'Review explicit target denies, recorded findings, client setup defaults and publication checks before upgrading.',
     links: {
+      'RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
       '../src/content/docs/reference/dependency-security.md': '/mcp-zap-server/reference/dependency-security/',
       '../../SECURITY.md#url-validation--access-control': '/mcp-zap-server/reference/security-policy/#url-validation--access-control',
       'RELEASE_NOTES_0.16.0.md#migrate-ci-evidence-and-baselines': '/mcp-zap-server/releases/0.16.0/#migrate-ci-evidence-and-baselines',
@@ -105,6 +132,7 @@ const pages = [
       '../../docs/src/content/docs/operations/production-checklist.md': '/mcp-zap-server/operations/production-checklist/',
       '../../docs/releases/RELEASE_NOTES_0.16.0.md': '/mcp-zap-server/releases/0.16.0/',
       '../../docs/releases/RELEASE_NOTES_0.17.0.md': '/mcp-zap-server/releases/0.17.0/',
+      '../../docs/releases/RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
     },
   },
   {

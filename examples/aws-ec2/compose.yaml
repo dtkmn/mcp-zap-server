@@ -50,7 +50,7 @@ services:
     networks: [isolated]
 
   mcp-server:
-    image: ${MCP_ZAP_IMAGE:?Set MCP_ZAP_IMAGE to the verified v0.17.0 release digest in .env}
+    image: ${MCP_ZAP_IMAGE:?Set MCP_ZAP_IMAGE to the verified v0.17.1 release digest in .env}
     platform: linux/amd64
     depends_on:
       zap:

@@ -9,12 +9,12 @@ architecture and deployment configuration. Image publication and a successful
 workflow do not establish that all dependency findings are fixed.
 
 Consult the linked upstream advisories and the packages in your deployed image
-before making an upgrade decision. The [release guide](/mcp-zap-server/releases/0.17.0/)
+before making an upgrade decision. The [release guide](/mcp-zap-server/releases/0.17.1/)
 describes the scanner's version and image requirements.
 
-## Dependency updates in v0.17.0 source
+## Dependency updates carried forward from v0.17.0 source
 
-Verify publication before selecting a `v0.17.0` image. These source dependency
+Verify publication before selecting a `v0.17.1` image. These source dependency
 updates do not establish that an existing deployment or a published artifact
 has been upgraded.
 

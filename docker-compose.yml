@@ -40,7 +40,7 @@ services:
 
   mcp-server:
     # Use the matching published release for Linux AMD64 and ARM64.
-    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.17.0}
+    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.17.1}
     restart: always
     depends_on:
       zap:

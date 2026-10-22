@@ -6,8 +6,8 @@ Docker setup.
 
 You need Docker 20.10 or newer with its engine running, Docker Compose with
 `--wait` and `--wait-timeout` support, Git, and an MCP client supporting
-Streamable HTTP with custom headers. This source selects `v0.17.0`; see the
-[upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.17.0/)
+Streamable HTTP with custom headers. This source selects `v0.17.1`; see the
+[upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.17.1/)
 for an existing installation. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
 and image publication before starting that version. Until it is available, use
 the published `v0.16.0` source release or the contributor source-build path.
@@ -41,7 +41,7 @@ Existing `.env` files and custom client grants are preserved. See
 for the default and optional per-client restrictions. Tool access does not
 replace authorization to scan a target; crawling also sends traffic.
 
-The intended default MCP image is `dtkmn/mcp-zap-server:v0.17.0` for Linux AMD64
+The intended default MCP image is `dtkmn/mcp-zap-server:v0.17.1` for Linux AMD64
 and ARM64 after publication. Choose an available
 published version with `IMAGE_TAG` in `.env`. An existing
 `latest` or development tag must be changed deliberately to a released version;

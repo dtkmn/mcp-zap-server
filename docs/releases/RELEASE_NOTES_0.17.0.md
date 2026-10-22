@@ -1,10 +1,16 @@
 # Release Notes and Upgrade Guide - Version 0.17.0
 
+> Distribution notice: the published `v0.17.0` release has no Desktop download
+> assets, and its image-release workflow did not complete. Use `v0.17.1` only
+> after verifying its images and downloads; see the
+> [0.17.1 upgrade guide](RELEASE_NOTES_0.17.1.md). The feature and migration
+> descriptions below retain this version's source behavior.
+
 This guide describes MCP ZAP Server `v0.17.0`. Check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
 release-image workflow before installing it. Source metadata, a tag or a local
 build does not establish that images, registry metadata or Desktop downloads
-are available. Until publication, `v0.16.0` remains the published release.
+are available. Use a version with verified available images before deploying.
 
 Use Linux AMD64 or ARM64 images from GHCR or Docker Hub only after the matching
 release has published them. Obtain the actual registry digest for `v0.17.0`

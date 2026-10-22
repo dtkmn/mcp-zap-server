@@ -14,7 +14,7 @@ before deploying it.
 
 The next normal scanner release in this repository is intended to include the
 Claude Desktop MCPB, its setup guide and both `.sha256` files. Connector version
-`0.1.0` is independent of the scanner tag: for example, a future `v0.17.0`
+`0.1.0` is independent of the scanner tag: for example, a future `v0.17.1`
 scanner release can carry the `0.1.0` connector assets. There is no separate
 Desktop release or repository. The existing immutable `v0.16.0` release is not
 being changed. Check the scanner release's assets for available Desktop downloads.
@@ -32,9 +32,13 @@ existing scanner Docker release workflow; verify image publication separately.
 See the [package release procedure](../../packaging/claude-desktop/README.md#prepare-downloads-for-a-normal-scanner-release)
 for exact filenames and package version rules, and the
 [user setup guide](../../packaging/claude-desktop/SETUP.md) for installation.
+Use the [publishing procedure](PUBLISHING.md) and its read-only preflight before
+publishing. A successful Desktop preview build alone does not attach its files
+to a release.
 
 ## Version Archive
 
+- [0.17.1 release and upgrade guide](./RELEASE_NOTES_0.17.1.md) — distribution requirements, release preflight and inherited upgrade requirements
 - [0.17.0 release and upgrade guide](./RELEASE_NOTES_0.17.0.md) — explicit-deny migration, client defaults and publication checks
 - [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — includes immutable image references and upgrade requirements
 - [0.15.0](./RELEASE_NOTES_0.15.0.md)

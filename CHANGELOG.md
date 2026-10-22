@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1]
+
+### Changed
+
+- Align scanner, chart, Registry-source and fresh-install defaults to `0.17.1` / `v0.17.1`. Existing selected versions and settings are preserved. Desktop connector `0.1.0`, plugin `0.5.0` and Gateway Core `0.11.0` retain independent versions.
+- Add a read-only draft-release preflight and an explicit Desktop-assets-first publishing procedure. Verify all four downloaded Desktop files before publishing an immutable release; the image-release workflow cannot attach missing assets afterward.
+- Carry forward the `0.17.0` product changes and upgrade requirements. The published `v0.17.0` release lacks Desktop downloads and its image-release workflow did not complete. Check the [0.17.1 upgrade guide](./docs/releases/RELEASE_NOTES_0.17.1.md) and actual image publication before installing this version. The separate zlib finding remains open.
+
 ## [0.17.0]
 
 Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and

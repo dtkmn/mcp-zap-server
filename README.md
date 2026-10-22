@@ -48,11 +48,11 @@ Prerequisites:
 - Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
-This source selects image `v0.17.0`. Verify that the matching
+This source selects image `v0.17.1`. Verify that the matching
 [GitHub release](https://github.com/dtkmn/mcp-zap-server/releases) and Linux AMD64/ARM64
 images are published before starting it. Until then, use the published `v0.16.0`
 release or build local source through the contributor setup. Read the
-[0.17.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.17.0.md) before changing
+[0.17.1 upgrade guide](./docs/releases/RELEASE_NOTES_0.17.1.md) before changing
 an existing installation. Settings and selected versions are preserved; set
 `IMAGE_TAG` in `.env` deliberately when upgrading.
 
@@ -127,7 +127,7 @@ permissions and standalone OCI use.
 
 ## Discovery Metadata
 
-This source includes `0.17.0` MCP Registry metadata in
+This source includes `0.17.1` MCP Registry metadata in
 [`.mcp/server.json`](./.mcp/server.json). Metadata in source does not publish a
 registry version or image. Check the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
@@ -151,14 +151,16 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
 
-## Version 0.17.0
+## Version 0.17.1
 
-The [0.17.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.17.0.md)
+The [0.17.1 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.17.1.md)
 describes neutral recorded-findings responses, authoritative explicit target
 denies, permission-aware next actions, and the local client setup options.
 Publication of the tag, images, registry version and Desktop downloads must be
 verified separately in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
-Until they are available, `v0.16.0` remains the published release.
+Use a version with verified published images until the matching distribution is available.
+The `v0.17.0` GitHub release is incomplete: its Desktop assets are absent and
+its image-release workflow did not complete. See the upgrade guide for availability checks.
 
 ## Version 0.16.0
 

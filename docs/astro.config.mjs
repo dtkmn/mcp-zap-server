@@ -39,6 +39,8 @@ export default defineConfig({
 					label: 'Mission Control',
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
+						{ slug: 'releases/0.17.1' },
+						{ slug: 'releases/publishing' },
 						{ slug: 'releases/0.17.0' },
 						{ slug: 'releases/0.16.0' },
 						{ slug: 'getting-started/self-serve-first-run' },

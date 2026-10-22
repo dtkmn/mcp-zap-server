@@ -176,14 +176,14 @@ from this checkout; source hashes are included in the bundle. Building this
 preview does not publish a release or rebuild the scanner images.
 
 Connector and scanner versions are independent. For example, a future scanner
-release `v0.17.0` can include connector `0.1.0`; the asset filenames use the
+release `v0.17.1` can include connector `0.1.0`; the asset filenames use the
 connector version. After publication, bump the connector version when its packaged
 code, dependencies, scanner resources or setup guide change. Ordinary scanner
 changes outside the bundle do not require a connector version bump.
 
 Bundled Compose files, scripts and defaults are snapshots of the selected
 source, not a promise to install that release's newest scanner. The current
-packaged `.env.example` selects scanner `v0.17.0`; verify image publication
+packaged `.env.example` selects scanner `v0.17.1`; verify image publication
 before distributing or starting a fresh installation. Update and validate those
 resources deliberately when changing the fresh-install scanner version; preserve
 the selected settings when reusing an existing scanner.
@@ -228,16 +228,19 @@ distribution assets. With no draft tag, the packaging workflow produces
 maintainer-only Actions artifacts; those expire and are not the public download
 route.
 
-Release packaging happens before publication through the manual draft-release
-flow below. Publishing an immutable release is not a packaging trigger; all
-assets must already be attached when the user publishes it.
+**Save a draft; do not publish after creating the tag.** Release packaging happens
+before publication through the manual draft-release flow below. Publishing an
+immutable release is not a packaging trigger; all assets must already be
+attached when the user publishes it. Follow the
+[scanner publishing procedure](../../docs/releases/PUBLISHING.md), including its
+downloaded-file preflight immediately before publication.
 
 Maintainers prepare the assets before publishing the normal scanner release:
 
 1. Include the reviewed connector source and guide in the next normal scanner
    release commit on `main`. Set the scanner `build.gradle` version for that
    release. The existing immutable `v0.16.0` release stays untouched.
-2. Create the normal scanner tag, such as `v0.17.0`, and a **draft** GitHub
+2. Create the normal scanner tag, such as `v0.17.1`, and a **draft** GitHub
    release for that existing tag in this repository. The usual scanner
    prerelease tags are also supported; a stable release does not need to be
    marked as a prerelease merely because its connector is a macOS preview.
@@ -265,7 +268,19 @@ Maintainers prepare the assets before publishing the normal scanner release:
    A failed run can leave some files attached. Inspect the draft and remove
    conflicting files yourself before retrying; the workflow does no automatic
    cleanup or replacement.
-5. Publish the normal scanner release only after reviewing all four assets.
+5. Run the read-only preflight from the repository root with the approved full
+   commit SHA; it must report `PASS`:
+
+   ```bash
+   python3 scripts/verify-release-draft.py --tag v0.17.1 --commit APPROVED_FULL_COMMIT_SHA
+   ```
+
+   It checks the existing mutable draft, tag/source/version and all four
+   downloaded files and their checksums. Any `STOP` blocks publication. A passed
+   build or an Actions artifact alone does not satisfy this gate.
+6. Publish the normal scanner release only after reviewing all four assets and
+   passing the preflight immediately beforehand. Use the guarded publication
+   command in the [publishing procedure](../../docs/releases/PUBLISHING.md#4-publish-only-through-the-successful-preflight).
    Publication then triggers the existing scanner Docker release workflow.
    That workflow requires all four expected assets to be nonempty and uploaded
    before building images; this check does not validate downloaded bytes and

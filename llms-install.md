@@ -2,10 +2,10 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example selects `v0.17.0` for GHCR and Docker Hub after
+The versioned image example selects `v0.17.1` for GHCR and Docker Hub after
 publication. Verify the release and its Linux AMD64/ARM64 images before running
 these commands. Until then, use the published `v0.16.0` source release. The
-[release and upgrade guide](docs/releases/RELEASE_NOTES_0.17.0.md) explains version
+[release and upgrade guide](docs/releases/RELEASE_NOTES_0.17.1.md) explains version
 selection, availability and upgrade requirements.
 
 ## What This Server Does
@@ -99,7 +99,7 @@ docker run -d \
   -e MCP_SECURITY_ENABLED=true \
   -e MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY=false \
   -e MCP_API_KEY="$MCP_API_KEY" \
-  ghcr.io/dtkmn/mcp-zap-server:v0.17.0
+  ghcr.io/dtkmn/mcp-zap-server:v0.17.1
 ```
 
 Check the MCP server:

@@ -113,7 +113,7 @@ mcp:
   image:
     repository: ghcr.io/dtkmn/mcp-zap-server  # Override for your own registry if needed
     pullPolicy: IfNotPresent
-    tag: ""  # Defaults to chart appVersion; verify v0.17.0 publication before installing
+    tag: ""  # Defaults to chart appVersion; verify v0.17.1 publication before installing
   
   service:
     type: ClusterIP  # Expose via ingress or load balancer only when needed

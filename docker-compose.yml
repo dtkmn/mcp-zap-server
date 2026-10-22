@@ -39,8 +39,8 @@ services:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-home:/home/zap/.ZAP
 
   mcp-server:
-    # Published v0.16.0 supports Linux AMD64 and ARM64.
-    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.16.0}
+    # Use the matching published release for Linux AMD64 and ARM64.
+    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.17.0}
     restart: always
     depends_on:
       zap:

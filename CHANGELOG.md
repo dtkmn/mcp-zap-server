@@ -7,17 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0]
+
+Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and
+image publication before installing this version. Source version metadata does
+not publish images, registry entries or Desktop downloads. Read the
+[upgrade guide](./docs/releases/RELEASE_NOTES_0.17.0.md) for the explicit-deny
+migration, installation defaults and separate client versions.
+
 ### Fixed
 
+- Describe empty findings as currently recorded alerts without inferring scan completion, coverage or safety. Keep useful in-progress reads and existing evidence authorization.
+- Make explicit operator target denies authoritative over localhost/private-network opt-ins and overlapping allow rules. Separate blank-by-default operator rules from built-in address guards; preserve configured restrictions, case-insensitive hostname matching and equivalent numeric IP literals.
+- Build the shell-free healthcheck with Go `1.27.3` for its `crypto/x509` fix, and align the standalone extension example's compile-only Spring dependency with the application's patched Boot `4.1.1` / Framework `7.0.9` baseline.
+- Refresh the signed Java 25 / Debian 13 runtime base to include Expat `2.9.0-1~deb13u1` for Linux AMD64 and ARM64. The separate zlib finding remains; package updates are not a claim that all dependency findings are cleared.
 - Override the Claude Desktop MCPB builder's transitive `tmp` dependency to `0.2.7`, covering path traversal, symbolic-link handling and the `0.2.6` non-string path bypass. Reject affected lockfile copies before packaging and in the rebuilt archive. The dependency remains build-only.
-- Limit automatic Claude Desktop MCPB packaging to relevant pushes to `main`, retaining manual build/draft-release preparation. Ordinary dev/PR CI keeps the connector tests without generating distribution assets.
 - Pin Zod `4.6.7` across Claude Desktop runtime and build dependencies to address `SNYK-JS-ZOD-20510278`. Reject affected lockfile resolutions and check the rebuilt MCPB's runtime version. Earlier preview artifacts containing Zod `3.25.76` must be rebuilt before publication.
 
 ### Added
 
-- Add Claude Desktop MCPB packaging with a standalone installation/setup/demo-scan guide and checksums for normal scanner releases in this repository. Manual packaging attaches the four assets to an existing mutable draft without creating a release or overwriting assets. Connector `0.1.0` is independently versioned; no separate Desktop release or tag is needed. Bundled fresh-install defaults select scanner `v0.16.0`.
-- Add a Claude Desktop MCPB preview with local prerequisite/setup/readiness tools, the official MCP SDK transport, and bundled copies of the existing Docker release bootstrap/doctor. Installation alone does not start containers; setup preserves existing credentials and other clients' settings.
-- Add Claude Code packaging and a marketplace index for MCP ZAP Connect `0.4.0`, reusing the existing Docker scanner and setup skill. Claude instructions preserve other clients' settings, configure a private HTTP API-key connection and include a native status-only check.
+- Add Claude Desktop MCPB packaging, local prerequisite/setup/readiness tools, a matching setup guide and checksums for normal scanner releases. The connector uses the official MCP SDK transport and bundled Docker bootstrap/doctor resources; installation alone does not start containers or replace an existing scanner's settings.
+- Add Claude Code packaging and a marketplace index alongside Codex and Cursor support in MCP ZAP Connect `0.5.0`. Shared setup preserves other clients' settings and verifies the intended client's authenticated connection separately.
+- Add scanner-readiness checks before requested scan workflows, with actionable recovery guidance and no automatic repair or scan replay. Tool readiness remains separate from scan completion.
+
+### Changed
+
+- Filter guided next-action suggestions by the caller's effective tool scopes while preserving existing authorization enforcement.
+- Align active scanner/application, chart, registry-source and installation defaults to `0.17.0` / `v0.17.0`. Preserve existing selected versions and explicit restrictions. Gateway Core/WebFlux remains `0.11.0`; Flyway migrations remain V1–V8.
+- Select scanner `v0.17.0` in fresh Desktop setup resources after image publication. Connector `0.1.0` and plugin `0.5.0` remain independently versioned.
 
 ## [0.16.0]
 

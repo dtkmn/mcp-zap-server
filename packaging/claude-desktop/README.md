@@ -183,7 +183,8 @@ changes outside the bundle do not require a connector version bump.
 
 Bundled Compose files, scripts and defaults are snapshots of the selected
 source, not a promise to install that release's newest scanner. The current
-packaged `.env.example` defaults to scanner `v0.16.0`. Update and validate those
+packaged `.env.example` selects scanner `v0.17.0`; verify image publication
+before distributing or starting a fresh installation. Update and validate those
 resources deliberately when changing the fresh-install scanner version; preserve
 the selected settings when reusing an existing scanner.
 

@@ -50,7 +50,7 @@ start_stack() {
   fi
   mcp_image="$(printf '%s\n' "$images" | sed -n '/^dtkmn\/mcp-zap-server:/p')"
   if [[ ! "$mcp_image" =~ ^dtkmn/mcp-zap-server:v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Select a verified published release tag in .env, such as IMAGE_TAG=v0.16.0; --start does not use latest or development images." >&2
+    echo "Select a verified published release tag in .env, such as IMAGE_TAG=v0.17.0; --start does not use latest or development images." >&2
     return 1
   fi
 

@@ -48,11 +48,13 @@ Prerequisites:
 - Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
-The default `v0.16.0` image is published on Docker Hub and GHCR for Linux AMD64
-and ARM64. See the [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md)
-for the verified image digest and upgrade requirements. Existing settings and
-selected versions are preserved; set `IMAGE_TAG` in `.env` deliberately when
-upgrading an existing installation.
+This source selects image `v0.17.0`. Verify that the matching
+[GitHub release](https://github.com/dtkmn/mcp-zap-server/releases) and Linux AMD64/ARM64
+images are published before starting it. Until then, use the published `v0.16.0`
+release or build local source through the contributor setup. Read the
+[0.17.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.17.0.md) before changing
+an existing installation. Settings and selected versions are preserved; set
+`IMAGE_TAG` in `.env` deliberately when upgrading.
 
 Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
@@ -125,13 +127,14 @@ permissions and standalone OCI use.
 
 ## Discovery Metadata
 
-This repository includes MCP Registry metadata in [`.mcp/server.json`](./.mcp/server.json).
-Version `0.16.0` is published as active/latest in the
+This source includes `0.17.0` MCP Registry metadata in
+[`.mcp/server.json`](./.mcp/server.json). Metadata in source does not publish a
+registry version or image. Check the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
-with versioned GHCR and Docker Hub images. Use metadata from the same version as
-the image you deploy. The image includes the MCP server name expected by
-registry and catalog tooling. The [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md)
-records the publication evidence and immutable image digest.
+and use metadata from the same published version as the image you deploy.
+The image includes the MCP server name expected by registry and catalog tooling.
+The published `0.16.0` version and its immutable digest remain documented in the
+[0.16.0 release guide](./docs/releases/RELEASE_NOTES_0.16.0.md).
 
 Docker Compose remains the easiest installation path because the MCP server is designed to operate with a ZAP sidecar and explicit auth keys. The OCI package metadata is for advanced standalone installs where ZAP is already running and reachable from the MCP container.
 
@@ -147,6 +150,15 @@ Docker Compose remains the easiest installation path because the MCP server is d
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
 In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
+
+## Version 0.17.0
+
+The [0.17.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.17.0.md)
+describes neutral recorded-findings responses, authoritative explicit target
+denies, permission-aware next actions, and the local client setup options.
+Publication of the tag, images, registry version and Desktop downloads must be
+verified separately in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
+Until they are available, `v0.16.0` remains the published release.
 
 ## Version 0.16.0
 

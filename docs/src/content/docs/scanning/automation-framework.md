@@ -39,7 +39,7 @@ For the default single API-key client, that workspace is
 Place the automation directory inside it so a generated report can be read
 through MCP. The report access restriction remains in place.
 
-The current `v0.16.0` `docker-compose.yml` defaults both automation
+The source `v0.17.0` `docker-compose.yml` defaults both automation
 directories to
 `${ZAP_REPORT_DIRECTORY}/workspaces/${MCP_CLIENT_ID}/automation`, using `/zap/wrk`
 and `default-client` when those settings are absent. It also forwards

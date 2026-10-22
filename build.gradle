@@ -20,7 +20,7 @@ plugins {
 }
 
 group = 'mcp.server.zap'
-version = '0.16.0'
+version = '0.17.0'
 def extensionApiPublicationVersion = version.toString()
 
 springBoot {

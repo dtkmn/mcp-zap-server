@@ -11,7 +11,7 @@ java {
     }
 }
 
-def defaultExtensionApiVersion = '0.16.0'
+def defaultExtensionApiVersion = '0.17.0'
 def extensionApiVersion = providers.gradleProperty('extensionApiVersion').orElse(defaultExtensionApiVersion).get()
 def extensionApiGroup = providers.gradleProperty('extensionApiGroup').orElse('io.github.dtkmn').get()
 def extensionApiCoordinate = "${extensionApiGroup}:mcp-zap-extension-api:${extensionApiVersion}"
@@ -36,5 +36,5 @@ repositories {
 
 dependencies {
     compileOnly extensionApiCoordinate
-    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.1.0'
+    compileOnly 'org.springframework.boot:spring-boot-autoconfigure:4.1.1'
 }

@@ -93,8 +93,10 @@ with a different key. Reuse the existing scanner when you want to keep those
 connections working without reconfiguration.
 
 The extension bundles a snapshot of the scanner setup files and defaults.
-Connector `0.1.0` currently defaults a new installation to scanner `v0.16.0`;
-downloading it from a newer scanner release does not itself change that default.
+Connector `0.1.0` currently defaults a new installation to scanner `v0.17.0`;
+verify that the scanner image is published before a fresh installation.
+Until `v0.17.0` is available, use a published scanner release and matching bundle.
+Downloading a bundle from a scanner release does not itself change its embedded default.
 An existing scanner keeps its selected version and settings.
 
 If a prerequisite is missing, resolve it and ask Claude to check again. If it

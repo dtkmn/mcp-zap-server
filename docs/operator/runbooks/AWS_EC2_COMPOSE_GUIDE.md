@@ -5,10 +5,12 @@ through AWS Session Manager, and verify scanning and report retrieval against an
 API supplied with the example. This path is useful when you have an AWS account
 and want to evaluate the server without creating a Kubernetes cluster.
 
-The [example configuration](../../../examples/aws-ec2/) targets published MCP ZAP
-Server **v0.16.0** and ZAP **2.17.0**, with images pinned by digest. The
-[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.16.0/)
-records the published MCP digest; step 4 selects and verifies it for this instance.
+The [example configuration](../../../examples/aws-ec2/) targets MCP ZAP
+Server **v0.17.0** after publication and ZAP **2.17.0**, with images pinned by digest. The
+[release and upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.17.0/)
+explains image availability; step 4 selects and verifies the published digest
+for this instance. Until `v0.17.0` is published, use the `v0.16.0` source release
+and its matching example instead.
 The reference configuration uses Linux x86_64, 4 vCPUs, 16 GiB RAM and an
 encrypted 40 GiB disk.
 These are a starting point for a small evaluation, not measured production
@@ -123,7 +125,7 @@ the same parameters. `CREATE_COMPLETE` confirms infrastructure creation; it
 does not confirm Session Manager availability or install/start MCP, ZAP or
 Docker. Continue with the connection checks below and steps 3–8. No application
 API keys, containers, VPC, NAT gateway, load balancer, database or backup are created by
-the template. Image selection still requires the published **v0.16.0** digest
+the template. Image selection still requires the published **v0.17.0** digest
 in step 4; infrastructure provisioning does not publish that release.
 
 This is a disposable host starter. Its workspace and configuration live on the
@@ -199,9 +201,9 @@ and [Docker installation](https://docs.aws.amazon.com/AmazonECS/latest/developer
 
 ## 4. Configure credentials and shared storage
 
-The `v0.16.0` release image is published on GHCR and Docker Hub for Linux AMD64
-and ARM64; see the [publication evidence](https://danieltse.org/mcp-zap-server/releases/0.16.0/).
-The snippet below pulls that tag, reads the GHCR digest returned by Docker,
+Verify that the `v0.17.0` release image is published on GHCR and Docker Hub for
+Linux AMD64 and ARM64; see the [release guide](https://danieltse.org/mcp-zap-server/releases/0.17.0/).
+After publication, the snippet below pulls that tag, reads the GHCR digest returned by Docker,
 validates its format and saves the immutable image reference as `MCP_ZAP_IMAGE`.
 If publication or digest selection fails, it stops before writing credentials.
 Docker documents [image pulls and digest references](https://docs.docker.com/reference/cli/docker/image/pull/).
@@ -224,13 +226,13 @@ writes a mode `0600` file. Temporary variables are confined to its subshell:
   set +x
   set -euo pipefail
   umask 077
-  MCP_EC2_TAG=ghcr.io/dtkmn/mcp-zap-server:v0.16.0
+  MCP_EC2_TAG=ghcr.io/dtkmn/mcp-zap-server:v0.17.0
   docker pull "$MCP_EC2_TAG"
   MCP_EC2_DIGEST=$(docker image inspect "$MCP_EC2_TAG" \
     --format '{{range .RepoDigests}}{{println .}}{{end}}' \
     | sed -n '/^ghcr[.]io\/dtkmn\/mcp-zap-server@sha256:/p')
   if [[ ! $MCP_EC2_DIGEST =~ ^ghcr[.]io/dtkmn/mcp-zap-server@sha256:[0-9a-f]{64}$ ]]; then
-    printf 'Expected one GHCR digest for v0.16.0. Verify image publication before retrying.\n' >&2
+    printf 'Expected one GHCR digest for v0.17.0. Verify image publication before retrying.\n' >&2
     exit 1
   fi
   MCP_EC2_IMAGE="$MCP_EC2_TAG@${MCP_EC2_DIGEST#*@}"

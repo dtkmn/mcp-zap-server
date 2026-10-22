@@ -4,10 +4,16 @@ This Helm chart deploys the MCP ZAP Server (Model Context Protocol server for ZA
 
 ## Chart And Image Versions
 
-Chart `0.16.0` defaults to published MCP image `v0.16.0`, available on GHCR and
-Docker Hub for Linux AMD64 and ARM64. Use the chart from the same release as your
-image. The [release guide](../../docs/releases/RELEASE_NOTES_0.16.0.md) records
-the publication evidence and immutable image digest.
+Chart `0.17.0` selects MCP image `v0.17.0` for Linux AMD64 and ARM64. Verify
+publication on GHCR or Docker Hub before installation; source defaults do not
+establish image availability. Use the chart from the same published release as
+your image. The [0.17.0 release guide](../../docs/releases/RELEASE_NOTES_0.17.0.md)
+explains the explicit-deny migration and image selection. Until publication, use
+the published `0.16.0` chart and matching image.
+
+Version `0.17.0` keeps explicit operator target denies authoritative over local
+and private-network allowances. Existing explicit deny lists remain binding;
+remove only the restrictions you deliberately intend to lift.
 
 Version `0.16.0` validates Automation Framework duration capabilities, enforces
 plan/artifact filesystem containment, validates report output paths, and corrects
@@ -761,7 +767,7 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 helm upgrade mcp-zap ./helm/mcp-zap-server \
   --namespace mcp-zap \
   --values custom-values.yaml \
-  --set mcp.image.tag=v0.16.0
+  --set mcp.image.tag=v0.17.0
 ```
 
 ## Uninstalling

@@ -774,6 +774,8 @@ class GuidedSecurityToolsServiceTest {
             .contains("Next Actions:")
             .contains("Drill down: call zap_findings_details")
             .contains("Report: call zap_report_generate")
+            .contains("after the requested crawl or attack has finished and passive analysis has drained")
+            .contains("alert counts do not establish completion")
             .contains("# Findings Summary");
     }
 

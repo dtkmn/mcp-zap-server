@@ -146,8 +146,9 @@ zap:
       # Comma-separated list of allowed domains (wildcards supported: *.example.com)
       # If set, host must match whitelist AND still pass blacklist/private-network checks
       whitelist: ${ZAP_URL_WHITELIST:}
-      # Default blacklist includes localhost and private network ranges
-      blacklist: ${ZAP_URL_BLACKLIST:localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      # Explicit operator denies; local/private opt-ins never override these rules.
+      # Built-in address safety checks apply independently, even when this is blank.
+      blacklist: ${ZAP_URL_BLACKLIST:}
 
     queue:
       dispatch-interval-ms: ${ZAP_SCAN_QUEUE_DISPATCH_INTERVAL_MS:2000}

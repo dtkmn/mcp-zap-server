@@ -74,7 +74,8 @@ public class FindingsService {
     public String getFindingsSummary(String baseUrl) {
         List<AlertSnapshot> alerts = loadAlerts(baseUrl);
         if (alerts.isEmpty()) {
-            return "✅ **Scan Complete**: No alerts found.";
+            return "No alerts are currently recorded for this target. "
+                    + "This does not establish scan completion, coverage, or safety.";
         }
 
         Map<String, Map<String, List<AlertSnapshot>>> riskGroups = new LinkedHashMap<>();

@@ -187,6 +187,23 @@ class QuickStartScopesTest(unittest.TestCase):
             self.assertNotIn(name, environment)
 
     @unittest.skipUnless(DOCKER, "Docker Compose is required for configuration rendering")
+    def test_custom_env_file_target_denies_are_not_shadowed_by_empty_defaults(self):
+        settings = b"MCP_API_KEY=operator-key\nZAP_API_KEY=scanner-key\n"
+        (self.root / ".env").write_bytes(settings)
+        rules = "localhost,127.0.0.1,10.0.0.0/8,::1/128,*.blocked.invalid"
+        policy_file = self.root / "target-policy.env"
+        original = f"ZAP_URL_BLACKLIST={rules}\n".encode()
+        policy_file.write_bytes(original)
+        override = self.root / "target-policy-compose.yml"
+        override.write_text("services:\n  mcp-server:\n    env_file:\n      - target-policy.env\n")
+
+        environment = self.render_compose(override)
+
+        self.assertEqual(environment["ZAP_URL_BLACKLIST"], rules)
+        self.assertEqual(policy_file.read_bytes(), original)
+        self.assertEqual((self.root / ".env").read_bytes(), settings)
+
+    @unittest.skipUnless(DOCKER, "Docker Compose is required for configuration rendering")
     def test_existing_key_and_identity_shell_overrides_still_apply(self):
         self.bootstrap()
         self.environment.update({

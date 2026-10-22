@@ -84,7 +84,7 @@ public class ExpertResultsMcpToolsService implements ExpertToolGroup {
 
     @Tool(
             name = "zap_get_findings_summary",
-            description = "Get a high-level markdown summary of scan findings for a required target baseUrl covered by scan evidence visible to the caller, grouped by risk and alert type."
+            description = "Read currently recorded alerts, including while scan work is in progress, grouped by risk and alert type. Alert counts do not establish scan completion, coverage, or safety. Requires a target baseUrl covered by scan evidence visible to the caller."
     )
     public String getFindingsSummary(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl

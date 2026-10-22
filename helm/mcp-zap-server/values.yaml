@@ -242,7 +242,8 @@ mcp:
       allowLocalhost: false
       allowPrivateNetworks: false
       whitelist: ""
-      blacklist: "localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+      # Explicit denies override the allow flags and whitelist. Built-in guards are separate.
+      blacklist: ""
   
   # Liveness and readiness probes
   livenessProbe:

@@ -11,7 +11,7 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 /**
@@ -34,17 +34,12 @@ public class UrlValidationService {
     @Value("#{'${zap.scan.url.whitelist:}'.split(',')}")
     private List<String> whitelist;
 
-    @Value("#{'${zap.scan.url.blacklist:localhost,127.0.0.1,0.0.0.0,169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'.split(',')}")
+    // Explicit operator rules are separate from the address safety checks below.
+    @Value("#{'${zap.scan.url.blacklist:}'.split(',')}")
     private List<String> blacklist;
 
     private static final Pattern IPV4_LITERAL_PATTERN = Pattern.compile(
         "^(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}$"
-    );
-    private static final Set<String> BUILT_IN_PRIVATE_NETWORK_SAFETY_CIDRS = Set.of(
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "169.254.0.0/16"
     );
 
     /**
@@ -108,8 +103,7 @@ public class UrlValidationService {
             );
         }
 
-        // Check blacklist for hostname/IP literals. Allowing localhost or private-network scanning
-        // should bypass only the built-in safety guardrails, not explicit administrator blocks.
+        // Explicit operator restrictions are never bypassed by local/private target opt-ins.
         InetAddress hostLiteral = parseIpLiteral(host);
         if (isBlacklistedHost(host, hostLiteral)) {
             throw new IllegalArgumentException("URL host '" + host + "' is blacklisted");
@@ -195,6 +189,7 @@ public class UrlValidationService {
         return blacklist.stream()
             .filter(entry -> entry != null && !entry.trim().isEmpty())
             .map(String::trim)
+            .map(pattern -> pattern.toLowerCase(Locale.ROOT))
             .anyMatch(pattern -> matchesBlacklistEntry(host, hostLiteral, pattern));
     }
 
@@ -203,25 +198,15 @@ public class UrlValidationService {
      */
     private boolean matchesBlacklistEntry(String host, InetAddress hostLiteral, String pattern) {
         if (pattern.contains("/")) {
-            if (hostLiteral == null || !isInCidr(hostLiteral, pattern)) {
-                return false;
-            }
-            if ((allowLocalhost && hostLiteral.isLoopbackAddress())
-                || isBypassablePrivateNetworkSafetyCidr(pattern, hostLiteral)) {
-                return false;
-            }
-            return true;
+            return hostLiteral != null && isInCidr(hostLiteral, pattern);
         }
-        if (allowLocalhost && isLocalhost(host)) {
-            return false;
+        if (hostLiteral != null && !pattern.contains("*")) {
+            InetAddress deniedLiteral = parseIpLiteral(pattern);
+            if (deniedLiteral != null) {
+                return hostLiteral.equals(deniedLiteral);
+            }
         }
         return matchesPattern(host, pattern);
-    }
-
-    private boolean isBypassablePrivateNetworkSafetyCidr(String pattern, InetAddress hostLiteral) {
-        return allowPrivateNetworks
-            && isPrivateNetwork(hostLiteral)
-            && BUILT_IN_PRIVATE_NETWORK_SAFETY_CIDRS.contains(pattern);
     }
 
     /**
@@ -371,7 +356,7 @@ public class UrlValidationService {
             return "";
         }
 
-        String normalized = host.trim().toLowerCase();
+        String normalized = host.trim().toLowerCase(Locale.ROOT);
         while (normalized.endsWith(".")) {
             normalized = normalized.substring(0, normalized.length() - 1);
         }

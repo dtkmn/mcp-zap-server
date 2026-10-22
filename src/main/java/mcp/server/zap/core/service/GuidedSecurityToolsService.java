@@ -156,7 +156,7 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_findings_summary",
-            description = "Get the first-pass findings view after a scan or passive-scan wait. This returns a concise grouped risk summary for fast triage. Requires a nonblank target baseUrl covered by scan evidence visible to the caller."
+            description = "Read currently recorded alerts, including while scan work is in progress, as a concise grouped risk summary for fast triage. Alert counts do not establish scan completion, coverage, or safety. Requires a nonblank target baseUrl covered by scan evidence visible to the caller."
     )
     public String getGuidedFindingsSummary(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller, for example https://app.example.com/admin") String baseUrl
@@ -313,7 +313,7 @@ public class GuidedSecurityToolsService {
                 .append("Use: first-pass triage before drilldown or report generation.\n")
                 .append(NEXT_ACTIONS_HEADER).append('\n');
         appendAction(output, "zap_findings_details", "- Drill down: call zap_findings_details for one alert family or concrete instances when you need evidence.");
-        appendAction(output, "zap_report_generate", "- Report: call zap_report_generate after passive analysis has drained and the summary is ready to share.");
+        appendAction(output, "zap_report_generate", "- Report: call zap_report_generate after the requested crawl or attack has finished and passive analysis has drained; alert counts do not establish completion.");
         return output.append('\n').append(delegateResponse).toString();
     }
 

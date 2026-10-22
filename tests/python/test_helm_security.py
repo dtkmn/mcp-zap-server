@@ -71,6 +71,26 @@ class HelmSecurityTest(unittest.TestCase):
                 self.assertEqual(service["spec"]["type"], "ClusterIP")
                 self.assertFalse(any(resource["kind"] == "HorizontalPodAutoscaler" for resource in resources))
 
+    def test_default_target_blacklist_is_empty_and_address_guards_stay_enabled(self):
+        environment = env_values(self.mcp_container(self.render()))
+        self.assertEqual(environment["ZAP_URL_BLACKLIST"], "")
+        self.assertEqual(environment["ZAP_ALLOW_LOCALHOST"], "false")
+        self.assertEqual(environment["ZAP_ALLOW_PRIVATE_NETWORKS"], "false")
+
+    def test_explicit_target_denies_survive_rendering_with_local_and_private_opt_ins(self):
+        rules = "localhost,127.0.0.1,10.0.0.0/8,::1/128,*.blocked.invalid"
+        resources = self.render(
+            "--set-json", "mcp.scan.url.blacklist=" + json.dumps(rules),
+            "--set", "mcp.scan.url.allowLocalhost=true",
+            "--set", "mcp.scan.url.allowPrivateNetworks=true",
+            "--set-string", "mcp.scan.url.whitelist=*",
+        )
+        environment = env_values(self.mcp_container(resources))
+        self.assertEqual(environment["ZAP_URL_BLACKLIST"], rules)
+        self.assertEqual(environment["ZAP_ALLOW_LOCALHOST"], "true")
+        self.assertEqual(environment["ZAP_ALLOW_PRIVATE_NETWORKS"], "true")
+        self.assertEqual(environment["ZAP_URL_WHITELIST"], "*")
+
     def test_ha_emits_shared_revocation_tls_and_stable_affinity(self):
         resources = self.render(preset="values-ha.yaml")
         environment = env_values(self.mcp_container(resources))

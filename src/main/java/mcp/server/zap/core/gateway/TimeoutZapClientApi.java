@@ -28,9 +28,16 @@ public final class TimeoutZapClientApi extends ClientApi {
     private final String apiKey;
     private final int connectTimeoutMs;
     private final int readTimeoutMs;
+    private final EngineMaintenanceGate maintenanceGate;
 
     public TimeoutZapClientApi(String host, int port, String apiKey, int connectTimeoutMs, int readTimeoutMs) {
+        this(host, port, apiKey, connectTimeoutMs, readTimeoutMs, null);
+    }
+
+    public TimeoutZapClientApi(String host, int port, String apiKey, int connectTimeoutMs, int readTimeoutMs,
+                               EngineMaintenanceGate maintenanceGate) {
         super(host, port, apiKey);
+        this.maintenanceGate = maintenanceGate;
         this.connectTimeoutMs = requirePositive(connectTimeoutMs, "connect-timeout-ms");
         this.readTimeoutMs = requirePositive(readTimeoutMs, "read-timeout-ms");
         this.proxy = new Proxy(Proxy.Type.HTTP, new InetSocketAddress(host, port));
@@ -39,6 +46,11 @@ public final class TimeoutZapClientApi extends ClientApi {
 
     @Override
     public ApiResponse callApi(String requestMethod, String component, String type, String method,
+                               Map<String, String> params) throws ClientApiException {
+        return guarded(component, type, method, params, () -> callXml(requestMethod, component, type, method, params));
+    }
+
+    private ApiResponse callXml(String requestMethod, String component, String type, String method,
                                Map<String, String> params) throws ClientApiException {
         byte[] response = request(requestMethod, "xml", component, type, method, params);
         try {
@@ -62,13 +74,20 @@ public final class TimeoutZapClientApi extends ClientApi {
     @Override
     public byte[] callApiOther(String requestMethod, String component, String type, String method,
                                Map<String, String> params) throws ClientApiException {
-        return request(requestMethod, "other", component, type, method, params);
+        return guarded(component, type, method, params, () -> request(requestMethod, "other", component, type, method, params));
     }
 
     @Override
     public String callApiJson(String component, String type, String method, Map<String, String> params)
             throws ClientApiException {
-        return new String(request("GET", "JSON", component, type, method, params), StandardCharsets.UTF_8);
+        return guarded(component, type, method, params,
+                () -> new String(request("GET", "JSON", component, type, method, params), StandardCharsets.UTF_8));
+    }
+
+    private <T> T guarded(String component, String type, String method, Map<String, String> params,
+                          EngineMaintenanceGate.ApiCall<T> call)
+            throws ClientApiException {
+        return maintenanceGate == null ? call.call() : maintenanceGate.apiCall(component, type, method, params, call);
     }
 
     private byte[] request(String requestMethod, String format, String component, String type, String method,

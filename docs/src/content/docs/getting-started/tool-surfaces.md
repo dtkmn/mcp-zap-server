@@ -77,6 +77,9 @@ Guided tools:
 - `zap_report_read_chunk` (introduced in `v0.15.0`; complete paged report retrieval)
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
+- `zap_addon_inspect`
+- `zap_addon_update`
+- `zap_addon_update_status`
 - `zap_scan_history_list`
 - `zap_scan_history_get`
 - `zap_scan_history_export`
@@ -90,6 +93,8 @@ Use `guided` when:
 - you want the server to choose direct versus queue execution for crawl and attack flows
 - you want guided target authentication without exposing raw ZAP context/user tools
 - you want scan history evidence without switching to the raw queue or report surfaces
+- you want to inspect scanner add-ons and passive rules before scanning; add-on
+  updates additionally require [operator maintenance configuration](../../operations/engine-addons/)
 - you do not need raw queue administration, raw auth-context setup, scan-policy tuning, or Automation Framework control
 
 ## Expert Surface

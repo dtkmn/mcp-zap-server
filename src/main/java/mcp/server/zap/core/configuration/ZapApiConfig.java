@@ -1,6 +1,7 @@
 package mcp.server.zap.core.configuration;
 
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
+import mcp.server.zap.core.gateway.EngineMaintenanceGate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,9 +19,10 @@ public class ZapApiConfig {
             @Value("${zap.server.port:8090}") int zapApiPort,
             @Value("${zap.server.apiKey}") String zapApiKey,
             @Value("${zap.server.connect-timeout-ms:5000}") int connectTimeoutMs,
-            @Value("${zap.server.read-timeout-ms:10000}") int readTimeoutMs
+            @Value("${zap.server.read-timeout-ms:10000}") int readTimeoutMs,
+            EngineMaintenanceGate maintenanceGate
     ) {
-        return new TimeoutZapClientApi(zapApiUrl, zapApiPort, zapApiKey, connectTimeoutMs, readTimeoutMs);
+        return new TimeoutZapClientApi(zapApiUrl, zapApiPort, zapApiKey, connectTimeoutMs, readTimeoutMs, maintenanceGate);
     }
 
 }

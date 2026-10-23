@@ -1,6 +1,7 @@
 package mcp.server.zap.core.configuration;
 
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
+import mcp.server.zap.core.gateway.EngineMaintenanceGate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -12,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ZapApiConfigTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(ZapApiConfig.class)
+            .withUserConfiguration(ZapApiConfig.class, AddonMaintenanceProperties.class, EngineMaintenanceGate.class)
             .withPropertyValues("zap.server.apiKey=test-api-key");
 
     @Test

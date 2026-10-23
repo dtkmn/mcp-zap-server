@@ -49,6 +49,12 @@ preview URL:
 | Juice Shop | `http://localhost:3001` | `http://juice-shop:3000` |
 | Petstore | `http://localhost:3002` | `http://petstore:8080` |
 
+When checking a newly announced vulnerability, first use `zap_addon_inspect` to
+check the required add-on and passive rule. An approved operator can update an
+installed add-on through MCP and verify loaded readiness before crawling. See
+[ZAP add-on inspection and updates](../../operations/engine-addons/); a scanner
+readiness result does not establish that a target was checked or is safe.
+
 ## The Short Version
 
 Ask your MCP client:

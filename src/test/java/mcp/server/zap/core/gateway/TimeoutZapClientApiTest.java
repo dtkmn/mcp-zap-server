@@ -5,6 +5,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import mcp.server.zap.core.configuration.AddonMaintenanceProperties;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.zaproxy.clientapi.core.ApiResponseElement;
@@ -15,6 +17,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -29,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TimeoutZapClientApiTest {
+    @TempDir Path maintenanceDirectory;
     private HttpServer server;
     private ExecutorService executor;
     private ClientApi client;
@@ -67,6 +71,47 @@ class TimeoutZapClientApiTest {
         assertEquals("zap", received.get().get("host"));
         assertEquals("GET", received.get().get("method"));
         assertEquals(Map.of("url", target, "followRedirects", "true"), decode(received.get().get("query")));
+    }
+
+    @Test
+    void maintenanceGateCoversGeneratedXmlPostOtherAndJsonActionsBeforeHttpDispatch() throws Exception {
+        AtomicInteger httpRequests = new AtomicInteger();
+        server.createContext("/", exchange -> {
+            httpRequests.incrementAndGet();
+            respond(exchange, 200, "<Result>OK</Result>");
+        });
+        AddonMaintenanceProperties properties = new AddonMaintenanceProperties();
+        properties.setUpdatesEnabled(true);
+        properties.setStateDirectory(maintenanceDirectory.toString());
+        EngineMaintenanceGate gate = new EngineMaintenanceGate(properties);
+        ClientApi guarded = new TimeoutZapClientApi("127.0.0.1", server.getAddress().getPort(), "test-key", 500, 200, gate);
+        try (var ignored = gate.beginMaintenance()) {
+            var attempts = executor.submit(() -> {
+                assertThrows(EngineBusyException.class, () -> guarded.core.accessUrl("http://fixture.invalid", "true"));
+                assertThrows(EngineBusyException.class, () -> guarded.callApi("POST", "openapi", "action", "importFile", Map.of()));
+                assertThrows(EngineBusyException.class, () -> guarded.callApiOther("reports", "action", "generate", Map.of()));
+                assertThrows(EngineBusyException.class, () -> guarded.callApiJson("authentication", "action", "test", Map.of()));
+            });
+            attempts.get(5, TimeUnit.SECONDS);
+        }
+        assertEquals(0, httpRequests.get());
+    }
+
+    @Test
+    void generatedScanBusyResponseRemainsRetriableWithMaintenanceEnabled() throws Exception {
+        server.createContext("/xml/spider/action/scan/", exchange -> respond(exchange, 400,
+                "<Result type=\"exception\" code=\"scan_in_progress\" detail=\"busy\">Scan running</Result>"));
+        server.createContext("/xml/core/action/accessUrl/", exchange -> respond(exchange, 200, "<Result>OK</Result>"));
+        AddonMaintenanceProperties properties = new AddonMaintenanceProperties();
+        properties.setUpdatesEnabled(true);
+        properties.setStateDirectory(maintenanceDirectory.toString());
+        EngineMaintenanceGate gate = new EngineMaintenanceGate(properties);
+        ClientApi guarded = new TimeoutZapClientApi("127.0.0.1", server.getAddress().getPort(), "test-key", 500, 200, gate);
+        ClientApiException failure = assertThrows(ClientApiException.class,
+                () -> guarded.spider.scan("http://fixture.invalid", "1", "true", "", "false"));
+        assertEquals("scan_in_progress", failure.getCode());
+        assertFalse(gate.isQuarantined());
+        assertEquals("OK", ((ApiResponseElement) guarded.core.accessUrl("http://fixture.invalid", "true")).getValue());
     }
 
     @Test

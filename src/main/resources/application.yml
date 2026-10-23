@@ -111,6 +111,15 @@ mcp:
 
 # ZAP Configuration
 zap:
+  addons:
+    updates-enabled: ${ZAP_ADDON_UPDATES_ENABLED:false}
+    # Operator assertion: fresh dedicated engine, all activity through one controller.
+    exclusive-engine: ${ZAP_ADDON_EXCLUSIVE_ENGINE:false}
+    controller-replicas: ${ZAP_ADDON_CONTROLLER_REPLICAS:1}
+    allowed-addon-ids: ${ZAP_ADDON_ALLOWED_IDS:pscanrules}
+    operator-client-ids: ${ZAP_ADDON_OPERATOR_CLIENT_IDS:}
+    # Durable private state must survive MCP restarts; unresolved installs pause engine actions.
+    state-directory: ${ZAP_ADDON_STATE_DIRECTORY:${user.home}/.mcp-zap/addon-maintenance}
   server:
     url: ${ZAP_API_URL:localhost}
     port: ${ZAP_API_PORT:8090}

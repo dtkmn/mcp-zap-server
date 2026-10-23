@@ -30,6 +30,9 @@ public class ToolScopeRegistry {
         List<McpToolAccessRule> rules = new ArrayList<>();
 
         // Inventory and findings
+        register(rules, "zap_addon_inspect", McpToolSurface.GUIDED, "zap:engine:addons:read");
+        register(rules, "zap_addon_update_status", McpToolSurface.GUIDED, "zap:engine:addons:read");
+        register(rules, "zap_addon_update", McpToolSurface.GUIDED, "zap:engine:addons:update");
         register(rules, "zap_alerts", McpToolSurface.EXPERT, "zap:alerts:read");
         register(rules, "zap_alert_details", McpToolSurface.EXPERT, "zap:alerts:read");
         register(rules, "zap_alert_instances", McpToolSurface.EXPERT, "zap:alerts:read");

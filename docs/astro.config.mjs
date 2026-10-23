@@ -85,6 +85,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'operations/abuse-protection' },
 						{ slug: 'operations/runtime-policy-bundles' },
+						{ slug: 'operations/engine-addons' },
 						{ slug: 'operations/observability' },
 						{ slug: 'operations/structured-logging' },
 						{ slug: 'operations/aws-ec2-compose' },

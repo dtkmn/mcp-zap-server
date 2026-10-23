@@ -15,6 +15,8 @@ import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import mcp.server.zap.core.service.ActiveScanService;
+import mcp.server.zap.core.service.AddonMaintenanceService;
+import mcp.server.zap.core.service.AddonMaintenanceMcpToolsService;
 import mcp.server.zap.core.service.AjaxSpiderService;
 import mcp.server.zap.core.service.AutomationPlanService;
 import mcp.server.zap.core.service.ContextUserService;
@@ -140,6 +142,7 @@ class ToolSurfaceProviderTest {
                 guidedAuthSessionMcpToolsService,
                 passiveScanMcpToolsService,
                 scanHistoryMcpToolsService,
+                new AddonMaintenanceMcpToolsService(mock(AddonMaintenanceService.class)),
                 expertToolGroups
         );
     }

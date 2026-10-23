@@ -36,7 +36,7 @@ Modes:
 - `warn`: log missing-scope usage but still allow it
 - `enforce`: reject insufficient-scope requests with HTTP `403`
 
-`allowWildcard=true` lets a client with `*` call the exposed tools. Keep it enabled for the standard local default. Restricted deployments can turn it off after assigning explicit scopes to every intended client.
+`allowWildcard=true` lets a client with `*` pass ordinary tool-scope checks. Keep it enabled for the standard local default. Restricted deployments can turn it off after assigning explicit scopes to every intended client. Add-on updates additionally require the exact maintenance scope and operator configuration described below; a wildcard alone does not authorize them.
 
 ## Scope Flow
 
@@ -60,10 +60,16 @@ In JWT mode, the access token inherits the same scopes from the source client. J
 ## Quick-Start Permissions
 
 The packaged local API-key client defaults to `*` with wildcard acceptance
-enabled. This permits every tool exposed by the selected surface. The default
+enabled. This permits ordinary tools exposed by the selected surface. The default
 `guided` surface includes crawling, active attacks, target authentication, API
 imports, findings, history and reports. Selecting `expert` also exposes expert
 tools to that wildcard client; a grant never enables a disabled tool.
+
+`zap_addon_update` is a maintenance operation with additional checks. It requires
+the explicit `zap:engine:addons:update` scope, an approved operator client,
+enforced authorization, and enabled maintenance on a dedicated single-controller
+engine. It remains disabled by default. See
+[ZAP add-on inspection and updates](../../operations/engine-addons/).
 
 Run only the target and workflow the user requests. MCP grants do not establish
 permission to scan a system, authenticate ZAP to a website or replace target
@@ -102,6 +108,8 @@ Common scopes:
 | --- | --- |
 | `mcp:tools:list` | Allow MCP `tools/list` discovery |
 | `zap:inventory:read` | Read hosts, sites, and URLs |
+| `zap:engine:addons:read` | Inspect engine add-ons, Marketplace candidates and passive-rule readiness |
+| `zap:engine:addons:update` | Request an operator-enabled update of an approved installed add-on; exact grant required |
 | `zap:alerts:read` | Read grouped findings, raw instances, snapshots, and diffs |
 | `zap:report:read` | Read guided summaries, report templates, and generated report artifacts |
 | `zap:report:generate` | Generate reports |

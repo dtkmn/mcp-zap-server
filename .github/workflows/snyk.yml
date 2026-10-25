@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up JDK 25
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           java-version: "25"
           distribution: temurin
@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('build/snyk-reports/source/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           sarif_file: build/snyk-reports/source/report.sarif
           category: snyk-open-source
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('build/snyk-reports/container/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           sarif_file: build/snyk-reports/container/report.sarif
           category: snyk-container
@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('build/snyk-reports/iac/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           sarif_file: build/snyk-reports/iac/report.sarif
           category: snyk-iac

@@ -26,7 +26,7 @@ FROM gcr.io/distroless/java25-debian13:nonroot@sha256:69514ce1edfe8759f5169870e8
 
 # Build a shell-free, statically linked HTTP health probe for the target image
 # architecture. Only /out/http-healthcheck enters the runtime image.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:7fd63dd7c37f5ddaef15bd8fd3f3e4f90f0d50cd9cae255c7cf73887a494d8df AS healthcheck-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS healthcheck-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src/healthcheck

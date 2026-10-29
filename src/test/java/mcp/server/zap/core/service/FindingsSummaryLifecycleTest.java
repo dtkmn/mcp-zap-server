@@ -48,7 +48,6 @@ class FindingsSummaryLifecycleTest {
     private EngineFindingAccess findingAccess;
     private FindingsService findings;
     private GuidedSecurityToolsService guided;
-    private ExpertResultsMcpToolsService expert;
 
     @BeforeEach
     void setUp() {
@@ -74,7 +73,6 @@ class FindingsSummaryLifecycleTest {
         guided = new GuidedSecurityToolsService(
                 mock(GuidedScanWorkflowService.class), reports, findings,
                 mock(OpenApiService.class), new ZapEngineAdapter(), records, actions);
-        expert = new ExpertResultsMcpToolsService(findings, reports);
     }
 
     @AfterEach
@@ -171,6 +169,28 @@ class FindingsSummaryLifecycleTest {
                 .hasMessage("Synthetic engine read failure");
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"snapshot", "diff"})
+    void retainedSnapshotToolsRejectForeignWorkspaceEvidenceBeforeEngineRead(String operation) {
+        history.append(entry("scan_run", "started", TARGET, "client-b", Instant.now()));
+        assertThatThrownBy(() -> {
+            if ("snapshot".equals(operation)) guided.exportFindingsSnapshot(TARGET);
+            else guided.diffFindings(TARGET, "{\"version\":2,\"fingerprints\":[]}", 10);
+        }).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No visible scan evidence exists");
+        verifyNoInteractions(findingAccess);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"snapshot", "diff"})
+    void retainedSnapshotToolsRejectUnscannedTargetsBeforeEngineRead(String operation) {
+        recordJob(ScanJobStatus.RUNNING);
+        assertThatThrownBy(() -> {
+            if ("snapshot".equals(operation)) guided.exportFindingsSnapshot("https://target.example/other");
+            else guided.diffFindings("https://target.example/other", "{\"version\":2,\"fingerprints\":[]}", 10);
+        }).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No visible scan evidence exists");
+        verifyNoInteractions(findingAccess);
+    }
+
     private void recordJob(ScanJobStatus status) {
         ScanJob job = new ScanJob("job-1", ScanJobType.SPIDER_SCAN,
                 Map.of("targetUrl", TARGET), Instant.now(), 1, WORKSPACE, null);
@@ -201,7 +221,6 @@ class FindingsSummaryLifecycleTest {
         return switch (entryPoint) {
             case SERVICE -> findings.getFindingsSummary(target);
             case GUIDED -> guided.getGuidedFindingsSummary(target);
-            case EXPERT -> expert.getFindingsSummary(target);
         };
     }
 
@@ -220,6 +239,6 @@ class FindingsSummaryLifecycleTest {
     }
 
     private enum EntryPoint {
-        SERVICE, GUIDED, EXPERT
+        SERVICE, GUIDED
     }
 }

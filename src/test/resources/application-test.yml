@@ -34,6 +34,9 @@ zap:
     apiKey: test-api-key
   
   scan:
+    jobs:
+      launch-safety:
+        journal-directory: ${user.dir}/build/test-launch-journals/${random.uuid}
     limits:
       maxActiveScanDurationInMins: 5
       maxSpiderScanDurationInMins: 3

@@ -38,8 +38,6 @@ server:
 #   - jwt: JWT token-based authentication (recommended for production)
 mcp:
   server:
-    tools:
-      surface: ${MCP_SERVER_TOOLS_SURFACE:guided}
     request:
       maxBodyBytes: ${MCP_REQUEST_MAX_BODY_BYTES:262144}
     security:
@@ -92,14 +90,10 @@ mcp:
       workspace-quota:
         enabled: ${MCP_PROTECTION_WORKSPACE_QUOTA_ENABLED:true}
         max-queued-or-running-scan-jobs: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_QUEUED_OR_RUNNING_SCAN_JOBS:5}
-        max-direct-scans: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_DIRECT_SCANS:2}
-        max-automation-plans: ${MCP_PROTECTION_WORKSPACE_QUOTA_MAX_AUTOMATION_PLANS:2}
       backpressure:
         enabled: ${MCP_PROTECTION_BACKPRESSURE_ENABLED:true}
         max-tracked-scan-jobs: ${MCP_PROTECTION_BACKPRESSURE_MAX_TRACKED_SCAN_JOBS:20}
         max-running-scan-jobs: ${MCP_PROTECTION_BACKPRESSURE_MAX_RUNNING_SCAN_JOBS:8}
-        max-direct-scans: ${MCP_PROTECTION_BACKPRESSURE_MAX_DIRECT_SCANS:4}
-        max-automation-plans: ${MCP_PROTECTION_BACKPRESSURE_MAX_AUTOMATION_PLANS:4}
     observability:
       audit:
         enabled: ${MCP_OBSERVABILITY_AUDIT_ENABLED:true}
@@ -188,6 +182,9 @@ zap:
           max-backoff-ms: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS:10000}
           multiplier: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER:2.0}
     jobs:
+      launch-safety:
+        journal-directory: ${ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY:${user.home}/.mcp-zap/scan-launch-safety}
+        operator-client-ids: ${ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS:}
       store:
         backend: ${ZAP_SCAN_JOBS_STORE_BACKEND:${ZAP_SCAN_QUEUE_STORE_BACKEND:in-memory}}
         postgres:

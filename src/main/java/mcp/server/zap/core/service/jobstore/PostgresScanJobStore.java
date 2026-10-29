@@ -476,11 +476,7 @@ public class PostgresScanJobStore implements ScanJobStore {
                     connection.setAutoCommit(true);
                 }
             } catch (Exception e) {
-                if (properties.isFailFast()) {
-                    throw new IllegalStateException("Postgres scan job transactional update failed", e);
-                }
-                log.warn("Postgres scan job transactional update failed (falling back to current view): {}", e.getMessage());
-                return list();
+                throw new IllegalStateException("Postgres scan job transactional update failed; no mutation was acknowledged", e);
             }
         }
     }
@@ -504,8 +500,8 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "zap_scan_id, last_error, created_at, started_at, completed_at, next_attempt_at, last_known_progress, "
                 + "queue_position, claim_owner_id, claim_fence_id, claim_heartbeat_at, claim_expires_at, "
                 + "busy_wait_started_at, busy_wait_count, cancel_requested_at, cancel_deadline_at, "
-                + "cancel_next_attempt_at, cancel_attempt_count, updated_at"
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "cancel_next_attempt_at, cancel_attempt_count, launch_attempt_json, updated_at"
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "ON CONFLICT (job_id) DO UPDATE SET "
                 + "job_type = EXCLUDED.job_type, "
                 + "parameters_json = EXCLUDED.parameters_json, "
@@ -532,6 +528,7 @@ public class PostgresScanJobStore implements ScanJobStore {
                 + "cancel_deadline_at = EXCLUDED.cancel_deadline_at, "
                 + "cancel_next_attempt_at = EXCLUDED.cancel_next_attempt_at, "
                 + "cancel_attempt_count = EXCLUDED.cancel_attempt_count, "
+                + "launch_attempt_json = EXCLUDED.launch_attempt_json, "
                 + "updated_at = EXCLUDED.updated_at";
 
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -561,7 +558,8 @@ public class PostgresScanJobStore implements ScanJobStore {
             setTimestamp(statement, 24, job.getCancelDeadlineAt());
             setTimestamp(statement, 25, job.getCancelNextAttemptAt());
             statement.setInt(26, job.getCancelAttemptCount());
-            statement.setTimestamp(27, Timestamp.from(Instant.now()));
+            statement.setString(27, job.getLaunchAttempt() == null ? null : objectMapper.writeValueAsString(job.getLaunchAttempt()));
+            statement.setTimestamp(28, Timestamp.from(Instant.now()));
             statement.executeUpdate();
         }
     }
@@ -704,10 +702,12 @@ public class PostgresScanJobStore implements ScanJobStore {
     private int countCapacityInUse(Connection connection, boolean activeFamily, Instant now) throws Exception {
         String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE ("
                 + "job_type IN (" + familySqlPlaceholders(activeFamily) + ")"
-                + ") AND (status = ? OR (status = ? AND claim_owner_id IS NOT NULL AND claim_expires_at > ?))";
+                + ") AND (status IN (?, ?, ?) OR (status = ? AND claim_owner_id IS NOT NULL AND claim_expires_at > ?))";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = bindFamilyTypes(statement, 1, activeFamily);
             statement.setString(index++, ScanJobStatus.RUNNING.name());
+            statement.setString(index++, ScanJobStatus.STARTING.name());
+            statement.setString(index++, ScanJobStatus.START_OUTCOME_UNKNOWN.name());
             statement.setString(index++, ScanJobStatus.QUEUED.name());
             statement.setTimestamp(index, Timestamp.from(now));
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -721,13 +721,15 @@ public class PostgresScanJobStore implements ScanJobStore {
 
     private boolean hasAjaxCapacityInUse(Connection connection, Instant now) throws Exception {
         String sql = "SELECT 1 FROM " + tableName + " WHERE job_type = ? "
-                + "AND (status = ? OR (status = ? AND (cancel_requested_at IS NOT NULL "
+                + "AND (status IN (?, ?, ?) OR (status = ? AND (cancel_requested_at IS NOT NULL "
                 + "OR (claim_owner_id IS NOT NULL AND claim_expires_at > ?)))) LIMIT 1";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, ScanJobType.AJAX_SPIDER.name());
             statement.setString(2, ScanJobStatus.RUNNING.name());
-            statement.setString(3, ScanJobStatus.QUEUED.name());
-            statement.setTimestamp(4, Timestamp.from(now));
+            statement.setString(3, ScanJobStatus.STARTING.name());
+            statement.setString(4, ScanJobStatus.START_OUTCOME_UNKNOWN.name());
+            statement.setString(5, ScanJobStatus.QUEUED.name());
+            statement.setTimestamp(6, Timestamp.from(now));
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();
             }
@@ -788,7 +790,49 @@ public class PostgresScanJobStore implements ScanJobStore {
                 toInstant(resultSet.getTimestamp("cancel_deadline_at")),
                 toInstant(resultSet.getTimestamp("cancel_next_attempt_at")),
                 resultSet.getInt("cancel_attempt_count")
-        );
+        ).restoreLaunchAttempt(readLaunchAttempt(resultSet.getString("launch_attempt_json")));
+    }
+
+    private ScanJob.LaunchAttempt readLaunchAttempt(String json) throws Exception {
+        return json == null ? null : objectMapper.readValue(json, ScanJob.LaunchAttempt.class);
+    }
+
+    @Override
+    public Optional<ScanJob> updateLaunchAttempt(String jobId, String attemptId, long resolutionVersion,
+                                                 UnaryOperator<ScanJob> updater) {
+        // Safety transitions never use the fail-soft read path, even with legacy failFast=false.
+        try (Connection connection = openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                lockTableForQueueMutation(connection);
+                ScanJob current = loadById(connection, jobId, true).orElse(null);
+                ScanJob.LaunchAttempt launch = current == null ? null : current.getLaunchAttempt();
+                if (launch == null || !launch.id().equals(attemptId)
+                        || launch.resolutionVersion() != resolutionVersion) {
+                    connection.commit();
+                    return Optional.empty();
+                }
+                ScanJob updated = Objects.requireNonNull(updater.apply(current));
+                normalizeQueuePositionTransition(connection, updated);
+                upsertJob(connection, updated);
+                connection.commit();
+                return Optional.of(updated);
+            } catch (Exception e) {
+                connection.rollback();
+                throw e;
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Postgres launch-receipt update failed; ownership remains unresolved", e);
+        }
+    }
+
+    @Override
+    public List<ScanJob> listStrict() {
+        try (Connection connection = openConnection()) {
+            return loadAll(connection, false);
+        } catch (Exception e) {
+            throw new IllegalStateException("Postgres safety snapshot failed", e);
+        }
     }
 
     private Instant toInstant(Timestamp value) {

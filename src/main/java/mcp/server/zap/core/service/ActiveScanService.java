@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -241,18 +243,25 @@ public class ActiveScanService {
      * Start a standard active scan and return the ZAP scan ID.
      */
     public String startActiveScanJob(String targetUrl, String recurse, String policy) {
+        return startActiveScanJob(targetUrl, recurse, policy, NativeScanLaunch.UNTRACKED);
+    }
+
+public String startActiveScanJob(String targetUrl, String recurse, String policy, NativeScanLaunch launch) {
         urlValidationService.validateUrl(targetUrl);
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        return engineScanExecution.startActiveScan(new ActiveScanRequest(
+        ActiveScanRequest request = new ActiveScanRequest(
                 targetUrl,
                 effectiveRecurse,
                 effectivePolicy,
                 scanLimitProperties.getMaxActiveScanDurationInMins(),
                 scanLimitProperties.getHostPerScan(),
                 scanLimitProperties.getThreadPerHost()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startActiveScan(request)
+                : engineScanExecution.startActiveScan(request, launch);
     }
 
     /**
@@ -263,6 +272,14 @@ public class ActiveScanService {
                                            String targetUrl,
                                            String recurse,
                                            String policy) {
+        return startActiveScanAsUserJob(contextId, userId, targetUrl, recurse, policy, NativeScanLaunch.UNTRACKED);
+    }
+
+public String startActiveScanAsUserJob(String contextId,
+                                           String userId,
+                                           String targetUrl,
+                                           String recurse,
+                                           String policy, NativeScanLaunch launch) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserId = requireText(userId, "userId");
         urlValidationService.validateUrl(targetUrl);
@@ -270,7 +287,7 @@ public class ActiveScanService {
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        return engineScanExecution.startActiveScanAsUser(new AuthenticatedActiveScanRequest(
+        AuthenticatedActiveScanRequest request = new AuthenticatedActiveScanRequest(
                 normalizedContextId,
                 normalizedUserId,
                 targetUrl,
@@ -279,7 +296,10 @@ public class ActiveScanService {
                 scanLimitProperties.getMaxActiveScanDurationInMins(),
                 scanLimitProperties.getHostPerScan(),
                 scanLimitProperties.getThreadPerHost()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startActiveScanAsUser(request)
+                : engineScanExecution.startActiveScanAsUser(request, launch);
     }
 
     /**

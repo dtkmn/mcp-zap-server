@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
@@ -113,14 +115,21 @@ public class SpiderScanService {
      * Start a standard spider scan and return the ZAP scan ID.
      */
     public String startSpiderScanJob(String targetUrl) {
+        return startSpiderScanJob(targetUrl, NativeScanLaunch.UNTRACKED);
+    }
+
+public String startSpiderScanJob(String targetUrl, NativeScanLaunch launch) {
         urlValidationService.validateUrl(targetUrl);
-        return engineScanExecution.startSpiderScan(new SpiderScanRequest(
+        SpiderScanRequest request = new SpiderScanRequest(
                 targetUrl,
                 scanLimitProperties.getSpiderMaxDepth(),
                 scanLimitProperties.getSpiderThreadCount(),
                 scanLimitProperties.getMaxSpiderScanDurationInMins(),
                 scanLimitProperties.getSpiderMaxChildren()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startSpiderScan(request)
+                : engineScanExecution.startSpiderScan(request, launch);
     }
 
     /**
@@ -132,6 +141,15 @@ public class SpiderScanService {
                                            String maxChildren,
                                            String recurse,
                                            String subtreeOnly) {
+        return startSpiderScanAsUserJob(contextId, userId, targetUrl, maxChildren, recurse, subtreeOnly, NativeScanLaunch.UNTRACKED);
+    }
+
+public String startSpiderScanAsUserJob(String contextId,
+                                           String userId,
+                                           String targetUrl,
+                                           String maxChildren,
+                                           String recurse,
+                                           String subtreeOnly, NativeScanLaunch launch) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserId = requireText(userId, "userId");
         urlValidationService.validateUrl(targetUrl);
@@ -140,7 +158,7 @@ public class SpiderScanService {
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectiveSubtreeOnly = hasText(subtreeOnly) ? subtreeOnly.trim() : "false";
 
-        return engineScanExecution.startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
+        AuthenticatedSpiderScanRequest request = new AuthenticatedSpiderScanRequest(
                 normalizedContextId,
                 normalizedUserId,
                 targetUrl,
@@ -150,7 +168,10 @@ public class SpiderScanService {
                 scanLimitProperties.getSpiderThreadCount(),
                 scanLimitProperties.getMaxSpiderScanDurationInMins(),
                 scanLimitProperties.getSpiderMaxDepth()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startSpiderScanAsUser(request)
+                : engineScanExecution.startSpiderScanAsUser(request, launch);
     }
 
     private String resolveMaxChildren(String maxChildren) {

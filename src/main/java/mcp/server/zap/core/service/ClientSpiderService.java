@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import java.util.Map;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
@@ -74,6 +76,10 @@ public class ClientSpiderService {
     }
 
     public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName) {
+        return startClientSpiderJob(targetUrl, maxDepth, contextName, userName, NativeScanLaunch.UNTRACKED);
+    }
+
+public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName, NativeScanLaunch launch) {
         String normalizedContextName = normalizeOptionalName(contextName);
         String normalizedUserName = normalizeOptionalName(userName);
         if ((normalizedContextName == null) != (normalizedUserName == null)) {
@@ -88,9 +94,11 @@ public class ClientSpiderService {
         if (maxDurationMinutes < 0) {
             throw new IllegalArgumentException("maxSpiderScanDurationInMins must be zero (unlimited) or greater");
         }
-        return engineScanExecution.startClientSpiderScan(
-                new ClientSpiderScanRequest(targetUrl, effectiveMaxDepth, maxDurationMinutes,
-                        normalizedContextName, normalizedUserName));
+        ClientSpiderScanRequest request = new ClientSpiderScanRequest(targetUrl, effectiveMaxDepth, maxDurationMinutes,
+                        normalizedContextName, normalizedUserName);
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startClientSpiderScan(request)
+                : engineScanExecution.startClientSpiderScan(request, launch);
     }
 
     public String getClientSpiderStatus(String scanId) {

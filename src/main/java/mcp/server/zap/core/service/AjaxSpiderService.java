@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderScanRequest;
@@ -110,17 +112,36 @@ public class AjaxSpiderService {
         return startAjaxSpider(targetUrl, jobId, claimToken, Objects.requireNonNull(onAccepted));
     }
 
+    private String launchAjaxSpider(String targetUrl, NativeScanLaunch launch) {
+        AjaxSpiderScanRequest request = new AjaxSpiderScanRequest(targetUrl);
+        return launch == NativeScanLaunch.UNTRACKED ? ajaxSpiderExecution.startAjaxSpider(request)
+                : ajaxSpiderExecution.startAjaxSpider(request, launch);
+    }
+
     private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
         return startAjaxSpider(targetUrl, jobId, claimToken, scanId -> { });
     }
 
+    public String startAjaxSpiderJobTracked(String targetUrl, String jobId, ScanJobClaimToken claimToken,
+                                    NativeScanLaunch launch) {
+        if (jobId == null || jobId.isBlank() || claimToken == null || scanJobStore == null) {
+            throw new IllegalArgumentException("A queued AJAX launch requires its durable job and claim");
+        }
+        return startAjaxSpider(targetUrl, jobId, claimToken, scanId -> { }, launch);
+    }
+
     private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken,
                                    Consumer<String> onAccepted) {
+        return startAjaxSpider(targetUrl, jobId, claimToken, onAccepted, NativeScanLaunch.UNTRACKED);
+    }
+
+    private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken,
+                                   Consumer<String> onAccepted, NativeScanLaunch launch) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
         if (scanJobStore == null) {
-            return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+            return launchAjaxSpider(targetUrl, launch);
         }
         // ZAP exposes one global AJAX crawler. Serialize starts with managed stop retries.
         return scanJobStore.tryWithAjaxLifecycleLock(jobs -> {
@@ -139,12 +160,13 @@ public class AjaxSpiderService {
                     .filter(job -> !job.getStatus().isTerminal())
                     .anyMatch(job -> job.isCancellationRequested()
                             || job.getStatus() == ScanJobStatus.RUNNING
+                            || job.hasUnresolvedLaunch()
                             || (!Objects.equals(jobId, job.getId())
                             && job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
             if (occupied) {
                 throw new EngineBusyException("AJAX Spider has an active job or pending cancellation", null);
             }
-            String scanId = ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+            String scanId = launchAjaxSpider(targetUrl, launch);
             try {
                 onAccepted.accept(scanId);
             } catch (RuntimeException | Error failure) {

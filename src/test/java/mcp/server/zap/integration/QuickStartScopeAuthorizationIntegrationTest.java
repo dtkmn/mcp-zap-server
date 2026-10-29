@@ -1,5 +1,6 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
+import mcp.server.zap.core.configuration.ApiKeyProperties;
 import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess;

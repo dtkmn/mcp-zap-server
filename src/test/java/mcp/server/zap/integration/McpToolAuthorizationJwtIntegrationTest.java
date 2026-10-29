@@ -1,5 +1,7 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
+import mcp.server.zap.core.configuration.AbuseProtectionProperties;
+import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Files;

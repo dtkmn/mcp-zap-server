@@ -1,5 +1,8 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
+import mcp.server.zap.core.configuration.AbuseProtectionProperties;
+import mcp.server.zap.core.configuration.ScanLaunchSafetyProperties;
+import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;

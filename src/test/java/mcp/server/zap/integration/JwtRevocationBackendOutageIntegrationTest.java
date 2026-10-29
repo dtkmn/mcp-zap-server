@@ -1,5 +1,9 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
+import mcp.server.zap.core.configuration.ApiKeyProperties;
+import mcp.server.zap.core.configuration.JwtProperties;
+import mcp.server.zap.core.configuration.SecurityConfig;
+import mcp.server.zap.core.configuration.TokenRevocationStoreProperties;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;

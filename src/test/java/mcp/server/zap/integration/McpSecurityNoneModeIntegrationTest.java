@@ -1,4 +1,4 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.JsonNode;

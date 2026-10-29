@@ -1,4 +1,4 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;

@@ -1,15 +1,21 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
 import tools.jackson.databind.JsonNode;
+import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;
+import org.zaproxy.clientapi.core.ClientApi;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -31,6 +37,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(AbstractMcpProtectionIntegrationTest.MockZapConfig.class)
 class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyIntegrationTest {
 
+    @Autowired
+    private ScanJobStore scanJobStore;
+
+    @Autowired
+    private ClientApi zap;
+
     @DynamicPropertySource
     static void registerPolicyBundle(DynamicPropertyRegistry registry) {
         registry.add("mcp.server.policy.bundle", () -> {
@@ -45,6 +57,7 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
     @Test
     void enforceDenyFromMcpClientBlocksToolExecutionWithSafeExplainableError() throws Exception {
         String sessionId = initializeSession(POLICY_API_KEY);
+        assertThat(scanJobStore.listStrict()).as("Policy fixture starts with an empty job store").isEmpty();
         EntityExchangeResult<String> result = callAttackTool(
                 POLICY_API_KEY,
                 sessionId,
@@ -83,5 +96,11 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
                 .contains("type=\"policy_decision\"")
                 .contains("outcome=\"deny\"");
         assertThat(prometheus.getResponseBody()).doesNotContain(SECRET_TOKEN);
+
+        assertThat(scanJobStore.listStrict()).as("Policy-denied request must not admit a scan job").isEmpty();
+        verify(zap.ascan, never()).scan(nullable(String.class), nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), nullable(String.class));
+        verify(zap.ascan, never()).scanAsUser(nullable(String.class), nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class));
     }
 }

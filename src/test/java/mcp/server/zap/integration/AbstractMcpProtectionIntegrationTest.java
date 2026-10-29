@@ -1,5 +1,6 @@
-package mcp.server.zap.core.configuration;
+package mcp.server.zap.integration;
 
+import mcp.server.zap.core.configuration.ZapInitializationProperties;
 import tools.jackson.databind.ObjectMapper;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;

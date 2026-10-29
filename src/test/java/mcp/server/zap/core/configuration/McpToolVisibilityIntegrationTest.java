@@ -9,15 +9,24 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Stream;
 import mcp.gateway.core.context.GatewayToolExecutionContext;
 import mcp.gateway.core.invocation.McpToolInvocation;
 import mcp.gateway.core.protection.McpAbuseProtectionDecision;
 import mcp.gateway.core.tool.McpToolRegistry;
+import mcp.server.zap.RetiredExpertTools;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
+import mcp.server.zap.core.gateway.EngineScanExecution;
+import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
+import mcp.server.zap.core.model.ScanJob;
+import mcp.server.zap.core.model.ScanJobStatus;
+import mcp.server.zap.core.model.ScanJobType;
+import mcp.server.zap.core.service.ScanJobReconciliationMcpToolsService;
 import mcp.server.zap.core.service.SpiderScanService;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
+import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.McpAbuseProtectionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,7 +73,8 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "mcp.server.tools.surface=guided",
+                "mcp.server.tools.surface=expert",
+                "MCP_SERVER_TOOLS_SURFACE=expert",
                 "mcp.server.security.enabled=true",
                 "mcp.server.security.mode=api-key",
                 "mcp.server.security.authorization.mode=enforce",
@@ -81,6 +91,15 @@ import static org.mockito.Mockito.when;
                 "mcp.server.auth.apiKeys[2].clientId=visibility-admin",
                 "mcp.server.auth.apiKeys[2].key=visibility-admin-key",
                 "mcp.server.auth.apiKeys[2].scopes[0]=*",
+                "mcp.server.auth.apiKeys[3].clientId=visibility-operator",
+                "mcp.server.auth.apiKeys[3].key=visibility-operator-key",
+                "mcp.server.auth.apiKeys[3].scopes[0]=mcp:tools:list",
+                "mcp.server.auth.apiKeys[3].scopes[1]=zap:scan:queue:reconcile",
+                "mcp.server.auth.apiKeys[4].clientId=visibility-unapproved",
+                "mcp.server.auth.apiKeys[4].key=visibility-unapproved-key",
+                "mcp.server.auth.apiKeys[4].scopes[0]=mcp:tools:list",
+                "mcp.server.auth.apiKeys[4].scopes[1]=zap:scan:queue:reconcile",
+                "zap.scan.jobs.launch-safety.operator-client-ids[0]=visibility-operator",
                 "mcp.server.protection.enabled=false",
                 "mcp.server.protection.rate-limit.enabled=false"
         }
@@ -116,11 +135,20 @@ class McpToolVisibilityIntegrationTest {
     @Autowired
     private AbuseProtectionProperties protectionProperties;
 
+    @Autowired
+    private ScanLaunchSafetyProperties launchSafetyProperties;
+
+    @Autowired
+    private ScanJobStore scanJobStore;
+
     @MockitoSpyBean
     private ToolAuthorizationService authorizationService;
 
     @MockitoSpyBean
     private McpAbuseProtectionService protectionService;
+
+    @MockitoSpyBean
+    private ScanJobReconciliationMcpToolsService reconciliationService;
 
     @MockitoBean
     private EnginePassiveScanAccess passiveScanAccess;
@@ -128,17 +156,15 @@ class McpToolVisibilityIntegrationTest {
     @MockitoBean
     private SpiderScanService spiderScanService;
 
+    @MockitoBean
+    private EngineScanExecution scanExecution;
+
+    @MockitoBean
+    private EngineAjaxSpiderExecution ajaxExecution;
+
     @BeforeEach
-    void verifyFixtureAndStubEngine() {
+    void resetGovernanceAndStubEngine() {
         restoreGovernanceModes();
-        List<String> activeNames = Arrays.stream(toolCallbackProvider.getToolCallbacks())
-                .map(callback -> callback.getToolDefinition().name())
-                .toList();
-        assertThat(activeNames).contains(ACTIVE_TOOL).doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL);
-        assertThat(mcpActiveToolRegistry.names()).containsExactlyInAnyOrderElementsOf(activeNames);
-        assertThat(authorizationService.mappedToolNames())
-                .contains(ACTIVE_TOOL, DISABLED_TOOL)
-                .doesNotContain(UNKNOWN_TOOL);
         when(passiveScanAccess.loadPassiveScanSnapshot()).thenReturn(new PassiveScanSnapshot(0, 0, false));
     }
 
@@ -182,7 +208,7 @@ class McpToolVisibilityIntegrationTest {
     void grantingTheDisabledToolsScopeOrWildcardDoesNotMakeItAvailable(String apiKey) throws Exception {
         String sessionId = initializeSession(apiKey);
         List<String> grantedScopes = apiKey.equals("visibility-admin-key") ? List.of("*") : List.of("zap:scan:read");
-        assertThat(authorizationService.authorizeToolCall(grantedScopes, DISABLED_TOOL).allowed()).isTrue();
+        assertThat(authorizationService.authorizeToolCall(grantedScopes, DISABLED_TOOL).allowed()).isFalse();
         clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
 
         EntityExchangeResult<String> result = call(apiKey, sessionId, DISABLED_TOOL, 42);
@@ -195,6 +221,23 @@ class McpToolVisibilityIntegrationTest {
         );
     }
 
+    @ParameterizedTest(name = "Retired expert aliases stay unavailable: {0}, protection={1}")
+    @MethodSource("governanceModes")
+    void allRetiredExpertAliasesStayUnavailableWithWildcardAndStaleExpertConfiguration(
+            ToolAuthorizationProperties.Mode mode, boolean protectionEnabled) throws Exception {
+        String key = "visibility-admin-key";
+        String session = initializeSession(key);
+        authorizationProperties.setMode(mode);
+        protectionProperties.setEnabled(protectionEnabled);
+        clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        for (String retired : RetiredExpertTools.NAMES) {
+            assertUnknownToolResponse(call(key, session, retired, "retired-alias"), "retired-alias");
+        }
+        verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
+        verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
+        verifyNoInteractions(passiveScanAccess, spiderScanService);
+    }
+
     @ParameterizedTest(name = "API-key unknown tool preserves JSON-RPC id {0}")
     @MethodSource("requestIds")
     void unknownToolPreservesTheOriginalRequestId(Object requestId) throws Exception {
@@ -204,7 +247,18 @@ class McpToolVisibilityIntegrationTest {
     }
 
     @Test
-    void disabledToolsAreNotAdvertisedThroughDiscovery() throws Exception {
+    void discoveryMatchesRegisteredCallbacksAndActiveMappingsWithoutUnavailableTools() throws Exception {
+        List<String> activeNames = Arrays.stream(toolCallbackProvider.getToolCallbacks())
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
+        assertThat(activeNames).hasSize(26).contains(ACTIVE_TOOL)
+                .doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL,
+                        "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status");
+        assertThat(mcpActiveToolRegistry.names()).containsExactlyInAnyOrderElementsOf(activeNames);
+        assertThat(authorizationService.mappedToolNames())
+                .contains(ACTIVE_TOOL)
+                .doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL)
+                .doesNotContainAnyElementsOf(RetiredExpertTools.NAMES);
         String sessionId = initializeSession(LIST_KEY);
         EntityExchangeResult<String> result = post(LIST_KEY, sessionId, Map.of(
                 "jsonrpc", "2.0", "id", 8, "method", "tools/list"
@@ -216,8 +270,71 @@ class McpToolVisibilityIntegrationTest {
         for (JsonNode tool : envelope.path("result").path("tools")) {
             advertisedNames.add(tool.path("name").asString());
         }
-        assertThat(advertisedNames).contains(ACTIVE_TOOL).doesNotContain(DISABLED_TOOL, UNKNOWN_TOOL);
+        assertThat(advertisedNames).hasSize(26).contains(ACTIVE_TOOL)
+                .doesNotContain(DISABLED_TOOL, UNKNOWN_TOOL,
+                        "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status");
         assertThat(advertisedNames).containsExactlyInAnyOrderElementsOf(mcpActiveToolRegistry.names());
+    }
+
+    @Test
+    void approvedOperatorCannotInspectOrReleaseAHeldLaunchThroughUnregisteredTools() throws Exception {
+        assertThat(launchSafetyProperties.getOperatorClientIds()).containsExactly("visibility-operator");
+        String jobId = "operator-recovery-" + UUID.randomUUID();
+        String attemptId = "attempt-" + UUID.randomUUID();
+        ScanJob held = new ScanJob(jobId, ScanJobType.ACTIVE_SCAN, Map.of(), Instant.now(), 3,
+                "visibility-operator", null);
+        held.beginLaunch(new ScanJob.LaunchAttempt(attemptId, "former-controller", Instant.now(), 2));
+        held.markLaunchUnknown("Test fixture: no native scan was started");
+        scanJobStore.upsertAll(List.of(held));
+        String key = "visibility-operator-key";
+        String session = initializeSession(key);
+        clearInvocations(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+
+        EntityExchangeResult<String> status = post(key, session, Map.of(
+                "jsonrpc", "2.0", "id", "recovery-status", "method", "tools/call",
+                "params", Map.of("name", "zap_scan_job_reconciliation_status", "arguments", Map.of("jobId", jobId))));
+        assertUnknownToolResponse(status, "recovery-status");
+        assertThat(scanJobStore.load(jobId).orElseThrow().getStatus()).isEqualTo(ScanJobStatus.START_OUTCOME_UNKNOWN);
+
+        EntityExchangeResult<String> confirmation = post(key, session, Map.of(
+                "jsonrpc", "2.0", "id", "recovery-confirm", "method", "tools/call",
+                "params", Map.of("name", "zap_scan_job_reconcile", "arguments", Map.of(
+                        "jobId", jobId, "launchAttemptId", attemptId, "expectedResolutionVersion", 2,
+                        "resolution", "confirm_stopped", "confirmOwnership", true))));
+        assertUnknownToolResponse(confirmation, "recovery-confirm");
+        ScanJob saved = scanJobStore.load(jobId).orElseThrow();
+        assertThat(saved.getStatus()).isEqualTo(ScanJobStatus.START_OUTCOME_UNKNOWN);
+        assertThat(saved.getLaunchAttempt().id()).isEqualTo(attemptId);
+        assertThat(saved.getLaunchAttempt().resolutionVersion()).isEqualTo(2);
+        verifyNoInteractions(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"visibility-operator-key", "visibility-unapproved-key", "visibility-admin-key", "visibility-read-key"})
+    void recoveryToolsStayUnknownForEveryCallerAndGovernanceModeDespiteApprovedOperatorConfiguration(String key) throws Exception {
+        assertThat(launchSafetyProperties.getOperatorClientIds()).containsExactly("visibility-operator");
+        String session = initializeSession(key);
+        clearInvocations(authorizationService, protectionService, reconciliationService,
+                passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+        for (ToolAuthorizationProperties.Mode mode : ToolAuthorizationProperties.Mode.values()) {
+            authorizationProperties.setMode(mode);
+            for (boolean protection : new boolean[]{false, true}) {
+                protectionProperties.setEnabled(protection);
+                for (String tool : List.of("zap_scan_job_reconcile", "zap_scan_job_reconciliation_status")) {
+                    Map<String, Object> arguments = tool.equals("zap_scan_job_reconciliation_status")
+                            ? Map.of("jobId", "held-job")
+                            : Map.of("jobId", "held-job", "launchAttemptId", "attempt", "expectedResolutionVersion", 2,
+                                    "resolution", "confirm_stopped", "confirmOwnership", true);
+                    EntityExchangeResult<String> result = post(key, session, Map.of(
+                            "jsonrpc", "2.0", "id", "unregistered-recovery", "method", "tools/call",
+                            "params", Map.of("name", tool, "arguments", arguments)));
+                    assertUnknownToolResponse(result, "unregistered-recovery");
+                }
+            }
+        }
+        verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
+        verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
+        verifyNoInteractions(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
     }
 
     @Test

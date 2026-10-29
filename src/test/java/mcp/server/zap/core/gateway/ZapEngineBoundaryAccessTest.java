@@ -575,6 +575,7 @@ class ZapEngineBoundaryAccessTest {
     @Test
     void ajaxSpiderAdapterStartsAndReadsBrowserSpiderStatus() throws Exception {
         when(ajaxSpider.optionMaxDuration()).thenReturn(element("optionMaxDuration", "5"));
+        when(ajaxSpider.scan("http://target", "false", "", "")).thenReturn(element("Result", "OK"));
         when(ajaxSpider.status()).thenReturn(element("status", "running"));
         when(ajaxSpider.numberOfResults()).thenReturn(element("numberOfResults", "12"));
 

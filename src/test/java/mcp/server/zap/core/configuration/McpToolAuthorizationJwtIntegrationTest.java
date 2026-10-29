@@ -9,6 +9,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import mcp.gateway.core.tool.McpToolRegistry;
+import mcp.server.zap.RetiredExpertTools;
+import mcp.server.zap.core.gateway.EngineScanExecution;
+import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
+import mcp.server.zap.core.gateway.EngineFindingAccess;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.verifyNoInteractions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,6 +38,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
+                "mcp.server.tools.surface=expert",
+                "MCP_SERVER_TOOLS_SURFACE=expert",
+                "mcp.server.security.authorization.allow-wildcard=true",
                 "mcp.server.security.enabled=true",
                 "mcp.server.security.mode=jwt",
                 "mcp.server.auth.jwt.enabled=true",
@@ -42,7 +53,18 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "mcp.server.auth.apiKeys[1].scopes[0]=mcp:tools:list",
                 "mcp.server.auth.apiKeys[2].clientId=no-list-client",
                 "mcp.server.auth.apiKeys[2].key=no-list-api-key",
-                "mcp.server.auth.apiKeys[2].scopes[0]=zap:report:read"
+                "mcp.server.auth.apiKeys[2].scopes[0]=zap:report:read",
+                "mcp.server.auth.apiKeys[3].clientId=legacy-expert-client",
+                "mcp.server.auth.apiKeys[3].key=legacy-expert-api-key",
+                "mcp.server.auth.apiKeys[3].scopes[0]=mcp:tools:list",
+                "mcp.server.auth.apiKeys[3].scopes[1]=zap:scan:active:run",
+                "mcp.server.auth.apiKeys[4].clientId=wildcard-client",
+                "mcp.server.auth.apiKeys[4].key=wildcard-api-key",
+                "mcp.server.auth.apiKeys[4].scopes[0]=*",
+                "mcp.server.auth.apiKeys[5].clientId=reconcile-client",
+                "mcp.server.auth.apiKeys[5].key=reconcile-api-key",
+                "mcp.server.auth.apiKeys[5].scopes[0]=mcp:tools:list",
+                "mcp.server.auth.apiKeys[5].scopes[1]=zap:scan:queue:reconcile"
         }
 )
 @ActiveProfiles("test")
@@ -60,9 +82,21 @@ class McpToolAuthorizationJwtIntegrationTest {
     @Autowired
     private ToolCallbackProvider toolCallbackProvider;
 
+    @Autowired private ToolAuthorizationProperties authorizationProperties;
+    @Autowired private AbuseProtectionProperties protectionProperties;
+    @MockitoBean private EngineScanExecution scanExecution;
+    @MockitoBean private EngineAjaxSpiderExecution ajaxExecution;
+    @MockitoBean private EngineFindingAccess findingAccess;
+
+    @AfterEach
+    void restoreGovernanceModes() {
+        authorizationProperties.setMode(ToolAuthorizationProperties.Mode.ENFORCE);
+        protectionProperties.setEnabled(false);
+    }
+
     @BeforeAll
     static void createReportFile() throws Exception {
-        reportDirectory = Files.createTempDirectory("mcp-authz-reports");
+        reportDirectory = Files.createTempDirectory("mcp-authz-reports").toRealPath();
         reportFile = reportDirectory
                 .resolve("workspaces")
                 .resolve("reporter-client")
@@ -218,12 +252,99 @@ class McpToolAuthorizationJwtIntegrationTest {
                 });
     }
 
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"legacy-expert-api-key", "wildcard-api-key"})
+    void retiredAliasesAreUnavailableForOldOrWildcardJwtScopesInEveryGovernanceMode(String key) throws Exception {
+        String token = issueAccessToken(key);
+        String session = initializeSession(token);
+        clearInvocations(scanExecution, ajaxExecution, findingAccess);
+        JsonNode expected = OBJECT_MAPPER.valueToTree(Map.of("jsonrpc", "2.0", "id", "retired-jwt",
+                "error", Map.of("code", -32602, "message", "Unknown tool")));
+        for (ToolAuthorizationProperties.Mode mode : ToolAuthorizationProperties.Mode.values()) {
+            authorizationProperties.setMode(mode);
+            for (boolean protection : new boolean[]{false, true}) {
+                protectionProperties.setEnabled(protection);
+                for (String retired : RetiredExpertTools.NAMES) {
+                    String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "retired-jwt",
+                            "method", "tools/call", "params", Map.of("name", retired, "arguments", Map.of())));
+                    EntityExchangeResult<String> response = client().post().uri("/mcp")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
+                            .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                            .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange()
+                            .expectStatus().isOk().expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                            .expectBody(String.class).returnResult();
+                    assertThat(OBJECT_MAPPER.readTree(response.getResponseBody())).isEqualTo(expected);
+                }
+            }
+        }
+        verifyNoInteractions(scanExecution, ajaxExecution, findingAccess);
+    }
+
+    @Test
+    void oldExpertScanScopeDoesNotBecomeGuidedAttackPermission() throws Exception {
+        String token = issueAccessToken("legacy-expert-api-key");
+        String session = initializeSession(token);
+        clearInvocations(scanExecution, ajaxExecution);
+        String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "no-scope-escalation", "method", "tools/call",
+                "params", Map.of("name", "zap_attack_start", "arguments", Map.of("targetUrl", "https://example.com"))));
+        client().post().uri("/mcp").header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange().expectStatus().isForbidden()
+                .expectBody().jsonPath("$.error").isEqualTo("insufficient_scope")
+                .jsonPath("$.requiredScopes[0]").isEqualTo("zap:scan:attack:run");
+        verifyNoInteractions(scanExecution, ajaxExecution);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"reconcile-api-key", "wildcard-api-key"})
+    void unconfiguredRecoveryToolsStayUnknownDespiteExactOrWildcardScopes(String key) throws Exception {
+        String token = issueAccessToken(key);
+        String session = initializeSession(token);
+        clearInvocations(scanExecution, ajaxExecution, findingAccess);
+        JsonNode expected = OBJECT_MAPPER.valueToTree(Map.of("jsonrpc", "2.0", "id", "optional-recovery",
+                "error", Map.of("code", -32602, "message", "Unknown tool")));
+        for (ToolAuthorizationProperties.Mode mode : ToolAuthorizationProperties.Mode.values()) {
+            authorizationProperties.setMode(mode);
+            for (boolean protection : new boolean[]{false, true}) {
+                protectionProperties.setEnabled(protection);
+                for (String tool : List.of("zap_scan_job_reconcile", "zap_scan_job_reconciliation_status")) {
+                    String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "optional-recovery",
+                            "method", "tools/call", "params", Map.of("name", tool, "arguments", Map.of())));
+                    EntityExchangeResult<String> response = client().post().uri("/mcp")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
+                            .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                            .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange()
+                            .expectStatus().isOk().expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                            .expectBody(String.class).returnResult();
+                    assertThat(OBJECT_MAPPER.readTree(response.getResponseBody())).isEqualTo(expected);
+                }
+            }
+        }
+        verifyNoInteractions(scanExecution, ajaxExecution, findingAccess);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"zap_findings_snapshot", "zap_findings_diff"})
+    void retainedFindingsToolsStillRequireAlertsReadScopeBeforeEngineAccess(String tool) throws Exception {
+        String token = issueAccessToken("reporter-api-key");
+        String session = initializeSession(token);
+        clearInvocations(findingAccess);
+        String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "scoped-findings", "method", "tools/call",
+                "params", Map.of("name", tool, "arguments", Map.of("baseUrl", "https://unowned.example"))));
+        client().post().uri("/mcp").header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
+                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange().expectStatus().isForbidden()
+                .expectBody().jsonPath("$.error").isEqualTo("insufficient_scope")
+                .jsonPath("$.requiredScopes[0]").isEqualTo("zap:alerts:read");
+        verifyNoInteractions(findingAccess);
+    }
+
     private static Object[] unknownToolRequestIds() {
         return new Object[]{"unknown-tool-request", 9_007_199_254_740_993L};
     }
 
     @Test
-    void expertDiscoveryMatchesTheExactActiveRegistryAndToolProvider() throws Exception {
+    void staleExpertSettingStillDiscoversOnlyTheCuratedGuidedInventory() throws Exception {
         String token = issueAccessToken("lister-api-key");
         String sessionId = initializeSession(token);
         EntityExchangeResult<String> result = client().post()
@@ -244,7 +365,9 @@ class McpToolAuthorizationJwtIntegrationTest {
         for (JsonNode tool : OBJECT_MAPPER.readTree(json).path("result").path("tools")) {
             advertisedNames.add(tool.path("name").asString());
         }
-        assertThat(advertisedNames).contains("zap_passive_scan_status", "zap_spider_status")
+        assertThat(advertisedNames).hasSize(26).contains("zap_passive_scan_status", "zap_findings_snapshot", "zap_findings_diff")
+                .doesNotContain("zap_scan_job_reconcile", "zap_scan_job_reconciliation_status")
+                .doesNotContainAnyElementsOf(RetiredExpertTools.NAMES)
                 .containsExactlyInAnyOrderElementsOf(mcpActiveToolRegistry.names());
         assertThat(mcpActiveToolRegistry.names()).containsExactlyInAnyOrderElementsOf(
                 Arrays.stream(toolCallbackProvider.getToolCallbacks())

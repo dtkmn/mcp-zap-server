@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "mcp.server.security.enabled=true",
         "mcp.server.security.mode=api-key",
         "mcp.server.tools.surface=expert",
+        "zap.scan.jobs.launch-safety.journal-directory=${user.dir}/build/test-launch-journals/${random.uuid}",
         "mcp.server.auth.jwt.enabled=true",
         "mcp.server.auth.jwt.secret=registered-clients-integration-jwt-secret-at-least-32-characters",
         "mcp.server.auth.apiKeys[0].clientId=lister-client",

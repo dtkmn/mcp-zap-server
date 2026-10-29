@@ -38,7 +38,7 @@ class ScanJobQueueStateNormalizerTest {
     }
 
     @Test
-    void repairsRunningJobsWithoutZapScanId() {
+    void holdsRunningJobsWithoutZapScanIdForReconciliation() {
         ScanJob invalidRunningJob = queuedJob("job-running-no-id", "2026-05-06T00:00:01Z");
         invalidRunningJob.incrementAttempts();
         invalidRunningJob.markRunning(null);
@@ -48,8 +48,9 @@ class ScanJobQueueStateNormalizerTest {
 
         assertTrue(state.normalized());
         assertEquals(1, state.repairedRunningJobs());
-        assertEquals(ScanJobStatus.FAILED, repairedJob.getStatus());
-        assertTrue(repairedJob.getLastError().contains("Missing ZAP scan ID"));
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, repairedJob.getStatus());
+        assertTrue(repairedJob.hasUnresolvedLaunch());
+        assertTrue(repairedJob.getLastError().contains("possible launch remains held"));
     }
 
     @Test

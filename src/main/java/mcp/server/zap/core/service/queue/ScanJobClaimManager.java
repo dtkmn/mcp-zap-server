@@ -70,7 +70,7 @@ public class ScanJobClaimManager {
                 }
                 if (!hasText(job.getZapScanId())) {
                     scanJobStore.updateClaimedJob(job.getId(), ScanJobClaimToken.from(job), now, claimedJob -> {
-                        claimedJob.markFailed("Missing ZAP scan ID while job is RUNNING");
+                        claimedJob.markLaunchUnknown("Missing native scan ID; possible launch remains held for reconciliation");
                         return claimedJob;
                     });
                     continue;
@@ -162,7 +162,7 @@ public class ScanJobClaimManager {
                 job.getCancelDeadlineAt(),
                 job.getCancelNextAttemptAt(),
                 job.getCancelAttemptCount()
-        );
+        ).restoreLaunchAttempt(job.getLaunchAttempt());
     }
 
     private void recordClaimObservations(

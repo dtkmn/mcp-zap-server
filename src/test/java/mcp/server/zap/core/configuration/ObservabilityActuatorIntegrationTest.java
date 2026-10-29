@@ -46,7 +46,7 @@ class ObservabilityActuatorIntegrationTest {
 
     @BeforeAll
     static void createReportFile() throws Exception {
-        reportDirectory = Files.createTempDirectory("observability-reports");
+        reportDirectory = Files.createTempDirectory("observability-reports").toRealPath();
         reportFile = reportDirectory
                 .resolve("workspaces")
                 .resolve("obs-workspace")

@@ -33,17 +33,17 @@ class McpGatewayWebFluxAdapterConfigurationTest {
                 .containsExactlyInAnyOrder("zap_crawl_start", "zap_passive_scan_status")
                 .doesNotContain("zap_spider_status", "zap_attack_start");
         assertThat(scopeRegistry.getToolRegistry().names())
-                .contains("zap_spider_status", "zap_attack_start");
+                .contains("zap_crawl_stop", "zap_attack_start").doesNotContain("zap_spider_status");
     }
 
     @Test
     void activeRegistryPreservesToolCapabilities() {
         McpToolRegistry registry = configuration.mcpActiveToolRegistry(
-                provider("zap_crawl_start", "zap_active_scan_start"), scopeRegistry);
+                provider("zap_crawl_start", "zap_attack_start"), scopeRegistry);
 
         assertThat(registry.hasCapability("zap_crawl_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
                 .isTrue();
-        assertThat(registry.hasCapability("zap_active_scan_start", ToolScopeRegistry.DIRECT_SCAN_CAPABILITY))
+        assertThat(registry.hasCapability("zap_attack_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
                 .isTrue();
     }
 

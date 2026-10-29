@@ -17,11 +17,11 @@ import static org.assertj.core.api.Assertions.assertThat;
                 "mcp.server.auth.apiKeys[0].clientId=client-a",
                 "mcp.server.auth.apiKeys[0].key=client-a-key",
                 "mcp.server.auth.apiKeys[0].workspaceId=workspace-one",
-                "mcp.server.auth.apiKeys[0].scopes[0]=zap:scan:active:run",
+                "mcp.server.auth.apiKeys[0].scopes[0]=zap:scan:attack:run",
                 "mcp.server.auth.apiKeys[1].clientId=client-c",
                 "mcp.server.auth.apiKeys[1].key=client-c-key",
                 "mcp.server.auth.apiKeys[1].workspaceId=workspace-two",
-                "mcp.server.auth.apiKeys[1].scopes[0]=zap:scan:active:run",
+                "mcp.server.auth.apiKeys[1].scopes[0]=zap:scan:attack:run",
                 "mcp.server.protection.enabled=true",
                 "mcp.server.protection.rate-limit.enabled=false",
                 "mcp.server.protection.workspace-quota.enabled=false",
@@ -42,7 +42,7 @@ class McpBackpressureIntegrationTest extends AbstractMcpProtectionIntegrationTes
         EntityExchangeResult<String> first = callTool(
                 "client-a-key",
                 sessionA,
-                "zap_queue_active_scan",
+                "zap_attack_start",
                 Map.of("targetUrl", "https://example.com")
         );
         assertThat(first.getStatus().value()).isEqualTo(200);
@@ -50,7 +50,7 @@ class McpBackpressureIntegrationTest extends AbstractMcpProtectionIntegrationTes
         EntityExchangeResult<String> second = callTool(
                 "client-c-key",
                 sessionC,
-                "zap_queue_active_scan",
+                "zap_attack_start",
                 Map.of("targetUrl", "https://example.com")
         );
         assertThat(second.getStatus().value()).isEqualTo(429);

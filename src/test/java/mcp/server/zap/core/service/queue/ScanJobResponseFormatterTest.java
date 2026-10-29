@@ -130,6 +130,7 @@ class ScanJobResponseFormatterTest {
                 Queue depth: 1
                 Claimed for Dispatch: 1
                 Running: 1
+                Launches held: 0
                 Filter: QUEUED
                 - job-queued | ACTIVE_SCAN | QUEUED | attempts=0/3 | progress=0% | queuePosition=1 | claimOwner=worker-a | claimExpiresAt=2026-05-06T00:00:30Z | claimState=active
                 """, output);

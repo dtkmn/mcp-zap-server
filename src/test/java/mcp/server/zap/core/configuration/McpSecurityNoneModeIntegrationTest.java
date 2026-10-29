@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import mcp.gateway.core.tool.McpToolRegistry;
+import mcp.server.zap.RetiredExpertTools;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,10 +24,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "mcp.server.tools.surface=guided",
+                "mcp.server.tools.surface=expert",
                 "mcp.server.security.enabled=true",
                 "mcp.server.security.mode=none",
                 "mcp.server.security.authorization.mode=enforce",
+                "zap.scan.jobs.launch-safety.operator-client-ids= ,  ,",
                 "mcp.server.protection.enabled=false"
         }
 )
@@ -75,7 +77,9 @@ class McpSecurityNoneModeIntegrationTest {
                 "error", Map.of("code", -32602, "message", "Unknown tool")
         ));
 
-        for (String toolName : List.of(UNKNOWN_TOOL, DISABLED_TOOL)) {
+        for (String toolName : java.util.stream.Stream.concat(java.util.stream.Stream.of(UNKNOWN_TOOL,
+                        "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status"),
+                RetiredExpertTools.NAMES.stream()).toList()) {
             EntityExchangeResult<String> result = post(sessionId, Map.of(
                     "jsonrpc", "2.0",
                     "id", "none-mode-unavailable",
@@ -107,11 +111,12 @@ class McpSecurityNoneModeIntegrationTest {
                 .map(callback -> callback.getToolDefinition().name())
                 .toList();
 
-        assertThat(advertisedNames)
+        assertThat(advertisedNames).hasSize(26)
                 .containsExactlyInAnyOrderElementsOf(registeredNames)
                 .containsExactlyInAnyOrderElementsOf(activeToolRegistry.names())
                 .contains("zap_passive_scan_status")
-                .doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL);
+                .doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL, "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status")
+                .doesNotContainAnyElementsOf(RetiredExpertTools.NAMES);
     }
 
     private EntityExchangeResult<String> post(String sessionId, Map<String, Object> request) throws Exception {

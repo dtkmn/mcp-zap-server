@@ -69,7 +69,7 @@ class PolicyDryRunServiceTest {
 
     @Test
     void dryRunFallsBackToDefaultDecisionWhenNoRuleMatches() throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/expert-readonly-triage.json"));
+        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
 
         Map<String, Object> response = service.dryRun(
                 bundle,
@@ -83,12 +83,12 @@ class PolicyDryRunServiceTest {
         assertThat(decision(response)).containsEntry("source", "default");
         assertThat(mapList(response, "trace"))
                 .extracting(entry -> entry.get("ruleId"))
-                .contains("allow-readonly-review-surface", "deny-expert-mutation-tools");
+                .contains("allow-readonly-review-surface", "deny-mutation-tools");
 
         CapturedPolicyDecision audit = capturedPolicyDecision();
         assertThat(audit.outcome()).isEqualTo("deny");
         assertThat(audit.details())
-                .containsEntry("bundleName", "expert-readonly-triage")
+                .containsEntry("bundleName", "guided-readonly-triage")
                 .containsEntry("evaluatedTool", "zap_findings_summary")
                 .containsEntry("normalizedHost", "prod.example.com")
                 .containsEntry("decisionSource", "default")
@@ -100,7 +100,7 @@ class PolicyDryRunServiceTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"zap_report_read", "zap_report_read_chunk"})
     void readonlyReportRulesAllowWorkspaceReadsWithoutHostMatching(String toolName) throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/expert-readonly-triage.json"));
+        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
         Map<String, Object> response = service.dryRun(bundle, toolName, null, "2026-04-06T09:00:00Z");
         assertThat(validation(response)).containsEntry("valid", true);
         assertThat(decision(response)).containsEntry("result", "allow")

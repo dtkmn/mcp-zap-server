@@ -3,6 +3,7 @@ package mcp.server.zap.core.configuration;
 import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
 import mcp.server.zap.core.service.ActiveScanService;
 import mcp.server.zap.core.service.AutomationPlanService;
@@ -26,8 +27,11 @@ import tools.jackson.databind.JsonNode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+        "zap.scan.jobs.launch-safety.journal-directory=${user.dir}/build/test-launch-journals/${random.uuid}",
         "mcp.server.auth.apiKeys[0].key=restricted-scope-integration-key",
         "mcp.server.auth.apiKeys[0].clientId=restricted-scope-client",
         "mcp.server.auth.apiKeys[0].scopes=mcp:tools:list,zap:scan:read,zap:scan:crawl:run,zap:scan:stop,zap:alerts:read,zap:report:read,zap:report:generate",
@@ -35,7 +39,7 @@ import static org.mockito.Mockito.when;
         "mcp.server.security.mode=api-key",
         "mcp.server.security.enabled=true",
         "mcp.server.security.authorization.mode=enforce",
-        // Expert mode must not silently expand the credential's permissions.
+        // An obsolete expert setting must not expand the credential's permissions.
         "mcp.server.tools.surface=expert",
         "mcp.server.protection.enabled=false"
 })
@@ -71,9 +75,14 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
                 "mcp:tools:list", "zap:scan:read", "zap:scan:crawl:run", "zap:scan:stop",
                 "zap:alerts:read", "zap:report:read", "zap:report:generate");
         when(passiveScanAccess.loadPassiveScanSnapshot()).thenReturn(new PassiveScanSnapshot(0, 0, false));
-        when(spiderScanService.startSpiderScan(TARGET)).thenReturn("Scan ID: restricted-crawl");
-        when(spiderScanService.getSpiderScanStatus("restricted-crawl"))
-                .thenReturn("Progress: 100%\nCompleted: yes");
+        when(spiderScanService.startSpiderScanJob(eq(TARGET), any(NativeScanLaunch.class)))
+                .thenAnswer(invocation -> {
+                    NativeScanLaunch launch = invocation.getArgument(1);
+                    launch.beforeDispatch();
+                    launch.accepted("restricted-crawl");
+                    return "restricted-crawl";
+                });
+        when(spiderScanService.getSpiderScanProgressPercent("restricted-crawl")).thenReturn(100);
         when(findingsService.getFindingsSummary(TARGET)).thenReturn("No findings in fixture.");
         when(reportService.generateReport("traditional-html-plus", "light", TARGET))
                 .thenReturn("/zap/wrk/restricted-report.html");
@@ -120,13 +129,19 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
             "zap_context_upsert,zap:context:write",
             "zap_user_upsert,zap:user:write"
     })
-    void highImpactToolsAreDeniedBeforeDispatchEvenOnExpertSurface(String tool, String scope) throws Exception {
+    void highImpactOrRetiredToolsStayUnavailableForTheRestrictedClient(String tool, String scope) throws Exception {
         EntityExchangeResult<String> result = callTool(KEY, initializeSession(KEY), tool, Map.of());
 
-        assertThat(result.getStatus().value()).isEqualTo(403);
         JsonNode body = OBJECT_MAPPER.readTree(result.getResponseBody());
-        assertThat(body.path("error").asString()).isEqualTo("insufficient_scope");
-        assertThat(body.path("requiredScopes").path(0).asString()).isEqualTo(scope);
+        if (mcp.server.zap.RetiredExpertTools.NAMES.contains(tool)) {
+            assertThat(result.getStatus().value()).isEqualTo(200);
+            assertThat(body.path("error").path("code").asInt()).isEqualTo(-32602);
+            assertThat(body.path("error").path("message").asString()).isEqualTo("Unknown tool");
+        } else {
+            assertThat(result.getStatus().value()).isEqualTo(403);
+            assertThat(body.path("error").asString()).isEqualTo("insufficient_scope");
+            assertThat(body.path("requiredScopes").path(0).asString()).isEqualTo(scope);
+        }
         verifyNoInteractions(activeScanService, openApiService, automationPlanService, authSessionService,
                 passiveScanAccess, spiderScanService, findingsService, reportService);
     }

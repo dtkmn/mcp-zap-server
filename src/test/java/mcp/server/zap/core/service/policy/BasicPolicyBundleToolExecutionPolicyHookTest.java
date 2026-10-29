@@ -61,14 +61,14 @@ class BasicPolicyBundleToolExecutionPolicyHookTest {
                   "decision": "deny",
                   "reason": "Production active scans require a safer workflow.",
                   "match": {
-                    "tools": ["zap_active_scan_start"],
+                    "tools": ["zap_attack_start"],
                     "hosts": ["prod.example.com"]
                   }
                 }
                 """));
 
         PolicyEnforcementDecision decision = hook(properties).evaluate(new ToolExecutionPolicyContext(
-                "zap_active_scan_start",
+                "zap_attack_start",
                 "https://prod.example.com",
                 "corr-deny"
         ));

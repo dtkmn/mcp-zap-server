@@ -57,7 +57,12 @@ class PostgresScanJobStoreRaceHarnessTest {
     private static final Instant BASE_TIME = Instant.parse("2026-05-06T00:00:00Z");
 
     @Container
-    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
+    static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
+            .withReuse(false)
+            .withCommand("postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=30")
+            .withCreateContainerCmdModifier(command -> command.getHostConfig()
+                    .withMemory(256L * 1024 * 1024)
+                    .withNanoCPUs(1_000_000_000L));
 
     @BeforeAll
     static void migrateSchema() {

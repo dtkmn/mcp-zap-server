@@ -110,6 +110,7 @@ public class ScanJobResponseFormatter {
                 .append('\n')
                 .append("Running: ")
                 .append(jobs.stream().filter(job -> job.getStatus() == ScanJobStatus.RUNNING).count())
+                .append('\n').append("Launches held: ").append(jobs.stream().filter(ScanJob::hasUnresolvedLaunch).count())
                 .append('\n');
 
         if (filter != null) {
@@ -212,6 +213,7 @@ public class ScanJobResponseFormatter {
     }
 
     private String formatProgress(ScanJob job) {
+        if (job.hasUnresolvedLaunch()) return "unknown (possible execution remains held)";
         return job.getType() == ScanJobType.AJAX_SPIDER
                 ? "unavailable (ZAP does not report a percentage)"
                 : job.getLastKnownProgress() + "%";

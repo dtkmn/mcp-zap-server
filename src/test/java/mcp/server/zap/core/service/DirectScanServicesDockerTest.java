@@ -21,6 +21,7 @@ import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoo
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -64,6 +65,9 @@ import static org.mockito.Mockito.when;
 @Tag("docker")
 @Testcontainers
 class DirectScanServicesDockerTest {
+    @RegisterExtension
+    final GuardedQueueTestSupport launches = new GuardedQueueTestSupport();
+
     private static final Pattern SCAN_ID_PATTERN = Pattern.compile("Scan ID: ([^\\n]+)");
     private static final Network NETWORK = Network.newNetwork();
 
@@ -203,19 +207,17 @@ class DirectScanServicesDockerTest {
         boolean browserCrawl = !"http".equals(effectiveStrategy);
         String targetUrl = origin + (browserCrawl ? "/client-crawl.html" : "/http-stop.html") + query;
         String discoveredUrl = origin + "/client-discovered" + query;
-        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
-        when(executionMode.resolveDefaultMode()).thenReturn(mode);
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         AjaxSpiderService ajaxSpider = new AjaxSpiderService(
                 new ZapEngineAjaxSpiderExecution(clientApi), mock(UrlValidationService.class));
         ajaxSpider.setScanJobStore(store);
         var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
-        ScanJobQueueService queue = new ScanJobQueueService(
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpider, clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
-                false, store, new SingleNodeQueueLeadershipCoordinator());
+                false, store, new SingleNodeQueueLeadershipCoordinator()));
         GuidedScanWorkflowService guided = new GuidedScanWorkflowService(
-                executionMode, spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
+                spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
                 queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(),
                 mock(GuidedToolActions.class));
         String operationId = null;
@@ -306,8 +308,7 @@ class DirectScanServicesDockerTest {
 
     private static Stream<Arguments> guidedCrawlerModes() {
         return Stream.of("http", "client", "browser", "auto")
-                .flatMap(strategy -> Stream.of(GuidedExecutionModeResolver.ExecutionMode.values())
-                        .map(mode -> Arguments.of(strategy, mode)));
+                .map(strategy -> Arguments.of(strategy, GuidedExecutionModeResolver.ExecutionMode.QUEUE));
     }
 
     private static void printBrowserVersion(String name, String executable) throws Exception {
@@ -362,7 +363,7 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
             GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
@@ -370,7 +371,7 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
             GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
@@ -447,15 +448,13 @@ class DirectScanServicesDockerTest {
             assertTrue(nativePoll.getStringValue("responseBody").contains("Signed in as scan-user"));
         }
 
-        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
-        when(executionMode.resolveDefaultMode()).thenReturn(mode);
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
-        ScanJobQueueService queue = new ScanJobQueueService(
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, mock(AjaxSpiderService.class), clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
-                false, store, new SingleNodeQueueLeadershipCoordinator());
-        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(executionMode,
+                false, store, new SingleNodeQueueLeadershipCoordinator()));
+        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(
                 mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
                 mock(ActiveScanService.class), queue, authSessions,
                 new ZapEngineAdapter(), new GatewayRecordFactory(), mock(GuidedToolActions.class));

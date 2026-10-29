@@ -31,12 +31,18 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     @Override
     public String startSpiderScan(SpiderScanRequest request) {
+        return startSpiderScan(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startSpiderScan(SpiderScanRequest request, NativeScanLaunch launch) {
         try {
             configureSpider(request.maxDepth(), request.threadCount(), request.maxDurationMinutes());
             accessTargetWithRetry(request.targetUrl());
 
             ApiResponse response;
             try {
+                launch.beforeDispatch();
                 response = zap.spider.scan(
                         request.targetUrl(),
                         String.valueOf(request.maxChildren()),
@@ -51,6 +57,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
                 throw e;
             }
             String scanId = responseValue(response, "spider.scan()");
+            launch.accepted(scanId);
             log.info("Spider scan started with ID: {} for URL: {}", scanId, request.targetUrl());
             return scanId;
         } catch (InterruptedException e) {
@@ -73,11 +80,17 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     @Override
     public String startSpiderScanAsUser(AuthenticatedSpiderScanRequest request) {
+        return startSpiderScanAsUser(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startSpiderScanAsUser(AuthenticatedSpiderScanRequest request, NativeScanLaunch launch) {
         try {
             configureSpider(request.maxDepth(), request.threadCount(), request.maxDurationMinutes());
 
             ApiResponse response;
             try {
+                launch.beforeDispatch();
                 response = zap.spider.scanAsUser(
                         request.contextId(),
                         request.userId(),
@@ -94,6 +107,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
             }
 
             String scanId = responseValue(response, "spider.scanAsUser()");
+            launch.accepted(scanId);
             log.info("Spider-as-user started with ID: {} for URL: {}, context: {}, user: {}",
                     scanId, request.targetUrl(), request.contextId(), request.userId());
             return scanId;
@@ -133,14 +147,20 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     @Override
     public String startClientSpiderScan(ClientSpiderScanRequest request) {
+        return startClientSpiderScan(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startClientSpiderScan(ClientSpiderScanRequest request, NativeScanLaunch launch) {
         try {
             configureClientSpiderDuration(request.maxDurationMinutes());
-            ApiResponse response = launchClientSpider(request);
+            ApiResponse response = launchClientSpider(request, launch);
             String scanId = responseValue(response, "clientSpider.scan()");
             if (!hasText(scanId)) {
                 throw new ZapApiException("Client Spider returned a blank scan ID",
                         new IllegalStateException("Blank ZAP scan ID"));
             }
+            launch.accepted(scanId);
             log.info("Client Spider scan started with ID: {} for URL: {}", scanId, request.targetUrl());
             return scanId.trim();
         } catch (ClientApiException e) {
@@ -176,14 +196,20 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     @Override
     public String startActiveScan(ActiveScanRequest request) {
+        return startActiveScan(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startActiveScan(ActiveScanRequest request, NativeScanLaunch launch) {
         try {
             configureActiveScan(request.maxDurationMinutes(), request.hostPerScan(), request.threadPerHost());
-            ApiResponseElement response = launchActiveScan(request);
+            ApiResponseElement response = launchActiveScan(request, launch);
             String scanId = requireElementValue(
                     response,
                     "ascan.scan()",
                     "Failed to start scan on " + request.targetUrl() + ": received null response"
             );
+            launch.accepted(scanId);
             log.info("Started active scan with ID {} on {} with policy: {}, maxDuration: {} mins",
                     scanId, request.targetUrl(), request.policy(), request.maxDurationMinutes());
             return scanId;
@@ -196,10 +222,16 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     @Override
     public String startActiveScanAsUser(AuthenticatedActiveScanRequest request) {
+        return startActiveScanAsUser(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startActiveScanAsUser(AuthenticatedActiveScanRequest request, NativeScanLaunch launch) {
         try {
             configureActiveScan(request.maxDurationMinutes(), request.hostPerScan(), request.threadPerHost());
             ApiResponseElement response;
             try {
+                launch.beforeDispatch();
                 response = (ApiResponseElement) zap.ascan.scanAsUser(
                         request.targetUrl(),
                         request.contextId(),
@@ -220,6 +252,7 @@ public class ZapEngineScanExecution implements EngineScanExecution {
                     "ascan.scanAsUser()",
                     "Failed to start scan-as-user on " + request.targetUrl() + ": received null response"
             );
+            launch.accepted(scanId);
             log.info("Started active scan-as-user with ID {} on {} for context {}, user {}",
                     scanId, request.targetUrl(), request.contextId(), request.userId());
             return scanId;
@@ -408,8 +441,9 @@ public class ZapEngineScanExecution implements EngineScanExecution {
         }
     }
 
-    private ApiResponseElement launchActiveScan(ActiveScanRequest request) throws ClientApiException {
+    private ApiResponseElement launchActiveScan(ActiveScanRequest request, NativeScanLaunch launch) throws ClientApiException {
         try {
+            launch.beforeDispatch();
             return (ApiResponseElement) zap.ascan.scan(
                     request.targetUrl(),
                     request.recurse(),
@@ -426,9 +460,10 @@ public class ZapEngineScanExecution implements EngineScanExecution {
         }
     }
 
-    private ApiResponse launchClientSpider(ClientSpiderScanRequest request) throws ClientApiException {
+    private ApiResponse launchClientSpider(ClientSpiderScanRequest request, NativeScanLaunch launch) throws ClientApiException {
         try {
             // Use one browser per crawl so ZAP's default cannot multiply the shared concurrency limit.
+            launch.beforeDispatch();
             return zap.clientSpider.scan(
                     "firefox-headless", request.targetUrl(), request.contextName(), request.userName(), null,
                     String.valueOf(request.maxDepth()), null, "1", null);
@@ -444,7 +479,11 @@ public class ZapEngineScanExecution implements EngineScanExecution {
         if (!(response instanceof ApiResponseElement element)) {
             throw new IllegalStateException("Unexpected response from " + operation + ": " + response);
         }
-        return element.getValue();
+        if (element.getValue() == null || element.getValue().isBlank()) {
+            throw new ZapApiException("ZAP returned a blank scan ID/value for " + operation,
+                    new IllegalStateException("Blank native response"));
+        }
+        return element.getValue().trim();
     }
 
     private String requireElementValue(ApiResponseElement response, String operation, String nullResponseMessage) {

@@ -7,6 +7,13 @@ public interface EngineAjaxSpiderExecution {
 
     String startAjaxSpider(AjaxSpiderScanRequest request);
 
+    default String startAjaxSpider(AjaxSpiderScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startAjaxSpider(request);
+        launch.accepted(id);
+        return id;
+    }
+
     AjaxSpiderStatus readAjaxSpiderStatus();
 
     void stopAjaxSpider();

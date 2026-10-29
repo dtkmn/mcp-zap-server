@@ -24,12 +24,23 @@ public class ZapEngineAjaxSpiderExecution implements EngineAjaxSpiderExecution {
 
     @Override
     public String startAjaxSpider(AjaxSpiderScanRequest request) {
+        return startAjaxSpider(request, NativeScanLaunch.UNTRACKED);
+    }
+
+    @Override
+    public String startAjaxSpider(AjaxSpiderScanRequest request, NativeScanLaunch launch) {
         try {
             assertAjaxSpiderAvailable();
             accessTarget(request.targetUrl());
-            zap.ajaxSpider.scan(request.targetUrl(), "false", "", "");
+            launch.beforeDispatch();
+            ApiResponse acknowledgement = zap.ajaxSpider.scan(request.targetUrl(), "false", "", "");
+            if (!"OK".equalsIgnoreCase(responseValue(acknowledgement, "ajaxSpider.scan()"))) {
+                throw new IllegalStateException("AJAX Spider did not return a supported positive launch acknowledgement");
+            }
             log.info("AJAX Spider scan started for URL: {}", request.targetUrl());
-            return ZAP_QUEUE_SCAN_ID_PREFIX + System.currentTimeMillis();
+            String id = ZAP_QUEUE_SCAN_ID_PREFIX + System.currentTimeMillis();
+            launch.accepted(id);
+            return id;
         } catch (ClientApiException e) {
             if ("scan_in_progress".equals(e.getCode())) {
                 throw new EngineBusyException("ZAP is busy with another AJAX Spider scan", e);
@@ -44,6 +55,9 @@ public class ZapEngineAjaxSpiderExecution implements EngineAjaxSpiderExecution {
         try {
             ApiResponse statusResponse = zap.ajaxSpider.status();
             String status = responseValue(statusResponse, "ajaxSpider.status()");
+            if (!"running".equalsIgnoreCase(status) && !"stopped".equalsIgnoreCase(status)) {
+                throw new IllegalStateException("AJAX Spider status is unknown; stopped execution is not established");
+            }
             ApiResponse messagesResponse = zap.ajaxSpider.numberOfResults();
             String messagesCount = responseValue(messagesResponse, "ajaxSpider.numberOfResults()");
             boolean running = "running".equalsIgnoreCase(status);

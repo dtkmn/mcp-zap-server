@@ -9,7 +9,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 
 public class ScanJobResultApplier {
@@ -52,7 +51,6 @@ public class ScanJobResultApplier {
             List<ScanJobStartResult> startResults,
             Instant claimUntil
     ) {
-        List<ScanJobStopRequest> stopRequests = new ArrayList<>();
         RuntimeException firstPersistenceFailure = null;
         for (ScanJobPollResult result : pollResults) {
             claimManager.releasePollTarget(result.jobId());
@@ -123,19 +121,14 @@ public class ScanJobResultApplier {
         for (ScanJobStartResult result : startResults) {
             claimManager.releaseStartTarget(result.jobId());
 
+            // NativeScanLaunch.accepted already persisted this exact receipt at the
+            // gateway boundary. Batch result application never adopts or stops it again.
+            if (result.success()) continue;
+
             Instant appliedAt = Instant.now();
-            RuntimeException persistenceFailure = null;
-            ScanJob updatedJob = null;
-            boolean[] adoptedStart = {false};
             try {
-                updatedJob = scanJobStore.updateClaimedJob(result.jobId(), result.claimToken(), appliedAt, job -> {
-                    adoptedStart[0] = false;
-                    if (job.getStatus() != ScanJobStatus.QUEUED) {
-                        adoptedStart[0] = job.getStatus() == ScanJobStatus.RUNNING
-                                && result.success() && result.scanId() != null
-                                && result.scanId().equals(job.getZapScanId());
-                        return job;
-                    }
+                scanJobStore.updateClaimedJob(result.jobId(), result.claimToken(), appliedAt, job -> {
+                    if (job.getStatus() != ScanJobStatus.QUEUED) return job;
 
                     if (result.engineBusy()) {
                         if (job.isCancellationRequested()) {
@@ -146,30 +139,19 @@ public class ScanJobResultApplier {
                         }
                         return job;
                     }
+                    // Only a failure before beforeDispatch can still be QUEUED here.
+                    // Possible native execution is already STARTING/UNKNOWN and is excluded.
                     job.incrementAttempts();
-                    if (result.success()) {
-                        job.markRunning(result.scanId());
-                        renewClaimWithoutShortening(job, appliedAt, claimUntil);
-                        adoptedStart[0] = true;
-                        log.info("Started scan job {} as ZAP scan {} on worker {}", job.getId(), result.scanId(), workerNodeId);
+                    if (job.isCancellationRequested()) {
+                        job.markCancelled();
+                    } else if (scheduleStartRetryIfAllowed(job, result.error())) {
+                        log.info("Scheduled retry for scan job {} after preparation error", job.getId());
                     } else {
-                        if (job.isCancellationRequested()) {
-                            // Startup may have reached ZAP (e.g. a dispatch timeout). Preserve
-                            // ownership for cancellation instead of launching another crawl.
-                            job.recordTransientError("Cancellation pending after startup error: " + result.error());
-                            job.clearClaim();
-                            return job;
-                        }
-                        if (scheduleStartRetryIfAllowed(job, result.error())) {
-                            log.info("Scheduled retry for scan job {} after startup error", job.getId());
-                        } else {
-                            log.error("Failed to start scan job {}: {}", job.getId(), result.error());
-                        }
+                        log.error("Failed to prepare scan job {}: {}", job.getId(), result.error());
                     }
                     return job;
                 }).orElse(null);
             } catch (RuntimeException e) {
-                persistenceFailure = e;
                 if (firstPersistenceFailure == null) {
                     firstPersistenceFailure = e;
                 }
@@ -181,50 +163,9 @@ public class ScanJobResultApplier {
                         e
                 );
             }
-
-            // In-memory rows are mutable after commit; a later cancellation must not
-            // make an adopted start look abandoned and trigger a second global stop.
-            if (result.success() && hasText(result.scanId())
-                    && (persistenceFailure != null
-                    || updatedJob == null
-                    || !adoptedStart[0])) {
-                try {
-                    if (scanJobStore.load(result.jobId()).filter(job -> job.getStatus() == ScanJobStatus.RUNNING
-                            && result.scanId().equals(job.getZapScanId())).isPresent()) {
-                        // Persisted ownership can outlive the dispatch claim when another
-                        // worker has already taken over polling the same scan.
-                        continue;
-                    }
-                } catch (RuntimeException e) {
-                    if (firstPersistenceFailure == null) {
-                        firstPersistenceFailure = e;
-                    }
-                    persistenceFailure = e;
-                    log.error("Failed to read accepted scan ownership for job {} on worker {}",
-                            result.jobId(), workerNodeId, e);
-                }
-                claimManager.recordLateResultCleanup(1);
-                if (updatedJob == null && persistenceFailure == null) {
-                    claimManager.recordClaimConflict(1);
-                }
-                if (persistenceFailure != null) {
-                    log.warn(
-                            "Cleaning up scan start result for job {} on worker {} because durable persistence failed",
-                            result.jobId(),
-                            workerNodeId
-                    );
-                } else {
-                    log.warn(
-                            "Cleaning up late scan start result for job {} on worker {} because durable claim ownership moved",
-                            result.jobId(),
-                            workerNodeId
-                    );
-                }
-                stopRequests.add(new ScanJobStopRequest(result.type(), result.scanId(), result.jobId()));
-            }
         }
 
-        return new ScanJobApplyOutcome(stopRequests, firstPersistenceFailure);
+        return new ScanJobApplyOutcome(List.of(), firstPersistenceFailure);
     }
 
     private void deferBusyEngine(ScanJob job, String reason, Instant now) {
@@ -269,7 +210,4 @@ public class ScanJobResultApplier {
         return spiderRetryPolicy;
     }
 
-    private boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
 }

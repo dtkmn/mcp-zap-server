@@ -6,6 +6,8 @@ import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineBusyException;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
 import mcp.server.zap.core.model.ScanJob;
@@ -15,6 +17,7 @@ import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.RequestIdentityHolder;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
+import mcp.server.zap.core.service.queue.ScanJobLaunchSafety;
 import mcp.server.zap.core.service.queue.ScanJobStopRequest;
 import mcp.server.zap.core.service.queue.leadership.LeadershipDecision;
 import mcp.server.zap.core.service.queue.leadership.QueueLeadershipCoordinator;
@@ -64,6 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.inOrder;
@@ -72,8 +76,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static mcp.server.zap.core.service.GuardedQueueTestSupport.startReplies;
+import static mcp.server.zap.core.service.GuardedQueueTestSupport.launch;
 
 public class ScanJobQueueServiceTest {
+    @RegisterExtension
+    final GuardedQueueTestSupport launches = new GuardedQueueTestSupport();
 
     private ActiveScanService activeScanService;
     private SpiderScanService spiderScanService;
@@ -89,19 +97,35 @@ public class ScanJobQueueServiceTest {
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
         clientSpiderService = mock(ClientSpiderService.class);
+        doAnswer(invocation -> {
+            when(activeScanService.getActiveScanProgressPercent(invocation.getArgument(0))).thenReturn(100);
+            return null;
+        }).when(activeScanService).stopActiveScanJob(anyString());
+        doAnswer(invocation -> {
+            when(spiderScanService.getSpiderScanProgressPercent(invocation.getArgument(0))).thenReturn(100);
+            return null;
+        }).when(spiderScanService).stopSpiderScanJob(anyString());
+        doAnswer(invocation -> {
+            when(clientSpiderService.getClientSpiderProgressPercent(invocation.getArgument(0))).thenReturn(100);
+            return null;
+        }).when(clientSpiderService).stopClientSpiderJob(anyString());
+        doAnswer(invocation -> {
+            when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(false);
+            return null;
+        }).when(ajaxSpiderService).stopAjaxSpiderJob();
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
 
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(1);
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
 
-        service = new ScanJobQueueService(
+        service = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 false, new InMemoryScanJobStore(), new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
     }
 
     @AfterEach
@@ -113,7 +137,7 @@ public class ScanJobQueueServiceTest {
             ScanJobQueueService.RetryPolicy activePolicy,
             ScanJobQueueService.RetryPolicy spiderPolicy
     ) {
-        return new ScanJobQueueService(
+        return launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 ajaxSpiderService,
@@ -122,15 +146,36 @@ public class ScanJobQueueServiceTest {
                 activePolicy,
                 spiderPolicy,
                 false
-        );
+        ));
+    }
+
+    @Test
+    void unconfiguredQueueCannotAdmitOrDispatchWork() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJobQueueService unconfigured = new ScanJobQueueService(activeScanService, spiderScanService,
+                urlValidationService, scanLimitProperties, 3, false, store);
+        try {
+            assertThrows(NullPointerException.class,
+                    () -> unconfigured.queueActiveScan("http://example.com", "true", null, null));
+            assertThrows(NullPointerException.class, unconfigured::processQueue);
+            assertTrue(store.list().isEmpty());
+            verify(activeScanService, never()).startActiveScanJob(any(), any(), any(), any());
+            verify(spiderScanService, never()).startSpiderScanJob(any(), any());
+        } finally { unconfigured.shutdownExecutor(); }
+    }
+
+    @Test
+    void configuredQueueCannotReplaceItsLaunchOwner() {
+        assertThrows(IllegalStateException.class,
+                () -> service.configureLaunchSafety(mock(ScanJobLaunchSafety.class)));
     }
 
     @Test
     void clientSpiderJobsUseNativeIdsAndShareTraditionalSpiderCapacity() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(2);
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 4))
-                .thenReturn("client-1", "client-2");
-        when(spiderScanService.startSpiderScanJob("http://example.com/http")).thenReturn("spider-1");
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(4), eq(null), eq(null), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("client-1", "client-2"));
+        when(spiderScanService.startSpiderScanJob(eq("http://example.com/http"), any(NativeScanLaunch.class))).thenAnswer(startReplies("spider-1"));
 
         String firstId = extractJobId(service.queueClientSpiderScan("http://example.com/client", 4, "client-first"));
         assertEquals(firstId, extractJobId(service.queueClientSpiderScan("http://example.com/client", 4, "client-first")));
@@ -142,7 +187,7 @@ public class ScanJobQueueServiceTest {
         assertEquals("client-2", service.getJobForTesting(secondId).getZapScanId());
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondId).getStatus());
         assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(spiderId).getStatus());
-        verify(spiderScanService, never()).startSpiderScanJob(anyString());
+        verify(spiderScanService, never()).startSpiderScanJob(anyString(), any(NativeScanLaunch.class));
 
         when(clientSpiderService.getClientSpiderProgressPercent("client-1")).thenReturn(100);
         service.processQueueOnceForTesting();
@@ -154,8 +199,8 @@ public class ScanJobQueueServiceTest {
         service.processQueueOnceForTesting();
 
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(spiderId).getStatus());
-        verify(clientSpiderService, times(2)).startClientSpiderJob("http://example.com/client", 4);
-        verify(spiderScanService).startSpiderScanJob("http://example.com/http");
+        verify(clientSpiderService, times(2)).startClientSpiderJob(eq("http://example.com/client"), eq(4), eq(null), eq(null), any(NativeScanLaunch.class));
+        verify(spiderScanService).startSpiderScanJob(eq("http://example.com/http"), any(NativeScanLaunch.class));
         verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
     }
 
@@ -163,13 +208,13 @@ public class ScanJobQueueServiceTest {
     void invalidClientSpiderDepthIsRejectedBeforeAdmission() {
         assertThrows(IllegalArgumentException.class,
                 () -> service.queueClientSpiderScan("http://example.com", -1, null));
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
     }
 
     @Test
     void authenticatedClientSpiderNamesAreStoredAndIncludedInIdempotency() {
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 4, "Application", "alice"))
-                .thenReturn("client-user-1");
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(4), eq("Application"), eq("alice"), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("client-user-1"));
 
         String jobId = extractJobId(service.queueClientSpiderScan(
                 "http://example.com/client", 4, " Application ", " alice ", "client-auth"));
@@ -187,7 +232,7 @@ public class ScanJobQueueServiceTest {
                 "http://example.com/client", 4, "Other application", "alice", "client-auth"));
         assertThrows(IllegalStateException.class, () -> service.queueClientSpiderScan(
                 "http://example.com/client", 4, "client-auth"));
-        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 4, "Application", "alice");
+        verify(clientSpiderService).startClientSpiderJob(eq("http://example.com/client"), eq(4), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
     }
 
     @ParameterizedTest
@@ -195,8 +240,8 @@ public class ScanJobQueueServiceTest {
     void partialClientSpiderAuthenticationIsRejectedBeforeAdmission(String contextName, String userName) {
         assertThrowsExactly(IllegalArgumentException.class, () -> service.queueClientSpiderScan(
                 "http://example.com", null, contextName, userName, null));
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), anyString(), anyString(), any(NativeScanLaunch.class));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
     }
 
     static Stream<Arguments> partialClientSpiderAuthenticationNames() {
@@ -213,8 +258,8 @@ public class ScanJobQueueServiceTest {
     @ParameterizedTest
     @MethodSource("anonymousClientSpiderAuthenticationNames")
     void absentClientSpiderAuthenticationUsesAnonymousCrawl(String contextName, String userName) {
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0))
-                .thenReturn("client-anonymous");
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(0), eq(null), eq(null), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("client-anonymous"));
 
         String jobId = extractJobId(service.queueClientSpiderScan(
                 "http://example.com/client", 0, contextName, userName, null));
@@ -223,8 +268,8 @@ public class ScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.RUNNING, job.getStatus());
         assertEquals("client-anonymous", job.getZapScanId());
         assertEquals(Map.of("targetUrl", "http://example.com/client", "maxDepth", "0"), job.getParameters());
-        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 0);
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), any(), any());
+        verify(clientSpiderService).startClientSpiderJob(eq("http://example.com/client"), eq(0), eq(null), eq(null), any(NativeScanLaunch.class));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), anyString(), anyString(), any(NativeScanLaunch.class));
     }
 
     static Stream<Arguments> anonymousClientSpiderAuthenticationNames() {
@@ -238,9 +283,9 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void authenticatedClientSpiderStartupRetryKeepsAuthenticationAndNativeLifecycle() {
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0, "Application", "alice"))
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(0), eq("Application"), eq("alice"), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("Browser temporarily unavailable", null))
-                .thenReturn("client-retry");
+                .thenAnswer(startReplies("client-retry"));
 
         String jobId = extractJobId(service.queueClientSpiderScan(
                 "http://example.com/client", 0, "Application", "alice", "client-auth-retry"));
@@ -258,16 +303,15 @@ public class ScanJobQueueServiceTest {
         assertEquals(2, running.getAttempts());
         service.cancelScanJob(jobId);
         assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
-        verify(clientSpiderService, times(2)).startClientSpiderJob(
-                "http://example.com/client", 0, "Application", "alice");
+        verify(clientSpiderService, times(2)).startClientSpiderJob(eq("http://example.com/client"), eq(0), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
         verify(clientSpiderService).stopClientSpiderJob("client-retry");
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
         verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
     }
 
     @Test
     void authenticatedClientSpiderStartupFailureExhaustsRetryBudgetWithoutAnonymousFallback() {
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", null, "Application", "alice"))
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(null), eq("Application"), eq("alice"), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("Browser authentication failed", null));
 
         String jobId = extractJobId(service.queueClientSpiderScan(
@@ -283,17 +327,16 @@ public class ScanJobQueueServiceTest {
         assertThat(service.getScanJobStatus(jobId))
                 .contains("Status: FAILED", "Browser authentication failed", "Dead Letter: true");
         assertThat(service.listDeadLetterJobs()).contains(jobId);
-        verify(clientSpiderService, times(3)).startClientSpiderJob(
-                "http://example.com/client", null, "Application", "alice");
-        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
-        verify(spiderScanService, never()).startSpiderScanJob(anyString());
+        verify(clientSpiderService, times(3)).startClientSpiderJob(eq("http://example.com/client"), eq(null), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
+        verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
+        verify(spiderScanService, never()).startSpiderScanJob(anyString(), any(NativeScanLaunch.class));
         verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString());
     }
 
     @Test
     void clientSpiderTransientStatusFailurePreservesRunningScanWithoutLaunchingDuplicate() {
-        when(clientSpiderService.startClientSpiderJob("http://example.com/client", null))
-                .thenReturn("client-poll");
+        when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(null), eq(null), eq(null), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("client-poll"));
         when(clientSpiderService.getClientSpiderProgressPercent("client-poll"))
                 .thenThrow(new ZapApiException("Client status temporarily unavailable", null))
                 .thenReturn(45, 100);
@@ -313,7 +356,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
         assertThat(service.getScanJobStatus(jobId)).contains("ZAP reports stopped; crawl outcome unknown");
-        verify(clientSpiderService).startClientSpiderJob("http://example.com/client", null);
+        verify(clientSpiderService).startClientSpiderJob(eq("http://example.com/client"), eq(null), eq(null), eq(null), any(NativeScanLaunch.class));
         verify(clientSpiderService, never()).stopClientSpiderJob(anyString());
     }
 
@@ -321,37 +364,37 @@ public class ScanJobQueueServiceTest {
     void authenticatedClientSpiderQueuedRestartRetainsParametersAndIdempotency() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(0);
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
-        ScanJobQueueService writer = new ScanJobQueueService(
+        ScanJobQueueService writer = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
-                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator());
+                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator()));
         String jobId = extractJobId(writer.queueClientSpiderScan(
                 "http://example.com/client", 0, "Application", "alice", "client-auth-restart"));
         writer.shutdownExecutor();
 
-        ScanJobQueueService restored = new ScanJobQueueService(
+        ScanJobQueueService restored = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
-                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator());
+                false, sharedJobStore, new SingleNodeQueueLeadershipCoordinator()));
         try {
             assertEquals(jobId, extractJobId(restored.queueClientSpiderScan(
                     "http://example.com/client", 0, "Application", "alice", "client-auth-restart")));
             assertEquals(ScanJobStatus.QUEUED, restored.getJobForTesting(jobId).getStatus());
             when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
-            when(clientSpiderService.startClientSpiderJob("http://example.com/client", 0, "Application", "alice"))
-                    .thenReturn("client-restored");
+            when(clientSpiderService.startClientSpiderJob(eq("http://example.com/client"), eq(0), eq("Application"), eq("alice"), any(NativeScanLaunch.class)))
+                    .thenAnswer(startReplies("client-restored"));
 
             restored.processQueueOnceForTesting();
 
             assertEquals(ScanJobStatus.RUNNING, restored.getJobForTesting(jobId).getStatus());
             assertEquals("client-restored", restored.getJobForTesting(jobId).getZapScanId());
             assertEquals(1, sharedJobStore.list().size());
-            verify(clientSpiderService).startClientSpiderJob("http://example.com/client", 0, "Application", "alice");
-            verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any());
+            verify(clientSpiderService).startClientSpiderJob(eq("http://example.com/client"), eq(0), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
+            verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
         } finally {
             restored.shutdownExecutor();
         }
@@ -359,7 +402,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void queueActiveScanStartsImmediatelyWhenCapacityAvailable() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-101");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-101"));
 
         String response = service.queueActiveScan("http://example.com", null, null, null);
         String jobId = extractJobId(response);
@@ -370,13 +413,13 @@ public class ScanJobQueueServiceTest {
         assertEquals("A-101", job.getZapScanId());
         assertEquals(1, job.getAttempts());
         verify(urlValidationService).validateUrl("http://example.com");
-        verify(activeScanService).startActiveScanJob("http://example.com", "true", null);
+        verify(activeScanService).startActiveScanJob(eq("http://example.com"), eq("true"), eq(null), any(NativeScanLaunch.class));
     }
 
     @Test
     void enforcesConcurrencyAndStartsQueuedJobWhenSlotFrees() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
-                .thenReturn("A-1", "A-2");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("A-1", "A-2"));
         when(activeScanService.getActiveScanProgressPercent("A-1"))
                 .thenReturn(0, 100);
 
@@ -391,7 +434,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.RUNNING, firstJob.getStatus());
         assertEquals(ScanJobStatus.QUEUED, secondJob.getStatus());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
         service.processQueueOnceForTesting();
 
@@ -405,12 +448,12 @@ public class ScanJobQueueServiceTest {
         secondJob = service.getJobForTesting(secondJobId);
         assertEquals(ScanJobStatus.RUNNING, secondJob.getStatus());
         assertEquals("A-2", secondJob.getZapScanId());
-        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
     void listScanJobsHidesJobsRejectedByAccessBoundary() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-101");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-101"));
 
         service.queueActiveScan("http://example.com", null, null, null);
         service.setScanJobAccessBoundary(job -> false);
@@ -424,7 +467,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void getScanJobStatusRejectsJobsOutsideAccessBoundary() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-102");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-102"));
 
         String response = service.queueActiveScan("http://example.com", null, null, null);
         String jobId = extractJobId(response);
@@ -449,8 +492,8 @@ public class ScanJobQueueServiceTest {
         clientB.setWorkspaceId("workspace-b");
         apiKeyProperties.setApiKeys(List.of(clientA, clientB));
         service.setClientWorkspaceResolver(new ClientWorkspaceResolver(apiKeyProperties));
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
-                .thenReturn("A-client-a", "A-client-b");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("A-client-a", "A-client-b"));
 
         RequestIdentityHolder.set("client-a", "workspace-a");
         String clientAJobId = extractJobId(service.queueActiveScan("http://a.example.com", null, null, null));
@@ -470,7 +513,7 @@ public class ScanJobQueueServiceTest {
     @Test
     void restoresDurableQueueSnapshotOnServiceRestart() {
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
-        ScanJobQueueService writerService = new ScanJobQueueService(
+        ScanJobQueueService writerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -479,14 +522,14 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-restart");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-restart"));
 
         String runningJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-1", "true", null, null));
         String queuedJobId = extractJobId(writerService.queueActiveScan("http://example.com/restore-2", "true", null, null));
 
-        ScanJobQueueService restoredService = new ScanJobQueueService(
+        ScanJobQueueService restoredService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -495,18 +538,18 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         ScanJob restoredRunning = restoredService.getJobForTesting(runningJobId);
         ScanJob restoredQueued = restoredService.getJobForTesting(queuedJobId);
 
         assertNotNull(restoredRunning);
-        assertEquals(ScanJobStatus.RUNNING, restoredRunning.getStatus());
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, restoredRunning.getStatus());
         assertEquals("A-restart", restoredRunning.getZapScanId());
 
         assertNotNull(restoredQueued);
         assertEquals(ScanJobStatus.QUEUED, restoredQueued.getStatus());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -533,7 +576,7 @@ public class ScanJobQueueServiceTest {
         restoredJob.assignQueuePosition(1);
         sharedJobStore.upsertAll(List.of(restoredJob));
 
-        ScanJobQueueService restoredService = new ScanJobQueueService(
+        ScanJobQueueService restoredService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -542,14 +585,14 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         String summary = restoredService.listScanJobs(null);
         assertTrue(summary.contains("Queue depth: 1"));
     }
 
     @Test
-    void restartRecoveryRepairsRunningJobWithoutScanId() {
+    void restartRecoveryHoldsRunningJobWithoutScanId() {
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
 
         ScanJob invalidRunningJob = ScanJob.restore(
@@ -570,7 +613,7 @@ public class ScanJobQueueServiceTest {
         );
         sharedJobStore.upsertAll(List.of(invalidRunningJob));
 
-        ScanJobQueueService restoredService = new ScanJobQueueService(
+        ScanJobQueueService restoredService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -579,12 +622,13 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         ScanJob repairedJob = restoredService.getJobForTesting("job-running-no-id");
         assertNotNull(repairedJob);
-        assertEquals(ScanJobStatus.FAILED, repairedJob.getStatus());
-        assertTrue(repairedJob.getLastError().contains("Missing ZAP scan ID"));
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, repairedJob.getStatus());
+        assertTrue(repairedJob.hasUnresolvedLaunch());
+        assertTrue(repairedJob.getLastError().contains("operator reconciliation"));
     }
 
     @Test
@@ -595,9 +639,9 @@ public class ScanJobQueueServiceTest {
         TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
 
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(1);
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-follower");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-follower"));
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -606,8 +650,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -616,7 +660,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
         String response = followerService.queueActiveScan("http://example.com/follower", "true", null, null);
         String jobId = extractJobId(response);
@@ -626,7 +670,7 @@ public class ScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.RUNNING, followerJob.getStatus());
         assertEquals("A-follower", followerJob.getZapScanId());
         assertEquals("node-b", followerJob.getClaimOwnerId());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
         leaderService.processQueueOnceForTesting();
 
@@ -635,7 +679,7 @@ public class ScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.RUNNING, leaderJob.getStatus());
         assertEquals("A-follower", leaderJob.getZapScanId());
         assertEquals("node-b", leaderJob.getClaimOwnerId());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -679,7 +723,7 @@ public class ScanJobQueueServiceTest {
 
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
 
-        ScanJobQueueService followerServiceA = new ScanJobQueueService(
+        ScanJobQueueService followerServiceA = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -688,8 +732,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinatorA
-        );
-        ScanJobQueueService followerServiceB = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerServiceB = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -698,7 +742,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinatorB
-        );
+        ));
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
@@ -725,7 +769,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void queuedAjaxSpiderUsesSharedJobLifecycle() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:1"));
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String response = service.queueAjaxSpiderScan("http://example.com/spa", "ajax-req-1");
@@ -742,14 +786,14 @@ public class ScanJobQueueServiceTest {
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(jobId).getStatus());
-        verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/spa"), anyString(), any(), any());
+        verify(ajaxSpiderService).startAjaxSpiderJobTracked(eq("http://example.com/spa"), anyString(), any(), any(NativeScanLaunch.class));
         verify(ajaxSpiderService, times(2)).isAjaxSpiderRunning();
     }
 
     @Test
     void onlyOneAjaxSpiderJobStartsAtATimeEvenWhenSpiderCapacityAllowsMore() {
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(5);
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1", "ajax-spider:2");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:1", "ajax-spider:2"));
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true, false);
 
         String firstJobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa-1", "ajax-1"));
@@ -757,7 +801,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(firstJobId).getStatus());
         assertEquals(ScanJobStatus.QUEUED, service.getJobForTesting(secondJobId).getStatus());
-        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.SUCCEEDED, service.getJobForTesting(firstJobId).getStatus());
@@ -765,12 +809,12 @@ public class ScanJobQueueServiceTest {
 
         service.processQueueOnceForTesting();
         assertEquals(ScanJobStatus.RUNNING, service.getJobForTesting(secondJobId).getStatus());
-        verify(ajaxSpiderService, times(2)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+        verify(ajaxSpiderService, times(2)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
     void cancelledAjaxSpiderRemainsCancelledWhenCrawlerStops() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:1");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:1"));
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenReturn(true);
         String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com/spa", "ajax-cancel"));
 
@@ -790,7 +834,7 @@ public class ScanJobQueueServiceTest {
     void failedAjaxStopRemainsPendingUntilRetrySucceedsWithoutConsumingStartupAttempts() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:cancel");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:cancel"));
         doThrow(new ZapApiException("Internal Error", null)).doNothing()
                 .when(ajaxSpiderService).stopAjaxSpiderJob();
         try {
@@ -814,16 +858,17 @@ public class ScanJobQueueServiceTest {
             assertFalse(cancelled.isCancellationPending());
             assertEquals(1, cancelled.getAttempts());
             verify(ajaxSpiderService, times(2)).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
         } finally {
             cancellingService.shutdownExecutor();
         }
     }
 
     @Test
-    void lateAjaxStartWithFailedCleanupRetainsOwnershipUntilRetryBeforeNextCrawl() throws Exception {
+    void lateAjaxReceiptIsAdoptedThenExplicitCancellationRetriesBeforeNextCrawl() throws Exception {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         EngineAjaxSpiderExecution engine = mock(EngineAjaxSpiderExecution.class);
+        doCallRealMethod().when(engine).startAjaxSpider(any(), any(NativeScanLaunch.class));
         AjaxSpiderService ajax = new AjaxSpiderService(engine, urlValidationService);
         ajax.setScanJobStore(store);
         CountDownLatch startEntered = new CountDownLatch(1);
@@ -864,10 +909,10 @@ public class ScanJobQueueServiceTest {
 
         // One startup attempt prevents a fresh launch retry from hiding lost cleanup ownership.
         // Per-task virtual threads let the test join the complete late-result cleanup callback.
-        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajax,
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService, ajax,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(1, 0, 0, 1),
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store);
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store));
         ExecutorService caller = Executors.newSingleThreadExecutor();
         try {
             Future<String> submission = caller.submit(() -> queue.queueAjaxSpiderScan("http://example.com/late", null));
@@ -877,8 +922,10 @@ public class ScanJobQueueServiceTest {
 
             releaseLateStart.countDown();
             assertTrue(lateStartThread.get().join(Duration.ofSeconds(5)), "Late cleanup must finish before inspecting state");
-            assertEquals(1, stopCalls.get());
+            assertEquals(0, stopCalls.get(), "A trustworthy late receipt is adopted, not automatically stopped");
             assertEquals("ajax-spider:late", currentCrawl.get());
+            queue.cancelScanJob(jobId);
+            assertEquals(1, stopCalls.get());
 
             ScanJob pending = store.load(jobId).orElseThrow();
             assertFalse(pending.getStatus().isTerminal(),
@@ -912,6 +959,7 @@ public class ScanJobQueueServiceTest {
     void delayedAjaxCleanupCannotStopNewerCrawlAfterOriginalCancellation() throws Exception {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         EngineAjaxSpiderExecution engine = mock(EngineAjaxSpiderExecution.class);
+        doCallRealMethod().when(engine).startAjaxSpider(any(), any(NativeScanLaunch.class));
         CountDownLatch accepted = new CountDownLatch(1);
         CountDownLatch releaseReturn = new CountDownLatch(1);
         AtomicReference<Thread> delayedThread = new AtomicReference<>();
@@ -932,8 +980,8 @@ public class ScanJobQueueServiceTest {
                 new EngineAjaxSpiderExecution.AjaxSpiderStatus("running", "0", currentCrawl.get() != null));
         AjaxSpiderService ajax = new AjaxSpiderService(engine, urlValidationService) {
             @Override
-            public String startAjaxSpiderJob(String url, String jobId, ScanJobClaimToken token, Consumer<String> onAccepted) {
-                String scanId = super.startAjaxSpiderJob(url, jobId, token, onAccepted);
+            public String startAjaxSpiderJobTracked(String url, String jobId, ScanJobClaimToken token, NativeScanLaunch launch) {
+                String scanId = super.startAjaxSpiderJobTracked(url, jobId, token, launch);
                 if ("ajax-spider:original".equals(scanId)) {
                     delayedThread.set(Thread.currentThread());
                     accepted.countDown();
@@ -947,10 +995,10 @@ public class ScanJobQueueServiceTest {
             }
         };
         ajax.setScanJobStore(store);
-        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajax,
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService, ajax,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(1, 0, 0, 1),
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store);
+                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), true, store));
         ExecutorService caller = Executors.newSingleThreadExecutor();
         try {
             Future<String> submission = caller.submit(() -> queue.queueAjaxSpiderScan("http://example.com/original", null));
@@ -1042,7 +1090,7 @@ public class ScanJobQueueServiceTest {
     void ajaxCancellationUsesBackoffAndRepeatedRequestsPreserveOriginalDeadline() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 10_000, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:backoff");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:backoff"));
         doThrow(new ZapApiException("Stop request failed", null)).when(ajaxSpiderService).stopAjaxSpiderJob();
         try {
             String jobId = extractJobId(cancellingService.queueAjaxSpiderScan("http://example.com/spa", null));
@@ -1071,7 +1119,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void restoredWorkerResumesAjaxCancellationWithoutResettingItsDeadline() {
+    void restoredWorkerHoldsLegacyAjaxCancellationWithoutResettingItsDeadline() {
         Instant now = Instant.now();
         ScanJob pending = runningAjaxJob("cancel-restored", now.minusSeconds(90));
         pending.requestCancellation(now.minusSeconds(30), now.plusSeconds(60));
@@ -1079,7 +1127,9 @@ public class ScanJobQueueServiceTest {
         pending.claim("former-worker", now.minusSeconds(30), now.minusSeconds(1));
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         store.upsertAll(List.of(pending));
-        ScanJobQueueService restored = newAjaxCancellationService(store, 60_000, "restored-worker");
+        ScanJobQueueService restored = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, urlValidationService, scanLimitProperties, 3, false, store,
+                new TestQueueLeadershipCoordinator("restored-worker", new SharedLeadershipState("restored-worker"))));
         try {
             ScanJob restoredPending = restored.getJobForTesting(pending.getId());
             assertTrue(restoredPending.isCancellationPending());
@@ -1090,11 +1140,11 @@ public class ScanJobQueueServiceTest {
             restored.processQueueOnceForTesting();
 
             ScanJob cancelled = store.load(pending.getId()).orElseThrow();
-            assertEquals(ScanJobStatus.CANCELLED, cancelled.getStatus());
+            assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, cancelled.getStatus());
             assertEquals(now.plusSeconds(60), cancelled.getCancelDeadlineAt());
             assertEquals(1, cancelled.getAttempts());
-            verify(ajaxSpiderService).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
+            verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
         } finally {
             restored.shutdownExecutor();
         }
@@ -1123,7 +1173,7 @@ public class ScanJobQueueServiceTest {
             assertEquals(1, unconfirmed.getAttempts());
             assertEquals(ScanJobStatus.QUEUED, store.load(next.getId()).orElseThrow().getStatus());
             verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
             doThrow(new ZapApiException("Stop request failed again", null))
                     .when(ajaxSpiderService).stopAjaxSpiderJob();
@@ -1146,7 +1196,7 @@ public class ScanJobQueueServiceTest {
     void statusResultDispatchedBeforeCancellationCannotCompletePendingAjaxJob() throws Exception {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 60_000, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:stale-status");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:stale-status"));
         CountDownLatch pollEntered = new CountDownLatch(1);
         CountDownLatch releasePoll = new CountDownLatch(1);
         when(ajaxSpiderService.isAjaxSpiderRunning()).thenAnswer(invocation -> {
@@ -1184,9 +1234,11 @@ public class ScanJobQueueServiceTest {
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
         CountDownLatch startEntered = new CountDownLatch(1);
         CountDownLatch releaseStart = new CountDownLatch(1);
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenAnswer(invocation -> {
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(invocation -> {
+            launch(invocation).beforeDispatch();
             startEntered.countDown();
             assertTrue(releaseStart.await(5, TimeUnit.SECONDS));
+            launch(invocation).accepted("ajax-spider:delayed-start");
             return "ajax-spider:delayed-start";
         });
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -1196,7 +1248,7 @@ public class ScanJobQueueServiceTest {
             assertTrue(startEntered.await(5, TimeUnit.SECONDS));
             ScanJob starting = store.list().getFirst();
             String jobId = starting.getId();
-            assertEquals(ScanJobStatus.QUEUED, starting.getStatus());
+            assertEquals(ScanJobStatus.STARTING, starting.getStatus());
             assertTrue(starting.hasLiveClaim(Instant.now()));
 
             cancellingService.cancelScanJob(jobId);
@@ -1204,8 +1256,8 @@ public class ScanJobQueueServiceTest {
             ScanJob pendingStart = store.load(jobId).orElseThrow();
             Instant requestedAt = pendingStart.getCancelRequestedAt();
             assertTrue(pendingStart.isCancellationPending());
-            assertEquals(ScanJobStatus.QUEUED, pendingStart.getStatus());
-            assertEquals(0, pendingStart.getAttempts());
+            assertEquals(ScanJobStatus.STARTING, pendingStart.getStatus());
+            assertEquals(1, pendingStart.getAttempts());
             verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
 
             releaseStart.countDown();
@@ -1222,7 +1274,7 @@ public class ScanJobQueueServiceTest {
 
             assertEquals(ScanJobStatus.CANCELLED, store.load(jobId).orElseThrow().getStatus());
             verify(ajaxSpiderService, times(1)).stopAjaxSpiderJob();
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
         } finally {
             releaseStart.countDown();
             executor.shutdownNow();
@@ -1234,7 +1286,7 @@ public class ScanJobQueueServiceTest {
     void newerAjaxJobStartsOnlyAfterPendingStopIsAccepted() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJobQueueService cancellingService = newAjaxCancellationService(store, 0, "cancel-worker");
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-spider:first", "ajax-spider:next");
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-spider:first", "ajax-spider:next"));
         doThrow(new ZapApiException("First stop failed", null))
                 .doThrow(new ZapApiException("Second stop failed", null)).doNothing()
                 .when(ajaxSpiderService).stopAjaxSpiderJob();
@@ -1246,16 +1298,16 @@ public class ScanJobQueueServiceTest {
             assertEquals(ScanJobStatus.RUNNING, store.load(firstId).orElseThrow().getStatus());
             assertTrue(store.load(firstId).orElseThrow().isCancellationPending());
             assertEquals(ScanJobStatus.QUEUED, store.load(nextId).orElseThrow().getStatus());
-            verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, times(1)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
             cancellingService.processQueueOnceForTesting();
 
             assertEquals(ScanJobStatus.CANCELLED, store.load(firstId).orElseThrow().getStatus());
             assertEquals(ScanJobStatus.RUNNING, store.load(nextId).orElseThrow().getStatus());
             var ordered = inOrder(ajaxSpiderService);
-            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/first"), anyString(), any(), any());
+            ordered.verify(ajaxSpiderService).startAjaxSpiderJobTracked(eq("http://example.com/first"), anyString(), any(), any(NativeScanLaunch.class));
             ordered.verify(ajaxSpiderService, times(3)).stopAjaxSpiderJob();
-            ordered.verify(ajaxSpiderService).startAjaxSpiderJob(eq("http://example.com/next"), anyString(), any(), any());
+            ordered.verify(ajaxSpiderService).startAjaxSpiderJobTracked(eq("http://example.com/next"), anyString(), any(), any(NativeScanLaunch.class));
         } finally {
             cancellingService.shutdownExecutor();
         }
@@ -1301,279 +1353,11 @@ public class ScanJobQueueServiceTest {
     }
 
     private ScanJobQueueService newAjaxCancellationService(InMemoryScanJobStore store, long retryDelayMs, String workerId) {
-        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
+        return launches.guardedWithCurrentOwnedFixtures(new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
                 urlValidationService, scanLimitProperties,
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(3, retryDelayMs, retryDelayMs, 1),
-                false, store, new TestQueueLeadershipCoordinator(workerId, new SharedLeadershipState(workerId)));
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = ScanJobType.class, names = "AJAX_SPIDER", mode = EnumSource.Mode.EXCLUDE)
-    void nativeLateCleanupPersistsOldScanAndRetriesWithoutChangingNewerAttempt(ScanJobType type) {
-        InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJob source = new ScanJob("source-newer", type,
-                Map.of("targetUrl", "http://example.com/native", "contextId", "context-1", "userId", "user-1"),
-                Instant.now().minusSeconds(20), 3, "requester-1", "request-key");
-        source.incrementAttempts();
-        source.markRunning("scan-newer");
-        store.upsertAll(List.of(source));
-        AtomicInteger stops = new AtomicInteger();
-        if (type.isActiveFamily()) {
-            doAnswer(invocation -> {
-                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
-                return null;
-            }).when(activeScanService).stopActiveScanJob("scan-old");
-        } else if (type == ScanJobType.CLIENT_SPIDER) {
-            doAnswer(invocation -> {
-                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
-                return null;
-            }).when(clientSpiderService).stopClientSpiderJob("scan-old");
-        } else {
-            doAnswer(invocation -> {
-                if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
-                return null;
-            }).when(spiderScanService).stopSpiderScanJob("scan-old");
-        }
-        ScanJobQueueService queue = newNativeCleanupService(store, false);
-        ScanJobStopRequest request = new ScanJobStopRequest(type, "scan-old", source.getId());
-        try {
-            queue.requestScanCleanup(request);
-
-            ScanJob cleanup = cleanupFor(store, source.getId());
-            assertEquals(type, cleanup.getType());
-            assertEquals("scan-old", cleanup.getZapScanId());
-            assertEquals(source.getRequesterId(), cleanup.getRequesterId());
-            assertEquals(source.getParameters().get("contextId"), cleanup.getParameters().get("contextId"));
-            assertNull(cleanup.getIdempotencyKey());
-            assertTrue(cleanup.isCancellationPending());
-            assertEquals(1, cleanup.getCancelAttemptCount());
-            assertEquals(0, cleanup.getAttempts());
-            Instant requestedAt = cleanup.getCancelRequestedAt();
-            Instant deadline = cleanup.getCancelDeadlineAt();
-            Instant retryAt = cleanup.getCancelNextAttemptAt();
-            ScanJobClaimToken newerClaim = ScanJobClaimToken.from(store.load(source.getId()).orElseThrow());
-
-            queue.requestScanCleanup(request);
-            assertEquals(1, stops.get(), "Duplicate delivery must respect the saved backoff");
-            assertEquals(2, store.list().size());
-            assertEquals(requestedAt, cleanup.getCancelRequestedAt());
-            assertEquals(deadline, cleanup.getCancelDeadlineAt());
-            assertEquals(retryAt, cleanup.getCancelNextAttemptAt());
-            ScanJob preserved = store.load(source.getId()).orElseThrow();
-            assertEquals("scan-newer", preserved.getZapScanId());
-            assertEquals(ScanJobStatus.RUNNING, preserved.getStatus());
-            assertEquals(newerClaim, ScanJobClaimToken.from(preserved));
-            assertFalse(preserved.isCancellationRequested());
-
-            cleanup.deferCancellationAttempt(Instant.now().minusSeconds(1));
-            queue.processQueueOnceForTesting();
-            assertEquals(2, stops.get());
-            assertEquals(ScanJobStatus.CANCELLED, store.load(cleanup.getId()).orElseThrow().getStatus());
-            assertEquals(ScanJobStatus.RUNNING, store.load(source.getId()).orElseThrow().getStatus());
-            assertEquals("scan-newer", store.load(source.getId()).orElseThrow().getZapScanId());
-            queue.requestScanCleanup(request);
-            assertEquals(2, stops.get(), "A resolved cleanup record must make duplicate delivery harmless");
-            verify(activeScanService, never()).stopActiveScanJob("scan-newer");
-            verify(spiderScanService, never()).stopSpiderScanJob("scan-newer");
-            verify(clientSpiderService, never()).stopClientSpiderJob("scan-newer");
-        } finally {
-            queue.shutdownExecutor();
-        }
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = ScanJobStatus.class, names = {"RUNNING", "SUCCEEDED", "CANCELLED"})
-    void lateCleanupForAlreadyAdoptedNativeScanDoesNotCancelIt(ScanJobStatus status) {
-        InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJob source = new ScanJob("already-adopted-source", ScanJobType.ACTIVE_SCAN,
-                Map.of("targetUrl", "http://example.com/adopted"), Instant.now(), 3);
-        source.incrementAttempts();
-        source.markRunning("active-adopted");
-        if (status == ScanJobStatus.SUCCEEDED) {
-            source.markSucceeded(100);
-        } else if (status == ScanJobStatus.CANCELLED) {
-            source.markCancelled();
-        }
-        store.upsertAll(List.of(source));
-        ScanJobQueueService queue = newNativeCleanupService(store, false);
-        try {
-            assertDoesNotThrow(() -> queue.requestScanCleanup(
-                    new ScanJobStopRequest(source.getType(), "active-adopted", source.getId())));
-
-            assertEquals(1, store.list().size(), "An adopted scan must not get a cleanup child");
-            ScanJob preserved = store.load(source.getId()).orElseThrow();
-            assertEquals(status, preserved.getStatus());
-            assertEquals("active-adopted", preserved.getZapScanId());
-            assertEquals(1, preserved.getAttempts());
-            assertNull(preserved.getCancelRequestedAt(), "Late cleanup must not request cancellation of an adopted scan");
-            verify(activeScanService, never()).stopActiveScanJob(anyString());
-            verify(spiderScanService, never()).stopSpiderScanJob(anyString());
-        } finally {
-            queue.shutdownExecutor();
-        }
-    }
-
-    @Test
-    void expiredNativeCleanupRetainsCapacityAndRequiresExplicitCancellationToReopenWindow() {
-        InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJob source = new ScanJob("failed-native-source", ScanJobType.ACTIVE_SCAN,
-                Map.of("targetUrl", "http://example.com/source"), Instant.now().minusSeconds(120), 3);
-        source.incrementAttempts();
-        source.markFailed("Startup timed out");
-        store.upsertAll(List.of(source));
-        doThrow(new ZapApiException("Stop failed", null)).when(activeScanService).stopActiveScanJob("old-active");
-        ScanJobQueueService queue = newNativeCleanupService(store, false);
-        ScanJobStopRequest request = new ScanJobStopRequest(source.getType(), "old-active", source.getId());
-        try {
-            queue.requestScanCleanup(request);
-            ScanJob cleanup = cleanupFor(store, source.getId());
-            assertTrue(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(source.getId()))
-                    .getMessage().contains("unconfirmed cleanup"));
-            assertTrue(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(cleanup.getId()))
-                    .getMessage().contains("Cleanup records cannot launch"));
-            assertTrue(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(cleanup.getId()))
-                    .getMessage().contains("Cleanup records cannot launch"));
-
-            cleanup.recordCancellationFailure("Expired fixture");
-            Instant expiredAt = Instant.now().minusSeconds(1);
-            cleanup.requestCancellation(expiredAt.minusSeconds(30), expiredAt);
-            queue.processQueueOnceForTesting();
-            queue.requestScanCleanup(request);
-
-            ScanJob unconfirmed = store.load(cleanup.getId()).orElseThrow();
-            assertEquals(ScanJobStatus.RUNNING, unconfirmed.getStatus());
-            assertTrue(unconfirmed.isCancellationRequested());
-            assertFalse(unconfirmed.isCancellationPending());
-            assertEquals(expiredAt, unconfirmed.getCancelDeadlineAt());
-            assertTrue(queue.getScanJobStatus(cleanup.getId()).contains("Unable to confirm cancellation"));
-            String waitingId = extractJobId(queue.queueActiveScan("http://example.com/waiting", "true", null, null));
-            assertEquals(ScanJobStatus.QUEUED, store.load(waitingId).orElseThrow().getStatus());
-            verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
-            verify(activeScanService, times(1)).stopActiveScanJob("old-active");
-
-            queue.cancelScanJob(cleanup.getId());
-            ScanJob retried = store.load(cleanup.getId()).orElseThrow();
-            assertTrue(retried.isCancellationPending());
-            assertTrue(retried.getCancelRequestedAt().isAfter(expiredAt));
-            assertEquals(Duration.ofSeconds(30), Duration.between(retried.getCancelRequestedAt(), retried.getCancelDeadlineAt()));
-            assertEquals(1, retried.getCancelAttemptCount());
-            verify(activeScanService, times(2)).stopActiveScanJob("old-active");
-        } finally {
-            queue.shutdownExecutor();
-        }
-    }
-
-    @ParameterizedTest
-    @EnumSource(value = ScanJobType.class, names = {"SPIDER_SCAN", "CLIENT_SPIDER"})
-    void lateNativeSpiderStartWithFailedStopCreatesDurableCleanupAndRetries(ScanJobType type) throws Exception {
-        InMemoryScanJobStore store = new InMemoryScanJobStore();
-        CountDownLatch entered = new CountDownLatch(1);
-        CountDownLatch releaseStart = new CountDownLatch(1);
-        AtomicReference<Thread> lateThread = new AtomicReference<>();
-        AtomicInteger starts = new AtomicInteger();
-        AtomicInteger stops = new AtomicInteger();
-        var startCall = when(type == ScanJobType.CLIENT_SPIDER
-                ? clientSpiderService.startClientSpiderJob(anyString(), any())
-                : spiderScanService.startSpiderScanJob(anyString()));
-        startCall.thenAnswer(invocation -> {
-            starts.incrementAndGet();
-            lateThread.set(Thread.currentThread());
-            entered.countDown();
-            boolean released = false;
-            while (!released) {
-                try {
-                    released = releaseStart.await(20, TimeUnit.SECONDS);
-                    assertTrue(released, "Test must release the delayed ZAP response");
-                } catch (InterruptedException ignored) {
-                    // The remote start has succeeded even though the dispatcher cancelled its wait.
-                }
-            }
-            return "spider-late-native";
-        });
-        var stopCall = doAnswer(invocation -> {
-            if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
-            return null;
-        });
-        if (type == ScanJobType.CLIENT_SPIDER) {
-            stopCall.when(clientSpiderService).stopClientSpiderJob("spider-late-native");
-        } else {
-            stopCall.when(spiderScanService).stopSpiderScanJob("spider-late-native");
-        }
-        ScanJobQueueService queue = new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService,
-                clientSpiderService, urlValidationService, scanLimitProperties,
-                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1),
-                new ScanJobQueueService.RetryPolicy(1, 10_000, 10_000, 1), true, store,
-                new SingleNodeQueueLeadershipCoordinator());
-        ExecutorService caller = Executors.newSingleThreadExecutor();
-        try {
-            Future<String> submission = caller.submit(() -> type == ScanJobType.CLIENT_SPIDER
-                    ? queue.queueClientSpiderScan("http://example.com/late-native", null, null)
-                    : queue.queueSpiderScan("http://example.com/late-native", null));
-            assertTrue(entered.await(3, TimeUnit.SECONDS));
-            String sourceId = extractJobId(submission.get(15, TimeUnit.SECONDS));
-            assertEquals(ScanJobStatus.FAILED, store.load(sourceId).orElseThrow().getStatus());
-            assertEquals(1L, releaseStart.getCount());
-
-            releaseStart.countDown();
-            assertTrue(lateThread.get().join(Duration.ofSeconds(5)));
-            ScanJob cleanup = cleanupFor(store, sourceId);
-            assertTrue(cleanup.isCancellationPending());
-            assertEquals("spider-late-native", cleanup.getZapScanId());
-            assertEquals(1, stops.get());
-            assertEquals(1, store.load(sourceId).orElseThrow().getAttempts());
-
-            cleanup.deferCancellationAttempt(Instant.now().minusSeconds(1));
-            queue.processQueueOnceForTesting();
-            assertEquals(ScanJobStatus.CANCELLED, store.load(cleanup.getId()).orElseThrow().getStatus());
-            assertEquals(2, stops.get());
-            assertEquals(1, starts.get(), "Cleanup must not relaunch the source scan");
-        } finally {
-            releaseStart.countDown();
-            queue.shutdownExecutor();
-            caller.shutdownNow();
-        }
-    }
-
-    @Test
-    void nativeCleanupPersistenceFailureOnlyStopsAbandonedScanId() {
-        AtomicInteger failWrites = new AtomicInteger();
-        InMemoryScanJobStore store = new InMemoryScanJobStore() {
-            @Override
-            public List<ScanJob> updateAndGet(UnaryOperator<List<ScanJob>> updater) {
-                if (failWrites.get() > 0) throw new IllegalStateException("Cleanup persistence failed");
-                return super.updateAndGet(updater);
-            }
-        };
-        ScanJob source = new ScanJob("persistence-failed-source", ScanJobType.ACTIVE_SCAN,
-                Map.of("targetUrl", "http://example.com/source"), Instant.now(), 3);
-        source.markRunning("active-newer");
-        store.upsertAll(List.of(source));
-        ScanJobQueueService queue = newNativeCleanupService(store, false);
-        try {
-            failWrites.set(1);
-            IllegalStateException failure = assertThrows(IllegalStateException.class, () ->
-                    queue.requestScanCleanup(new ScanJobStopRequest(source.getType(), "active-abandoned", source.getId())));
-            assertEquals("Cleanup persistence failed", failure.getMessage());
-            verify(activeScanService).stopActiveScanJob("active-abandoned");
-            verify(activeScanService, never()).stopActiveScanJob("active-newer");
-            assertEquals("active-newer", store.load(source.getId()).orElseThrow().getZapScanId());
-            assertEquals(1, store.list().size());
-        } finally {
-            queue.shutdownExecutor();
-        }
-    }
-
-    private ScanJobQueueService newNativeCleanupService(InMemoryScanJobStore store, boolean virtualThreads) {
-        return new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
-                urlValidationService, scanLimitProperties,
-                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1),
-                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), virtualThreads, store,
-                new SingleNodeQueueLeadershipCoordinator());
-    }
-
-    private ScanJob cleanupFor(InMemoryScanJobStore store, String sourceId) {
-        return store.list().stream().filter(job -> sourceId.equals(job.getCleanupOfJobId())).findFirst().orElseThrow();
+                false, store, new TestQueueLeadershipCoordinator(workerId, new SharedLeadershipState(workerId))));
     }
 
     private ScanJob runningAjaxJob(String jobId, Instant createdAt) {
@@ -1584,14 +1368,86 @@ public class ScanJobQueueServiceTest {
         return job;
     }
 
+    private ScanJobQueueService newNativeCleanupService(InMemoryScanJobStore store, boolean virtualThreads) {
+        return launches.guardedWithCurrentOwnedFixtures(new ScanJobQueueService(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1),
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), virtualThreads, store,
+                new SingleNodeQueueLeadershipCoordinator()));
+    }
+
+    @Test
+    void recoveredLegacyNativeCleanupRetainsCapacityAndCannotLaunchThroughRetryOrReplay() {
+        Instant now = Instant.now();
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJob source = new ScanJob("legacy-source", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/source"), now.minusSeconds(120), 3);
+        source.incrementAttempts();
+        source.markFailed("Legacy startup did not complete");
+        ScanJob cleanup = new ScanJob("legacy-cleanup", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com/source", ScanJob.CLEANUP_OF_JOB_ID, source.getId()),
+                now.minusSeconds(90), 0);
+        cleanup.markRunning("native-old");
+        Instant expiredAt = now.minusSeconds(1);
+        cleanup.requestCancellation(expiredAt.minusSeconds(30), expiredAt);
+        store.upsertAll(List.of(source, cleanup));
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, clientSpiderService, urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1),
+                new ScanJobQueueService.RetryPolicy(3, 10_000, 10_000, 1), false, store,
+                new SingleNodeQueueLeadershipCoordinator()));
+        ScanJob held = store.load(cleanup.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, held.getStatus());
+        // A trusted operator must first restore ownership of the known old native ID.
+        ScanJobLaunchSafety safety = (ScanJobLaunchSafety) org.springframework.test.util.ReflectionTestUtils
+                .getField(queue, "launchSafety");
+        safety.reconcile(held.getId(), held.getLaunchAttempt().id(), held.getLaunchAttempt().resolutionVersion(),
+                "attach_scan", "native-old", true);
+        queue.processQueueOnceForTesting();
+
+        ScanJob expired = store.load(cleanup.getId()).orElseThrow();
+        assertEquals(ScanJobStatus.RUNNING, expired.getStatus());
+        assertTrue(expired.isCancellationRequested());
+        assertFalse(expired.isCancellationPending());
+        assertEquals(expiredAt, expired.getCancelDeadlineAt());
+        assertThat(expired.getLastError()).contains("Unable to confirm cancellation");
+        assertThat(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(source.getId())))
+                .hasMessageContaining("unconfirmed cleanup");
+        assertThat(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(source.getId())))
+                .hasMessageContaining("unconfirmed cleanup");
+        assertThat(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(cleanup.getId())))
+                .hasMessageContaining("Cleanup records cannot launch");
+        assertThat(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(cleanup.getId())))
+                .hasMessageContaining("Cleanup records cannot launch");
+
+        String waitingId = extractJobId(queue.queueActiveScan("http://example.com/waiting", "true", null, null));
+        queue.processQueueOnceForTesting();
+        assertEquals(ScanJobStatus.QUEUED, store.load(waitingId).orElseThrow().getStatus());
+        assertEquals(expiredAt, store.load(cleanup.getId()).orElseThrow().getCancelDeadlineAt());
+        verify(activeScanService, never()).startActiveScanJob(any(), any(), any(), any());
+        verify(activeScanService, never()).stopActiveScanJob(any());
+
+        doThrow(new ZapApiException("Stop still unavailable", null)).when(activeScanService).stopActiveScanJob("native-old");
+        queue.cancelScanJob(cleanup.getId());
+        ScanJob reopened = store.load(cleanup.getId()).orElseThrow();
+        assertTrue(reopened.isCancellationPending());
+        assertTrue(reopened.getCancelRequestedAt().isAfter(expiredAt));
+        assertEquals(Duration.ofSeconds(30), Duration.between(reopened.getCancelRequestedAt(), reopened.getCancelDeadlineAt()));
+        assertEquals(1, reopened.getCancelAttemptCount());
+        assertEquals(0, reopened.getAttempts());
+        assertEquals(ScanJobStatus.QUEUED, store.load(waitingId).orElseThrow().getStatus());
+        verify(activeScanService).stopActiveScanJob("native-old");
+        verify(activeScanService, never()).startActiveScanJob(any(), any(), any(), any());
+    }
+
     @Test
     void busyEngineWaitsWithoutConsumingAttemptsAndThenStarts() {
         ScanJobQueueService waitingService = newServiceWithPolicies(
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1));
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new EngineBusyException("Engine is busy", null))
-                .thenReturn("active-after-wait");
+                .thenAnswer(startReplies("active-after-wait"));
         try {
             String response = waitingService.queueActiveScan("http://example.com", "true", null, null);
             String jobId = extractJobId(response);
@@ -1614,7 +1470,7 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void waitingJobCanBeCancelledBeforeEngineStarts() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any()))
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new EngineBusyException("Engine is busy", null));
         String jobId = extractJobId(service.queueAjaxSpiderScan("http://example.com", null));
 
@@ -1623,7 +1479,7 @@ public class ScanJobQueueServiceTest {
 
         assertEquals(ScanJobStatus.CANCELLED, service.getJobForTesting(jobId).getStatus());
         assertEquals(0, service.getJobForTesting(jobId).getAttempts());
-        verify(ajaxSpiderService, times(1)).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+        verify(ajaxSpiderService, times(1)).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
         verify(ajaxSpiderService, never()).stopAjaxSpiderJob();
     }
 
@@ -1636,18 +1492,18 @@ public class ScanJobQueueServiceTest {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         store.upsertAll(List.of(waiting));
         when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(0);
-        ScanJobQueueService restored = new ScanJobQueueService(activeScanService, spiderScanService,
-                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store);
+        ScanJobQueueService restored = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store));
         try {
             restored.processQueueOnceForTesting();
             ScanJob expired = store.load("busy-expired").orElseThrow();
             assertEquals(ScanJobStatus.FAILED, expired.getStatus());
             assertEquals(0, expired.getAttempts());
             assertTrue(expired.getLastError().contains("Engine busy wait timed out after 180000 ms"));
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
             when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
-            when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any())).thenReturn("ajax-after-manual-retry");
+            when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-after-manual-retry"));
             restored.retryScanJob("busy-expired");
 
             assertEquals(ScanJobStatus.RUNNING, store.load("busy-expired").orElseThrow().getStatus());
@@ -1667,13 +1523,13 @@ public class ScanJobQueueServiceTest {
         waiting.claim("another-worker", now, now.plusSeconds(60));
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         store.upsertAll(List.of(waiting));
-        ScanJobQueueService restored = new ScanJobQueueService(activeScanService, spiderScanService,
-                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store);
+        ScanJobQueueService restored = launches.guarded(new ScanJobQueueService(activeScanService, spiderScanService,
+                ajaxSpiderService, urlValidationService, scanLimitProperties, 2, false, store));
         try {
             restored.processQueueOnceForTesting();
             assertEquals(ScanJobStatus.QUEUED, store.load("busy-in-flight").orElseThrow().getStatus());
             assertEquals("another-worker", store.load("busy-in-flight").orElseThrow().getClaimOwnerId());
-            verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString(), anyString(), any(), any());
+            verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
         } finally {
             restored.shutdownExecutor();
         }
@@ -1681,14 +1537,17 @@ public class ScanJobQueueServiceTest {
 
     @Test
     void configuredZeroEngineBusyWaitFailsImmediatelyWithoutConsumingAttempts() {
-        when(ajaxSpiderService.startAjaxSpiderJob(anyString(), anyString(), any(), any()))
+        when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new EngineBusyException("Engine is busy", null));
+        InMemoryScanJobStore configuredStore = new InMemoryScanJobStore();
         new ApplicationContextRunner()
                 .withBean(ActiveScanService.class, () -> activeScanService)
                 .withBean(SpiderScanService.class, () -> spiderScanService)
                 .withBean(AjaxSpiderService.class, () -> ajaxSpiderService)
                 .withBean(UrlValidationService.class, () -> urlValidationService)
                 .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
+                .withBean(InMemoryScanJobStore.class, () -> configuredStore)
+                .withBean(ScanJobLaunchSafety.class, () -> launches.safetyForStore(configuredStore))
                 .withUserConfiguration(ScanJobQueueService.class)
                 .withPropertyValues("zap.scan.queue.engine-busy-max-wait-ms=0")
                 .run(context -> {
@@ -1703,12 +1562,14 @@ public class ScanJobQueueServiceTest {
 
     @ParameterizedTest
     @MethodSource("cancellationWindowSettings")
-    void configuredCancellationWindowAppliesToAjaxAndNativeCleanup(long expectedWaitMs, String[] properties) {
+    void configuredCancellationWindowAppliesToAjaxAndNativeReceipts(long expectedWaitMs, String[] properties) {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJob source = new ScanJob("configured-cleanup-source", ScanJobType.ACTIVE_SCAN,
                 Map.of("targetUrl", "http://example.com/source"), Instant.now(), 3);
-        source.markFailed("Startup timed out");
+        source.markRunning("old-configured");
+        source.restoreLaunchAttempt(new ScanJob.LaunchAttempt("configuration-active", "configuration-controller", Instant.now(), 0));
         ScanJob ajax = runningAjaxJob("configured-ajax", Instant.now());
+        ajax.restoreLaunchAttempt(new ScanJob.LaunchAttempt("configuration-ajax", "configuration-controller", Instant.now(), 0));
         store.upsertAll(List.of(source, ajax));
         doThrow(new ZapApiException("Stop failed", null)).when(activeScanService).stopActiveScanJob("old-configured");
         doThrow(new ZapApiException("Stop failed", null)).when(ajaxSpiderService).stopAjaxSpiderJob();
@@ -1720,6 +1581,7 @@ public class ScanJobQueueServiceTest {
                 .withBean(UrlValidationService.class, () -> urlValidationService)
                 .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
                 .withBean(InMemoryScanJobStore.class, () -> store)
+                .withBean(ScanJobLaunchSafety.class, ScanJobQueueServiceTest::mockSafetyForConfigurationTests)
                 .withUserConfiguration(ScanJobQueueService.class)
                 .withInitializer(context -> {
                     try {
@@ -1740,10 +1602,10 @@ public class ScanJobQueueServiceTest {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     ScanJobQueueService configured = context.getBean(ScanJobQueueService.class);
-                    configured.requestScanCleanup(new ScanJobStopRequest(source.getType(), "old-configured", source.getId()));
+                    configured.cancelScanJob(source.getId());
                     configured.cancelScanJob(ajax.getId());
 
-                    ScanJob cleanup = cleanupFor(store, source.getId());
+                    ScanJob cleanup = store.load(source.getId()).orElseThrow();
                     ScanJob cancelledAjax = store.load(ajax.getId()).orElseThrow();
                     assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(cleanup.getCancelRequestedAt(), cleanup.getCancelDeadlineAt()));
                     assertEquals(Duration.ofMillis(expectedWaitMs), Duration.between(cancelledAjax.getCancelRequestedAt(), cancelledAjax.getCancelDeadlineAt()));
@@ -1764,6 +1626,17 @@ public class ScanJobQueueServiceTest {
                     verify(activeScanService, times(2)).stopActiveScanJob("old-configured");
                     verify(ajaxSpiderService, times(2)).stopAjaxSpiderJob();
                 });
+    }
+
+    private static ScanJobLaunchSafety mockSafetyForConfigurationTests() {
+        // These contexts isolate legacy configuration aliases and retry-window wiring.
+        // Real receipt persistence/native-boundary behavior is exercised by guarded integration tests.
+        ScanJobLaunchSafety safety = mock(ScanJobLaunchSafety.class);
+        doAnswer(invocation -> {
+            invocation.getArgument(1, Runnable.class).run();
+            return null;
+        }).when(safety).executeOwnedStop(any(), any());
+        return safety;
     }
 
     private static Stream<Arguments> cancellationWindowSettings() {
@@ -1790,6 +1663,7 @@ public class ScanJobQueueServiceTest {
                 .withBean(SpiderScanService.class, () -> spiderScanService)
                 .withBean(UrlValidationService.class, () -> urlValidationService)
                 .withBean(ScanLimitProperties.class, () -> scanLimitProperties)
+                .withBean(ScanJobLaunchSafety.class, ScanJobQueueServiceTest::mockSafetyForConfigurationTests)
                 .withUserConfiguration(ScanJobQueueService.class)
                 .withPropertyValues("zap.scan.queue.cancel-max-wait-ms=" + waitMs)
                 .run(context -> assertThat(context.getStartupFailure())
@@ -1805,7 +1679,7 @@ public class ScanJobQueueServiceTest {
 
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1814,8 +1688,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1824,7 +1698,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
         String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/cancel", "true", null, null));
         String cancelMessage = followerService.cancelScanJob(jobId);
@@ -1843,9 +1717,9 @@ public class ScanJobQueueServiceTest {
         TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
 
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0, 0, 1, 1);
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-retried");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-retried"));
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1854,8 +1728,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1864,7 +1738,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
         String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/retry", "true", null, null));
         leaderService.cancelScanJob(jobId);
@@ -1888,11 +1762,11 @@ public class ScanJobQueueServiceTest {
         TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
         TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
 
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("first failure", new RuntimeException("first failure")))
-                .thenReturn("A-replayed");
+                .thenAnswer(startReplies("A-replayed"));
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1902,8 +1776,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1913,7 +1787,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
         String sourceJobId = extractJobId(leaderService.queueActiveScan("http://example.com/dead-letter-follower", "true", null, null));
         ScanJob sourceJob = leaderService.getJobForTesting(sourceJobId);
@@ -1933,9 +1807,9 @@ public class ScanJobQueueServiceTest {
     @Test
     void scanJobStoreTracksEnqueuedAndRunningJobs() {
         InMemoryScanJobStore scanJobStore = new InMemoryScanJobStore();
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-store");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-store"));
 
-        ScanJobQueueService storeBackedService = new ScanJobQueueService(
+        ScanJobQueueService storeBackedService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1944,7 +1818,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 scanJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         String jobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store", "true", null, null));
 
@@ -1960,7 +1834,7 @@ public class ScanJobQueueServiceTest {
         InMemoryScanJobStore scanJobStore = new InMemoryScanJobStore();
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
 
-        ScanJobQueueService storeBackedService = new ScanJobQueueService(
+        ScanJobQueueService storeBackedService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -1969,7 +1843,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 scanJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         String firstJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q1", "true", null, null));
         String secondJobId = extractJobId(storeBackedService.queueActiveScan("http://example.com/store-q2", "true", null, null));
@@ -2012,7 +1886,7 @@ public class ScanJobQueueServiceTest {
         );
         scanJobStore.upsertAll(List.of(storedJob));
 
-        ScanJobQueueService readService = new ScanJobQueueService(
+        ScanJobQueueService readService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -2021,7 +1895,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 scanJobStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
+        ));
 
         String detail = readService.getScanJobStatus("job-store-only");
         assertTrue(detail.contains("Job ID: job-store-only"));
@@ -2038,7 +1912,7 @@ public class ScanJobQueueServiceTest {
         AtomicInteger activeCapacity = new AtomicInteger(0);
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenAnswer(ignored -> activeCapacity.get());
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -2047,8 +1921,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -2057,12 +1931,12 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-failover");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-failover"));
 
         String queuedJobId = extractJobId(leaderService.queueActiveScan("http://example.com/failover", "true", null, null));
-        verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
 
         leadershipState.setLeaderId("node-b");
         activeCapacity.set(1);
@@ -2072,20 +1946,20 @@ public class ScanJobQueueServiceTest {
         assertNotNull(resumedJob);
         assertEquals(ScanJobStatus.RUNNING, resumedJob.getStatus());
         assertEquals("A-failover", resumedJob.getZapScanId());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
-    void expiredRunningClaimCanBeRecoveredWithoutDuplicateStart() {
+    void expiredRunningClaimRemainsHeldUntilOwnershipIsReconciled() {
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
         SharedLeadershipState leadershipState = new SharedLeadershipState("node-a");
         TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
         TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
 
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-recover");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-recover"));
         when(activeScanService.getActiveScanProgressPercent("A-recover")).thenReturn(100);
 
-        ScanJobQueueService leaderService = new ScanJobQueueService(
+        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -2094,8 +1968,8 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 leaderCoordinator
-        );
-        ScanJobQueueService followerService = new ScanJobQueueService(
+        ));
+        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 urlValidationService,
@@ -2104,7 +1978,7 @@ public class ScanJobQueueServiceTest {
                 false,
                 sharedJobStore,
                 followerCoordinator
-        );
+        ));
 
         String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/recover-running", "true", null, null));
         ScanJob runningJob = sharedJobStore.load(jobId).orElseThrow();
@@ -2114,9 +1988,9 @@ public class ScanJobQueueServiceTest {
         followerService.processQueueOnceForTesting();
 
         ScanJob recoveredJob = sharedJobStore.load(jobId).orElseThrow();
-        assertEquals(ScanJobStatus.SUCCEEDED, recoveredJob.getStatus());
-        verify(activeScanService, times(1)).startActiveScanJob("http://example.com/recover-running", "true", null);
-        verify(activeScanService).getActiveScanProgressPercent("A-recover");
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, recoveredJob.getStatus());
+        verify(activeScanService, times(1)).startActiveScanJob(eq("http://example.com/recover-running"), eq("true"), eq(null), any(NativeScanLaunch.class));
+        verify(activeScanService, never()).getActiveScanProgressPercent("A-recover");
     }
 
     @Test
@@ -2131,14 +2005,14 @@ public class ScanJobQueueServiceTest {
 
         assertTrue(cancelMessage.contains("cancelled"));
         assertEquals(ScanJobStatus.CANCELLED, job.getStatus());
-        verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
     void retryCancelledJobStartsAgainWhenRetryBudgetAvailable() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
-                .thenReturn("A-1")
-                .thenReturn("A-retry");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
+                .thenAnswer(startReplies("A-1"))
+                .thenAnswer(startReplies("A-retry"));
 
         String response = service.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
@@ -2156,12 +2030,12 @@ public class ScanJobQueueServiceTest {
         assertEquals(2, retriedJob.getAttempts());
         assertEquals("A-retry", retriedJob.getZapScanId());
         verify(activeScanService).stopActiveScanJob("A-1");
-        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
     void cancelRunningJobStopsZapScan() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-stop");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-stop"));
 
         String response = service.queueActiveScan("http://example.com", "true", null, null);
         String jobId = extractJobId(response);
@@ -2190,16 +2064,19 @@ public class ScanJobQueueServiceTest {
         if (type.isActiveFamily()) {
             doAnswer(invocation -> {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                when(activeScanService.getActiveScanProgressPercent("scan-cancel")).thenReturn(100);
                 return null;
             }).when(activeScanService).stopActiveScanJob("scan-cancel");
         } else if (type == ScanJobType.CLIENT_SPIDER) {
             doAnswer(invocation -> {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                when(clientSpiderService.getClientSpiderProgressPercent("scan-cancel")).thenReturn(100);
                 return null;
             }).when(clientSpiderService).stopClientSpiderJob("scan-cancel");
         } else {
             doAnswer(invocation -> {
                 if (stops.incrementAndGet() == 1) throw new ZapApiException("Stop failed", null);
+                when(spiderScanService.getSpiderScanProgressPercent("scan-cancel")).thenReturn(100);
                 return null;
             }).when(spiderScanService).stopSpiderScanJob("scan-cancel");
         }
@@ -2249,7 +2126,7 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(3, 60_000, 60_000, 2.0),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0)
         );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("boom", new RuntimeException("boom")));
 
         String response = delayedService.queueActiveScan("http://example.com", "true", null, null);
@@ -2265,7 +2142,7 @@ public class ScanJobQueueServiceTest {
         ScanJob unchangedJob = delayedService.getJobForTesting(jobId);
         assertEquals(ScanJobStatus.QUEUED, unchangedJob.getStatus());
         assertEquals(1, unchangedJob.getAttempts());
-        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(1)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -2274,9 +2151,9 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1.0),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0)
         );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("active boom", new RuntimeException("active boom")));
-        when(spiderScanService.startSpiderScanJob(anyString()))
+        when(spiderScanService.startSpiderScanJob(anyString(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("spider boom", new RuntimeException("spider boom")));
 
         String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null, null));
@@ -2292,8 +2169,8 @@ public class ScanJobQueueServiceTest {
         assertEquals(3, activeJob.getAttempts());
         assertEquals(ScanJobStatus.FAILED, spiderJob.getStatus());
         assertEquals(2, spiderJob.getAttempts());
-        verify(activeScanService, times(3)).startActiveScanJob(anyString(), anyString(), any());
-        verify(spiderScanService, times(2)).startSpiderScanJob(anyString());
+        verify(activeScanService, times(3)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
+        verify(spiderScanService, times(2)).startSpiderScanJob(anyString(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -2302,8 +2179,8 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(4, 0, 0, 1.0),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0)
         );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-1");
-        when(spiderScanService.startSpiderScanJob(anyString())).thenReturn("S-1");
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-1"));
+        when(spiderScanService.startSpiderScanJob(anyString(), any(NativeScanLaunch.class))).thenAnswer(startReplies("S-1"));
 
         String activeJobId = extractJobId(policyService.queueActiveScan("http://example.com/active", "true", null, null));
         String spiderJobId = extractJobId(policyService.queueSpiderScan("http://example.com/spider", null));
@@ -2321,7 +2198,7 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0)
         );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("active boom", new RuntimeException("active boom")));
 
         String failedJobId = extractJobId(policyService.queueActiveScan("http://example.com/dead-letter", "true", null, null));
@@ -2343,9 +2220,9 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
                 new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0)
         );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any()))
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
                 .thenThrow(new ZapApiException("first failure", new RuntimeException("first failure")))
-                .thenReturn("A-replayed");
+                .thenAnswer(startReplies("A-replayed"));
 
         String sourceJobId = extractJobId(policyService.queueActiveScan("http://example.com/requeue", "true", null, null));
         ScanJob sourceJob = policyService.getJobForTesting(sourceJobId);
@@ -2360,13 +2237,13 @@ public class ScanJobQueueServiceTest {
         assertEquals("A-replayed", replayJob.getZapScanId());
         assertEquals(1, replayJob.getAttempts());
         assertTrue(replayResponse.contains("Source Job ID: " + sourceJobId));
-        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any());
+        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
-    void successfulStartIsStoppedWhenFailFastPersistenceThrows() {
+    void failedIntentPersistenceDoesNotDispatchOrStopANativeScan() {
         FailingUpdateScanJobStore failingStore = new FailingUpdateScanJobStore();
-        ScanJobQueueService failFastService = new ScanJobQueueService(
+        ScanJobQueueService failFastService = launches.guarded(new ScanJobQueueService(
                 activeScanService,
                 spiderScanService,
                 ajaxSpiderService,
@@ -2377,14 +2254,14 @@ public class ScanJobQueueServiceTest {
                 false,
                 failingStore,
                 new SingleNodeQueueLeadershipCoordinator()
-        );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any())).thenReturn("A-orphan");
+        ));
+        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-orphan"));
 
         assertThrows(IllegalStateException.class, () ->
                 failFastService.queueActiveScan("http://example.com/orphan", "true", null, null)
         );
 
-        verify(activeScanService).stopActiveScanJob("A-orphan");
+        verify(activeScanService, never()).stopActiveScanJob("A-orphan");
         ScanJob queuedJob = failingStore.list().getFirst();
         assertEquals(ScanJobStatus.QUEUED, queuedJob.getStatus());
     }

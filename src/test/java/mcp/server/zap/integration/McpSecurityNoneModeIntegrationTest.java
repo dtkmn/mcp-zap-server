@@ -48,26 +48,6 @@ class McpSecurityNoneModeIntegrationTest {
     private ToolCallbackProvider toolCallbackProvider;
 
     @Test
-    void noneModeAllowsMcpToolsListWithoutAuthenticationOrToolScopes() throws Exception {
-        String sessionId = initializeSession();
-
-        client().post()
-                .uri("/mcp")
-                .header("Mcp-Session-Id", sessionId)
-                .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue("{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}")
-                .exchange()
-                .expectStatus().isOk()
-                .expectHeader().doesNotExist(HttpHeaders.WWW_AUTHENTICATE)
-                .expectBody(String.class)
-                .value(body -> assertThat(body)
-                        .contains("\"result\"")
-                        .contains("\"tools\"")
-                        .doesNotContain("insufficient_scope"));
-    }
-
-    @Test
     void noneModeStillTreatsUnknownAndDisabledToolsAsTheSameGenericError() throws Exception {
         String sessionId = initializeSession();
         assertThat(activeToolRegistry.names()).doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL);
@@ -103,6 +83,10 @@ class McpSecurityNoneModeIntegrationTest {
 
         assertThat(result.getStatus().value()).isEqualTo(200);
         assertThat(result.getResponseHeaders().containsHeader(HttpHeaders.WWW_AUTHENTICATE)).isFalse();
+        assertThat(result.getResponseBody())
+                .contains("\"result\"")
+                .contains("\"tools\"")
+                .doesNotContain("insufficient_scope");
         List<String> advertisedNames = new ArrayList<>();
         for (JsonNode tool : responseEnvelope(result).path("result").path("tools")) {
             advertisedNames.add(tool.path("name").asString());

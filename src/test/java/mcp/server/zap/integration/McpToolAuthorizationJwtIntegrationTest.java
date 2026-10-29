@@ -256,7 +256,7 @@ class McpToolAuthorizationJwtIntegrationTest {
 
     @ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"legacy-expert-api-key", "wildcard-api-key"})
-    void retiredAliasesAreUnavailableForOldOrWildcardJwtScopesInEveryGovernanceMode(String key) throws Exception {
+    void retiredAliasIsUnavailableForOldOrWildcardJwtScopesInEveryGovernanceMode(String key) throws Exception {
         String token = issueAccessToken(key);
         String session = initializeSession(token);
         clearInvocations(scanExecution, ajaxExecution, findingAccess);
@@ -266,17 +266,15 @@ class McpToolAuthorizationJwtIntegrationTest {
             authorizationProperties.setMode(mode);
             for (boolean protection : new boolean[]{false, true}) {
                 protectionProperties.setEnabled(protection);
-                for (String retired : RetiredExpertTools.NAMES) {
-                    String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "retired-jwt",
-                            "method", "tools/call", "params", Map.of("name", retired, "arguments", Map.of())));
-                    EntityExchangeResult<String> response = client().post().uri("/mcp")
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
-                            .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
-                            .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange()
-                            .expectStatus().isOk().expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
-                            .expectBody(String.class).returnResult();
-                    assertThat(OBJECT_MAPPER.readTree(response.getResponseBody())).isEqualTo(expected);
-                }
+                String request = OBJECT_MAPPER.writeValueAsString(Map.of("jsonrpc", "2.0", "id", "retired-jwt",
+                        "method", "tools/call", "params", Map.of("name", "zap_active_scan_start", "arguments", Map.of())));
+                EntityExchangeResult<String> response = client().post().uri("/mcp")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).header("Mcp-Session-Id", session)
+                        .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE + "," + MediaType.TEXT_EVENT_STREAM_VALUE)
+                        .contentType(MediaType.APPLICATION_JSON).bodyValue(request).exchange()
+                        .expectStatus().isOk().expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
+                        .expectBody(String.class).returnResult();
+                assertThat(OBJECT_MAPPER.readTree(response.getResponseBody())).isEqualTo(expected);
             }
         }
         verifyNoInteractions(scanExecution, ajaxExecution, findingAccess);

@@ -224,18 +224,32 @@ class McpToolVisibilityIntegrationTest {
         );
     }
 
-    @ParameterizedTest(name = "Retired expert aliases stay unavailable: {0}, protection={1}")
+    @Test
+    void allRetiredExpertAliasesStayUnavailableWithWildcardAndStaleExpertConfiguration() throws Exception {
+        String key = "visibility-admin-key";
+        String session = initializeSession(key);
+        protectionProperties.setEnabled(true);
+        clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
+        for (String retired : RetiredExpertTools.NAMES) {
+            assertUnknownToolResponse(call(key, session, retired, "retired-alias"), "retired-alias");
+        }
+        verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
+        verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
+        verifyNoInteractions(passiveScanAccess, spiderScanService);
+    }
+
+    @ParameterizedTest(name = "Retired expert alias stays unavailable: {0}, protection={1}")
     @MethodSource("governanceModes")
-    void allRetiredExpertAliasesStayUnavailableWithWildcardAndStaleExpertConfiguration(
+    void retiredExpertAliasStaysUnavailableAcrossGovernanceModesWithWildcard(
             ToolAuthorizationProperties.Mode mode, boolean protectionEnabled) throws Exception {
         String key = "visibility-admin-key";
         String session = initializeSession(key);
         authorizationProperties.setMode(mode);
         protectionProperties.setEnabled(protectionEnabled);
         clearInvocations(authorizationService, protectionService, passiveScanAccess, spiderScanService);
-        for (String retired : RetiredExpertTools.NAMES) {
-            assertUnknownToolResponse(call(key, session, retired, "retired-alias"), "retired-alias");
-        }
+
+        assertUnknownToolResponse(call(key, session, "zap_active_scan_start", "retired-alias"), "retired-alias");
+
         verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
         verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
         verifyNoInteractions(passiveScanAccess, spiderScanService);

@@ -19,12 +19,14 @@ import mcp.server.zap.core.gateway.ZapEngineRuntimeAccess;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import mcp.server.zap.core.model.ScanJobStatus;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.aop.aspectj.annotation.AspectJProxyFactory;
 
 /** Exercises the real queued service, initialization aspect, engine adapter and guarded transport. */
 class AddonMaintenanceQueueIntegrationTest {
+    @RegisterExtension final GuardedQueueTestSupport launches = new GuardedQueueTestSupport();
     @TempDir Path directory;
 
     @ParameterizedTest
@@ -70,24 +72,24 @@ class AddonMaintenanceQueueIntegrationTest {
             var limits = new ScanLimitProperties();
             var validation = mock(UrlValidationService.class);
             var spider = new SpiderScanService(execution, validation, limits);
-            var queue = new ScanJobQueueService(mock(ActiveScanService.class), spider, validation, limits,
+            var queue = launches.guarded(new ScanJobQueueService(mock(ActiveScanService.class), spider, validation, limits,
                     new ScanJobQueueService.RetryPolicy(1, 0, 0, 1),
-                    new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), false);
+                    new ScanJobQueueService.RetryPolicy(1, 0, 0, 1), false));
             try {
-                String jobId;
-                try (var ignored = gate.beginMaintenance()) {
+                String jobId = gate.withMaintenance(() -> {
                     String response = queue.queueSpiderScan("http://fixture.invalid", null);
-                    jobId = response.lines().filter(line -> line.startsWith("Job ID: "))
+                    String queuedJobId = response.lines().filter(line -> line.startsWith("Job ID: "))
                             .map(line -> line.substring("Job ID: ".length()).trim()).findFirst().orElseThrow();
                     queue.processQueueOnceForTesting();
-                    var waiting = queue.getJobForTesting(jobId);
+                    var waiting = queue.getJobForTesting(queuedJobId);
                     assertThat(waiting.getStatus()).isEqualTo(ScanJobStatus.QUEUED);
                     assertThat(waiting.getAttempts()).isZero();
                     assertThat(waiting.getBusyWaitCount()).isGreaterThanOrEqualTo(2);
                     assertThat(actionRequests.get()).isZero();
                     assertThat(scanStarts.get()).isZero();
                     assertThat(gate.isQuarantined()).isFalse();
-                }
+                    return queuedJobId;
+                });
                 queue.processQueueOnceForTesting();
                 var running = queue.getJobForTesting(jobId);
                 assertThat(running.getStatus()).isEqualTo(ScanJobStatus.RUNNING);

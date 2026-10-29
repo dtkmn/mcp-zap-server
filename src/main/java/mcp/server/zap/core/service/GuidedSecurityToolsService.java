@@ -89,12 +89,12 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The server decides direct versus queued execution from deployment topology. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, or strategy=browser for the existing AJAX Spider API. strategy=auto starts with HTTP Spider; only an unauthenticated direct HTTP start failure triggers AJAX fallback. Auto does not detect JavaScript coverage. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
+            description = "Start a guided crawl for a target host or root URL. The request is submitted to the protected scan queue for every storage backend; keep the returned operation ID for status and cancellation. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, or strategy=browser for the existing AJAX Spider API. strategy=auto selects HTTP Spider without automatic fallback. Auto does not detect JavaScript coverage. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
-            @ToolParam(required = false, description = "Optional crawl strategy: auto starts HTTP (unauthenticated direct mode alone falls back to AJAX on HTTP start failure), http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for the AJAX Spider API. Auto does not detect JavaScript coverage.") String strategy,
-            @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
+            @ToolParam(required = false, description = "Optional crawl strategy: auto selects HTTP without automatic fallback, http for traditional link discovery, client for Client Spider on JavaScript-driven apps, or browser for the AJAX Spider API. Auto does not detect JavaScript coverage.") String strategy,
+            @ToolParam(required = false, description = "Optional idempotency key for reusing the same queued request; different parameters with the same key are rejected.") String idempotencyKey,
             @ToolParam(required = false, description = "Optional session ID from zap_auth_session_prepare. Use a kind=browser profile with strategy=client, or a kind=form profile with http/auto. The browser strategy means AJAX Spider and rejects authSessionId.") String authSessionId
     ) {
         return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
@@ -122,13 +122,13 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_attack_start",
-            description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The server decides direct versus queued execution from deployment topology. When authSessionId is supplied, guided attack currently accepts prepared form-login sessions only."
+            description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The request is submitted to the protected scan queue for every storage backend; keep the returned operation ID for status and cancellation. When authSessionId is supplied, guided attack currently accepts prepared form-login sessions only."
     )
     public String startAttack(
             @ToolParam(description = "Target host or base URL to attack, for example https://app.example.com or https://app.example.com/api") String targetUrl,
             @ToolParam(required = false, description = "Optional recurse flag (default: true)") String recurse,
             @ToolParam(required = false, description = "Optional active-scan policy name when you need a non-default rule set") String policy,
-            @ToolParam(required = false, description = "Optional idempotency key used only when guided execution selects queued mode; ignored in direct mode.") String idempotencyKey,
+            @ToolParam(required = false, description = "Optional idempotency key for reusing the same queued request; different parameters with the same key are rejected.") String idempotencyKey,
             @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided attack currently accepts form-login sessions only.") String authSessionId
     ) {
         return guidedScanWorkflowService.startAttack(targetUrl, recurse, policy, idempotencyKey, authSessionId);
@@ -152,6 +152,28 @@ public class GuidedSecurityToolsService {
             @ToolParam(description = "Guided attack operation ID returned by zap_attack_start") String operationId
     ) {
         return guidedScanWorkflowService.stopAttack(operationId);
+    }
+
+    @Tool(
+            name = "zap_findings_snapshot",
+            description = "Export a normalized findings snapshot with measured ZAP version and installed add-on inventory as JSON for a required target baseUrl covered by scan evidence visible to the caller, so CI or release workflows can save a baseline. Unavailable scanner identity is explicitly marked incomplete."
+    )
+    public String exportFindingsSnapshot(
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl
+    ) {
+        return findingsService.exportFindingsSnapshot(baseUrl);
+    }
+
+    @Tool(
+            name = "zap_findings_diff",
+            description = "Compare current findings for a required target baseUrl covered by scan evidence visible to the caller against a previously exported findings snapshot. New/resolved counts require matching complete scanner inventories; otherwise only informational observed changes are reported. Matching inventory does not prove application remediation or equal scan coverage."
+    )
+    public String diffFindings(
+            @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
+            @ToolParam(description = "JSON findings snapshot returned earlier by zap_findings_snapshot") String baselineSnapshot,
+            @ToolParam(description = "Maximum grouped result lines to render") Integer maxGroups
+    ) {
+        return findingsService.diffFindings(baseUrl, baselineSnapshot, maxGroups);
     }
 
     @Tool(

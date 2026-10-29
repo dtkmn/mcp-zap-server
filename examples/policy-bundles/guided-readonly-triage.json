@@ -2,13 +2,13 @@
   "apiVersion": "mcp.zap.policy/v1",
   "kind": "PolicyBundle",
   "metadata": {
-    "name": "expert-readonly-triage",
-    "displayName": "Expert Readonly Triage",
-    "description": "Allow expert triage reads on review hosts while making mutation tools an explicit deny.",
+    "name": "guided-readonly-triage",
+    "displayName": "Guided Readonly Triage",
+    "description": "Allow guided findings reads on review hosts while making mutation tools an explicit deny.",
     "owner": "security-platform",
     "labels": {
       "channel": "triage",
-      "surface": "expert"
+      "surface": "guided"
     }
   },
   "spec": {
@@ -27,22 +27,15 @@
       },
       {
         "id": "allow-readonly-review-surface",
-        "description": "Allow findings, inventory, and report reads for approved review hosts.",
+        "description": "Allow findings reads and comparisons for approved review hosts.",
         "decision": "allow",
         "reason": "Readonly triage clients may inspect findings and report artifacts without mutating scan state.",
         "match": {
           "tools": [
-            "zap_alerts",
-            "zap_alert_details",
-            "zap_alert_instances",
             "zap_findings_snapshot",
             "zap_findings_diff",
             "zap_findings_summary",
-            "zap_findings_details",
-            "zap_hosts",
-            "zap_sites",
-            "zap_urls",
-            "zap_view_templates"
+            "zap_findings_details"
           ],
           "hosts": [
             "*.review.example.com",
@@ -60,25 +53,19 @@
         }
       },
       {
-        "id": "deny-expert-mutation-tools",
-        "description": "Make state-changing expert tools an explicit deny regardless of later bundle mistakes.",
+        "id": "deny-mutation-tools",
+        "description": "Make state-changing guided tools an explicit deny regardless of later bundle mistakes.",
         "decision": "deny",
         "reason": "Readonly triage clients may not start scans, mutate auth/context state, or rewrite ZAP scan policies.",
         "match": {
           "tools": [
             "zap_attack_start",
             "zap_crawl_start",
-            "zap_active_scan_start",
-            "zap_spider_start",
-            "zap_ajax_spider",
-            "zap_queue_active_scan",
-            "zap_queue_spider_scan",
-            "zap_queue_ajax_spider",
-            "zap_context_upsert",
-            "zap_user_upsert",
-            "zap_context_auth_configure",
-            "zap_scan_policy_rule_set",
-            "zap_generate_report",
+            "zap_target_import",
+            "zap_auth_session_prepare",
+            "zap_auth_session_validate",
+            "zap_addon_update",
+            "zap_scan_job_reconcile",
             "zap_report_generate"
           ]
         }

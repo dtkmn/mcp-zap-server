@@ -14,6 +14,8 @@ import static org.mockito.Mockito.when;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import mcp.server.zap.core.configuration.AddonMaintenanceProperties;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import mcp.server.zap.core.gateway.EngineMaintenanceGate;
@@ -185,6 +187,24 @@ class AddonMaintenanceServiceTest {
         assertThatThrownBy(this::update).isInstanceOf(IllegalStateException.class);
         verify(engine, never()).install(any());
         assertThat(gate.isQuarantined()).isFalse();
+        assertMaintenanceAndActionsAvailableFromAnotherThread();
+    }
+
+    @Test void preflightInventoryFailureReleasesMaintenanceForAnotherThread() throws Exception {
+        when(engine.inventory()).thenThrow(new ClientApiException("inventory unavailable"));
+        assertThatThrownBy(this::update).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no install request was sent");
+        verify(engine, never()).install(any());
+        assertThat(Files.exists(directory.resolve("update.pending"))).isFalse();
+        assertMaintenanceAndActionsAvailableFromAnotherThread();
+    }
+
+    @Test void markerPersistenceFailureReleasesLockWhileRetainingQuarantine() throws Exception {
+        Files.createDirectory(directory.resolve("update.pending.tmp"));
+        assertThatThrownBy(this::update).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot persist engine maintenance state");
+        verify(engine, never()).install(any());
+        assertLockReleasedWhileQuarantinedFromAnotherThread();
     }
 
     @Test void updatesThenVerifiesLoadedVersionRuleAndDependencyChanges() throws Exception {
@@ -199,6 +219,7 @@ class AddonMaintenanceServiceTest {
         verify(engine).requireQuiescent(gate, before);
         verify(engine).install("pscanrules");
         assertThat(Files.exists(directory.resolve("update.pending"))).isFalse();
+        assertMaintenanceAndActionsAvailableFromAnotherThread();
     }
 
     @Test void timeoutPersistsQuarantineAndNeverRetriesOrReportsReady() throws Exception {
@@ -212,6 +233,16 @@ class AddonMaintenanceServiceTest {
         assertThat(service.status("pscanrules", "77.0.0", List.of("20020")).verification().status()).isEqualTo("unknown");
         assertThat(new EngineMaintenanceGate(properties).isQuarantined()).isTrue();
         verify(engine).install("pscanrules");
+        assertLockReleasedWhileQuarantinedFromAnotherThread();
+    }
+
+    @Test void installationErrorPropagatesButReleasesLockWhileRetainingQuarantine() throws Exception {
+        var failure = new AssertionError("installation failed");
+        doThrow(failure).when(engine).install("pscanrules");
+        assertThatThrownBy(this::update).isSameAs(failure);
+        assertThat(Files.readString(directory.resolve("update.pending"))).isEqualTo("pscanrules:77.0.0\n");
+        verify(engine).install("pscanrules");
+        assertLockReleasedWhileQuarantinedFromAnotherThread();
     }
 
     @Test void failedDynamicUnloadIsPendingRestartWithoutAutomaticLifecycleAction() throws Exception {
@@ -242,6 +273,38 @@ class AddonMaintenanceServiceTest {
         when(engine.inventory()).thenReturn(after);
         when(engine.passiveRules()).thenReturn(List.of());
         assertThat(service.status("pscanrules", "77.0.0", List.of("20020")).verification().status()).isEqualTo("unavailable");
+    }
+
+    private void assertMaintenanceAndActionsAvailableFromAnotherThread() throws Exception {
+        assertThat(gate.isUpdating()).isFalse();
+        assertThat(gate.isMaintenanceOwner()).isFalse();
+        assertThat(gate.isQuarantined()).isFalse();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            assertThat(executor.submit(() -> gate.withMaintenance(() -> gate.isMaintenanceOwner()))
+                    .get(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(executor.submit(() -> gate.apiCall("core", "action", "accessUrl", () -> "OK"))
+                    .get(5, TimeUnit.SECONDS)).isEqualTo("OK");
+        }
+        assertThat(gate.isUpdating()).isFalse();
+    }
+
+    private void assertLockReleasedWhileQuarantinedFromAnotherThread() throws Exception {
+        assertThat(gate.isUpdating()).isFalse();
+        assertThat(gate.isMaintenanceOwner()).isFalse();
+        assertThat(gate.isQuarantined()).isTrue();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var probe = executor.submit(() -> {
+                assertThatThrownBy(() -> gate.apiCall("core", "action", "accessUrl", () -> "bad"))
+                        .isInstanceOf(ClientApiException.class)
+                        .hasMessageContaining("quarantined");
+                assertThatThrownBy(() -> gate.withMaintenance(() -> "bad"))
+                        .isInstanceOf(IllegalStateException.class)
+                        .hasMessageContaining("Engine maintenance is unresolved");
+                return null;
+            });
+            probe.get(5, TimeUnit.SECONDS);
+        }
+        assertThat(gate.isUpdating()).isFalse();
     }
 
     private AddonMaintenanceService.UpdateResult update() { return service.update("pscanrules", "76.0.0", "77.0.0", true, List.of("20020")); }

@@ -88,7 +88,7 @@ public class AddonMaintenanceService {
         if (!Boolean.TRUE.equals(acknowledgeDependencyChanges)) throw new IllegalArgumentException("Acknowledge that Marketplace installation can also add or update dependencies.");
         if (compareVersions(expectedCandidateVersion, expectedInstalledVersion) <= 0) throw new IllegalArgumentException("The approved candidate must be newer than the installed version.");
 
-        try (var ignored = gate.beginMaintenance()) {
+        return gate.withMaintenance(() -> {
             Inventory before;
             List<Addon> marketplace;
             try {
@@ -136,7 +136,7 @@ public class AddonMaintenanceService {
                         "Installation completion is unknown or verification failed. The engine may still be updating. Engine actions remain quarantined; do not retry. An operator must reconcile the engine and maintenance marker. No restart was performed.",
                         addonId, before.installed(), List.of(), List.of(), null, true));
             }
-        }
+        });
     }
 
     private void requireAuthority() {

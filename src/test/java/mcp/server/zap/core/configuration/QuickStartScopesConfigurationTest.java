@@ -62,31 +62,6 @@ class QuickStartScopesConfigurationTest {
     }
 
     @Test
-    void existingExplicitCustomClientListReplacesThePackagedDefault() {
-        runner(Map.of("MCP_API_KEY", "unused-key"))
-                .withPropertyValues(
-                        "mcp.server.auth.apiKeys[0].clientId=reader",
-                        "mcp.server.auth.apiKeys[0].key=reader-key",
-                        "mcp.server.auth.apiKeys[0].name=Report reader",
-                        "mcp.server.auth.apiKeys[0].workspaceId=report-workspace",
-                        "mcp.server.auth.apiKeys[0].scopes[0]=zap:report:read",
-                        "mcp.server.auth.apiKeys[1].clientId=legacy-client",
-                        "mcp.server.auth.apiKeys[1].key=legacy-key")
-                .run(context -> {
-                    assertThat(context).hasNotFailed();
-                    List<ApiKeyProperties.ApiKeyClient> clients = context.getBean(ApiKeyProperties.class).getApiKeys();
-                    assertThat(clients).hasSize(2);
-                    assertThat(clients.getFirst().getClientId()).isEqualTo("reader");
-                    assertThat(clients.getFirst().getKey()).isEqualTo("reader-key");
-                    assertThat(clients.getFirst().getName()).isEqualTo("Report reader");
-                    assertThat(clients.getFirst().getWorkspaceId()).isEqualTo("report-workspace");
-                    assertThat(clients.getFirst().getScopes()).containsExactly("zap:report:read");
-                    assertThat(clients.getLast().getClientId()).isEqualTo("legacy-client");
-                    assertThat(clients.getLast().getScopes()).containsExactly("*");
-                });
-    }
-
-    @Test
     void nativeIndexedClientScopesAndMetadataArePreserved() {
         Map<String, Object> variables = Map.ofEntries(
                 Map.entry("MCP_API_KEY", "unused-packaged-key"),

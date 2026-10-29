@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 import mcp.server.zap.core.configuration.AddonMaintenanceProperties;
 import org.springframework.stereotype.Component;
 import org.zaproxy.clientapi.core.ApiResponseElement;
@@ -37,38 +38,29 @@ public class EngineMaintenanceGate {
             throw new IllegalArgumentException("zap.addons.state-directory must be an absolute private durable directory.");
         }
         directory = Path.of(configuredDirectory).normalize();
-        quarantined = Files.exists(directory.resolve("update.pending"));
-        Path tracked = directory.resolve("activities");
-        if (Files.exists(tracked)) {
-            try {
-                for (String line : Files.readAllLines(tracked, StandardCharsets.UTF_8)) {
-                    String[] parts = line.split(":", -1);
-                    if (parts.length != 2 || !parts[0].matches("(?:automation|clientSpider)")
-                            || !parts[1].matches("[0-9]+")) {
-                        quarantined = true;
-                        break;
-                    }
-                    activities.put(line, parts[0]);
-                }
-                if (activities.size() > 1000) quarantined = true;
-            } catch (IOException e) {
-                quarantined = true;
-            }
-        }
+        restoreRecordedState();
     }
 
     public boolean isQuarantined() { return quarantined; }
     public boolean isUpdating() { return updating; }
     public boolean isMaintenanceOwner() { return lock.isWriteLockedByCurrentThread(); }
 
-    public MaintenancePermit beginMaintenance() {
+    /** Runs synchronously so maintenance ownership and release stay on the caller's thread. */
+    public <T> T withMaintenance(Supplier<T> operation) {
         if (!lock.writeLock().tryLock()) throw new IllegalStateException("Engine actions are in progress; retry after they finish.");
-        if (quarantined || updating) {
+        try {
+            if (quarantined || updating) {
+                throw new IllegalStateException("Engine maintenance is unresolved; an operator must reconcile the engine before further work.");
+            }
+            updating = true;
+            try {
+                return operation.get();
+            } finally {
+                updating = false;
+            }
+        } finally {
             lock.writeLock().unlock();
-            throw new IllegalStateException("Engine maintenance is unresolved; an operator must reconcile the engine before further work.");
         }
-        updating = true;
-        return new MaintenancePermit();
     }
 
     /** Marker is durable before sending the install request. A process crash must not resume scans. */
@@ -127,37 +119,46 @@ public class EngineMaintenanceGate {
             // for every action, including configuration actions whose failure may be ambiguous.
             if (!maintenanceOwner) {
                 pending = component + ":pending-" + UUID.randomUUID();
-                synchronized (this) {
-                    if (activities.size() >= 1000) throw new ClientApiException("Too many unverified engine activities; verify completion first.");
-                    activities.put(pending, component);
-                    persistActivities();
-                }
+                recordPendingAction(pending, component);
             }
             T result = call.call();
-            if (pending != null) {
-                if (tracked && (!(result instanceof ApiResponseElement response) || response.getValue() == null
-                        || !response.getValue().matches("[0-9]+"))) {
-                    quarantined = true;
-                    throw new ClientApiException("Engine activity start outcome is unknown; operator reconciliation required.");
-                }
-                synchronized (this) {
-                    activities.remove(pending);
-                    if (tracked) activities.put(component + ":" + ((ApiResponseElement) result).getValue(), component);
-                    persistActivities();
-                }
-            }
+            recordSuccessfulAction(pending, component, tracked, result);
             return result;
         } catch (ClientApiException | RuntimeException e) {
-            // A disconnected request can still be running remotely. Leave its durable pending entry.
-            if (pending != null) {
-                if (e instanceof ClientApiException apiException && definiteNoStart(component, type, method, apiException)) {
-                    synchronized (this) { activities.remove(pending); persistActivities(); }
-                } else quarantined = true;
-            }
+            recordFailedAction(pending, component, type, method, e);
             throw e;
         } finally {
             lock.readLock().unlock();
         }
+    }
+
+    private synchronized void recordPendingAction(String pending, String component) throws ClientApiException {
+        if (activities.size() >= 1000) throw new ClientApiException("Too many unverified engine activities; verify completion first.");
+        activities.put(pending, component);
+        persistActivities();
+    }
+
+    private void recordSuccessfulAction(String pending, String component, boolean tracked, Object result)
+            throws ClientApiException {
+        if (pending == null) return;
+        if (tracked && (!(result instanceof ApiResponseElement response) || response.getValue() == null
+                || !response.getValue().matches("[0-9]+"))) {
+            quarantined = true;
+            throw new ClientApiException("Engine activity start outcome is unknown; operator reconciliation required.");
+        }
+        synchronized (this) {
+            activities.remove(pending);
+            if (tracked) activities.put(component + ":" + ((ApiResponseElement) result).getValue(), component);
+            persistActivities();
+        }
+    }
+
+    private void recordFailedAction(String pending, String component, String type, String method, Exception failure) {
+        // A disconnected request can still be running remotely. Leave its durable pending entry.
+        if (pending == null) return;
+        if (failure instanceof ClientApiException apiException && definiteNoStart(component, type, method, apiException)) {
+            synchronized (this) { activities.remove(pending); persistActivities(); }
+        } else quarantined = true;
     }
 
     private boolean definiteNoStart(String component, String type, String method, ClientApiException failure) {
@@ -187,6 +188,27 @@ public class EngineMaintenanceGate {
 
     private synchronized void persistActivities() { persist("activities", String.join("\n", activities.keySet())); }
 
+    private void restoreRecordedState() {
+        quarantined = Files.exists(directory.resolve("update.pending"));
+        Path tracked = directory.resolve("activities");
+        if (Files.exists(tracked)) {
+            try {
+                for (String line : Files.readAllLines(tracked, StandardCharsets.UTF_8)) {
+                    String[] parts = line.split(":", -1);
+                    if (parts.length != 2 || !parts[0].matches("(?:automation|clientSpider)")
+                            || !parts[1].matches("[0-9]+")) {
+                        quarantined = true;
+                        break;
+                    }
+                    activities.put(line, parts[0]);
+                }
+                if (activities.size() > 1000) quarantined = true;
+            } catch (IOException e) {
+                quarantined = true;
+            }
+        }
+    }
+
     private void persist(String name, String value) {
         try {
             Files.createDirectories(directory);
@@ -203,10 +225,5 @@ public class EngineMaintenanceGate {
 
     private void requireMaintenanceOwner() {
         if (!lock.isWriteLockedByCurrentThread()) throw new IllegalStateException("Maintenance permit required.");
-    }
-
-    public final class MaintenancePermit implements AutoCloseable {
-        private MaintenancePermit() { }
-        @Override public void close() { updating = false; lock.writeLock().unlock(); }
     }
 }

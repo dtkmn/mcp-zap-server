@@ -6,7 +6,7 @@ inputs:
     description: Target URL that ZAP should scan. This must be reachable from the ZAP container.
     required: true
   baseline-file:
-    description: Optional findings baseline JSON file from an expert-surface run. Guided self-serve flows skip baseline diff when snapshot tools are unavailable.
+    description: Optional findings baseline JSON file. Baseline comparison requires the findings snapshot tool; enforce mode fails when comparable evidence is unavailable.
     required: false
     default: ""
   baseline-mode:
@@ -26,11 +26,11 @@ inputs:
     required: false
     default: "zap-artifacts"
   report-template:
-    description: Report template hint. Expert mode passes this to zap_generate_report; guided mode maps it to html/json report format.
+    description: Guided report template, either traditional-html-plus or traditional-json-plus. Other templates are rejected before scanning.
     required: false
     default: "traditional-html-plus"
   report-theme:
-    description: Report theme passed to guided or expert report generation.
+    description: Report theme passed to guided report generation.
     required: false
     default: "light"
   run-active-scan:
@@ -38,7 +38,7 @@ inputs:
     required: false
     default: "true"
   scan-policy:
-    description: Optional active-scan policy name to pass to guided attack or expert active scan when supported.
+    description: Optional active-scan policy name to pass to the guided attack.
     required: false
     default: ""
   fail-on-new-findings:
@@ -139,7 +139,7 @@ outputs:
     description: Path to the artifact manifest that ties the gate result, summary, diff, and report outputs together.
     value: ${{ steps.gate.outputs.manifest_path }}
   report-path:
-    description: Container-side report path returned by guided or expert report generation.
+    description: Container-side report path returned by guided report generation.
     value: ${{ steps.gate.outputs.report_path }}
   report-local-path:
     description: Local copied report artifact path, when available.

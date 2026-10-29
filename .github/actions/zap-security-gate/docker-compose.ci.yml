@@ -55,7 +55,7 @@ services:
       MCP_SECURITY_ENABLED: "true"
       MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: "false"
       MCP_PROTECTION_ENABLED: "true"
-      MCP_SERVER_TOOLS_SURFACE: expert
+      ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY: /var/lib/mcp-zap/scan-launch-safety/receipts
       ZAP_REPORT_DIRECTORY: /zap/wrk/reports
       ZAP_AUTOMATION_LOCAL_DIRECTORY: /zap/wrk/automation
       ZAP_AUTOMATION_ZAP_DIRECTORY: /zap/wrk/automation
@@ -64,3 +64,7 @@ services:
       ZAP_ALLOW_PRIVATE_NETWORKS: "true"
     volumes:
       - ${LOCAL_ZAP_WORKSPACE_FOLDER}:/zap/wrk
+      - mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety
+
+volumes:
+  mcp-launch-safety:

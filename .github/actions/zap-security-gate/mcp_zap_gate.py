@@ -19,11 +19,11 @@ from pathlib import Path
 from typing import Any
 
 
-SCAN_ID_PATTERN = re.compile(r"^Scan ID:\s*(.+)$", re.MULTILINE)
 OPERATION_ID_PATTERN = re.compile(r"^Operation ID:\s*(.+)$", re.MULTILINE)
 REPORT_PATH_PATTERN = re.compile(r"^Path:\s*(.+)$", re.MULTILINE)
 COMPLETED_PATTERN = re.compile(r"^Completed:\s*(yes|no)$", re.MULTILINE | re.IGNORECASE)
 PROGRESS_PATTERN = re.compile(r"^Progress:\s*(\d+)%$", re.MULTILINE)
+JOB_STATUS_PATTERN = re.compile(r"^Status:\s*([A-Z_]+)\b", re.MULTILINE | re.IGNORECASE)
 CI_GATE_RESULT_CONTRACT_VERSION = "ci_gate_result/v2"
 CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v3"
 PREVIOUS_CI_GATE_FINDINGS_SNAPSHOT_CONTRACT_VERSION = "ci_gate_findings_snapshot/v2"
@@ -131,13 +131,6 @@ def extract_error_message(payload: Any) -> str:
     return str(payload)
 
 
-def parse_scan_id(text: str) -> str:
-    match = SCAN_ID_PATTERN.search(text)
-    if not match:
-        raise RuntimeError(f"Could not parse scan ID from tool output:\n{text}")
-    return match.group(1).strip()
-
-
 def parse_operation_id(text: str) -> str:
     match = OPERATION_ID_PATTERN.search(text)
     if not match:
@@ -146,6 +139,9 @@ def parse_operation_id(text: str) -> str:
 
 
 def parse_completed(text: str) -> bool:
+    status = JOB_STATUS_PATTERN.search(text)
+    if status:
+        return status.group(1).upper() == "SUCCEEDED"
     match = COMPLETED_PATTERN.search(text)
     if match:
         return match.group(1).strip().lower() == "yes"
@@ -310,6 +306,12 @@ def wait_for_completion(client: McpHttpClient,
     last_output = ""
     while time.time() < deadline:
         last_output = client.call_tool(tool_name, {argument_name: reference_id})
+        status = JOB_STATUS_PATTERN.search(last_output)
+        if status and status.group(1).upper() in {"FAILED", "CANCELLED", "START_OUTCOME_UNKNOWN"}:
+            raise RuntimeError(
+                f"Scan {reference_id} ended or requires recovery ({status.group(1).upper()}); "
+                f"no replacement scan was submitted.\n{last_output}"
+            )
         if parse_completed(last_output):
             return last_output
         time.sleep(poll_interval_seconds)
@@ -1212,7 +1214,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--suppressions-file")
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--report-template", default="traditional-html-plus")
+    parser.add_argument(
+        "--report-template",
+        choices=("traditional-html-plus", "traditional-json-plus"),
+        default="traditional-html-plus",
+        help="Supported guided report template; custom ZAP templates are not supported by this gate.",
+    )
     parser.add_argument("--report-theme", default="light")
     parser.add_argument("--run-active-scan", type=parse_bool, default=True)
     parser.add_argument("--scan-policy")
@@ -1253,24 +1260,17 @@ def main(argv: list[str] | None = None) -> int:
         "zap_attack_status",
         "zap_findings_summary",
         "zap_report_generate",
+        "zap_passive_scan_wait",
     }.issubset(available_tools)
-    expert_surface = {
-        "zap_spider_start",
-        "zap_spider_status",
-        "zap_active_scan_start",
-        "zap_active_scan_status",
-        "zap_get_findings_summary",
-        "zap_findings_snapshot",
-        "zap_generate_report",
-    }.issubset(available_tools)
+    snapshot_supported = "zap_findings_snapshot" in available_tools
 
-    if not guided_surface and not expert_surface:
+    if not guided_surface:
         raise RuntimeError(
-            "Unable to find a supported MCP tool surface for the security gate. "
+            "The security gate requires guided MCP scan and report tools. "
             f"Available tools were: {sorted(available_tools)}"
         )
 
-    surface = "expert" if expert_surface else "guided"
+    surface = "guided"
     seed_results_path: Path | None = None
     seed_results_contract: dict[str, Any] | None = None
     if args.seed_requests_file:
@@ -1295,71 +1295,41 @@ def main(argv: list[str] | None = None) -> int:
     crawl_reference: str
     attack_reference: str | None = None
 
-    if surface == "guided":
-        crawl_start = client.call_tool(
-            "zap_crawl_start",
+    crawl_start = client.call_tool(
+        "zap_crawl_start",
+        {
+            "targetUrl": args.target_url,
+            "strategy": "auto",
+        },
+    )
+    crawl_reference = parse_operation_id(crawl_start)
+    wait_for_completion(
+        client,
+        "zap_crawl_status",
+        crawl_reference,
+        args.spider_timeout_seconds,
+        args.poll_interval_seconds,
+        argument_name="operationId",
+    )
+
+    if args.run_active_scan:
+        attack_start = client.call_tool(
+            "zap_attack_start",
             {
                 "targetUrl": args.target_url,
-                "strategy": "auto",
+                "recurse": "true",
+                **({"policy": args.scan_policy} if args.scan_policy else {}),
             },
         )
-        crawl_reference = parse_operation_id(crawl_start)
+        attack_reference = parse_operation_id(attack_start)
         wait_for_completion(
             client,
-            "zap_crawl_status",
-            crawl_reference,
-            args.spider_timeout_seconds,
+            "zap_attack_status",
+            attack_reference,
+            args.active_timeout_seconds,
             args.poll_interval_seconds,
             argument_name="operationId",
         )
-
-        if args.run_active_scan:
-            attack_start = client.call_tool(
-                "zap_attack_start",
-                {
-                    "targetUrl": args.target_url,
-                    "recurse": "true",
-                    **({"policy": args.scan_policy} if args.scan_policy else {}),
-                },
-            )
-            attack_reference = parse_operation_id(attack_start)
-            wait_for_completion(
-                client,
-                "zap_attack_status",
-                attack_reference,
-                args.active_timeout_seconds,
-                args.poll_interval_seconds,
-                argument_name="operationId",
-            )
-    else:
-        spider_start = client.call_tool("zap_spider_start", {"targetUrl": args.target_url})
-        crawl_reference = parse_scan_id(spider_start)
-        wait_for_completion(
-            client,
-            "zap_spider_status",
-            crawl_reference,
-            args.spider_timeout_seconds,
-            args.poll_interval_seconds,
-        )
-
-        if args.run_active_scan:
-            active_start = client.call_tool(
-                "zap_active_scan_start",
-                {
-                    "targetUrl": args.target_url,
-                    "recurse": "true",
-                    **({"policy": args.scan_policy} if args.scan_policy else {}),
-                },
-            )
-            attack_reference = parse_scan_id(active_start)
-            wait_for_completion(
-                client,
-                "zap_active_scan_status",
-                attack_reference,
-                args.active_timeout_seconds,
-                args.poll_interval_seconds,
-            )
-
     passive_output = client.call_tool(
         "zap_passive_scan_wait",
         {
@@ -1385,7 +1355,7 @@ def main(argv: list[str] | None = None) -> int:
     baseline_source_contract: str | None = None
     diff_contract: dict[str, Any] | None = None
 
-    if surface == "expert":
+    if snapshot_supported:
         raw_snapshot = client.call_tool("zap_findings_snapshot", {"baseUrl": args.target_url})
         current_snapshot_contract, _ = canonicalize_snapshot(json.loads(raw_snapshot), args.target_url)
         current_snapshot_path = output_dir / "current-findings.json"
@@ -1416,7 +1386,7 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     if suppressions_requested:
-        if not expert_surface or current_findings_for_diff is None:
+        if not snapshot_supported or current_findings_for_diff is None:
             suppressions_note_path = output_dir / "suppressions-note.txt"
             write_text(
                 suppressions_note_path,
@@ -1441,7 +1411,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not baseline_requested:
         diff_unavailable_reason = "baseline_file_not_configured"
-    elif baseline_requested and not expert_surface:
+    elif baseline_requested and not snapshot_supported:
         diff_unavailable_reason = "guided_surface_without_snapshot_support"
         baseline_note_path = output_dir / "baseline-note.txt"
         write_text(
@@ -1514,26 +1484,15 @@ def main(argv: list[str] | None = None) -> int:
     resolved_findings = None if diff_contract is None else diff_contract["counts"]["resolved"]
     unchanged_findings = None if diff_contract is None else diff_contract["counts"]["unchanged"]
 
-    if surface == "guided":
-        report_response = client.call_tool(
-            "zap_report_generate",
-            {
-                "baseUrl": args.target_url,
-                "format": "json" if "json" in args.report_template.lower() else "html",
-                "theme": args.report_theme,
-            },
-        )
-        raw_report_path = parse_report_path(report_response)
-    else:
-        raw_report_path = client.call_tool(
-            "zap_generate_report",
-            {
-                "reportTemplate": args.report_template,
-                "theme": args.report_theme,
-                "sites": args.target_url,
-            },
-        ).strip()
-
+    report_response = client.call_tool(
+        "zap_report_generate",
+        {
+            "baseUrl": args.target_url,
+            "format": "json" if args.report_template == "traditional-json-plus" else "html",
+            "theme": args.report_theme,
+        },
+    )
+    raw_report_path = parse_report_path(report_response)
     copied_report_path: Path | None = None
     mapped_report = map_report_path(raw_report_path, args.report_root_container, args.report_root_local)
     if mapped_report and mapped_report.exists():
@@ -1651,7 +1610,7 @@ def main(argv: list[str] | None = None) -> int:
         ])
         if args.baseline_mode == "seed" and enforcement_requested:
             gate_summary_lines.append("- Seed mode allows baseline review; no comparable new-findings assessment was made.")
-    elif baseline_requested and surface == "guided":
+    elif baseline_requested and not snapshot_supported:
         gate_summary_lines.append("- Baseline diff was skipped because the guided self-serve surface does not expose snapshot/diff tools.")
     elif baseline_requested and not baseline_used:
         gate_summary_lines.append("- Baseline file was requested but not found.")

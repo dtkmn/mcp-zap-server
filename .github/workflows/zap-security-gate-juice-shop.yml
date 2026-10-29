@@ -106,10 +106,10 @@ jobs:
           pass2_manifest = load_json("PASS2_MANIFEST", "ci_gate_artifact_manifest/v1")
           pass2_diff = load_json("PASS2_DIFF_JSON", "ci_gate_findings_diff/v3")
 
-          if pass1_metadata.get("tool_surface") != "expert":
-            raise SystemExit(f"Pass 1 should use expert tools, got {pass1_metadata.get('tool_surface')}")
-          if pass2_metadata.get("tool_surface") != "expert":
-            raise SystemExit(f"Pass 2 should use expert tools, got {pass2_metadata.get('tool_surface')}")
+          if pass1_metadata.get("tool_surface") != "guided":
+            raise SystemExit(f"Pass 1 should use guided tools, got {pass1_metadata.get('tool_surface')}")
+          if pass2_metadata.get("tool_surface") != "guided":
+            raise SystemExit(f"Pass 2 should use guided tools, got {pass2_metadata.get('tool_surface')}")
           if not pass1_snapshot.get("findings"):
             raise SystemExit("Pass 1 should emit at least one normalized finding for Juice Shop.")
           if not pass2_metadata.get("baseline_used"):

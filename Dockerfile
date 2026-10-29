@@ -16,7 +16,9 @@ RUN gradle bootJar -x test && \
       exit 1; \
     fi && \
     cp "${boot_jars}" /tmp/app.jar && \
-    mkdir -p /tmp/runtime-layout/zap/wrk /tmp/runtime-layout/home/app
+    mkdir -p /tmp/runtime-layout/zap/wrk /tmp/runtime-layout/home/app \
+      /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety && \
+    chmod 0700 /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety
 
 # The signed multi-architecture runtime index is kept literal so Dependabot can
 # update its digest. This stage also supplies the canonical distroless passwd
@@ -53,6 +55,7 @@ COPY --from=healthcheck-builder /out/passwd /etc/passwd
 COPY --from=healthcheck-builder /out/group /etc/group
 COPY --from=builder /tmp/runtime-layout/home/app /home/app
 COPY --chown=1000:1000 --from=builder /tmp/runtime-layout/zap/wrk /zap/wrk
+COPY --chown=1000:1000 --from=builder /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety /var/lib/mcp-zap/scan-launch-safety
 WORKDIR /app
 COPY --chmod=0444 --from=builder /tmp/app.jar ./app.jar
 COPY --chmod=0555 --from=healthcheck-builder /out/http-healthcheck /usr/local/bin/http-healthcheck

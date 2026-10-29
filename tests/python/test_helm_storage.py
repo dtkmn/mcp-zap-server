@@ -90,9 +90,11 @@ class HelmSharedWorkspaceTest(unittest.TestCase):
         for name in ("ZAP_AUTOMATION_LOCAL_DIRECTORY", "ZAP_AUTOMATION_ZAP_DIRECTORY"):
             self.assertEqual(environment[name], "/shared/zap/automation")
 
-    def test_existing_claim_is_shared_without_creating_a_claim(self):
+    def test_existing_claim_is_shared_without_creating_a_workspace_claim(self):
         resources = parse_manifests(self.render("--set", "zap.persistence.existingClaim=existing-workspace"))
-        self.assertFalse(any(resource["kind"] == "PersistentVolumeClaim" for resource in resources))
+        self.assertFalse(any(resource["kind"] == "PersistentVolumeClaim"
+                             and resource["metadata"]["labels"].get("app.kubernetes.io/component") == "zap-proxy"
+                             for resource in resources))
         for component, container_name in COMPONENTS:
             self.assert_workspace(
                 find_resource(resources, "Deployment", component=component), container_name,
@@ -107,7 +109,8 @@ class HelmSharedWorkspaceTest(unittest.TestCase):
             required = deployment["spec"]["template"]["spec"].get("affinity", {}).get("podAffinity", {}).get(
                 "requiredDuringSchedulingIgnoredDuringExecution", [])
             self.assertNotIn(WORKSPACE_AFFINITY, required)
-        self.assertEqual(find_resource(resources, "PersistentVolumeClaim")["spec"]["accessModes"],
+        self.assertEqual(find_resource(resources, "PersistentVolumeClaim", name=f"{WORKSPACE}-zap-pvc")
+                         ["spec"]["accessModes"],
                          ["ReadWriteMany"])
 
     def test_rwo_affinity_preserves_operator_constraints(self):
@@ -158,8 +161,9 @@ class HelmSharedWorkspaceTest(unittest.TestCase):
         resources = parse_manifests(self.render("--set", "zap.persistence.shareWithMcp=false"))
         mcp = find_resource(resources, "Deployment", component="mcp-server")
         container = self.container(mcp, "mcp-server")
-        self.assertFalse(container.get("volumeMounts"))
-        self.assertFalse(mcp["spec"]["template"]["spec"].get("volumes"))
+        self.assertFalse(any(mount["name"] == "zap-data" for mount in container.get("volumeMounts", [])))
+        self.assertFalse(any(volume["name"] == "zap-data"
+                             for volume in mcp["spec"]["template"]["spec"].get("volumes", [])))
         for name in ("ZAP_REPORT_DIRECTORY", "ZAP_AUTOMATION_LOCAL_DIRECTORY", "ZAP_AUTOMATION_ZAP_DIRECTORY"):
             self.assertNotIn(name, env_values(container))
         required = mcp["spec"]["template"]["spec"].get("affinity", {}).get("podAffinity", {}).get(
@@ -174,11 +178,15 @@ class HelmSharedWorkspaceTest(unittest.TestCase):
             "--set", "zap.persistence.enabled=false",
             "--set", "zap.persistence.shareWithMcp=false",
         ))
-        self.assertFalse(any(resource["kind"] == "PersistentVolumeClaim" for resource in resources))
+        self.assertFalse(any(resource["kind"] == "PersistentVolumeClaim"
+                             and resource["metadata"]["labels"].get("app.kubernetes.io/component") == "zap-proxy"
+                             for resource in resources))
         for component, container_name in COMPONENTS:
             deployment = find_resource(resources, "Deployment", component=component)
-            self.assertFalse(self.container(deployment, container_name).get("volumeMounts"))
-            self.assertFalse(deployment["spec"]["template"]["spec"].get("volumes"))
+            self.assertFalse(any(mount["name"] == "zap-data"
+                                 for mount in self.container(deployment, container_name).get("volumeMounts", [])))
+            self.assertFalse(any(volume["name"] == "zap-data"
+                                 for volume in deployment["spec"]["template"]["spec"].get("volumes", [])))
 
     def test_claim_retention_can_be_disabled(self):
         resources = parse_manifests(self.render("--set", "zap.persistence.retainOnDelete=false"))

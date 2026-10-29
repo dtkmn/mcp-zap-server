@@ -47,6 +47,7 @@ class HelmSecurityTest(unittest.TestCase):
 
     def multi(self, *arguments, succeeds=True):
         return self.render(
+            "--set", "mcp.scan.jobs.store.backend=postgres",
             "--set", "mcp.replicaCount=2",
             "--set", "mcp.streamableHttp.sessionAffinity.enabled=true",
             "--set", "mcp.streamableHttp.sessionAffinity.provider=service-client-ip",

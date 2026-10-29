@@ -62,7 +62,6 @@ services:
       MCP_API_KEY: ${MCP_API_KEY:-}
       MCP_CLIENT_ID: ${MCP_CLIENT_ID:-default-client}
       MCP_CLIENT_DESCRIPTION: ${MCP_CLIENT_DESCRIPTION:-Default MCP client}
-      MCP_SERVER_TOOLS_SURFACE: ${MCP_SERVER_TOOLS_SURFACE:-guided}
       ZAP_REPORT_DIRECTORY: ${ZAP_REPORT_DIRECTORY:-/zap/wrk}
       ZAP_AUTOMATION_LOCAL_DIRECTORY: ${ZAP_AUTOMATION_LOCAL_DIRECTORY:-${ZAP_REPORT_DIRECTORY:-/zap/wrk}/workspaces/${MCP_CLIENT_ID:-default-client}/automation}
       ZAP_AUTOMATION_ZAP_DIRECTORY: ${ZAP_AUTOMATION_ZAP_DIRECTORY:-${ZAP_REPORT_DIRECTORY:-/zap/wrk}/workspaces/${MCP_CLIENT_ID:-default-client}/automation}
@@ -108,6 +107,8 @@ services:
       ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS:-10000}
       ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER: ${ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER:-2.0}
       ZAP_SCAN_JOBS_STORE_BACKEND: ${ZAP_SCAN_JOBS_STORE_BACKEND:-in-memory}
+      ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY: /var/lib/mcp-zap/scan-launch-safety/receipts
+      ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS: ${ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS:-}
       ZAP_SCAN_JOBS_STORE_POSTGRES_URL: ${ZAP_SCAN_JOBS_STORE_POSTGRES_URL:-}
       ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME: ${ZAP_SCAN_JOBS_STORE_POSTGRES_USERNAME:-}
       ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD: ${ZAP_SCAN_JOBS_STORE_POSTGRES_PASSWORD:-}
@@ -119,6 +120,7 @@ services:
       ZAP_URL_WHITELIST: ${ZAP_URL_WHITELIST:-}
     volumes:
       - ${LOCAL_ZAP_WORKPLACE_FOLDER:-./zap-workplace}/zap-wrk:/zap/wrk
+      - mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety
 
   juice-shop:
     image: bkimminich/juice-shop:v19.1.1
@@ -131,3 +133,6 @@ services:
     restart: always
     ports:
       - "${MCP_ZAP_BIND_ADDRESS:-127.0.0.1}:3002:8080"
+
+volumes:
+  mcp-launch-safety:

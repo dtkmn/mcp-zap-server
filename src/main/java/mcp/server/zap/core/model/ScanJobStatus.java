@@ -2,6 +2,8 @@ package mcp.server.zap.core.model;
 
 public enum ScanJobStatus {
     QUEUED,
+    STARTING,
+    START_OUTCOME_UNKNOWN,
     RUNNING,
     SUCCEEDED,
     FAILED,

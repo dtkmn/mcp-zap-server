@@ -144,7 +144,7 @@ Use those as starting points, not as production policy. Your actual bundle must 
 
 ## Previewing Decisions
 
-The former expert policy-preview tool is retired. Runtime policy configuration still supports `dry-run`, which records decisions for actual tool calls without blocking them. It is not a simulation: only perform actions that are authorized to execute. Rules must name tools in the current guided catalog; granting an old name does not restore it.
+Runtime policy configuration supports `dry-run`, which records decisions for actual tool calls without blocking them. It is not a simulation: only perform actions that are authorized to execute. Rules must name tools in the current guided catalog.
 
 ## Rollout Guidance
 

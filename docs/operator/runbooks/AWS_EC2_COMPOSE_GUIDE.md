@@ -23,7 +23,6 @@ limits independently, filter target-report metadata and expose
 retrieval. The older `v0.14.0` image maps HTTP depth to child count and does not
 provide the child setting or chunk tool. Use the intended release image;
 configuration alone cannot add these fixes to an older image.
-Automation plans have their own explicit job limits.
 See [HTTP crawl limits](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/#http-crawl-limits-unreleased-correction).
 
 This walkthrough serves one trusted client. Its example blocks external scan
@@ -274,7 +273,7 @@ Both automation settings point at that same directory:
 This places automation reports inside the caller's report-read boundary.
 The report-read tools will not grant access to a file merely because ZAP generated it.
 With different mount paths, map both settings to the same underlying storage.
-Automation workspace settings do not expose plan execution through MCP. See the [Automation Framework boundary](https://danieltse.org/mcp-zap-server/scanning/automation-framework/).
+These paths also support optional, separately managed native ZAP workflows. See the [native plan boundary](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/#automation-framework).
 
 The separate `mcp-launch-safety` named volume stores launch receipts for MCP only,
 outside the shared ZAP workspace and report artifacts. Preserve it when replacing
@@ -410,8 +409,6 @@ Those findings describe the sample API, not the MCP server's security.
 
 To exercise schema import, call `zap_target_import` with `definitionType: openapi`, `sourceKind: url`, `source: http://smoke-target:8080/openapi.json`, and `hostOverride: http://smoke-target:8080`. The specification contains an unlinked `/imported-only` operation. Follow import with a guided crawl or explicitly authorized attack before reading target findings.
 
-Host setup also installs a native Automation Framework example in the shared workspace. The guided MCP catalog does not run that plan; it is available only as an operator reference for a separately managed ZAP workflow. Use the guided scan/report sequence above for this MCP deployment.
-
 ## 8. Verify restart and reboot
 
 On EC2:
@@ -500,7 +497,7 @@ Do not treat a stopped instance as completed cleanup.
 | Missing MCP image or failed image pull | Check registry access and the selected published release, then configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
-| No automation tools | Expected: native Automation Framework plan tools are retired from the MCP catalog; use the guided scan/report sequence |
+| Client calls an unavailable tool | Use the current guided catalog; follow [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/) for an older integration |
 | Healthy services but report readback fails | Shared mount permissions, client workspace and both automation directory settings |
 | External scan cannot connect | Expected for this example; approve and validate engine egress before changing scope |
 | Need a shell/curl inside MCP | The released Java image is distroless; use health status, logs and supported MCP tools |
@@ -508,3 +505,7 @@ Do not treat a stopped instance as completed cleanup.
 
 When requesting help, provide versions, the failed step and sanitized error text.
 Remove API keys, tokens, account/resource identifiers and private report content.
+
+## Optional Native ZAP Reference
+
+Host setup also installs a native Automation Framework example in the shared workspace as an optional reference for a separately managed ZAP workflow. Use the guided scan/report sequence above for MCP. See [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/#automation-framework) for the native plan boundary.

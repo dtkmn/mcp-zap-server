@@ -53,4 +53,4 @@ Policies are shared engine-level configuration. Inspection reads their current s
 
 Choose a policy appropriate to the authorized target and permitted test intensity. Policy selection does not grant active-scan authorization or expand target scope. Track and stop the scan with the Operation ID returned by `zap_attack_start`.
 
-See [Scan Execution](../scan-execution-modes/) and [Tool Migration](../../getting-started/tool-surfaces/#migration-from-the-expert-interface).
+See [Scan Execution](../scan-execution-modes/) and [Upgrading to Guided Tools](../../getting-started/tool-migration/).

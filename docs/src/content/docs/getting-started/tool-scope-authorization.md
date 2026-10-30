@@ -60,7 +60,7 @@ In JWT mode, the access token inherits the same scopes from the source client. J
 ## Quick-Start Permissions
 
 The packaged local API-key client defaults to `*` with wildcard acceptance
-enabled. This permits ordinary tools in the guided catalog, including crawling, active attacks, target authentication, API imports, findings, history and reports. Retired expert tools remain unavailable even with wildcard or legacy scope grants.
+enabled. This permits ordinary tools in the guided catalog, including crawling, active attacks, target authentication, API imports, findings, history and reports.
 
 `zap_addon_update` is a maintenance operation with additional checks. It requires
 the explicit `zap:engine:addons:update` scope, an approved operator client,
@@ -68,11 +68,9 @@ enforced authorization, and enabled maintenance on a dedicated single-controller
 engine. It remains disabled by default. See
 [ZAP add-on inspection and updates](../../operations/engine-addons/).
 
-Manual launch reconciliation is unavailable through MCP. Neither
-`zap_scan_job_reconciliation_status` nor `zap_scan_job_reconcile` is registered.
-Setting `ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS` or granting
-`zap:scan:queue:reconcile` does not expose them. Uncertain launches remain held;
-see [unresolved launch holds](../../operations/scan-queue-retry-policy/#operator-reconciliation).
+Uncertain launches retain their holds and capacity. See
+[unresolved launch holds](../../operations/scan-queue-retry-policy/#operator-reconciliation)
+for the current status and resolution limits.
 
 Run only the target and workflow the user requests. MCP grants do not establish
 permission to scan a system, authenticate ZAP to a website or replace target
@@ -93,9 +91,8 @@ needed to reload environment settings. Do not regenerate settings or keys to
 change scopes.
 
 Use the scope inventory below for the intended workflow. Guided active attacks
-use `zap:scan:attack:run`. The former `zap:scan:active:run` grant does not authorize
-`zap_attack_start` or restore retired scan-start tools. Before disabling wildcard
-acceptance, give every intended client its complete explicit scope list,
+use `zap:scan:attack:run`. Before disabling wildcard acceptance, give every
+intended client its complete explicit scope list,
 including discovery and status where required.
 
 Policy inspection uses `zap:scan:policy:read` for `zap_scan_policies_list` and
@@ -174,7 +171,7 @@ After authentication in API-key or JWT mode, it checks whether the requested
 tool is registered and enabled before checking scopes or abuse-protection
 policies.
 
-A nonexistent tool and a retired expert tool receive the same
+A nonexistent or unavailable tool receives the same
 HTTP `200` JSON response, without a `WWW-Authenticate` challenge:
 
 ```json
@@ -198,7 +195,7 @@ registered for the current configuration. A permission mapping alone does not
 expose an optional tool. No separate tool-name list is maintained. This wiring
 assumes the application's current single provider;
 adding another registration path or runtime tool changes requires updating the
-registry assembly and its discovery-consistency tests together. The old surface selector is ignored and cannot restore retired tools.
+registry assembly and its discovery-consistency tests together.
 
 Tool calls require a request ID: id-less `tools/call` messages receive HTTP `202`
 with no body and do not execute. Explicit null, fractional, or non-string/non-integer
@@ -221,6 +218,6 @@ Normal MCP clients handle this automatically.
 - assign narrow scopes per client instead of sharing one broad key
 - keep `mcp:tools:list` only on clients that truly need discovery
 - disable wildcard scopes once migration is complete
-- grant guided crawl/attack scopes explicitly when migrating a restricted client; legacy expert scopes are not automatically remapped
+- grant each required guided action explicitly for restricted clients
 
-For the supported catalog and migration guidance, see [Guided Tools](../tool-surfaces/).
+See the [guided catalog](../tool-surfaces/) for supported tools and [Upgrading to Guided Tools](../tool-migration/) for older client and scope configurations.

@@ -3,7 +3,7 @@ title: "Scan Execution"
 editUrl: false
 description: "Start, monitor, and stop guided scans through the protected queue with in-memory or PostgreSQL storage."
 ---
-Guided crawl and attack starts always use the existing scan-job queue. Storage determines persistence, not execution routing. Agents cannot select a direct-start mode.
+Guided crawl and attack starts always use the existing scan-job queue. Storage determines persistence, not execution routing.
 
 ## Start and Track a Scan
 
@@ -49,7 +49,7 @@ In-memory job history lasts for the server process. PostgreSQL persists job hist
 
 Both stores use the same launch-safety checks. Unresolved launches retain capacity and require evidence or an explicit authorized resolution. See [Queue Retry and Launch Recovery](../../operations/scan-queue-retry-policy/).
 
-Valid previously issued signed guided direct-operation handles retain status and stop support. Raw scan IDs and expert queue-job IDs cannot be substituted for those handles. The old expert start, status, retry and queue-administration aliases are no longer exposed; see [Tool Migration](../../getting-started/tool-surfaces/#migration-from-the-expert-interface).
+For compatibility with older operation handles, see [Upgrading to Guided Tools](../../getting-started/tool-migration/#existing-operation-handles).
 
 ## Finish the Evidence Workflow
 
@@ -60,5 +60,3 @@ After crawl or attack completion:
 3. Generate and retrieve reports or snapshots as needed.
 
 Completion alone does not prove coverage or a clean security result. See [Findings and Reports](../findings-and-reports/).
-
-ZAP Automation Framework plans are separate native workflows and are not exposed through this MCP catalog. See [Automation Framework](../automation-framework/) for that boundary.

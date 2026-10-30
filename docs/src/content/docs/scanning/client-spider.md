@@ -73,7 +73,7 @@ This profile supports automatic username/password login in queued guided Client 
 
 Use the guided Operation ID with `zap_crawl_status` and `zap_crawl_stop`. Client Spider jobs share the spider concurrency limit, retry policy and cancellation handling. Native scan IDs remain engine diagnostics rather than agent-facing start/control arguments.
 
-Starts require `zap:scan:crawl:run`, status requires `zap:scan:read`, and stopping requires `zap:scan:stop`. Raw Client Spider and explicit queue aliases are retired.
+Starts require `zap:scan:crawl:run`, status requires `zap:scan:read`, and stopping requires `zap:scan:stop`.
 
 ## Findings and Reports
 

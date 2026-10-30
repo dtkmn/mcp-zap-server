@@ -7,7 +7,7 @@ AJAX Spider uses a real browser to explore rendered pages and JavaScript navigat
 
 ## Guided Lifecycle
 
-Use `zap_crawl_start` with `strategy=browser`, then pass its Operation ID to `zap_crawl_status` and `zap_crawl_stop`. Raw AJAX start/status/results and explicit queue aliases are retired.
+Use `zap_crawl_start` with `strategy=browser`, then pass its Operation ID to `zap_crawl_status` and `zap_crawl_stop`.
 
 Client Spider supports guided browser authentication profiles. The AJAX API route selected by `strategy=browser` rejects guided `authSessionId`.
 

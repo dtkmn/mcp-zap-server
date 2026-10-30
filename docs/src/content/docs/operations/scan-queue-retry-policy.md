@@ -124,11 +124,9 @@ cannot automatically detect every engine-only restart.
 
 ## Operator Reconciliation
 
-Manual launch reconciliation is unavailable through MCP. The current catalog
-does not register `zap_scan_job_reconcile` or
-`zap_scan_job_reconciliation_status`. Setting
-`ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS`, configuring Helm operator IDs or granting
-`zap:scan:queue:reconcile` does not make these tools available.
+Manual resolution of launch holds is unavailable through MCP. For older
+reconciliation tools and configuration, see
+[Upgrading to Guided Tools](../../getting-started/tool-migration/#unresolved-launches-and-reconciliation).
 
 Internal launch protection remains active. Uncertain jobs retain their holds and
 capacity reservations, and unresolved launches are not automatically started
@@ -187,7 +185,7 @@ When an active scan, traditional Spider, or Client Spider returns its native ID 
 
 Cleanup jobs retained from earlier versions remain visible with `Cleanup for Job ID` / `cleanupForJob`. They retain their scan family's capacity and use the shared cancellation retry window. They cannot be retried or replayed as new scans. PostgreSQL retains these records; ordinary in-memory history remains process-local.
 
-After the retry deadline, an unresolved cleanup remains visible as cancellation unconfirmed and continues to reserve capacity. Background status polling can confirm the scan has finished. The raw cleanup-job cancellation alias is retired, and no generic guided cleanup-job control replaces it. Historical cleanup-job IDs cannot be substituted for guided operation handles. Controller or engine replacement does not establish ownership of a saved native ID, and the current MCP catalog cannot manually clear a resulting hold.
+After the retry deadline, an unresolved cleanup remains visible as cancellation unconfirmed and continues to reserve capacity. Background status polling can confirm the scan has finished. The current MCP catalog has no generic cleanup-job control. Historical cleanup-job IDs cannot be substituted for guided operation handles. Controller or engine replacement does not establish ownership of a saved native ID, and the current MCP catalog cannot manually clear a resulting hold.
 
 ## Retryable Errors
 
@@ -220,8 +218,7 @@ For attempt `n`:
 - `ZAP_SCAN_QUEUE_RETRY_SPIDER_MAX_BACKOFF_MS`
 - `ZAP_SCAN_QUEUE_RETRY_SPIDER_MULTIPLIER`
 
-The retired expert retry/requeue tools are not exposed to agents. Internal retry policy
-still respects the configured per-type attempt budget. It cannot retry an
+Internal retry policy respects the configured per-type attempt budget. It cannot retry an
 unresolved launch or bypass its ownership hold.
 
 ## Operator Notes

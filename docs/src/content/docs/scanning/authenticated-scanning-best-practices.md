@@ -557,7 +557,7 @@ Use bearer and API-key bootstrap for gateway credential-reference preparation to
 
 ## Unsupported Authentication Workflows
 
-Raw context/user/authentication aliases have been retired. Guided profiles do not provide arbitrary script or custom login-step configuration. Use a separately managed ZAP workflow when the supported form, browser or header profiles cannot express the required authentication. Do not silently continue an authenticated scan anonymously.
+Guided profiles do not provide arbitrary script or custom login-step configuration. Use a separately managed ZAP workflow when the supported form, browser or header profiles cannot express the required authentication. Do not silently continue an authenticated scan anonymously.
 
 ## Common Pitfalls
 

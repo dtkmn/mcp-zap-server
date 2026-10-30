@@ -23,6 +23,7 @@ public class GuidedSecurityToolsService {
     private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
 
     private final GuidedScanWorkflowService guidedScanWorkflowService;
+    private final ActiveScanService activeScanService;
     private final ReportService reportService;
     private final FindingsService findingsService;
     private final OpenApiService openApiService;
@@ -31,6 +32,7 @@ public class GuidedSecurityToolsService {
     private final GuidedToolActions guidedToolActions;
 
     public GuidedSecurityToolsService(GuidedScanWorkflowService guidedScanWorkflowService,
+                                      ActiveScanService activeScanService,
                                       ReportService reportService,
                                       FindingsService findingsService,
                                       OpenApiService openApiService,
@@ -38,6 +40,7 @@ public class GuidedSecurityToolsService {
                                       GatewayRecordFactory gatewayRecordFactory,
                                       GuidedToolActions guidedToolActions) {
         this.guidedScanWorkflowService = guidedScanWorkflowService;
+        this.activeScanService = activeScanService;
         this.reportService = reportService;
         this.findingsService = findingsService;
         this.openApiService = openApiService;
@@ -121,13 +124,42 @@ public class GuidedSecurityToolsService {
     }
 
     @Tool(
+            name = "zap_scan_policies_list",
+            description = "List the active-scan policies currently configured in ZAP so you can inspect a policy before choosing it for zap_attack_start. This reads policy names without starting a scan or changing policy rules. Requires zap:scan:policy:read. Policy inspection does not reserve or freeze the configuration for a later scan."
+    )
+    public String listScanPolicies() {
+        StringBuilder output = new StringBuilder(activeScanService.listScanPolicies())
+                .append('\n').append(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, "zap_scan_policy_view", "- Inspect: call zap_scan_policy_view with a listed policy name to review its rules.");
+        appendAction(output, "zap_attack_start", "- Approved testing: call zap_attack_start with the selected policy name only when active testing of the target is authorized.");
+        return output.toString().trim();
+    }
+
+    @Tool(
+            name = "zap_scan_policy_view",
+            description = "Inspect a currently configured active-scan policy: category and rule counts, enabled state, attack strength and alert threshold. Rule details honor ruleFilter and limit; the summary still describes the whole policy. This reads configuration without starting a scan or changing policy rules. Requires zap:scan:policy:read. Policy inspection does not reserve or freeze the configuration for a later scan."
+    )
+    public String viewScanPolicy(
+            @ToolParam(description = "Required policy name returned by zap_scan_policies_list. Matching is case-insensitive.") String scanPolicyName,
+            @ToolParam(required = false, description = "Optional exact rule ID or category ID, or case-insensitive rule-name substring. Omit to include all rules.") String ruleFilter,
+            @ToolParam(required = false, description = "Maximum rule details to return: a whole number from 1 to 100, default 25.") String limit
+    ) {
+        StringBuilder output = new StringBuilder(activeScanService.viewScanPolicy(scanPolicyName, ruleFilter, limit))
+                .append('\n').append(NEXT_ACTIONS_HEADER).append('\n');
+        appendAction(output, "zap_scan_policies_list", "- Other policies: call zap_scan_policies_list to inspect the available names.");
+        appendAction(output, "zap_scan_policy_view", "- More rules: call zap_scan_policy_view with a narrower ruleFilter or a higher limit, up to 100.");
+        appendAction(output, "zap_attack_start", "- Approved testing: call zap_attack_start with the selected policy name only when active testing of the target is authorized.");
+        return output.toString().trim();
+    }
+
+    @Tool(
             name = "zap_attack_start",
             description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The request is submitted to the protected scan queue for every storage backend; keep the returned operation ID for status and cancellation. When authSessionId is supplied, guided attack currently accepts prepared form-login sessions only."
     )
     public String startAttack(
             @ToolParam(description = "Target host or base URL to attack, for example https://app.example.com or https://app.example.com/api") String targetUrl,
             @ToolParam(required = false, description = "Optional recurse flag (default: true)") String recurse,
-            @ToolParam(required = false, description = "Optional active-scan policy name when you need a non-default rule set") String policy,
+            @ToolParam(required = false, description = "Optional active-scan policy name. Use zap_scan_policies_list and zap_scan_policy_view to inspect configured policies; omit to use ZAP's default policy.") String policy,
             @ToolParam(required = false, description = "Optional idempotency key for reusing the same queued request; different parameters with the same key are rejected.") String idempotencyKey,
             @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided attack currently accepts form-login sessions only.") String authSessionId
     ) {

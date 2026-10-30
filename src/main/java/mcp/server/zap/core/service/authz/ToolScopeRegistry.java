@@ -43,6 +43,8 @@ public class ToolScopeRegistry {
         register(rules, "zap_attack_start", McpToolSurface.GUIDED, List.of(GUIDED_SCAN_CAPABILITY), "zap:scan:attack:run");
         register(rules, "zap_attack_status", McpToolSurface.GUIDED, "zap:scan:read");
         register(rules, "zap_attack_stop", McpToolSurface.GUIDED, "zap:scan:stop");
+        register(rules, "zap_scan_policies_list", McpToolSurface.GUIDED, "zap:scan:policy:read");
+        register(rules, "zap_scan_policy_view", McpToolSurface.GUIDED, "zap:scan:policy:read");
         register(rules, "zap_auth_session_prepare", McpToolSurface.GUIDED, "zap:auth:session:write");
         register(rules, "zap_auth_session_validate", McpToolSurface.GUIDED, "zap:auth:test");
         register(rules, "zap_report_generate", McpToolSurface.GUIDED, "zap:report:generate");

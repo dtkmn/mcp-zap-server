@@ -42,6 +42,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class GuidedSecurityToolsServiceTest {
@@ -118,6 +119,7 @@ class GuidedSecurityToolsServiceTest {
         when(scanJobQueueService.cancelScanJob(anyString())).thenReturn("Status: CANCELLED");
         service = new GuidedSecurityToolsService(
                 guidedScanWorkflowService,
+                activeScanService,
                 reportService,
                 findingsService,
                 openApiService,
@@ -804,6 +806,60 @@ class GuidedSecurityToolsServiceTest {
         verify(findingsService).diffFindings("https://example.com", "baseline-json", 17);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"zap_scan_policies_list", "zap_scan_policy_view"})
+    void policyInspectionSchemasKeepTheListEmptyAndViewFiltersOptional(String toolName) throws Exception {
+        ToolCallback callback = Arrays.stream(MethodToolCallbackProvider.builder().toolObjects(service).build().getToolCallbacks())
+                .filter(tool -> toolName.equals(tool.getToolDefinition().name())).findFirst().orElseThrow();
+        JsonNode schema = new ObjectMapper().readTree(callback.getToolDefinition().inputSchema());
+        List<String> required = new ArrayList<>();
+        for (JsonNode field : schema.path("required")) required.add(field.asString());
+
+        if ("zap_scan_policies_list".equals(toolName)) {
+            assertThat(required).isEmpty();
+            assertThat(schema.path("properties").propertyNames()).isEmpty();
+        } else {
+            assertThat(required).containsExactly("scanPolicyName");
+            assertThat(schema.path("properties").propertyNames())
+                    .containsExactlyInAnyOrder("scanPolicyName", "ruleFilter", "limit");
+            for (String field : List.of("scanPolicyName", "ruleFilter", "limit")) {
+                assertThat(schema.path("properties").path(field).path("type").asString()).isEqualTo("string");
+            }
+        }
+    }
+
+    @Test
+    void policyReadOnlyCallersInspectWithoutScanActionsOrMutationSuggestions() {
+        useScopes("zap:scan:policy:read");
+        when(activeScanService.listScanPolicies()).thenReturn("Available active-scan policies:\n- API");
+        when(activeScanService.viewScanPolicy("API", "sql", "3")).thenReturn("Policy: API\nShowing: 1 of 1 matched rules");
+
+        assertThat(service.listScanPolicies()).contains("- API", "zap_scan_policy_view")
+                .doesNotContain("zap_attack_start", "zap_scan_policy_rule_set", "direct", "queued");
+        assertThat(service.viewScanPolicy("API", "sql", "3"))
+                .contains("Policy: API", "Showing: 1 of 1 matched rules", "zap_scan_policies_list", "zap_scan_policy_view")
+                .doesNotContain("zap_attack_start", "zap_scan_policy_rule_set", "direct", "queued");
+        verify(activeScanService).listScanPolicies();
+        verify(activeScanService).viewScanPolicy("API", "sql", "3");
+        verifyNoMoreInteractions(activeScanService);
+        verifyNoInteractions(scanJobQueueService, spiderScanService, ajaxSpiderService, clientSpiderService);
+    }
+
+    @Test
+    void permittedPolicyReadersCanUseTheChosenPolicyForAGuidedQueuedAttack() {
+        useScopes("zap:scan:policy:read", "zap:scan:attack:run");
+        when(activeScanService.listScanPolicies()).thenReturn("Available active-scan policies:\n- API");
+        when(activeScanService.viewScanPolicy("API", null, null)).thenReturn("Policy: API");
+        when(scanJobQueueService.queueActiveScan("https://example.com", "true", "API", "chosen-policy"))
+                .thenReturn("Job ID: policy-job\nStatus: QUEUED");
+
+        assertThat(service.listScanPolicies()).contains("zap_attack_start", "authorized");
+        assertThat(service.viewScanPolicy("API", null, null)).contains("zap_attack_start", "authorized");
+        assertThat(service.startAttack("https://example.com", "true", "API", "chosen-policy", null))
+                .contains("Job ID: policy-job", "Operation ID:");
+        verify(scanJobQueueService).queueActiveScan("https://example.com", "true", "API", "chosen-policy");
+    }
+
     @Test
     void guidedFindingsSummaryAddsTriageContextForAgents() {
         when(findingsService.getFindingsSummary("https://example.com/admin"))
@@ -904,6 +960,7 @@ class GuidedSecurityToolsServiceTest {
     private GuidedSecurityToolsService serviceWithEngine(EngineAdapter localEngineAdapter) {
         return new GuidedSecurityToolsService(
                 guidedScanWorkflowService,
+                activeScanService,
                 reportService,
                 findingsService,
                 openApiService,

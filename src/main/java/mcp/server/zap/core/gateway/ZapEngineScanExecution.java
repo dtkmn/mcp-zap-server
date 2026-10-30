@@ -421,7 +421,6 @@ public class ZapEngineScanExecution implements EngineScanExecution {
 
     private void configureActiveScan(int maxDurationMinutes, int hostPerScan, int threadPerHost)
             throws ClientApiException {
-        zap.ascan.enableAllScanners(null);
         zap.ascan.setOptionMaxScanDurationInMins(maxDurationMinutes);
         zap.ascan.setOptionHostPerScan(hostPerScan);
         zap.ascan.setOptionThreadPerHost(threadPerHost);

@@ -1,0 +1,21 @@
+{{- if and .Values.mcp.enabled (eq (include "mcp-zap-server.scanJobStoreBackend" .) "in-memory") (not .Values.mcp.launchSafety.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mcp-zap-server.fullname" . }}-mcp-launch-safety
+  {{- if .Values.mcp.launchSafety.persistence.retainOnDelete }}
+  annotations:
+    helm.sh/resource-policy: keep
+  {{- end }}
+  labels:
+    {{- include "mcp-zap-server.mcp.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mcp.launchSafety.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.mcp.launchSafety.persistence.size }}
+  {{- if .Values.mcp.launchSafety.persistence.storageClass }}
+  storageClassName: {{ .Values.mcp.launchSafety.persistence.storageClass | quote }}
+  {{- end }}
+{{- end }}

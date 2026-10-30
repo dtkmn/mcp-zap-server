@@ -1,6 +1,17 @@
 {{- if .Values.mcp.enabled }}
+{{- $jobStoreBackend := include "mcp-zap-server.scanJobStoreBackend" . }}
+{{- $memoryLaunchSafety := eq $jobStoreBackend "in-memory" }}
+{{- $maximumControllers := int .Values.mcp.replicaCount }}
+{{- if .Values.mcp.autoscaling.enabled }}{{- $maximumControllers = int .Values.mcp.autoscaling.maxReplicas }}{{- end }}
+{{- if and $memoryLaunchSafety (gt $maximumControllers 1) }}
+{{- fail "In-memory launch safety requires one MCP controller; use Postgres for multiple workers" }}
+{{- end }}
 {{- $sharedWorkspace := and .Values.zap.persistence.enabled .Values.zap.persistence.shareWithMcp }}
 {{- $workspaceClaim := default (printf "%s-zap-pvc" (include "mcp-zap-server.fullname" .)) .Values.zap.persistence.existingClaim }}
+{{- $launchClaim := default (printf "%s-mcp-launch-safety" (include "mcp-zap-server.fullname" .)) .Values.mcp.launchSafety.persistence.existingClaim }}
+{{- if and $memoryLaunchSafety .Values.zap.persistence.enabled (eq $launchClaim $workspaceClaim) }}
+{{- fail "Launch safety requires an MCP-only claim separate from the ZAP/report workspace claim" }}
+{{- end }}
 {{- $automationDirectory := "" }}
 {{- if $sharedWorkspace }}
 {{- $automationDirectory = printf "%s/%s" (trimSuffix "/" .Values.zap.persistence.mountPath) .Values.zap.persistence.automationSubdirectory }}
@@ -15,11 +26,15 @@ metadata:
 spec:
   revisionHistoryLimit: {{ .Values.mcp.revisionHistoryLimit }}
   strategy:
+    {{- if $memoryLaunchSafety }}
+    type: Recreate
+    {{- else }}
     type: {{ .Values.mcp.deploymentStrategy.type }}
     {{- if eq .Values.mcp.deploymentStrategy.type "RollingUpdate" }}
     rollingUpdate:
       maxUnavailable: {{ .Values.mcp.deploymentStrategy.rollingUpdate.maxUnavailable }}
       maxSurge: {{ .Values.mcp.deploymentStrategy.rollingUpdate.maxSurge }}
+    {{- end }}
     {{- end }}
   {{- if not .Values.mcp.autoscaling.enabled }}
   replicas: {{ .Values.mcp.replicaCount }}
@@ -69,6 +84,14 @@ spec:
           value: "{{ .Values.mcp.service.targetPort }}"
         - name: ZAP_API_URL
           value: "{{ default (printf "%s-zap" (include "mcp-zap-server.fullname" .)) .Values.mcp.zapClient.url }}"
+        - name: ZAP_SCAN_JOBS_STORE_BACKEND
+          value: {{ $jobStoreBackend | quote }}
+        - name: ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS
+          value: {{ join "," .Values.mcp.launchSafety.operatorClientIds | quote }}
+        {{- if $memoryLaunchSafety }}
+        - name: ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY
+          value: /var/lib/mcp-zap/scan-launch-safety/receipts
+        {{- end }}
         - name: ZAP_API_PORT
           value: "{{ .Values.mcp.zapClient.port }}"
         - name: ZAP_API_CONNECT_TIMEOUT_MS
@@ -224,8 +247,9 @@ spec:
         {{- end }}
         resources:
           {{- toYaml .Values.mcp.resources | nindent 12 }}
-        {{- if $sharedWorkspace }}
+        {{- if or $sharedWorkspace $memoryLaunchSafety }}
         volumeMounts:
+        {{- if $sharedWorkspace }}
         - name: zap-data
           mountPath: {{ .Values.zap.persistence.mountPath | quote }}
           {{- with .Values.zap.persistence.workspaceSubPath }}
@@ -237,11 +261,23 @@ spec:
           subPath: {{ .Values.zap.persistence.contentImport.subPath | quote }}
         {{- end }}
         {{- end }}
-      {{- if $sharedWorkspace }}
+        {{- if $memoryLaunchSafety }}
+        - name: mcp-launch-safety
+          mountPath: /var/lib/mcp-zap/scan-launch-safety
+        {{- end }}
+        {{- end }}
+      {{- if or $sharedWorkspace $memoryLaunchSafety }}
       volumes:
+      {{- if $sharedWorkspace }}
       - name: zap-data
         persistentVolumeClaim:
           claimName: {{ $workspaceClaim | quote }}
+      {{- end }}
+      {{- if $memoryLaunchSafety }}
+      - name: mcp-launch-safety
+        persistentVolumeClaim:
+          claimName: {{ $launchClaim | quote }}
+      {{- end }}
       {{- end }}
       {{- with .Values.mcp.nodeSelector }}
       nodeSelector:

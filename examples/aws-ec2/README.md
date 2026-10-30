@@ -23,7 +23,7 @@ older release digest for an unpublished tag.
 | `setup-host.sh` | Root-only host preparation for Amazon Linux 2023 x86_64. |
 | `firewall.sh` | Bridge-scoped host/forward rules, installed persistently by host setup. |
 | `smoke-api.py` | Minimal internal scan fixture; never expose its port. |
-| `automation-plan.yaml` | Bounded requestor/spider/passive-wait/JSON-report plan for the internal fixture. |
+| `automation-plan.yaml` | Native ZAP plan example for a separately managed Automation Framework workflow. |
 
 Run `sudo bash ./setup-host.sh` from this directory. The script installs Docker
 and a checksum-verified Compose binary, prepares the writable UID/GID 1000
@@ -35,9 +35,7 @@ backend; do not use it to reconfigure a shared Docker host.
 Host setup also copies `automation-plan.yaml` to
 `workspace/workspaces/ec2-operator/automation/example-plan.yaml`, owned by
 UID/GID 1000 with mode 0640. Both containers see this plan at
-`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. Submit that
-absolute path to `zap_automation_plan_run` using its `planPath` argument, then
-follow the walkthrough's status, artifact and report-read checks. Re-running
+`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. The guided MCP catalog does not run this native plan. Use guided crawl/attack tools for the internal fixture and retrieve reports through the guided report tools. Re-running
 host setup restores the example plan from this source file.
 
 The client identity `ec2-operator` is fixed in Compose. If you change it, change
@@ -45,8 +43,13 @@ both automation directories to the matching `workspaces/<client-id>/automation`
 path. Use the current MCP container IP for SSM remote-host forwarding; Docker
 may assign a different address when a container is recreated.
 
+The MCP-only `mcp-launch-safety` named volume keeps launch receipts across
+container replacement, separately from the shared workspace and report artifacts.
+Do not delete unresolved receipts to unblock scans; follow the launch-recovery
+guidance in the deployment walkthrough.
+
 Stop the application with `sudo docker compose down` from this directory. The
-host workspace and `.env` remain on disk. For a temporary trial, terminate the
+host workspace, `.env` and named launch-safety volume remain on disk. For a temporary trial, terminate the
 dedicated EC2 instance and verify its root volume is deleted, then remove only
 the IAM and security-group resources created for it. Stopping EC2 alone does not
 remove its storage charges. Firewall files are host configuration and disappear

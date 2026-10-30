@@ -67,7 +67,6 @@ public class ZapInitializationService {
     @Before("execution(public * mcp.server.zap.core.gateway.ZapEngineScanExecution.start*(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution.startAjaxSpider(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineApiImportAccess.import*(..))"
-            + " || execution(public * mcp.server.zap.core.gateway.ZapEngineAutomationAccess.runAutomationPlan(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineContextAccess.testUserAuthentication(..))")
     public void ensureBeforeOutboundOperation() {
         try {

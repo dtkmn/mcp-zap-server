@@ -45,6 +45,26 @@ class ToolAuthorizationServiceTest {
     }
 
     @Test
+    void policyReadScopeAllowsInspectionWithoutGrantingScanOrEditingAccess() {
+        ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
+        for (String tool : List.of("zap_scan_policies_list", "zap_scan_policy_view")) {
+            assertThat(service.authorizeToolCall(List.of("zap:scan:policy:read"), tool).allowed()).isTrue();
+            assertThat(service.authorizeToolCall(List.of("*"), tool).allowed()).isTrue();
+            for (String unrelatedScope : List.of("zap:scan:read", "zap:scan:attack:run", "zap:scan:policy:write")) {
+                ToolAuthorizationDecision denied = service.authorizeToolCall(List.of(unrelatedScope), tool);
+                assertThat(denied.allowed()).isFalse();
+                assertThat(denied.missingScopes()).containsExactly("zap:scan:policy:read");
+            }
+        }
+        ToolAuthorizationDecision attack = service.authorizeToolCall(List.of("zap:scan:policy:read"), "zap_attack_start");
+        assertThat(attack.allowed()).isFalse();
+        assertThat(attack.missingScopes()).containsExactly("zap:scan:attack:run");
+        ToolAuthorizationDecision editing = service.authorizeToolCall(List.of("zap:scan:policy:read"), "zap_scan_policy_rule_set");
+        assertThat(editing.allowed()).isFalse();
+        assertThat(editing.mapped()).isFalse();
+    }
+
+    @Test
     void wildcardScopeCanBeDisabled() {
         ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, false);
 

@@ -43,6 +43,8 @@ class ToolSurfaceProviderTest {
             "zap_scan_history_get",
             "zap_scan_history_list",
             "zap_scan_history_release_evidence",
+            "zap_scan_policies_list",
+            "zap_scan_policy_view",
             "zap_target_import"
     );
     private static final Set<String> RECOVERY_TOOLS = Set.of(
@@ -52,15 +54,15 @@ class ToolSurfaceProviderTest {
     void guidedSurfaceOmitsReconciliationCallbacks() {
         Set<String> callbacks = names(provider());
         ToolScopeRegistry registry = new ToolScopeRegistry();
-        assertThat(callbacks).hasSize(26).containsExactlyInAnyOrderElementsOf(EXPECTED);
-        assertThat(registry.getToolRegistry().names()).hasSize(28)
+        assertThat(callbacks).hasSize(28).containsExactlyInAnyOrderElementsOf(EXPECTED);
+        assertThat(registry.getToolRegistry().names()).hasSize(30)
                 .containsAll(EXPECTED).containsAll(RECOVERY_TOOLS);
         assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.EXPERT)).isEmpty();
     }
 
     @Test
     void retiredExpertAliasesAreNeitherRegisteredNorDescribed() {
-        assertThat(RetiredExpertTools.NAMES).hasSize(55);
+        assertThat(RetiredExpertTools.NAMES).hasSize(53);
         assertThat(names(provider())).doesNotContainAnyElementsOf(RetiredExpertTools.NAMES);
         assertThat(new ToolScopeRegistry().getToolRegistry().names()).doesNotContainAnyElementsOf(RetiredExpertTools.NAMES);
     }

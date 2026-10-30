@@ -187,6 +187,21 @@ class OpenApiContentImportServiceTest {
         verifyNoInteractions(engine);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"automationLocalDirectory", "automationZapDirectory"})
+    void automationRootsRemainSeparateFromContentStaging(String field) throws IOException {
+        var originalPermissions = Files.getPosixFilePermissions(root);
+        String overlap = field.equals("automationLocalDirectory") ? root.toString() : properties.getZapDirectory();
+        ReflectionTestUtils.setField(service, field, overlap);
+
+        assertThatThrownBy(service::initialize).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("shared directory").hasNoCause();
+        verifyNoInteractions(engine);
+        assertThat(stagedDirectories()).isEmpty();
+        assertThat(root.resolve(".content-import-writer.lock")).doesNotExist();
+        assertThat(Files.getPosixFilePermissions(root)).isEqualTo(originalPermissions);
+    }
+
     @Test
     void symlinkRootAndAncestorAreRejectedWithoutTouchingOtherFiles() throws IOException {
         Path link = temp.toRealPath().resolve("linked");

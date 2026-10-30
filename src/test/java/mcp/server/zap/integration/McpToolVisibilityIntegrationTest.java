@@ -67,6 +67,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -102,6 +103,10 @@ import static org.mockito.Mockito.when;
                 "mcp.server.auth.apiKeys[4].key=visibility-unapproved-key",
                 "mcp.server.auth.apiKeys[4].scopes[0]=mcp:tools:list",
                 "mcp.server.auth.apiKeys[4].scopes[1]=zap:scan:queue:reconcile",
+                "mcp.server.auth.apiKeys[5].clientId=visibility-policy-reader",
+                "mcp.server.auth.apiKeys[5].key=visibility-policy-key",
+                "mcp.server.auth.apiKeys[5].scopes[0]=mcp:tools:list",
+                "mcp.server.auth.apiKeys[5].scopes[1]=zap:scan:policy:read",
                 "zap.scan.jobs.launch-safety.operator-client-ids[0]=visibility-operator",
                 "mcp.server.protection.enabled=false",
                 "mcp.server.protection.rate-limit.enabled=false"
@@ -268,7 +273,7 @@ class McpToolVisibilityIntegrationTest {
         List<String> activeNames = Arrays.stream(toolCallbackProvider.getToolCallbacks())
                 .map(callback -> callback.getToolDefinition().name())
                 .toList();
-        assertThat(activeNames).hasSize(26).contains(ACTIVE_TOOL)
+        assertThat(activeNames).hasSize(28).contains(ACTIVE_TOOL, "zap_scan_policies_list", "zap_scan_policy_view")
                 .doesNotContain(UNKNOWN_TOOL, DISABLED_TOOL,
                         "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status");
         assertThat(mcpActiveToolRegistry.names()).containsExactlyInAnyOrderElementsOf(activeNames);
@@ -287,10 +292,81 @@ class McpToolVisibilityIntegrationTest {
         for (JsonNode tool : envelope.path("result").path("tools")) {
             advertisedNames.add(tool.path("name").asString());
         }
-        assertThat(advertisedNames).hasSize(26).contains(ACTIVE_TOOL)
+        assertThat(advertisedNames).hasSize(28).contains(ACTIVE_TOOL, "zap_scan_policies_list", "zap_scan_policy_view")
                 .doesNotContain(DISABLED_TOOL, UNKNOWN_TOOL,
                         "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status");
         assertThat(advertisedNames).containsExactlyInAnyOrderElementsOf(mcpActiveToolRegistry.names());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"visibility-policy-key", "visibility-admin-key"})
+    void policyInspectionUsesOnlyEngineReadsWithoutQueuingWork(String apiKey) throws Exception {
+        String session = initializeSession(apiKey);
+        var jobsBefore = OBJECT_MAPPER.valueToTree(scanJobStore.list());
+        when(scanExecution.listActiveScanPolicyNames()).thenReturn(List.of("Default Policy", "API Checks"));
+        when(scanExecution.loadActiveScanPolicyCategories("API Checks")).thenReturn(List.of(
+                new EngineScanExecution.PolicyCategorySnapshot("0", "Injection", true, "LOW", "MEDIUM")));
+        when(scanExecution.loadActiveScanPolicyRules("API Checks")).thenReturn(List.of(
+                new EngineScanExecution.ScannerRuleSnapshot("40012", "Reflected XSS", "0", false,
+                        "LOW", "OFF", "release", "available", List.of()),
+                new EngineScanExecution.ScannerRuleSnapshot("40018", "SQL Injection", "0", true,
+                        "LOW", "MEDIUM", "release", "available", List.of())));
+
+        String policies = toolText(callWithArguments(apiKey, session, "zap_scan_policies_list", Map.of()));
+        String policy = toolText(callWithArguments(apiKey, session, "zap_scan_policy_view", Map.of(
+                "scanPolicyName", "API Checks", "ruleFilter", "40012", "limit", "1")));
+
+        assertThat(policies).contains("API Checks", "zap_scan_policy_view");
+        assertThat(policy).contains("Policy: API Checks", "40012", "enabled=no", "threshold=OFF")
+                .doesNotContain("40018", "zap_scan_policy_rule_set");
+        if (apiKey.equals("visibility-policy-key")) {
+            assertThat(policy).doesNotContain("zap_attack_start");
+        } else {
+            assertThat(policy).contains("zap_attack_start");
+        }
+        verify(scanExecution, times(2)).listActiveScanPolicyNames();
+        verify(scanExecution).loadActiveScanPolicyCategories("API Checks");
+        verify(scanExecution).loadActiveScanPolicyRules("API Checks");
+        verifyNoMoreInteractions(scanExecution);
+        verifyNoInteractions(spiderScanService, ajaxExecution);
+        assertThat(OBJECT_MAPPER.<JsonNode>valueToTree(scanJobStore.list())).isEqualTo(jobsBefore);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"visibility-list-key", "visibility-read-key"})
+    void policyInspectionRequiresItsOwnReadScopeBeforeEngineAccess(String apiKey) throws Exception {
+        String session = initializeSession(apiKey);
+        var jobsBefore = OBJECT_MAPPER.valueToTree(scanJobStore.list());
+        for (String tool : List.of("zap_scan_policies_list", "zap_scan_policy_view")) {
+            Map<String, Object> arguments = tool.equals("zap_scan_policy_view")
+                    ? Map.of("scanPolicyName", "API Checks") : Map.of();
+            EntityExchangeResult<String> response = callWithArguments(apiKey, session, tool, arguments);
+            assertThat(response.getStatus().value()).isEqualTo(403);
+            assertThat(response.getResponseHeaders().getFirst(HttpHeaders.WWW_AUTHENTICATE))
+                    .contains("insufficient_scope", "zap:scan:policy:read");
+            assertThat(responseEnvelope(response).path("requiredScopes").path(0).asString())
+                    .isEqualTo("zap:scan:policy:read");
+        }
+        verifyNoInteractions(scanExecution, spiderScanService, ajaxExecution);
+        assertThat(OBJECT_MAPPER.<JsonNode>valueToTree(scanJobStore.list())).isEqualTo(jobsBefore);
+    }
+
+    @Test
+    void policyReadPermissionDoesNotGrantScanStartOrRestoreEditing() throws Exception {
+        String key = "visibility-policy-key";
+        String session = initializeSession(key);
+        var jobsBefore = OBJECT_MAPPER.valueToTree(scanJobStore.list());
+
+        EntityExchangeResult<String> attack = callWithArguments(key, session, "zap_attack_start",
+                Map.of("targetUrl", "https://example.com", "policy", "API Checks"));
+        assertThat(attack.getStatus().value()).isEqualTo(403);
+        assertThat(responseEnvelope(attack).path("requiredScopes").path(0).asString())
+                .isEqualTo("zap:scan:attack:run");
+        assertUnknownToolResponse(call(key, session, "zap_scan_policy_rule_set", "retired-policy-edit"),
+                "retired-policy-edit");
+
+        verifyNoInteractions(scanExecution, spiderScanService, ajaxExecution);
+        assertThat(OBJECT_MAPPER.<JsonNode>valueToTree(scanJobStore.list())).isEqualTo(jobsBefore);
     }
 
     @Test
@@ -715,6 +791,21 @@ class McpToolVisibilityIntegrationTest {
     private EntityExchangeResult<String> call(String apiKey, String sessionId, String toolName, Object requestId)
             throws Exception {
         return call(apiKey, sessionId, toolName, requestId, "tool-visibility-regression");
+    }
+
+    private EntityExchangeResult<String> callWithArguments(String apiKey, String sessionId, String toolName,
+                                                          Map<String, Object> arguments) throws Exception {
+        return post(apiKey, sessionId, Map.of(
+                "jsonrpc", "2.0", "id", "policy-read", "method", "tools/call",
+                "params", Map.of("name", toolName, "arguments", arguments)));
+    }
+
+    private String toolText(EntityExchangeResult<String> response) throws Exception {
+        assertThat(response.getStatus().value()).isEqualTo(200);
+        JsonNode result = responseEnvelope(response).path("result");
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        String text = result.path("content").path(0).path("text").asString();
+        return text.startsWith("\"") ? OBJECT_MAPPER.readTree(text).asString() : text;
     }
 
     private EntityExchangeResult<String> call(String apiKey, String sessionId, String toolName, Object requestId,

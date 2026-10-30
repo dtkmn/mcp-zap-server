@@ -29,6 +29,22 @@ class ScanJobLaunchSafetyTest {
     @TempDir Path temporary;
 
     @Test
+    void memoryJournalCannotBePlacedUnderAutomationRootBeforeAnyWrites() throws Exception {
+        Path root = temporary.toRealPath();
+        Path automation = root.resolve("automation");
+        Path journal = automation.resolve("receipts");
+        ScanLaunchSafetyProperties properties = new ScanLaunchSafetyProperties();
+        properties.setJournalDirectory(journal.toString());
+
+        assertThatThrownBy(() -> new ScanJobLaunchSafety(new InMemoryScanJobStore(), properties,
+                root.resolve("reports").toString(), automation.toString()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("fenced")
+                .hasRootCauseMessage("Launch journal must be separate from report and automation roots");
+        assertThat(automation).doesNotExist();
+        assertThat(journal).doesNotExist();
+    }
+
+    @Test
     void legacyJsonIgnoresOnlyUnusedLabelAndRetainsOwnershipValidation() throws Exception {
         tools.jackson.databind.ObjectMapper mapper = tools.jackson.databind.json.JsonMapper.builder()
                 .enable(tools.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();

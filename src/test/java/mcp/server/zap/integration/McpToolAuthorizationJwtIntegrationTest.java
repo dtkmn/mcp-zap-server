@@ -365,7 +365,7 @@ class McpToolAuthorizationJwtIntegrationTest {
         for (JsonNode tool : OBJECT_MAPPER.readTree(json).path("result").path("tools")) {
             advertisedNames.add(tool.path("name").asString());
         }
-        assertThat(advertisedNames).hasSize(26).contains("zap_passive_scan_status", "zap_findings_snapshot", "zap_findings_diff")
+        assertThat(advertisedNames).hasSize(28).contains("zap_passive_scan_status", "zap_findings_snapshot", "zap_findings_diff")
                 .doesNotContain("zap_scan_job_reconcile", "zap_scan_job_reconciliation_status")
                 .doesNotContainAnyElementsOf(RetiredExpertTools.NAMES)
                 .containsExactlyInAnyOrderElementsOf(mcpActiveToolRegistry.names());

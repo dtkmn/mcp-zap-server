@@ -95,7 +95,7 @@ class McpSecurityNoneModeIntegrationTest {
                 .map(callback -> callback.getToolDefinition().name())
                 .toList();
 
-        assertThat(advertisedNames).hasSize(26)
+        assertThat(advertisedNames).hasSize(28)
                 .containsExactlyInAnyOrderElementsOf(registeredNames)
                 .containsExactlyInAnyOrderElementsOf(activeToolRegistry.names())
                 .contains("zap_passive_scan_status")

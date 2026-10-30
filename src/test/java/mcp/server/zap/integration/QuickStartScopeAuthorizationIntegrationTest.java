@@ -7,7 +7,6 @@ import mcp.server.zap.core.gateway.EnginePassiveScanAccess;
 import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.gateway.EnginePassiveScanAccess.PassiveScanSnapshot;
 import mcp.server.zap.core.service.ActiveScanService;
-import mcp.server.zap.core.service.AutomationPlanService;
 import mcp.server.zap.core.service.FindingsService;
 import mcp.server.zap.core.service.OpenApiService;
 import mcp.server.zap.core.service.ReportService;
@@ -62,8 +61,6 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
     @MockitoBean
     private OpenApiService openApiService;
     @MockitoBean
-    private AutomationPlanService automationPlanService;
-    @MockitoBean
     private GuidedAuthSessionService authSessionService;
     @MockitoBean
     private FindingsService findingsService;
@@ -114,7 +111,7 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
                 Map.entry("zap_report_read", Map.<String, Object>of("reportPath", "/zap/wrk/restricted-report.html")))) {
             assertThat(text(callTool(KEY, session, call.getKey(), call.getValue()))).isNotBlank();
         }
-        verifyNoInteractions(activeScanService, openApiService, automationPlanService, authSessionService);
+        verifyNoInteractions(activeScanService, openApiService, authSessionService);
     }
 
     @ParameterizedTest
@@ -143,7 +140,7 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
             assertThat(body.path("error").asString()).isEqualTo("insufficient_scope");
             assertThat(body.path("requiredScopes").path(0).asString()).isEqualTo(scope);
         }
-        verifyNoInteractions(activeScanService, openApiService, automationPlanService, authSessionService,
+        verifyNoInteractions(activeScanService, openApiService, authSessionService,
                 passiveScanAccess, spiderScanService, findingsService, reportService);
     }
 

@@ -20,7 +20,7 @@ import mcp.server.zap.core.gateway.EngineContextAccess.UserSnapshot;
 import org.springframework.stereotype.Service;
 
 /**
- * MCP tools for ZAP Context and User management.
+ * Internal ZAP context and user management, including guided authentication support.
  */
 @Slf4j
 @Service

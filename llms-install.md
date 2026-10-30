@@ -53,11 +53,12 @@ the same host as Compose; web-only clients cannot reach that loopback address.
 
 Use this path only when you already run, or are willing to run, ZAP separately. Marketplace and registry clients do not automatically start the ZAP sidecar for this package.
 
-Create a shared network and report workspace volume, then initialize the volume for the standard ZAP container UID/GID:
+Create a shared network, a report workspace volume and a private MCP launch-safety volume. Initialize the report workspace for the standard ZAP container UID/GID:
 
 ```bash
 docker network create mcp-zap-network
 docker volume create mcp-zap-wrk
+docker volume create mcp-launch-safety
 export ZAP_API_KEY="$(openssl rand -hex 32)"
 export MCP_API_KEY="$(openssl rand -hex 32)"
 
@@ -92,6 +93,8 @@ docker run -d \
   --user 1000:1000 \
   -p 127.0.0.1:7456:7456 \
   -v mcp-zap-wrk:/zap/wrk \
+  -v mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety \
+  -e ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY=/var/lib/mcp-zap/scan-launch-safety/receipts \
   -e ZAP_API_URL=mcp-zap-zap \
   -e ZAP_API_PORT=8090 \
   -e ZAP_API_KEY="$ZAP_API_KEY" \
@@ -122,7 +125,9 @@ X-API-Key: $MCP_API_KEY
 
 The `mcp-zap-wrk:/zap/wrk` volume must be mounted into both containers. ZAP writes report artifacts there, and the MCP server reads those same paths back for report and evidence-handoff tools. The MCP container is run as UID/GID `1000:1000` to match the standard `zaproxy/zap-stable` container user, so report directories remain writable by both containers.
 
-Keep `MCP_SERVER_TOOLS_SURFACE=guided` for normal crawl, status, findings and report workflows, including complete report readback. Use `-e MCP_SERVER_TOOLS_SURFACE=expert` only when you need lower-level ZAP tools outside the guided surface.
+The `mcp-launch-safety` volume is private to MCP and must stay outside the shared ZAP workspace and report artifacts. Preserve it across MCP container replacement. Do not delete unresolved launch receipts to unblock scans; follow [launch recovery](docs/src/content/docs/operations/scan-queue-retry-policy.md). The journal protects uncertain starts without making in-memory job history durable.
+
+The server exposes one guided catalog for crawl, status, findings, snapshots and reports, including complete report readback. For older client and deployment configurations, follow [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/).
 
 ## Safe First Test
 

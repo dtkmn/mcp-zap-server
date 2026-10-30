@@ -390,7 +390,7 @@ Not today:
 - [Form-Login Target Authentication](../../getting-started/form-login-target-authentication/)
 - [Client Spider](../client-spider/)
 - [Authenticated Scanning Reference](../authenticated-scanning-best-practices/)
-- [Scan Execution Modes](../scan-execution-modes/)
+- [Scan Execution](../scan-execution-modes/)
 - [Passive Scan](../passive-scan/)
 - [Findings And Reports](../findings-and-reports/)
 - [API Schema Imports](../api-schema-imports/)

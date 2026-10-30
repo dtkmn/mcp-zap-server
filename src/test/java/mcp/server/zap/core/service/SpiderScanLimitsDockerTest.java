@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.gateway.ZapEngineScanExecution;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -168,7 +169,7 @@ class SpiderScanLimitsDockerTest {
     private Map<String, String> crawlAndReadSuccessfulResponses(String rootPath, int depth, int children) throws Exception {
         limits.setSpiderMaxDepth(depth);
         limits.setSpiderMaxChildren(children);
-        String scanId = spiderScanService.startSpiderScanJob(ORIGIN + rootPath);
+        String scanId = spiderScanService.startSpiderScanJob(ORIGIN + rootPath, NativeScanLaunch.UNTRACKED);
         try {
             assertThat(((ApiResponseElement) clientApi.spider.optionMaxDepth()).getValue())
                     .isEqualTo(Integer.toString(depth));

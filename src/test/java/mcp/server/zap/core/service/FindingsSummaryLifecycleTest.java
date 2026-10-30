@@ -71,7 +71,7 @@ class FindingsSummaryLifecycleTest {
         when(actions.canCall(anyString())).thenReturn(true);
         ReportService reports = mock(ReportService.class);
         guided = new GuidedSecurityToolsService(
-                mock(GuidedScanWorkflowService.class), reports, findings,
+                mock(GuidedScanWorkflowService.class), mock(ActiveScanService.class), reports, findings,
                 mock(OpenApiService.class), new ZapEngineAdapter(), records, actions);
     }
 

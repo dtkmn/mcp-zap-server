@@ -330,7 +330,7 @@ public class ScanJobQueueServiceTest {
         verify(clientSpiderService, times(3)).startClientSpiderJob(eq("http://example.com/client"), eq(null), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
         verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
         verify(spiderScanService, never()).startSpiderScanJob(anyString(), any(NativeScanLaunch.class));
-        verify(ajaxSpiderService, never()).startAjaxSpiderJob(anyString());
+        verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -932,7 +932,18 @@ public class ScanJobQueueServiceTest {
                     "A late AJAX crawl whose cleanup failed must remain tracked; actual status: " + pending.getStatus());
             assertEquals("ajax-spider:late", pending.getZapScanId());
             assertTrue(pending.isCancellationPending(), "Failed late cleanup must enter the cancellation retry path");
-            assertThrows(EngineBusyException.class, () -> ajax.startAjaxSpiderJob("http://example.com/direct"));
+            Instant probeAt = Instant.now();
+            ScanJob candidate = new ScanJob("blocked-after-late-receipt", ScanJobType.AJAX_SPIDER,
+                    Map.of("targetUrl", "http://example.com/probe"), probeAt, 1);
+            candidate.claim("probe-worker", probeAt, probeAt.plusSeconds(60));
+            store.upsertAll(List.of(candidate));
+            try {
+                EngineBusyException blocked = assertThrows(EngineBusyException.class, () -> ajax.startAjaxSpiderJobTracked(
+                        "http://example.com/probe", candidate.getId(), ScanJobClaimToken.from(candidate), mock(NativeScanLaunch.class)));
+                assertThat(blocked).hasMessageContaining("active job or pending cancellation");
+            } finally {
+                store.updateAndGet(jobs -> jobs.stream().filter(job -> !candidate.getId().equals(job.getId())).toList());
+            }
             assertEquals(1, startCalls.get(), "Pending cleanup must reserve AJAX ownership before contacting ZAP");
 
             // Submitting another job dispatches the next cleanup retry before its launch.
@@ -1073,8 +1084,19 @@ public class ScanJobQueueServiceTest {
 
             queue.processQueueOnceForTesting();
             assertEquals(ScanJobStatus.QUEUED, store.load(next.getId()).orElseThrow().getStatus());
-            assertThrows(EngineBusyException.class,
-                    () -> ajaxSpiderService.startAjaxSpiderJob("http://example.com/direct"));
+            ScanJob candidate = store.load(next.getId()).orElseThrow();
+            Instant probeAt = Instant.now();
+            candidate.claim("probe-worker", probeAt, probeAt.plusSeconds(60));
+            store.upsertAll(List.of(candidate));
+            try {
+                EngineBusyException blocked = assertThrows(EngineBusyException.class,
+                        () -> ajaxSpiderService.startAjaxSpiderJobTracked("http://example.com/next", candidate.getId(),
+                                ScanJobClaimToken.from(candidate), mock(NativeScanLaunch.class)));
+                assertThat(blocked).hasMessageContaining("active job or pending cancellation");
+            } finally {
+                candidate.clearClaim();
+                store.upsertAll(List.of(candidate));
+            }
             assertEquals(1, requestCount.get(), "A timed-out stop must not release capacity or trigger immediate retries");
         } finally {
             releaseResponse.countDown();

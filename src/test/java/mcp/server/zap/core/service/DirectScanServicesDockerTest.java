@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.configuration.AuthBootstrapProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
@@ -330,9 +331,9 @@ class DirectScanServicesDockerTest {
     @Test
     void clientSpiderDiscoversJavaScriptTrafficAndStopsOnlyTheRequestedScan() throws Exception {
         String stoppedScanId = clientSpiderService.startClientSpiderJob(
-                "http://direct-scan-target/client-crawl.html?crawl=stop", 1);
+                "http://direct-scan-target/client-crawl.html?crawl=stop", 1, null, null, NativeScanLaunch.UNTRACKED);
         String continuingScanId = clientSpiderService.startClientSpiderJob(
-                "http://direct-scan-target/client-crawl.html?crawl=continue", 1);
+                "http://direct-scan-target/client-crawl.html?crawl=continue", 1, null, null, NativeScanLaunch.UNTRACKED);
 
         try {
             assertNotEquals(stoppedScanId, continuingScanId);
@@ -541,7 +542,8 @@ class DirectScanServicesDockerTest {
             clientApi.callApi("clientSpider", "action", "setOptionInitialLoadTimeInSecs", Map.of("Integer", "120"));
             clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "120"));
             clientApi.stats.clearStats(durationStatistic);
-            scanId = clientSpiderService.startClientSpiderJob("http://direct-scan-target/client-idle.html", 1);
+            scanId = clientSpiderService.startClientSpiderJob("http://direct-scan-target/client-idle.html", 1,
+                    null, null, NativeScanLaunch.UNTRACKED);
             String scanToExpire = scanId;
             await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
                     .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanToExpire) == 100);
@@ -575,14 +577,14 @@ class DirectScanServicesDockerTest {
             clientApi.stats.clearStats(durationStatistic);
 
             limitedScanId = clientSpiderService.startClientSpiderJob(
-                    "http://direct-scan-target/client-duration.html?crawl=limited", 0);
+                    "http://direct-scan-target/client-duration.html?crawl=limited", 0, null, null, NativeScanLaunch.UNTRACKED);
 
             ScanLimitProperties unlimitedProperties = new ScanLimitProperties();
             unlimitedProperties.setMaxSpiderScanDurationInMins(0);
             ClientSpiderService unlimitedService = new ClientSpiderService(
                     new ZapEngineScanExecution(clientApi), mock(UrlValidationService.class), unlimitedProperties);
             unlimitedScanId = unlimitedService.startClientSpiderJob(
-                    "http://direct-scan-target/client-duration.html?crawl=unlimited", 0);
+                    "http://direct-scan-target/client-duration.html?crawl=unlimited", 0, null, null, NativeScanLaunch.UNTRACKED);
 
             String scanToExpire = limitedScanId;
             await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
@@ -608,13 +610,13 @@ class DirectScanServicesDockerTest {
 
     @Test
     void spiderAndActiveScanJobsRetainNativeStatusAndStopSupport() throws Exception {
-        String spiderScanId = spiderScanService.startSpiderScanJob("http://direct-scan-target/");
+        String spiderScanId = spiderScanService.startSpiderScanJob("http://direct-scan-target/", NativeScanLaunch.UNTRACKED);
         String spiderStatus = spiderScanService.getSpiderScanStatus(spiderScanId);
 
         assertTrue(spiderStatus.contains("Scan ID: " + spiderScanId));
 
         clientApi.core.accessUrl("http://direct-scan-target/", "true");
-        String activeScanId = activeScanService.startActiveScanJob("http://direct-scan-target/", "true", null);
+        String activeScanId = activeScanService.startActiveScanJob("http://direct-scan-target/", "true", null, NativeScanLaunch.UNTRACKED);
         String activeStatus = activeScanService.getActiveScanStatus(activeScanId);
 
         assertTrue(activeStatus.contains("Scan ID: " + activeScanId));

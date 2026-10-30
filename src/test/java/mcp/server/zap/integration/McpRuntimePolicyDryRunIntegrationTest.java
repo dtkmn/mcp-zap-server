@@ -2,14 +2,21 @@ package mcp.server.zap.integration;
 
 import tools.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;
+import org.zaproxy.clientapi.core.ClientApi;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -31,6 +38,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import(AbstractMcpProtectionIntegrationTest.MockZapConfig.class)
 class McpRuntimePolicyDryRunIntegrationTest extends AbstractMcpRuntimePolicyIntegrationTest {
 
+    @Autowired
+    private ClientApi zap;
+
     @DynamicPropertySource
     static void registerPolicyBundle(DynamicPropertyRegistry registry) {
         registry.add("mcp.server.policy.bundle", () -> {
@@ -45,11 +55,12 @@ class McpRuntimePolicyDryRunIntegrationTest extends AbstractMcpRuntimePolicyInte
     @Test
     void dryRunDenyFromMcpClientRecordsPolicyAuditButAllowsToolExecution() throws Exception {
         String sessionId = initializeSession(POLICY_API_KEY);
+        String targetUrl = "https://example.com/orders?token=" + SECRET_TOKEN;
         EntityExchangeResult<String> result = callAttackTool(
                 POLICY_API_KEY,
                 sessionId,
                 "policy-dry-run-client-deny",
-                "https://example.com/orders"
+                targetUrl
         );
 
         assertThat(result.getStatus().value()).isEqualTo(200);
@@ -77,5 +88,12 @@ class McpRuntimePolicyDryRunIntegrationTest extends AbstractMcpRuntimePolicyInte
                 .contains("type=\"policy_decision\"")
                 .contains("outcome=\"dry_run_deny\"");
         assertThat(prometheus.getResponseBody()).doesNotContain(SECRET_TOKEN);
+
+        ArgumentCaptor<String> startedTarget = ArgumentCaptor.forClass(String.class);
+        verify(zap.ascan, times(1)).scan(startedTarget.capture(), nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), nullable(String.class));
+        assertThat(startedTarget.getValue()).isEqualTo(targetUrl);
+        verify(zap.ascan, never()).scanAsUser(nullable(String.class), nullable(String.class), nullable(String.class),
+                nullable(String.class), nullable(String.class), nullable(String.class), nullable(String.class));
     }
 }

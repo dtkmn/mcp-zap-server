@@ -70,10 +70,10 @@ class SpiderScanServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"0", " 7 "})
     void authenticatedChildOverrideDoesNotOverrideConfiguredDepth(String maxChildren) {
-        service.startSpiderScanAsUserJob(" 2 ", " 9 ", "http://example.com", maxChildren, "false", "true");
+        service.startSpiderScanAsUserJob(" 2 ", " 9 ", "http://example.com", maxChildren, "false", "true", launch);
 
         verify(engineScanExecution).startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
-                "2", "9", "http://example.com", maxChildren.trim(), "false", "true", 5, 15, 10));
+                "2", "9", "http://example.com", maxChildren.trim(), "false", "true", 5, 15, 10), launch);
     }
 
     @Test
@@ -81,17 +81,17 @@ class SpiderScanServiceTest {
         when(scanLimitProperties.getSpiderMaxDepth()).thenReturn(0);
         when(scanLimitProperties.getSpiderMaxChildren()).thenReturn(0);
 
-        service.startSpiderScanAsUserJob("2", "9", "http://example.com", null, null, null);
+        service.startSpiderScanAsUserJob("2", "9", "http://example.com", null, null, null, launch);
 
         verify(engineScanExecution).startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
-                "2", "9", "http://example.com", "0", "true", "false", 5, 15, 0));
+                "2", "9", "http://example.com", "0", "true", "false", 5, 15, 0), launch);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"-1", "invalid", "2147483648"})
     void invalidAuthenticatedChildLimitsDoNotLaunchCrawls(String maxChildren) {
         assertThatThrownBy(() -> service.startSpiderScanAsUserJob(
-                "2", "9", "http://example.com", maxChildren, null, null))
+                "2", "9", "http://example.com", maxChildren, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("maxChildren");
         verifyNoInteractions(engineScanExecution);
     }
@@ -100,10 +100,10 @@ class SpiderScanServiceTest {
     void negativeConfiguredDepthDoesNotLaunchEitherHttpCrawl() {
         when(scanLimitProperties.getSpiderMaxDepth()).thenReturn(-1);
 
-        assertThatThrownBy(() -> service.startSpiderScanJob("http://example.com"))
+        assertThatThrownBy(() -> service.startSpiderScanJob("http://example.com", launch))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.startSpiderScanAsUserJob(
-                "2", "9", "http://example.com", null, null, null))
+                "2", "9", "http://example.com", null, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(engineScanExecution);
     }

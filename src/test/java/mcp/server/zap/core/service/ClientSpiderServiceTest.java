@@ -53,9 +53,9 @@ class ClientSpiderServiceTest {
 
     @Test
     void queuedStartUsesRequestedDepthWithoutRegisteringADirectOperation() {
-        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 0, 15))).thenReturn("8");
+        when(engine.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 0, 15), launch)).thenReturn("8");
 
-        assertThat(service.startClientSpiderJob("http://example.com", 0)).isEqualTo("8");
+        assertThat(service.startClientSpiderJob("http://example.com", 0, null, null, launch)).isEqualTo("8");
 
         verifyNoInteractions(operations);
     }
@@ -78,12 +78,12 @@ class ClientSpiderServiceTest {
         scanLimits.setMaxSpiderScanDurationInMins(2);
         ClientSpiderScanRequest request = new ClientSpiderScanRequest(
                 "http://example.com", 3, 2, "member-context", "member-user");
-        when(engine.startClientSpiderScan(request)).thenReturn("10");
+        when(engine.startClientSpiderScan(request, launch)).thenReturn("10");
 
-        assertThat(service.startClientSpiderJob("http://example.com", 3, "member-context", "member-user"))
+        assertThat(service.startClientSpiderJob("http://example.com", 3, "member-context", "member-user", launch))
                 .isEqualTo("10");
 
-        verify(engine).startClientSpiderScan(request);
+        verify(engine).startClientSpiderScan(request, launch);
         verifyNoInteractions(operations);
     }
 
@@ -103,9 +103,9 @@ class ClientSpiderServiceTest {
     void rejectsIncompleteAuthenticationNamesBeforeLaunchingAScan() {
         assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, "context", null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
-        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, null, "user"))
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, null, "user", launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
-        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, "context", " "))
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, "context", " ", launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
         assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, " ", "user", launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
@@ -122,7 +122,7 @@ class ClientSpiderServiceTest {
         when(engine.startClientSpiderScan(request)).thenReturn("8");
 
         assertThat(service.startClientSpiderJob("http://example.com", null, null, null, launch)).isEqualTo("7");
-        assertThat(service.startClientSpiderJob("http://example.com", null)).isEqualTo("8");
+        assertThat(service.startClientSpiderJob("http://example.com", null, null, null, NativeScanLaunch.UNTRACKED)).isEqualTo("8");
 
         verify(engine).startClientSpiderScan(request, launch);
         verify(engine).startClientSpiderScan(request);
@@ -139,10 +139,10 @@ class ClientSpiderServiceTest {
 
     @Test
     void rejectsInvalidInputBeforeLaunchingTheBrowser() {
-        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", -1))
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", -1, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("maxDepth");
         doThrow(new IllegalArgumentException("URL not allowed")).when(urlValidation).validateUrl("http://blocked");
-        assertThatThrownBy(() -> service.startClientSpiderJob("http://blocked", 1))
+        assertThatThrownBy(() -> service.startClientSpiderJob("http://blocked", 1, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("URL not allowed");
 
         verifyNoInteractions(engine, operations);

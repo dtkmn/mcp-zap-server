@@ -70,10 +70,6 @@ public class SpiderScanService {
     /**
      * Start a standard spider scan and return the ZAP scan ID.
      */
-    public String startSpiderScanJob(String targetUrl) {
-        return startSpiderScanJob(targetUrl, NativeScanLaunch.UNTRACKED);
-    }
-
 public String startSpiderScanJob(String targetUrl, NativeScanLaunch launch) {
         urlValidationService.validateUrl(targetUrl);
         SpiderScanRequest request = new SpiderScanRequest(
@@ -91,15 +87,6 @@ public String startSpiderScanJob(String targetUrl, NativeScanLaunch launch) {
     /**
      * Start an authenticated spider scan and return the ZAP scan ID.
      */
-    public String startSpiderScanAsUserJob(String contextId,
-                                           String userId,
-                                           String targetUrl,
-                                           String maxChildren,
-                                           String recurse,
-                                           String subtreeOnly) {
-        return startSpiderScanAsUserJob(contextId, userId, targetUrl, maxChildren, recurse, subtreeOnly, NativeScanLaunch.UNTRACKED);
-    }
-
 public String startSpiderScanAsUserJob(String contextId,
                                            String userId,
                                            String targetUrl,

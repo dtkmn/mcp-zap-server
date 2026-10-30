@@ -81,7 +81,6 @@ public class ActiveScanService {
         for (String policyName : policyNames) {
             response.append("- ").append(policyName).append('\n');
         }
-        response.append("Use 'zap_scan_policy_view' with one of these names before setting the 'policy' parameter on direct or queued active scans.");
         return response.toString();
     }
 
@@ -193,10 +192,6 @@ public class ActiveScanService {
     /**
      * Start a standard active scan and return the ZAP scan ID.
      */
-    public String startActiveScanJob(String targetUrl, String recurse, String policy) {
-        return startActiveScanJob(targetUrl, recurse, policy, NativeScanLaunch.UNTRACKED);
-    }
-
 public String startActiveScanJob(String targetUrl, String recurse, String policy, NativeScanLaunch launch) {
         urlValidationService.validateUrl(targetUrl);
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
@@ -218,14 +213,6 @@ public String startActiveScanJob(String targetUrl, String recurse, String policy
     /**
      * Start an authenticated active scan and return the ZAP scan ID.
      */
-    public String startActiveScanAsUserJob(String contextId,
-                                           String userId,
-                                           String targetUrl,
-                                           String recurse,
-                                           String policy) {
-        return startActiveScanAsUserJob(contextId, userId, targetUrl, recurse, policy, NativeScanLaunch.UNTRACKED);
-    }
-
 public String startActiveScanAsUserJob(String contextId,
                                            String userId,
                                            String targetUrl,
@@ -412,9 +399,9 @@ public String startActiveScanAsUserJob(String contextId,
                                         String ruleFilter,
                                         int limit) {
         long enabledRules = allRules.stream().filter(ScannerRuleSnapshot::enabled).count();
-        List<ScannerRuleSnapshot> overriddenRules = allRules.stream()
+        long overriddenRules = allRules.stream()
                 .filter(ScannerRuleSnapshot::hasOverride)
-                .toList();
+                .count();
         int shownRules = Math.min(limit, matchingRules.size());
         Map<String, String> categoryNames = categories.stream()
                 .collect(java.util.stream.Collectors.toMap(
@@ -430,7 +417,7 @@ public String startActiveScanAsUserJob(String contextId,
                 .append("Categories: ").append(categories.size()).append('\n')
                 .append("Rules: ").append(allRules.size()).append(" total, ")
                 .append(enabledRules).append(" enabled, ")
-                .append(overriddenRules.size()).append(" overridden\n");
+                .append(overriddenRules).append(" overridden\n");
 
         if (hasText(ruleFilter)) {
             response.append("Filter: ").append(ruleFilter.trim())
@@ -449,15 +436,6 @@ public String startActiveScanAsUserJob(String contextId,
                     .append('\n');
         }
 
-        if (!overriddenRules.isEmpty()) {
-            response.append("\nCurrent rule overrides:\n");
-            for (ScannerRuleSnapshot rule : overriddenRules) {
-                response.append("- ")
-                        .append(formatScannerRuleLine(rule, categoryNames))
-                        .append('\n');
-            }
-        }
-
         response.append("\nRules:\n");
         if (matchingRules.isEmpty()) {
             response.append("- No rules matched the requested filter.\n");
@@ -472,7 +450,6 @@ public String startActiveScanAsUserJob(String contextId,
             }
         }
 
-        response.append("Use 'zap_scan_policy_rule_set' with this policy name and exact rule IDs from the list above to change rule state.");
         return response.toString();
     }
 
@@ -513,7 +490,7 @@ public String startActiveScanAsUserJob(String contextId,
             response.append('\n');
         }
 
-        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting direct or queued active scans.");
+        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting a guided active scan.");
         return response.toString();
     }
 

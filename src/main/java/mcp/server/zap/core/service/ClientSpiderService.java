@@ -32,14 +32,6 @@ public class ClientSpiderService {
         this.operationRegistry = operationRegistry;
     }
 
-    public String startClientSpiderJob(String targetUrl, Integer maxDepth) {
-        return startClientSpiderJob(targetUrl, maxDepth, null, null);
-    }
-
-    public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName) {
-        return startClientSpiderJob(targetUrl, maxDepth, contextName, userName, NativeScanLaunch.UNTRACKED);
-    }
-
 public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName, NativeScanLaunch launch) {
         String normalizedContextName = normalizeOptionalName(contextName);
         String normalizedUserName = normalizeOptionalName(userName);

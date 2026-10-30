@@ -11,12 +11,19 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
 import mcp.server.zap.core.gateway.NativeScanLaunch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class ActiveScanServiceTest {
@@ -49,7 +56,8 @@ class ActiveScanServiceTest {
         assertTrue(result.contains("Available active-scan policies:"));
         assertTrue(result.contains("Default Policy"));
         assertTrue(result.contains("API"));
-        assertTrue(result.contains("zap_scan_policy_view"));
+        verify(engineScanExecution).listActiveScanPolicyNames();
+        verifyNoMoreInteractions(engineScanExecution);
     }
 
     @Test
@@ -63,10 +71,75 @@ class ActiveScanServiceTest {
         assertTrue(result.contains("Active-scan policy view:"));
         assertTrue(result.contains("Policy: Default Policy"));
         assertTrue(result.contains("Rules: 3 total, 2 enabled, 1 overridden"));
-        assertTrue(result.contains("Current rule overrides:"));
+        assertThat(result).doesNotContain("Current rule overrides:", "zap_scan_policy_rule_set");
         assertTrue(result.contains("40012 | Cross Site Scripting (Reflected)"));
         assertTrue(result.contains("enabled=no"));
         assertTrue(result.contains("Showing: 2 of 3 matched rules"));
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"1", "100"})
+    void policyRuleDetailsHonorDefaultAndExplicitLimitsWithoutDuplicatingOverrides(String limit) {
+        int expectedLimit = limit == null ? 25 : Integer.parseInt(limit);
+        when(engineScanExecution.listActiveScanPolicyNames()).thenReturn(scanPolicyNamesResponse());
+        when(engineScanExecution.loadActiveScanPolicyCategories("Default Policy")).thenReturn(policyCategoriesResponse());
+        when(engineScanExecution.loadActiveScanPolicyRules("Default Policy")).thenReturn(
+                java.util.stream.IntStream.rangeClosed(1, 101)
+                        .mapToObj(id -> scannerRule(String.valueOf(id), "Rule " + id, "4", false, "LOW", "HIGH"))
+                        .toList());
+
+        String result = service.viewScanPolicy("Default Policy", null, limit);
+
+        assertThat(result).contains("Rules: 101 total, 0 enabled, 101 overridden",
+                        "Showing: " + expectedLimit + " of 101 matched rules")
+                .doesNotContain("Current rule overrides:", "- 101 | Rule 101");
+        assertThat(result.lines().filter(line -> line.startsWith("- ") && line.contains(" | category=")))
+                .hasSize(expectedLimit);
+        verify(engineScanExecution).listActiveScanPolicyNames();
+        verify(engineScanExecution).loadActiveScanPolicyCategories("Default Policy");
+        verify(engineScanExecution).loadActiveScanPolicyRules("Default Policy");
+        verifyNoMoreInteractions(engineScanExecution);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"40018,40018", "sQl,40018", "4,40012|40018", "unmatched,NONE"})
+    void policyRuleFiltersDoNotLeakUnmatchedOverrides(String filter, String expectedIds) {
+        when(engineScanExecution.listActiveScanPolicyNames()).thenReturn(scanPolicyNamesResponse());
+        when(engineScanExecution.loadActiveScanPolicyCategories("Default Policy")).thenReturn(policyCategoriesResponse());
+        when(engineScanExecution.loadActiveScanPolicyRules("Default Policy")).thenReturn(defaultPolicyScannersResponse());
+
+        String result = service.viewScanPolicy("Default Policy", filter, "100");
+
+        String[] ids = "NONE".equals(expectedIds) ? new String[0] : expectedIds.split("\\|");
+        assertThat(result.lines().filter(line -> line.startsWith("- ") && line.contains(" | category="))
+                .map(line -> line.substring(2, line.indexOf(" | ")))).containsExactly(ids);
+        assertThat(result).contains("Showing: " + ids.length + " of " + ids.length + " matched rules")
+                .doesNotContain("Current rule overrides:");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "101", "-1", "invalid"})
+    void invalidPolicyViewLimitsAreRejectedBeforeRuleQueries(String limit) {
+        when(engineScanExecution.listActiveScanPolicyNames()).thenReturn(scanPolicyNamesResponse());
+
+        assertThatThrownBy(() -> service.viewScanPolicy("Default Policy", null, limit))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("limit");
+
+        verify(engineScanExecution).listActiveScanPolicyNames();
+        verifyNoMoreInteractions(engineScanExecution);
+    }
+
+    @Test
+    void unknownPolicyNamePointsToAvailableInspectionWithoutQueryingRules() {
+        when(engineScanExecution.listActiveScanPolicyNames()).thenReturn(scanPolicyNamesResponse());
+
+        assertThatThrownBy(() -> service.viewScanPolicy("Missing Policy", null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unknown scan policy").hasMessageContaining("zap_scan_policies_list");
+
+        verify(engineScanExecution).listActiveScanPolicyNames();
+        verifyNoMoreInteractions(engineScanExecution);
     }
 
     @Test

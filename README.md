@@ -24,7 +24,7 @@ Use it when you want:
 - **safe agentic scanning** with guided defaults for spider, active scan, passive scan, API imports, findings, and reports
 - **operator control** through API-key or JWT auth, tool scopes, runtime policy bundles, rate limits, and audit events
 - **self-hosted deployment** with Docker Compose for local adoption and Helm for Kubernetes
-- **expert ZAP access** when you intentionally need lower-level ZAP context, user, scan, and report controls
+- **one guided tool catalog** with queue-managed scan starts, findings baselines, reports and explicit operator recovery
 
 Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap-server/)
 
@@ -141,9 +141,9 @@ Docker Compose remains the easiest installation path because the MCP server is d
 ## What You Get
 
 - **Guided scans**: intent-first tools for spider, active scan, passive scan, API imports, findings, reports, and scan history.
-- **Expert ZAP control**: optional lower-level tools for advanced ZAP context, user, scan, and report workflows.
+- **Guided tool catalog**: one supported interface; retired raw scan and configuration aliases cannot bypass the queue.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
-- **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
+- **Runtime policy bundles**: configured dry-run and enforcement modes for guided tool calls.
 - **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.

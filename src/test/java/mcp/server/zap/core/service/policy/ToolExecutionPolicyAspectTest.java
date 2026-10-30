@@ -79,7 +79,7 @@ class ToolExecutionPolicyAspectTest {
                 }
                 """);
         ObservabilityService observabilityService = mock(ObservabilityService.class);
-        PolicyDryRunService dryRunService = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry(), null);
+        PolicyDryRunService dryRunService = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry());
         BasicPolicyBundleToolExecutionPolicyHook hook = new BasicPolicyBundleToolExecutionPolicyHook(properties, dryRunService);
         ToolExecutionPolicyService policyService = new ToolExecutionPolicyService(
                 properties,
@@ -147,7 +147,7 @@ class ToolExecutionPolicyAspectTest {
                 }
                 """);
         ObservabilityService observabilityService = mock(ObservabilityService.class);
-        PolicyDryRunService dryRunService = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry(), null);
+        PolicyDryRunService dryRunService = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry());
         BasicPolicyBundleToolExecutionPolicyHook hook = new BasicPolicyBundleToolExecutionPolicyHook(properties, dryRunService);
         ToolExecutionPolicyService policyService = new ToolExecutionPolicyService(
                 properties,

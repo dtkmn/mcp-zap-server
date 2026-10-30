@@ -27,8 +27,6 @@ import mcp.gateway.core.policybundle.PolicyBundleRule;
 import mcp.gateway.core.policybundle.PolicyBundleRuleEvaluation;
 import mcp.gateway.core.policybundle.PolicyBundleRuleset;
 import mcp.gateway.core.policybundle.PolicyBundleTimeWindow;
-import mcp.server.zap.core.logging.RequestCorrelationHolder;
-import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
 import mcp.server.zap.extension.api.policy.PolicyBundlePreviewer;
@@ -54,54 +52,34 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
 
     private final ObjectMapper objectMapper;
     private final Set<String> knownActionNames;
-    private final ObservabilityService observabilityService;
     private final Clock clock;
     private PolicyBundleAccessBoundary policyBundleAccessBoundary;
 
     @Autowired
     public PolicyDryRunService(ObjectProvider<ObjectMapper> objectMapperProvider,
-                               ToolScopeRegistry toolScopeRegistry,
-                               ObjectProvider<ObservabilityService> observabilityServiceProvider) {
+                               ToolScopeRegistry toolScopeRegistry) {
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
         this.knownActionNames = new LinkedHashSet<>(toolScopeRegistry.getRequiredScopesByTool().keySet());
         this.knownActionNames.add(ToolScopeRegistry.TOOLS_LIST_ACTION);
-        this.observabilityService = observabilityServiceProvider.getIfAvailable();
         this.clock = Clock.systemUTC();
     }
 
     public PolicyDryRunService(ObjectMapper objectMapper, ToolScopeRegistry toolScopeRegistry) {
-        this(objectMapper, toolScopeRegistry, null);
+        this(objectMapper, toolScopeRegistry, Clock.systemUTC());
     }
 
     public PolicyDryRunService(ObjectMapper objectMapper,
                                ToolScopeRegistry toolScopeRegistry,
-                               ObservabilityService observabilityService) {
-        this(objectMapper, toolScopeRegistry, observabilityService, Clock.systemUTC());
-    }
-
-    public PolicyDryRunService(ObjectMapper objectMapper,
-                               ToolScopeRegistry toolScopeRegistry,
-                               ObservabilityService observabilityService,
                                Clock clock) {
         this.objectMapper = objectMapper;
         this.knownActionNames = new LinkedHashSet<>(toolScopeRegistry.getRequiredScopesByTool().keySet());
         this.knownActionNames.add(ToolScopeRegistry.TOOLS_LIST_ACTION);
-        this.observabilityService = observabilityService;
         this.clock = clock == null ? Clock.systemUTC() : clock;
     }
 
     @Autowired(required = false)
     void setPolicyBundleAccessBoundary(PolicyBundleAccessBoundary policyBundleAccessBoundary) {
         this.policyBundleAccessBoundary = policyBundleAccessBoundary;
-    }
-
-    public Map<String, Object> dryRun(String policyBundle,
-                                      String toolName,
-                                      String target,
-                                      String evaluatedAt) {
-        Map<String, Object> response = preview(policyBundle, toolName, target, evaluatedAt);
-        publishDecisionAudit(response);
-        return response;
     }
 
     @Override
@@ -575,54 +553,6 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
         return response;
     }
 
-    private void publishDecisionAudit(Map<String, Object> response) {
-        if (observabilityService == null || response == null) {
-            return;
-        }
-
-        Map<String, Object> bundle = mapValue(response.get("bundle"));
-        Map<String, Object> request = mapValue(response.get("request"));
-        Map<String, Object> validation = mapValue(response.get("validation"));
-        Map<String, Object> decision = mapValue(response.get("decision"));
-
-        Map<String, Object> details = new LinkedHashMap<>();
-        putIfPresent(details, "bundleName", bundle.get("name"));
-        putIfPresent(details, "bundleDisplayName", bundle.get("displayName"));
-        putIfPresent(details, "bundleOwner", bundle.get("owner"));
-        putIfPresent(details, "bundleTenant", bundle.get("tenant"));
-        putIfPresent(details, "bundleWorkspace", bundle.get("workspace"));
-        putIfPresent(details, "bundleTimezone", bundle.get("timezone"));
-        putIfPresent(details, "bundleRuleCount", bundle.get("ruleCount"));
-        putIfPresent(details, "evaluatedTool", request.get("tool"));
-        putIfPresent(details, "normalizedHost", request.get("normalizedHost"));
-        putIfPresent(details, "evaluatedAt", request.get("evaluatedAt"));
-        putIfPresent(details, "requestTenant", request.get("tenant"));
-        putIfPresent(details, "requestWorkspace", request.get("workspace"));
-        putIfPresent(details, "bundleLocalDay", request.get("bundleLocalDay"));
-        putIfPresent(details, "bundleLocalTime", request.get("bundleLocalTime"));
-        putIfPresent(details, "decisionSource", decision.get("source"));
-        putIfPresent(details, "matchedRuleId", decision.get("matchedRuleId"));
-        putIfPresent(details, "reason", decision.get("reason"));
-        putIfPresent(details, "defaultDecision", decision.get("defaultDecision"));
-        putIfPresent(details, "validationValid", validation.get("valid"));
-
-        List<String> validationErrors = stringList(validation.get("errors"));
-        if (!validationErrors.isEmpty()) {
-            details.put("validationErrors", validationErrors);
-        }
-
-        List<Map<String, Object>> trace = mapList(response.get("trace"));
-        if (!trace.isEmpty()) {
-            details.put("traceSummary", trace);
-        }
-
-        observabilityService.recordPolicyDecision(
-                stringValue(decision.get("result")),
-                details,
-                RequestCorrelationHolder.currentCorrelationId()
-        );
-    }
-
     private Map<String, Object> bundleSummary(PolicyBundle bundle) {
         Map<String, Object> summary = new LinkedHashMap<>();
         if (bundle == null) {
@@ -787,62 +717,6 @@ public class PolicyDryRunService implements PolicyBundlePreviewer {
 
     private boolean isHostPattern(String value) {
         return value != null && value.matches("^(?:\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*+$");
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> mapValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            return (Map<String, Object>) map;
-        }
-        return Map.of();
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> mapList(Object value) {
-        if (!(value instanceof List<?> list)) {
-            return List.of();
-        }
-        List<Map<String, Object>> maps = new ArrayList<>();
-        for (Object entry : list) {
-            if (entry instanceof Map<?, ?> map) {
-                maps.add((Map<String, Object>) map);
-            }
-        }
-        return List.copyOf(maps);
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> stringList(Object value) {
-        if (!(value instanceof List<?> list)) {
-            return List.of();
-        }
-        List<String> strings = new ArrayList<>();
-        for (Object entry : list) {
-            if (entry instanceof String text && !text.isBlank()) {
-                strings.add(text);
-            }
-        }
-        return List.copyOf(strings);
-    }
-
-    private void putIfPresent(Map<String, Object> details, String key, Object value) {
-        if (key == null || key.isBlank() || value == null) {
-            return;
-        }
-        if (value instanceof String text) {
-            if (!text.isBlank()) {
-                details.put(key, text);
-            }
-            return;
-        }
-        details.put(key, value);
-    }
-
-    private String stringValue(Object value) {
-        if (value instanceof String text && !text.isBlank()) {
-            return text;
-        }
-        return null;
     }
 
     private DayOfWeek parseDayOfWeek(String day) {

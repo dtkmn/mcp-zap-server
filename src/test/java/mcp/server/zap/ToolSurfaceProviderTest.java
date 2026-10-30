@@ -55,8 +55,8 @@ class ToolSurfaceProviderTest {
         Set<String> callbacks = names(provider());
         ToolScopeRegistry registry = new ToolScopeRegistry();
         assertThat(callbacks).hasSize(28).containsExactlyInAnyOrderElementsOf(EXPECTED);
-        assertThat(registry.getToolRegistry().names()).hasSize(30)
-                .containsAll(EXPECTED).containsAll(RECOVERY_TOOLS);
+        assertThat(registry.getToolRegistry().names()).hasSize(28)
+                .containsExactlyInAnyOrderElementsOf(EXPECTED).doesNotContainAnyElementsOf(RECOVERY_TOOLS);
         assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.EXPERT)).isEmpty();
     }
 

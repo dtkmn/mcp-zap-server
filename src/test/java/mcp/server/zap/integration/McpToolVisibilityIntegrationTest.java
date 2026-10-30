@@ -1,7 +1,6 @@
 package mcp.server.zap.integration;
 
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
-import mcp.server.zap.core.configuration.ScanLaunchSafetyProperties;
 import mcp.server.zap.core.configuration.ToolAuthorizationProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,7 +25,6 @@ import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
-import mcp.server.zap.core.service.ScanJobReconciliationMcpToolsService;
 import mcp.server.zap.core.service.SpiderScanService;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
@@ -144,9 +142,6 @@ class McpToolVisibilityIntegrationTest {
     private AbuseProtectionProperties protectionProperties;
 
     @Autowired
-    private ScanLaunchSafetyProperties launchSafetyProperties;
-
-    @Autowired
     private ScanJobStore scanJobStore;
 
     @MockitoSpyBean
@@ -154,9 +149,6 @@ class McpToolVisibilityIntegrationTest {
 
     @MockitoSpyBean
     private McpAbuseProtectionService protectionService;
-
-    @MockitoSpyBean
-    private ScanJobReconciliationMcpToolsService reconciliationService;
 
     @MockitoBean
     private EnginePassiveScanAccess passiveScanAccess;
@@ -370,8 +362,7 @@ class McpToolVisibilityIntegrationTest {
     }
 
     @Test
-    void approvedOperatorCannotInspectOrReleaseAHeldLaunchThroughUnregisteredTools() throws Exception {
-        assertThat(launchSafetyProperties.getOperatorClientIds()).containsExactly("visibility-operator");
+    void legacyOperatorCannotInspectOrReleaseAHeldLaunchThroughRemovedTools() throws Exception {
         String jobId = "operator-recovery-" + UUID.randomUUID();
         String attemptId = "attempt-" + UUID.randomUUID();
         ScanJob held = new ScanJob(jobId, ScanJobType.ACTIVE_SCAN, Map.of(), Instant.now(), 3,
@@ -381,7 +372,7 @@ class McpToolVisibilityIntegrationTest {
         scanJobStore.upsertAll(List.of(held));
         String key = "visibility-operator-key";
         String session = initializeSession(key);
-        clearInvocations(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+        clearInvocations(passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
 
         EntityExchangeResult<String> status = post(key, session, Map.of(
                 "jsonrpc", "2.0", "id", "recovery-status", "method", "tools/call",
@@ -399,15 +390,14 @@ class McpToolVisibilityIntegrationTest {
         assertThat(saved.getStatus()).isEqualTo(ScanJobStatus.START_OUTCOME_UNKNOWN);
         assertThat(saved.getLaunchAttempt().id()).isEqualTo(attemptId);
         assertThat(saved.getLaunchAttempt().resolutionVersion()).isEqualTo(2);
-        verifyNoInteractions(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+        verifyNoInteractions(passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"visibility-operator-key", "visibility-unapproved-key", "visibility-admin-key", "visibility-read-key"})
-    void recoveryToolsStayUnknownForEveryCallerAndGovernanceModeDespiteApprovedOperatorConfiguration(String key) throws Exception {
-        assertThat(launchSafetyProperties.getOperatorClientIds()).containsExactly("visibility-operator");
+    void recoveryToolsStayUnknownForEveryCallerAndGovernanceModeDespiteLegacyOperatorConfiguration(String key) throws Exception {
         String session = initializeSession(key);
-        clearInvocations(authorizationService, protectionService, reconciliationService,
+        clearInvocations(authorizationService, protectionService,
                 passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
         for (ToolAuthorizationProperties.Mode mode : ToolAuthorizationProperties.Mode.values()) {
             authorizationProperties.setMode(mode);
@@ -427,7 +417,7 @@ class McpToolVisibilityIntegrationTest {
         }
         verify(authorizationService, never()).authorize(anyCollection(), any(GatewayToolExecutionContext.class));
         verify(protectionService, never()).evaluate(any(GatewayToolExecutionContext.class));
-        verifyNoInteractions(reconciliationService, passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
+        verifyNoInteractions(passiveScanAccess, spiderScanService, scanExecution, ajaxExecution);
     }
 
     @Test

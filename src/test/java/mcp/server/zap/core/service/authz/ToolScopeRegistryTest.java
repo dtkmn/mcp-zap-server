@@ -13,7 +13,7 @@ class ToolScopeRegistryTest {
 
     @Test
     void describesOnlyTheGuidedRuntimeSurface() {
-        assertThat(registry.getToolRegistry().names()).hasSize(30)
+        assertThat(registry.getToolRegistry().names()).hasSize(28)
                 .containsExactlyInAnyOrderElementsOf(registry.getRequiredScopesByTool().keySet());
         assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.GUIDED))
                 .map(McpToolDescriptor::name).contains("zap_crawl_start", "zap_attack_start", "zap_report_read",
@@ -30,12 +30,13 @@ class ToolScopeRegistryTest {
     }
 
     @Test
-    void retainedFindingsAndLifecycleToolsKeepTheirReadStopAndOperatorScopes() {
+    void retainedFindingsAndLifecycleToolsKeepTheirReadAndStopScopes() {
         assertThat(registry.getRequiredScopes("zap_findings_snapshot")).containsExactly("zap:alerts:read");
         assertThat(registry.getRequiredScopes("zap_findings_diff")).containsExactly("zap:alerts:read");
         assertThat(registry.getRequiredScopes("zap_crawl_status")).containsExactly("zap:scan:read");
         assertThat(registry.getRequiredScopes("zap_crawl_stop")).containsExactly("zap:scan:stop");
-        assertThat(registry.getRequiredScopes("zap_scan_job_reconcile")).containsExactly("zap:scan:queue:reconcile");
+        assertThat(registry.getRequiredScopes("zap_scan_job_reconcile")).isNull();
+        assertThat(registry.getRequiredScopes("zap_scan_job_reconciliation_status")).isNull();
     }
 
     @Test

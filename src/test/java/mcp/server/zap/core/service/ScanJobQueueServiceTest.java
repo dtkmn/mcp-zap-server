@@ -75,6 +75,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static mcp.server.zap.core.service.GuardedQueueTestSupport.startReplies;
 import static mcp.server.zap.core.service.GuardedQueueTestSupport.launch;
@@ -508,6 +509,91 @@ public class ScanJobQueueServiceTest {
 
         RequestIdentityHolder.set("client-a", "workspace-a");
         assertThrowsExactly(IllegalArgumentException.class, () -> service.cancelScanJob(clientBJobId));
+    }
+
+    @Test
+    void heldLaunchViewsAllowAnotherRequesterInTheSameWorkspaceWithoutNativeEffects() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
+        ScanJob held = reconciliationHeldJob("routine-scanner");
+        store.upsertAll(List.of(held));
+
+        assertThat(queue.getReconciliationStatus(null)).contains(held.getId(), held.getLaunchAttempt().id(),
+                        "Reconciliation Version: 2")
+                .doesNotContain("sensitive-target.test");
+        assertThat(queue.getReconciliationStatus(held.getId()))
+                .contains(held.getId(), held.getLaunchAttempt().id()).doesNotContain("sensitive-target.test");
+        assertEquals(held.getId(), queue.requireReconciliationVisibleJob(held.getId()).getId());
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
+        assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
+        assertEquals(2, store.load(held.getId()).orElseThrow().getLaunchAttempt().resolutionVersion());
+        verifyNoInteractions(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService);
+    }
+
+    @Test
+    void heldLaunchViewsHideOtherWorkspaceJobsWithoutNativeEffects() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
+        ScanJob held = reconciliationHeldJob("other-scanner");
+        store.upsertAll(List.of(held));
+
+        assertThat(queue.getReconciliationStatus(null)).doesNotContain(held.getId(), held.getLaunchAttempt().id());
+        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.getReconciliationStatus(held.getId())))
+                .hasMessage("No scan job found for ID: " + held.getId());
+        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.requireReconciliationVisibleJob(held.getId())))
+                .hasMessage("No scan job found for ID: " + held.getId());
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
+        assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
+        assertEquals(2, store.load(held.getId()).orElseThrow().getLaunchAttempt().resolutionVersion());
+        verifyNoInteractions(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService);
+    }
+
+    @Test
+    void heldLaunchViewsRespectACustomSameWorkspaceDenialWithoutNativeEffects() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
+        ScanJob held = reconciliationHeldJob("routine-scanner");
+        store.upsertAll(List.of(held));
+        queue.setScanJobAccessBoundary(job -> false);
+
+        assertThat(queue.getReconciliationStatus(null)).doesNotContain(held.getId(), held.getLaunchAttempt().id());
+        assertThrowsExactly(IllegalArgumentException.class, () -> queue.getReconciliationStatus(held.getId()));
+        assertThrowsExactly(IllegalArgumentException.class, () -> queue.requireReconciliationVisibleJob(held.getId()));
+        assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
+        assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
+        assertEquals(2, store.load(held.getId()).orElseThrow().getLaunchAttempt().resolutionVersion());
+        verifyNoInteractions(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService);
+    }
+
+    private ScanJobQueueService reconciliationVisibilityQueue(InMemoryScanJobStore store) {
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
+                activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
+                urlValidationService, scanLimitProperties,
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
+                new ScanJobQueueService.RetryPolicy(3, 0, 0, 1), false, store,
+                new SingleNodeQueueLeadershipCoordinator()));
+        ApiKeyProperties clients = new ApiKeyProperties();
+        clients.setApiKeys(List.of(reconciliationClient("recovery-operator", "shared-workspace"),
+                reconciliationClient("routine-scanner", "shared-workspace"),
+                reconciliationClient("other-scanner", "other-workspace")));
+        queue.setClientWorkspaceResolver(new ClientWorkspaceResolver(clients));
+        RequestIdentityHolder.set("recovery-operator", "shared-workspace");
+        return queue;
+    }
+
+    private ApiKeyProperties.ApiKeyClient reconciliationClient(String id, String workspace) {
+        ApiKeyProperties.ApiKeyClient client = new ApiKeyProperties.ApiKeyClient();
+        client.setClientId(id);
+        client.setWorkspaceId(workspace);
+        return client;
+    }
+
+    private ScanJob reconciliationHeldJob(String requester) {
+        ScanJob job = new ScanJob("held-reconciliation-view", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "https://sensitive-target.test"), Instant.now(), 3, requester, null);
+        job.beginLaunch(new ScanJob.LaunchAttempt("attempt-reconciliation-view", "old-controller", Instant.now(), 2));
+        job.markLaunchUnknown("Response was lost");
+        return job;
     }
 
     @Test

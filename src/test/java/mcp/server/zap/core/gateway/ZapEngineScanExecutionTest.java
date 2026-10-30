@@ -14,6 +14,7 @@ import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.zaproxy.clientapi.core.ApiResponse;
 import org.zaproxy.clientapi.core.ApiResponseElement;
@@ -28,8 +29,8 @@ import org.zaproxy.clientapi.gen.Spider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.mock;
@@ -122,26 +123,54 @@ class ZapEngineScanExecutionTest {
         verifyNoInteractions(core);
     }
 
-    @Test
-    void startsActiveScanBehindGatewayExecutionBoundary() throws Exception {
-        when(ascan.scan("http://example.com", "true", "false", "Default Policy", null, null))
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"Default Policy", "Restricted Policy"})
+    void startsActiveScanWithoutChangingTheSelectedPolicy(String policy) throws Exception {
+        NativeScanLaunch launch = mock(NativeScanLaunch.class);
+        when(ascan.scan("http://example.com", "true", "false", policy, null, null))
                 .thenReturn(new ApiResponseElement("scan", "101"));
 
         String scanId = execution.startActiveScan(new ActiveScanRequest(
                 "http://example.com",
                 "true",
-                "Default Policy",
+                policy,
                 30,
                 5,
                 10
-        ));
+        ), launch);
 
         assertThat(scanId).isEqualTo("101");
-        verify(ascan).enableAllScanners(isNull());
-        verify(ascan).setOptionMaxScanDurationInMins(30);
-        verify(ascan).setOptionHostPerScan(5);
-        verify(ascan).setOptionThreadPerHost(10);
-        verify(ascan).scan("http://example.com", "true", "false", "Default Policy", null, null);
+        var ordered = inOrder(ascan, launch);
+        ordered.verify(ascan).setOptionMaxScanDurationInMins(30);
+        ordered.verify(ascan).setOptionHostPerScan(5);
+        ordered.verify(ascan).setOptionThreadPerHost(10);
+        ordered.verify(launch).beforeDispatch();
+        ordered.verify(ascan).scan("http://example.com", "true", "false", policy, null, null);
+        ordered.verify(launch).accepted("101");
+        verifyNoMoreInteractions(ascan, launch);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"Default Policy", "Restricted Policy"})
+    void startsAuthenticatedActiveScanWithoutChangingTheSelectedPolicy(String policy) throws Exception {
+        NativeScanLaunch launch = mock(NativeScanLaunch.class);
+        when(ascan.scanAsUser("http://example.com", "1", "2", "false", policy, null, null))
+                .thenReturn(new ApiResponseElement("scan", "102"));
+
+        String scanId = execution.startActiveScanAsUser(new AuthenticatedActiveScanRequest(
+                "1", "2", "http://example.com", "false", policy, 30, 5, 10), launch);
+
+        assertThat(scanId).isEqualTo("102");
+        var ordered = inOrder(ascan, launch);
+        ordered.verify(ascan).setOptionMaxScanDurationInMins(30);
+        ordered.verify(ascan).setOptionHostPerScan(5);
+        ordered.verify(ascan).setOptionThreadPerHost(10);
+        ordered.verify(launch).beforeDispatch();
+        ordered.verify(ascan).scanAsUser("http://example.com", "1", "2", "false", policy, null, null);
+        ordered.verify(launch).accepted("102");
+        verifyNoMoreInteractions(ascan, launch);
     }
 
     @Test
@@ -244,19 +273,25 @@ class ZapEngineScanExecutionTest {
     @Test
     void doesNotTreatConfigurationFailuresAsBusyLaunchRejections() throws Exception {
         ClientApiException failure = new ClientApiException("Scan In Progress", "scan_in_progress", null);
+        NativeScanLaunch launch = mock(NativeScanLaunch.class);
         when(spider.setOptionThreadCount(3)).thenThrow(failure);
-        when(ascan.enableAllScanners(null)).thenThrow(failure);
+        when(ascan.setOptionMaxScanDurationInMins(30)).thenThrow(failure);
         when(clientApi.callApi("clientSpider", "action", "setOptionMaxDuration", Map.of("Integer", "15")))
                 .thenThrow(failure);
 
         assertThatThrownBy(() -> execution.startSpiderScan(new SpiderScanRequest("http://example.com", 7, 3, 12)))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
         assertThatThrownBy(() -> execution.startActiveScan(
-                new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10)))
+                new ActiveScanRequest("http://example.com", "true", "Default Policy", 30, 5, 10), launch))
+                .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
+        assertThatThrownBy(() -> execution.startActiveScanAsUser(
+                new AuthenticatedActiveScanRequest("1", "2", "http://example.com", "true", "Default Policy", 30, 5, 10), launch))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
         assertThatThrownBy(() -> execution.startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 7, 15)))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
-        verifyNoInteractions(clientSpider);
+        verify(ascan, times(2)).setOptionMaxScanDurationInMins(30);
+        verifyNoMoreInteractions(ascan);
+        verifyNoInteractions(clientSpider, launch);
     }
 
     @Test

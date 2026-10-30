@@ -17,11 +17,11 @@ The shared core records three evidence shapes:
 | Evidence type | Source | Notes |
 | --- | --- | --- |
 | `scan_job` | Durable queue state from `scan_jobs` | Includes queued, running, succeeded, failed, and cancelled queue jobs. |
-| `scan_run` | Direct scan start events | Covers direct active scan, traditional Spider, AJAX Spider, and Client Spider starts, including supported authenticated variants. Client Spider is introduced in `v0.13.0`. |
+| `scan_run` | Retained direct-start history | Historical active scan, traditional Spider, AJAX Spider, and Client Spider start records remain readable. New guided starts use the queue. |
 | `report_artifact` | Generated report artifacts | Captures report path, media type, target scope, client, and workspace. |
 
-This does not change the normal MCP client setup. Clients still call `/mcp` and
-the existing scan/report tools as before. The new query tools expose the ledger:
+This does not change the normal MCP client setup. Clients call `/mcp` and
+the guided scan/report tools. These query tools expose the ledger:
 
 - `zap_scan_history_list`
 - `zap_scan_history_get`
@@ -31,7 +31,7 @@ the existing scan/report tools as before. The new query tools expose the ledger:
 
 All five use the existing `zap:scan:read` scope.
 
-[Client Spider](../../scanning/client-spider/) entries use operation kind `client_spider` and record whether a ZAP user was supplied. That authentication flag describes the requested configuration; it does not prove successful login. A direct `scan_run` records the start, not completion. For queued Client Spider jobs, `SUCCEEDED` with `crawlOutcome: unknown` means ZAP reported the crawl stopped, not that every page was reached. Verify discovered traffic and protected responses separately.
+[Client Spider](../../scanning/client-spider/) entries use operation kind `client_spider` and record whether a ZAP user was supplied. That authentication flag describes the requested configuration; it does not prove successful login. A retained `scan_run` records the start, not completion. For queued Client Spider jobs, `SUCCEEDED` with `crawlOutcome: unknown` means ZAP reported the crawl stopped, not that every page was reached. Verify discovered traffic and protected responses separately.
 
 ## Storage Backends
 
@@ -131,8 +131,8 @@ forking the shared ledger implementation.
 Before relying on the ledger for release evidence:
 
 1. Run Flyway migrations so `scan_history_entries` exists.
-2. Confirm `zap_scan_history_list` returns queue jobs after a queued scan.
-3. Confirm direct scan starts appear as `scan_run` entries.
+2. Confirm `zap_scan_history_list` returns queue jobs after a guided scan.
+3. When upgrading, confirm retained `scan_run` history remains readable without treating it as completion evidence.
 4. Generate a report and confirm a `report_artifact` entry appears.
 5. Export `zap_scan_history_release_evidence` and attach it to the release or
    pilot handoff record.

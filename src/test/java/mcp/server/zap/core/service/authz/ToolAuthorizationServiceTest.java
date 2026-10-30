@@ -32,16 +32,36 @@ class ToolAuthorizationServiceTest {
     }
 
     @Test
-    void findingsSummaryRequiresAlertReadScope() {
+    void retainedFindingsSnapshotRequiresAlertReadScope() {
         ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
 
-        ToolAuthorizationDecision denied = service.authorizeToolCall(List.of("zap:report:read"), "zap_get_findings_summary");
-        ToolAuthorizationDecision allowed = service.authorizeToolCall(List.of("zap:alerts:read"), "zap_get_findings_summary");
+        ToolAuthorizationDecision denied = service.authorizeToolCall(List.of("zap:report:read"), "zap_findings_snapshot");
+        ToolAuthorizationDecision allowed = service.authorizeToolCall(List.of("zap:alerts:read"), "zap_findings_snapshot");
 
         assertThat(denied.allowed()).isFalse();
         assertThat(denied.requiredScopes()).containsExactly("zap:alerts:read");
         assertThat(denied.missingScopes()).containsExactly("zap:alerts:read");
         assertThat(allowed.allowed()).isTrue();
+    }
+
+    @Test
+    void policyReadScopeAllowsInspectionWithoutGrantingScanOrEditingAccess() {
+        ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
+        for (String tool : List.of("zap_scan_policies_list", "zap_scan_policy_view")) {
+            assertThat(service.authorizeToolCall(List.of("zap:scan:policy:read"), tool).allowed()).isTrue();
+            assertThat(service.authorizeToolCall(List.of("*"), tool).allowed()).isTrue();
+            for (String unrelatedScope : List.of("zap:scan:read", "zap:scan:attack:run", "zap:scan:policy:write")) {
+                ToolAuthorizationDecision denied = service.authorizeToolCall(List.of(unrelatedScope), tool);
+                assertThat(denied.allowed()).isFalse();
+                assertThat(denied.missingScopes()).containsExactly("zap:scan:policy:read");
+            }
+        }
+        ToolAuthorizationDecision attack = service.authorizeToolCall(List.of("zap:scan:policy:read"), "zap_attack_start");
+        assertThat(attack.allowed()).isFalse();
+        assertThat(attack.missingScopes()).containsExactly("zap:scan:attack:run");
+        ToolAuthorizationDecision editing = service.authorizeToolCall(List.of("zap:scan:policy:read"), "zap_scan_policy_rule_set");
+        assertThat(editing.allowed()).isFalse();
+        assertThat(editing.mapped()).isFalse();
     }
 
     @Test
@@ -67,15 +87,16 @@ class ToolAuthorizationServiceTest {
     }
 
     @Test
-    void policyDryRunRequiresDedicatedPolicyScope() {
+    void retiredPolicyDryRunCannotBeAuthorizedByItsOldScopeOrWildcard() {
         ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
 
         ToolAuthorizationDecision denied = service.authorizeToolCall(List.of("mcp:tools:list"), "zap_policy_dry_run");
         ToolAuthorizationDecision allowed = service.authorizeToolCall(List.of("zap:policy:dry-run"), "zap_policy_dry_run");
 
         assertThat(denied.allowed()).isFalse();
-        assertThat(denied.requiredScopes()).containsExactly("zap:policy:dry-run");
-        assertThat(allowed.allowed()).isTrue();
+        assertThat(denied.requiredScopes()).isEmpty();
+        assertThat(allowed.allowed()).isFalse();
+        assertThat(service.authorizeToolCall(List.of("*"), "zap_policy_dry_run").allowed()).isFalse();
     }
 
     @Test

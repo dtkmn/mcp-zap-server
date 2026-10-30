@@ -1,5 +1,7 @@
 package mcp.server.zap.core.service;
 
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -14,14 +16,10 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.PolicyCategorySnapshot;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
-import mcp.server.zap.core.history.ScanHistoryLedgerService;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.OperationRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Service for direct and queue-managed active scan operations.
+ * Queued active scan execution, policy controls, and legacy native status and stop operations.
  */
 @Service
 public class ActiveScanService {
@@ -36,9 +34,6 @@ public class ActiveScanService {
     private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
-    private OperationRegistry operationRegistry;
-    private ClientWorkspaceResolver clientWorkspaceResolver;
-    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     /**
      * Build-time dependency injection constructor.
@@ -49,21 +44,6 @@ public class ActiveScanService {
         this.engineScanExecution = engineScanExecution;
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
-    }
-
-    @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
-    }
-
-    @Autowired(required = false)
-    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
-        this.clientWorkspaceResolver = clientWorkspaceResolver;
-    }
-
-    @Autowired(required = false)
-    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
-        this.scanHistoryLedgerService = scanHistoryLedgerService;
     }
 
     /**
@@ -93,7 +73,6 @@ public class ActiveScanService {
         for (String policyName : policyNames) {
             response.append("- ").append(policyName).append('\n');
         }
-        response.append("Use 'zap_scan_policy_view' with one of these names before setting the 'policy' parameter on direct or queued active scans.");
         return response.toString();
     }
 
@@ -169,48 +148,12 @@ public class ActiveScanService {
         );
     }
 
-    public String startActiveScan(
-            String targetUrl,
-            String recurse,
-            String policy
-    ) {
-        String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
-        String effectivePolicy = hasText(policy) ? policy.trim() : null;
-        String scanId = startActiveScanJob(targetUrl, effectiveRecurse, effectivePolicy);
-        trackDirectScanStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("active_scan", scanId, targetUrl, Map.of(
-                "recurse", effectiveRecurse,
-                "policy", effectivePolicy == null ? "default" : effectivePolicy
-        ));
-        return formatDirectStartMessage(scanId, targetUrl, effectiveRecurse, effectivePolicy);
-    }
-
-    public String startActiveScanAsUser(
-            String contextId,
-            String userId,
-            String targetUrl,
-            String recurse,
-            String policy
-    ) {
-        String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
-        String effectivePolicy = hasText(policy) ? policy.trim() : null;
-        String scanId = startActiveScanAsUserJob(contextId, userId, targetUrl, effectiveRecurse, effectivePolicy);
-        trackDirectScanStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("active_scan_as_user", scanId, targetUrl, Map.of(
-                "authenticated", "true",
-                "recurse", effectiveRecurse,
-                "policy", effectivePolicy == null ? "default" : effectivePolicy
-        ));
-        return formatDirectAuthenticatedStartMessage(scanId, contextId, userId, targetUrl, effectiveRecurse, effectivePolicy);
-    }
-
     public String getActiveScanStatus(
             String scanId
     ) {
         String normalizedScanId = requireText(scanId, "scanId");
         int progress = getActiveScanProgressPercent(normalizedScanId);
         boolean completed = progress >= 100;
-        trackDirectScanStatus(normalizedScanId, completed);
         return String.format(
                 "Direct active scan status:%n" +
                         "Scan ID: %s%n" +
@@ -222,7 +165,7 @@ public class ActiveScanService {
                 completed ? "yes" : "no",
                 completed
                         ? "Run 'zap_passive_scan_wait' before reading findings or generating reports."
-                        : "Use 'zap_active_scan_stop' to stop this direct scan, or 'zap_queue_active_scan' for durable queued execution next time."
+                        : ""
         );
     }
 
@@ -231,38 +174,39 @@ public class ActiveScanService {
     ) {
         String normalizedScanId = requireText(scanId, "scanId");
         stopActiveScanJob(normalizedScanId);
-        trackDirectScanStopped(normalizedScanId);
         return "Direct active scan stopped.\n"
-                + "Scan ID: " + normalizedScanId + '\n'
-                + "For retryable or HA-safe execution, prefer 'zap_queue_active_scan'.";
+                + "Scan ID: " + normalizedScanId;
     }
 
     /**
      * Start a standard active scan and return the ZAP scan ID.
      */
-    public String startActiveScanJob(String targetUrl, String recurse, String policy) {
+public String startActiveScanJob(String targetUrl, String recurse, String policy, NativeScanLaunch launch) {
         urlValidationService.validateUrl(targetUrl);
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        return engineScanExecution.startActiveScan(new ActiveScanRequest(
+        ActiveScanRequest request = new ActiveScanRequest(
                 targetUrl,
                 effectiveRecurse,
                 effectivePolicy,
                 scanLimitProperties.getMaxActiveScanDurationInMins(),
                 scanLimitProperties.getHostPerScan(),
                 scanLimitProperties.getThreadPerHost()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startActiveScan(request)
+                : engineScanExecution.startActiveScan(request, launch);
     }
 
     /**
      * Start an authenticated active scan and return the ZAP scan ID.
      */
-    public String startActiveScanAsUserJob(String contextId,
+public String startActiveScanAsUserJob(String contextId,
                                            String userId,
                                            String targetUrl,
                                            String recurse,
-                                           String policy) {
+                                           String policy, NativeScanLaunch launch) {
         String normalizedContextId = requireText(contextId, "contextId");
         String normalizedUserId = requireText(userId, "userId");
         urlValidationService.validateUrl(targetUrl);
@@ -270,7 +214,7 @@ public class ActiveScanService {
         String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
         String effectivePolicy = hasText(policy) ? policy.trim() : null;
 
-        return engineScanExecution.startActiveScanAsUser(new AuthenticatedActiveScanRequest(
+        AuthenticatedActiveScanRequest request = new AuthenticatedActiveScanRequest(
                 normalizedContextId,
                 normalizedUserId,
                 targetUrl,
@@ -279,7 +223,10 @@ public class ActiveScanService {
                 scanLimitProperties.getMaxActiveScanDurationInMins(),
                 scanLimitProperties.getHostPerScan(),
                 scanLimitProperties.getThreadPerHost()
-        ));
+        );
+        return launch == NativeScanLaunch.UNTRACKED
+                ? engineScanExecution.startActiveScanAsUser(request)
+                : engineScanExecution.startActiveScanAsUser(request, launch);
     }
 
     /**
@@ -415,49 +362,6 @@ public class ActiveScanService {
         return normalizedAlertThreshold;
     }
 
-    private void trackDirectScanStarted(String scanId, String workspaceId) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        operationRegistry.registerDirectScan("active:" + scanId, workspaceId);
-    }
-
-    private void recordDirectScanStarted(String operationKind,
-                                         String scanId,
-                                         String targetUrl,
-                                         Map<String, String> metadata) {
-        if (scanHistoryLedgerService == null) {
-            return;
-        }
-        scanHistoryLedgerService.recordDirectScanStarted(operationKind, scanId, targetUrl, metadata);
-    }
-
-    private void trackDirectScanStatus(String scanId, boolean completed) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        String operationId = "active:" + scanId;
-        if (completed) {
-            operationRegistry.releaseDirectScan(operationId);
-            return;
-        }
-        operationRegistry.touchDirectScan(operationId);
-    }
-
-    private void trackDirectScanStopped(String scanId) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        operationRegistry.releaseDirectScan("active:" + scanId);
-    }
-
-    private String resolveWorkspaceId() {
-        if (clientWorkspaceResolver == null) {
-            return "default-workspace";
-        }
-        return clientWorkspaceResolver.resolveCurrentWorkspaceId();
-    }
-
     private String formatScanPolicyView(String scanPolicyName,
                                         List<PolicyCategorySnapshot> categories,
                                         List<ScannerRuleSnapshot> allRules,
@@ -465,9 +369,9 @@ public class ActiveScanService {
                                         String ruleFilter,
                                         int limit) {
         long enabledRules = allRules.stream().filter(ScannerRuleSnapshot::enabled).count();
-        List<ScannerRuleSnapshot> overriddenRules = allRules.stream()
+        long overriddenRules = allRules.stream()
                 .filter(ScannerRuleSnapshot::hasOverride)
-                .toList();
+                .count();
         int shownRules = Math.min(limit, matchingRules.size());
         Map<String, String> categoryNames = categories.stream()
                 .collect(java.util.stream.Collectors.toMap(
@@ -483,7 +387,7 @@ public class ActiveScanService {
                 .append("Categories: ").append(categories.size()).append('\n')
                 .append("Rules: ").append(allRules.size()).append(" total, ")
                 .append(enabledRules).append(" enabled, ")
-                .append(overriddenRules.size()).append(" overridden\n");
+                .append(overriddenRules).append(" overridden\n");
 
         if (hasText(ruleFilter)) {
             response.append("Filter: ").append(ruleFilter.trim())
@@ -502,15 +406,6 @@ public class ActiveScanService {
                     .append('\n');
         }
 
-        if (!overriddenRules.isEmpty()) {
-            response.append("\nCurrent rule overrides:\n");
-            for (ScannerRuleSnapshot rule : overriddenRules) {
-                response.append("- ")
-                        .append(formatScannerRuleLine(rule, categoryNames))
-                        .append('\n');
-            }
-        }
-
         response.append("\nRules:\n");
         if (matchingRules.isEmpty()) {
             response.append("- No rules matched the requested filter.\n");
@@ -525,7 +420,6 @@ public class ActiveScanService {
             }
         }
 
-        response.append("Use 'zap_scan_policy_rule_set' with this policy name and exact rule IDs from the list above to change rule state.");
         return response.toString();
     }
 
@@ -566,7 +460,7 @@ public class ActiveScanService {
             response.append('\n');
         }
 
-        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting direct or queued active scans.");
+        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting a guided active scan.");
         return response.toString();
     }
 
@@ -597,47 +491,6 @@ public class ActiveScanService {
 
     private String safeLower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
-    }
-
-    private String formatDirectStartMessage(String scanId, String targetUrl, String recurse, String policy) {
-        return String.format(
-                "Direct active scan started.%n" +
-                        "Scan ID: %s%n" +
-                        "Target URL: %s%n" +
-                        "Recurse: %s%n" +
-                        "Policy: %s%n" +
-                        "Use 'zap_active_scan_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.%n" +
-                        "For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_active_scan'.",
-                scanId,
-                targetUrl,
-                recurse,
-                hasText(policy) ? policy : "<default>"
-        );
-    }
-
-    private String formatDirectAuthenticatedStartMessage(String scanId,
-                                                         String contextId,
-                                                         String userId,
-                                                         String targetUrl,
-                                                         String recurse,
-                                                         String policy) {
-        return String.format(
-                "Direct authenticated active scan started.%n" +
-                        "Scan ID: %s%n" +
-                        "Context ID: %s%n" +
-                        "User ID: %s%n" +
-                        "Target URL: %s%n" +
-                        "Recurse: %s%n" +
-                        "Policy: %s%n" +
-                        "Use 'zap_active_scan_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.%n" +
-                        "For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_active_scan_as_user'.",
-                scanId,
-                contextId,
-                userId,
-                targetUrl,
-                recurse,
-                hasText(policy) ? policy : "<default>"
-        );
     }
 
 }

@@ -139,7 +139,7 @@ class QuickStartScopesTest(unittest.TestCase):
         environment = self.render_compose()
         self.assertEqual(environment["MCP_API_KEY"], settings["MCP_API_KEY"])
         self.assertEqual(environment["MCP_CLIENT_ID"], "default-client")
-        self.assertEqual(environment["MCP_SERVER_TOOLS_SURFACE"], "guided")
+        self.assertNotIn("MCP_SERVER_TOOLS_SURFACE", environment)
         self.assertNotIn("MCP_CLIENT_SCOPES", environment)
         for name in NATIVE_ALIASES:
             self.assertNotIn(name, environment)

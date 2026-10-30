@@ -24,13 +24,7 @@
         "match": {
           "tools": [
             "zap_crawl_start",
-            "zap_attack_start",
-            "zap_active_scan_start",
-            "zap_queue_active_scan",
-            "zap_spider_start",
-            "zap_queue_spider_scan",
-            "zap_ajax_spider",
-            "zap_queue_ajax_spider"
+            "zap_attack_start"
           ],
           "hosts": [
             "*.prod.example.com",
@@ -50,6 +44,8 @@
             "zap_attack_start",
             "zap_findings_summary",
             "zap_findings_details",
+            "zap_findings_snapshot",
+            "zap_findings_diff",
             "zap_report_generate"
           ],
           "hosts": [

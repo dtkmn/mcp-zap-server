@@ -1,0 +1,74 @@
+{
+  "apiVersion": "mcp.zap.policy/v1",
+  "kind": "PolicyBundle",
+  "metadata": {
+    "name": "guided-readonly-triage",
+    "displayName": "Guided Readonly Triage",
+    "description": "Allow guided findings reads on review hosts while making mutation tools an explicit deny.",
+    "owner": "security-platform",
+    "labels": {
+      "channel": "triage",
+      "surface": "guided"
+    }
+  },
+  "spec": {
+    "defaultDecision": "deny",
+    "evaluationOrder": "first-match",
+    "timezone": "UTC",
+    "rules": [
+      {
+        "id": "allow-tool-discovery",
+        "description": "Allow the MCP client to discover the triage surface.",
+        "decision": "allow",
+        "reason": "Discovery is required before the operator can select readonly triage tools.",
+        "match": {
+          "tools": ["mcp:tools:list"]
+        }
+      },
+      {
+        "id": "allow-readonly-review-surface",
+        "description": "Allow findings reads and comparisons for approved review hosts.",
+        "decision": "allow",
+        "reason": "Readonly triage clients may inspect findings and report artifacts without mutating scan state.",
+        "match": {
+          "tools": [
+            "zap_findings_snapshot",
+            "zap_findings_diff",
+            "zap_findings_summary",
+            "zap_findings_details"
+          ],
+          "hosts": [
+            "*.review.example.com",
+            "juice-shop"
+          ]
+        }
+      },
+      {
+        "id": "allow-workspace-report-reads",
+        "description": "Allow bounded report previews and pages within the caller's report workspace; these calls do not carry a target host.",
+        "decision": "allow",
+        "reason": "Report reads enforce the caller's artifact-directory boundary.",
+        "match": {
+          "tools": ["zap_report_read", "zap_report_read_chunk"]
+        }
+      },
+      {
+        "id": "deny-mutation-tools",
+        "description": "Make state-changing guided tools an explicit deny regardless of later bundle mistakes.",
+        "decision": "deny",
+        "reason": "Readonly triage clients may not start scans, mutate auth/context state, or rewrite ZAP scan policies.",
+        "match": {
+          "tools": [
+            "zap_attack_start",
+            "zap_crawl_start",
+            "zap_target_import",
+            "zap_auth_session_prepare",
+            "zap_auth_session_validate",
+            "zap_addon_update",
+            "zap_report_generate"
+          ]
+        }
+      }
+    ]
+  }
+}

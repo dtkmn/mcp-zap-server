@@ -42,7 +42,7 @@ editUrl: false
     </div>
     <div class="telemetry-chip">
       <span>Coverage</span>
-      <strong>Guided, Expert, Queue, Ops</strong>
+      <strong>Guided Scans and Evidence</strong>
     </div>
     <div class="telemetry-chip">
       <span>Search Index</span>
@@ -62,12 +62,12 @@ editUrl: false
       <p>Choose agent-guided setup or Docker commands, connect your MCP client, and generate your first scan report.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-surfaces/">
-      <h3>&gt; [02] TOOL_SURFACES</h3>
-      <p>Choose the default guided surface or unlock the expert workflow controls.</p>
+      <h3>&gt; [02] GUIDED_TOOLS</h3>
+      <p>Use the guided tool catalog and migrate older raw-tool workflows.</p>
     </a>
     <a class="mission-card" href="./scanning/scan-execution-modes/">
-      <h3>&gt; [03] EXECUTION_MODES</h3>
-      <p>Understand guided, direct, queue-managed, and automation execution paths.</p>
+      <h3>&gt; [03] SCAN_EXECUTION</h3>
+      <p>Understand guided queue admission, storage and scan lifecycle controls.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-scope-authorization/">
       <h3>&gt; [04] TOOL_SCOPE_AUTHZ</h3>
@@ -106,8 +106,8 @@ editUrl: false
   <span class="section-label">tail -f /var/log/capabilities.txt</span>
 
   <ul class="capability-list">
-    <li><strong>Guided_Flows</strong>: Let the server choose direct or queued execution for crawl and attack.</li>
-    <li><strong>Expert_Tools</strong>: Expose raw queue, auth, policy, findings, and automation controls when needed.</li>
+    <li><strong>Guided_Flows</strong>: Queue crawl and attack operations with in-memory or PostgreSQL storage, then track them through guided status and stop tools.</li>
+    <li><strong>Findings_Evidence</strong>: Read target-scoped findings, export snapshots, compare baselines and retrieve reports.</li>
     <li><strong>Operational_Guardrails</strong>: Enforce scopes, rate limits, correlation IDs, queue observability, and scan-history evidence.</li>
   </ul>
 

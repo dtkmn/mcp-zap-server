@@ -1,0 +1,64 @@
+package mcp.server.zap;
+
+import java.util.Set;
+
+/** Explicit pre-retirement alias inventory: neither scopes nor old configuration may reactivate it. */
+public final class RetiredExpertTools {
+    private RetiredExpertTools() { }
+
+    public static final Set<String> NAMES = Set.of(
+            "zap_active_scan_as_user",
+            "zap_active_scan_start",
+            "zap_active_scan_status",
+            "zap_active_scan_stop",
+            "zap_ajax_spider",
+            "zap_ajax_spider_results",
+            "zap_ajax_spider_status",
+            "zap_ajax_spider_stop",
+            "zap_alert_details",
+            "zap_alert_instances",
+            "zap_alerts",
+            "zap_auth_test_user",
+            "zap_automation_plan_artifacts",
+            "zap_automation_plan_run",
+            "zap_automation_plan_status",
+            "zap_client_spider_start",
+            "zap_client_spider_status",
+            "zap_client_spider_stop",
+            "zap_context_auth_configure",
+            "zap_context_upsert",
+            "zap_contexts_list",
+            "zap_generate_report",
+            "zap_get_findings_summary",
+            "zap_hosts",
+            "zap_import_graphql_schema_file",
+            "zap_import_graphql_schema_url",
+            "zap_import_openapi_spec_file",
+            "zap_import_openapi_spec_url",
+            "zap_import_soap_wsdl_file",
+            "zap_import_soap_wsdl_url",
+            "zap_policy_dry_run",
+            "zap_queue_active_scan",
+            "zap_queue_active_scan_as_user",
+            "zap_queue_ajax_spider",
+            "zap_queue_client_spider_scan",
+            "zap_queue_spider_scan",
+            "zap_queue_spider_scan_as_user",
+            "zap_scan_job_cancel",
+            "zap_scan_job_dead_letter_list",
+            "zap_scan_job_dead_letter_requeue",
+            "zap_scan_job_list",
+            "zap_scan_job_retry",
+            "zap_scan_job_status",
+            "zap_scan_policy_rule_set",
+            "zap_sites",
+            "zap_spider_as_user",
+            "zap_spider_start",
+            "zap_spider_status",
+            "zap_spider_stop",
+            "zap_urls",
+            "zap_user_upsert",
+            "zap_users_list",
+            "zap_view_templates"
+    );
+}

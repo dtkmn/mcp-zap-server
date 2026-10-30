@@ -77,7 +77,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
                 job.getCancelDeadlineAt(),
                 job.getCancelNextAttemptAt(),
                 job.getCancelAttemptCount()
-        );
+        ).restoreLaunchAttempt(job.getLaunchAttempt());
     }
 
     @Override
@@ -267,6 +267,26 @@ public class InMemoryScanJobStore implements ScanJobStore {
     }
 
     @Override
+    public Optional<ScanJob> updateLaunchAttempt(String jobId, String attemptId, long resolutionVersion,
+                                                 UnaryOperator<ScanJob> updater) {
+        lock.lock();
+        try {
+            ScanJob current = jobs.get(jobId);
+            ScanJob.LaunchAttempt launch = current == null ? null : current.getLaunchAttempt();
+            if (launch == null || !launch.id().equals(attemptId)
+                    || launch.resolutionVersion() != resolutionVersion) {
+                return Optional.empty();
+            }
+            ScanJob updated = java.util.Objects.requireNonNull(updater.apply(copyJob(current)));
+            normalizeQueuePositionTransition(updated);
+            jobs.put(jobId, updated);
+            return Optional.of(updated);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
     public List<ScanJob> updateAndGet(UnaryOperator<List<ScanJob>> updater) {
         lock.lock();
         try {
@@ -301,6 +321,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
         return (int) jobs.values().stream()
                 .filter(job -> job.getType().isActiveFamily())
                 .filter(job -> job.getStatus() == ScanJobStatus.RUNNING
+                        || job.hasUnresolvedLaunch()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)))
                 .count();
     }
@@ -309,6 +330,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
         return (int) jobs.values().stream()
                 .filter(job -> job.getType().isSpiderFamily())
                 .filter(job -> job.getStatus() == ScanJobStatus.RUNNING
+                        || job.hasUnresolvedLaunch()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)))
                 .count();
     }
@@ -318,6 +340,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
                 .filter(job -> job.getType() == ScanJobType.AJAX_SPIDER)
                 .anyMatch(job -> job.isCancellationRequested()
                         || job.getStatus() == ScanJobStatus.RUNNING
+                        || job.hasUnresolvedLaunch()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
     }
 

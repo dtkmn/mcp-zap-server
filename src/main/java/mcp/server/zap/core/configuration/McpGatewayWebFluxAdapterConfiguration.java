@@ -31,8 +31,8 @@ public class McpGatewayWebFluxAdapterConfiguration {
     @Bean
     McpToolRegistry mcpActiveToolRegistry(ToolCallbackProvider toolCallbackProvider,
                                         ToolScopeRegistry toolScopeRegistry) {
-        // Derive availability from the same provider used by Spring AI, not the
-        // full permission inventory, which also describes disabled tools.
+        // Derive callable availability from the same provider used by Spring AI;
+        // permission declarations alone do not register tools.
         return toolScopeRegistry.getToolAccessRegistry().activeToolRegistry(
                 Arrays.stream(toolCallbackProvider.getToolCallbacks())
                         .map(callback -> callback.getToolDefinition().name())

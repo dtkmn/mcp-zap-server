@@ -13,6 +13,7 @@ import org.springframework.core.io.ClassPathResource;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,15 +50,25 @@ class SecurityStartupConfigurationTest {
                 .withPropertyValues(
                         "mcp.server.auth.apiKeys[0].clientId=reader",
                         "mcp.server.auth.apiKeys[0].key=reader-key",
-                        "mcp.server.auth.apiKeys[0].scopes[0]=mcp:tools:list",
-                        "mcp.server.auth.apiKeys[1].clientId=reporter",
-                        "mcp.server.auth.apiKeys[1].key=reporter-key",
-                        "mcp.server.auth.apiKeys[1].scopes[0]=zap:report:read")
+                        "mcp.server.auth.apiKeys[0].name=Report reader",
+                        "mcp.server.auth.apiKeys[0].workspaceId=report-workspace",
+                        "mcp.server.auth.apiKeys[0].scopes[0]=zap:report:read",
+                        "mcp.server.auth.apiKeys[1].clientId=legacy-client",
+                        "mcp.server.auth.apiKeys[1].key=legacy-key")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
-                    assertThat(context.getBean(ApiKeyProperties.class).getApiKeys())
+                    List<ApiKeyProperties.ApiKeyClient> clients = context.getBean(ApiKeyProperties.class).getApiKeys();
+                    assertThat(clients).hasSize(2);
+                    assertThat(clients)
                             .extracting(ApiKeyProperties.ApiKeyClient::getKey)
-                            .containsExactly("reader-key", "reporter-key");
+                            .containsExactly("reader-key", "legacy-key");
+                    assertThat(clients.getFirst().getClientId()).isEqualTo("reader");
+                    assertThat(clients.getFirst().getKey()).isEqualTo("reader-key");
+                    assertThat(clients.getFirst().getName()).isEqualTo("Report reader");
+                    assertThat(clients.getFirst().getWorkspaceId()).isEqualTo("report-workspace");
+                    assertThat(clients.getFirst().getScopes()).containsExactly("zap:report:read");
+                    assertThat(clients.getLast().getClientId()).isEqualTo("legacy-client");
+                    assertThat(clients.getLast().getScopes()).containsExactly("*");
                 });
     }
 

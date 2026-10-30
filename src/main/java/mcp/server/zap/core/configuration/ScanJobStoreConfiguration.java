@@ -21,23 +21,18 @@ public class ScanJobStoreConfiguration {
         String backend = normalize(properties.getBackend());
         if ("postgres".equals(backend)) {
             if (properties.getPostgres().getUrl() == null || properties.getPostgres().getUrl().isBlank()) {
-                log.warn("Scan job store backend is set to postgres but URL is blank; using in-memory scan job store");
-                return new InMemoryScanJobStore();
+                throw new IllegalStateException("Postgres scan job storage requires its URL; refusing an in-memory fallback that could lose launch ownership");
             }
             try {
                 log.info("Scan job store backend: postgres");
                 return new PostgresScanJobStore(properties.getPostgres(), objectMapper);
             } catch (RuntimeException e) {
-                if (properties.getPostgres().isFailFast()) {
-                    throw e;
-                }
-                log.warn("Scan job store postgres initialization failed (using in-memory): {}", e.getMessage());
-                return new InMemoryScanJobStore();
+                throw new IllegalStateException("Postgres scan job initialization failed; launch ownership must not fall back to memory", e);
             }
         }
 
         if (!"in-memory".equals(backend)) {
-            log.warn("Unknown scan job store backend '{}'; using in-memory scan job store", properties.getBackend());
+            throw new IllegalArgumentException("Unknown scan job store backend: " + properties.getBackend());
         } else {
             log.info("Scan job store backend: in-memory");
         }

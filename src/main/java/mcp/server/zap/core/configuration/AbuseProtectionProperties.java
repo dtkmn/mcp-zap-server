@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 public class AbuseProtectionProperties {
     private boolean enabled = true;
     private long retryAfterSeconds = 30L;
-    private long operationStaleAfterSeconds = 21600L;
     private final RateLimit rateLimit = new RateLimit();
     private final WorkspaceQuota workspaceQuota = new WorkspaceQuota();
     private final Backpressure backpressure = new Backpressure();
@@ -30,14 +29,6 @@ public class AbuseProtectionProperties {
 
     public void setRetryAfterSeconds(long retryAfterSeconds) {
         this.retryAfterSeconds = retryAfterSeconds;
-    }
-
-    public long getOperationStaleAfterSeconds() {
-        return operationStaleAfterSeconds;
-    }
-
-    public void setOperationStaleAfterSeconds(long operationStaleAfterSeconds) {
-        this.operationStaleAfterSeconds = operationStaleAfterSeconds;
     }
 
     public RateLimit getRateLimit() {
@@ -103,8 +94,6 @@ public class AbuseProtectionProperties {
     public static class WorkspaceQuota {
         private boolean enabled = true;
         private int maxQueuedOrRunningScanJobs = 5;
-        private int maxDirectScans = 2;
-        private int maxAutomationPlans = 2;
 
         public boolean isEnabled() {
             return enabled;
@@ -122,29 +111,12 @@ public class AbuseProtectionProperties {
             this.maxQueuedOrRunningScanJobs = maxQueuedOrRunningScanJobs;
         }
 
-        public int getMaxDirectScans() {
-            return maxDirectScans;
-        }
-
-        public void setMaxDirectScans(int maxDirectScans) {
-            this.maxDirectScans = maxDirectScans;
-        }
-
-        public int getMaxAutomationPlans() {
-            return maxAutomationPlans;
-        }
-
-        public void setMaxAutomationPlans(int maxAutomationPlans) {
-            this.maxAutomationPlans = maxAutomationPlans;
-        }
     }
 
     public static class Backpressure {
         private boolean enabled = true;
         private int maxTrackedScanJobs = 20;
         private int maxRunningScanJobs = 8;
-        private int maxDirectScans = 4;
-        private int maxAutomationPlans = 4;
 
         public boolean isEnabled() {
             return enabled;
@@ -170,20 +142,5 @@ public class AbuseProtectionProperties {
             this.maxRunningScanJobs = maxRunningScanJobs;
         }
 
-        public int getMaxDirectScans() {
-            return maxDirectScans;
-        }
-
-        public void setMaxDirectScans(int maxDirectScans) {
-            this.maxDirectScans = maxDirectScans;
-        }
-
-        public int getMaxAutomationPlans() {
-            return maxAutomationPlans;
-        }
-
-        public void setMaxAutomationPlans(int maxAutomationPlans) {
-            this.maxAutomationPlans = maxAutomationPlans;
-        }
     }
 }

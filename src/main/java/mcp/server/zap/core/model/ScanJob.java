@@ -1,5 +1,6 @@
 package mcp.server.zap.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -37,6 +38,71 @@ public class ScanJob {
     private String claimFenceId;
     private Instant claimHeartbeatAt;
     private Instant claimExpiresAt;
+    private LaunchAttempt launchAttempt;
+
+    /** A receipt fence for one native start, independent of the renewable worker lease. */
+    @JsonIgnoreProperties("engineIncarnation")
+    public record LaunchAttempt(String id, String controllerId,
+                                Instant dispatchedAt, long resolutionVersion) {
+        public LaunchAttempt {
+            if (id == null || id.isBlank() || controllerId == null || controllerId.isBlank()
+                    || dispatchedAt == null || resolutionVersion < 0) {
+                throw new IllegalArgumentException("A launch attempt requires its immutable identity and dispatch time");
+            }
+        }
+
+        public LaunchAttempt resolvedBy(String controllerId) {
+            return new LaunchAttempt(id, controllerId, dispatchedAt, resolutionVersion + 1);
+        }
+    }
+
+    public LaunchAttempt getLaunchAttempt() {
+        return launchAttempt;
+    }
+
+    /** Restore launch metadata without treating an incomplete launch as retryable work. */
+    public ScanJob restoreLaunchAttempt(LaunchAttempt launchAttempt) {
+        this.launchAttempt = launchAttempt;
+        return this;
+    }
+
+    public void beginLaunch(LaunchAttempt attempt) {
+        if (status != ScanJobStatus.QUEUED || launchAttempt != null || isCancellationRequested()) {
+            throw new IllegalStateException("Only an uncancelled queued job can begin a native launch");
+        }
+        launchAttempt = java.util.Objects.requireNonNull(attempt);
+        status = ScanJobStatus.STARTING;
+        attempts += 1;
+        startedAt = attempt.dispatchedAt();
+        nextAttemptAt = null;
+        queuePosition = 0;
+        lastError = null;
+    }
+
+    public void markLaunchUnknown(String reason) {
+        if (status.isTerminal()) {
+            return;
+        }
+        status = ScanJobStatus.START_OUTCOME_UNKNOWN;
+        lastError = reason;
+        nextAttemptAt = null;
+        completedAt = null;
+        queuePosition = 0;
+    }
+
+    public boolean hasUnresolvedLaunch() {
+        return status == ScanJobStatus.STARTING || status == ScanJobStatus.START_OUTCOME_UNKNOWN;
+    }
+
+    /** An authoritative rejection proves that this particular native start was not accepted. */
+    public void markRejectedLaunch() {
+        if (!hasUnresolvedLaunch() || zapScanId != null) throw new IllegalStateException("Only an unaccepted launch can be rejected");
+        attempts = Math.max(0, attempts - 1);
+        status = ScanJobStatus.QUEUED;
+        launchAttempt = null;
+        startedAt = null;
+        nextAttemptAt = null;
+    }
 
     /**
      * Create a new queued job with zero attempts.
@@ -614,6 +680,7 @@ public class ScanJob {
      */
     public void markQueuedForRetry(Instant retryAt, String reason) {
         this.status = ScanJobStatus.QUEUED;
+        this.launchAttempt = null;
         this.zapScanId = null;
         this.lastError = reason;
         this.startedAt = null;

@@ -122,7 +122,7 @@ target and workflow. Preserve any explicit per-client restrictions.
 If a required tool returns `insufficient_scope`, stop that operation and explain
 its missing permission using the checkout's scope guide. A scan request, a tool
 appearing in discovery or a Next Action does not authorize widening scopes,
-adding `*`, changing the tool surface or disabling enforcement. Do not substitute
+adding `*` or disabling enforcement. Do not substitute
 an active attack for a permitted crawl or retry the denied operation in a loop.
 
 If Docker, authentication or transport fails during the workflow, stop and

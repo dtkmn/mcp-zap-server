@@ -1,7 +1,7 @@
 ---
 title: "API Schema Imports"
 editUrl: false
-description: "Import OpenAPI, GraphQL, and SOAP definitions through guided or expert MCP tools."
+description: "Import OpenAPI, GraphQL, and SOAP definitions through the guided target import tool."
 ---
 MCP ZAP Server supports schema-driven API imports across three common families:
 
@@ -9,36 +9,13 @@ MCP ZAP Server supports schema-driven API imports across three common families:
 - GraphQL
 - SOAP / WSDL
 
-## Guided Versus Expert
+## Guided Import
 
-Default guided import:
-
-- `zap_target_import`
-
-Expert raw import tools:
-
-- `zap_import_openapi_spec_url`
-- `zap_import_openapi_spec_file`
-- `zap_import_graphql_schema_url`
-- `zap_import_graphql_schema_file`
-- `zap_import_soap_wsdl_url`
-- `zap_import_soap_wsdl_file`
-
-Use guided import when you want one stable entrypoint.
-
-Use expert import when you want the raw family-specific tools. That requires `MCP_SERVER_TOOLS_SURFACE=expert`.
+Use `zap_target_import` for all supported definition families. Set `definitionType` to `openapi`, `graphql`, or `soap`, `sourceKind` to `url` or `file`, and `source` to the definition URL or ZAP-visible path. OpenAPI also supports `sourceKind=content` as described below.
 
 ## OpenAPI / Swagger
 
-Expert tools:
-
-- `zap_import_openapi_spec_url`
-- `zap_import_openapi_spec_file`
-
-Parameters:
-
-- `apiUrl` or `filePath`
-- `hostOverride` optional
+Use `definitionType=openapi`, a supported `sourceKind`, and `source`. An optional `hostOverride` selects the target host described below.
 
 ### OpenAPI Target Policy
 
@@ -47,7 +24,7 @@ The override validation below is introduced in `v0.14.0` and is not included in
 for availability.
 
 The definition source and the API target can be different addresses. URL imports
-validate `apiUrl` before ZAP downloads the definition. Both URL and file imports
+validate `source` before ZAP downloads the definition. Both URL and file imports
 also validate any supplied `hostOverride` through the configured scan URL policy
 before calling ZAP.
 
@@ -73,10 +50,10 @@ send. Keep ZAP's filesystem access restricted too: imported files may reference
 other files. Disabling URL validation is an explicit operator opt-out from
 destination checks; override syntax checks still apply.
 
-For file imports, `filePath` (or guided `source` with `sourceKind=file`) refers to
+For file imports, `source` with `sourceKind=file` refers to
 ZAP's filesystem, such as `/zap/wrk/openapi.yaml`. A path on the AI client's
 computer is insufficient. URL/file import behavior is unchanged by the content
-mode below; the expert URL/file tools do not upload attached files.
+mode below; URL/file imports do not upload attached files.
 
 Use this when:
 
@@ -265,15 +242,7 @@ expiry deletes staging; it does **not** cancel ZAP or confirm the import complet
 
 ## GraphQL
 
-Expert tools:
-
-- `zap_import_graphql_schema_url`
-- `zap_import_graphql_schema_file`
-
-Parameters:
-
-- `endpointUrl`
-- `schemaUrl` or `filePath`
+Use `definitionType=graphql`, `sourceKind=url` or `file`, and `source`. Also provide the runtime API address as `endpointUrl`.
 
 Important:
 
@@ -282,14 +251,7 @@ Important:
 
 ## SOAP / WSDL
 
-Expert tools:
-
-- `zap_import_soap_wsdl_url`
-- `zap_import_soap_wsdl_file`
-
-Parameters:
-
-- `wsdlUrl` or `filePath`
+Use `definitionType=soap`, `sourceKind=url` or `file`, and `source` for the WSDL URL or ZAP-visible path.
 
 ## Guided Import Example
 

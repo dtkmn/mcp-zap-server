@@ -1,55 +1,56 @@
 ---
-title: "Scan Policy Controls"
+title: "Scan Policy Selection"
 editUrl: false
-description: "Inspect and tune ZAP active-scan policies through the expert MCP surface."
+description: "Inspect configured ZAP active-scan policies and select one for guided active testing."
 ---
-This page requires the `expert` surface. Set `MCP_SERVER_TOOLS_SURFACE=expert` if you want these tools exposed.
+Use `zap_scan_policies_list` and `zap_scan_policy_view` to inspect ZAP's current active-scan policies before choosing one. Both are read-only and require `zap:scan:policy:read`; they do not start a scan or change rules. Starting an attack separately requires `zap:scan:attack:run` and authorization to test the target.
 
-MCP ZAP Server exposes a bounded set of ZAP-native active-scan policy controls so agents no longer have to guess at opaque policy names or scanner rule IDs.
+First, list the configured policy names:
 
-## Tools
+```json
+{
+  "tool": "zap_scan_policies_list",
+  "arguments": {}
+}
+```
 
-- `zap_scan_policies_list`
-- `zap_scan_policy_view`
-- `zap_scan_policy_rule_set`
+Inspect a returned name. Replace `approved-policy` in these examples with a name actually returned by ZAP:
 
-Use them before setting the `policy` parameter on:
+```json
+{
+  "tool": "zap_scan_policy_view",
+  "arguments": {
+    "scanPolicyName": "approved-policy",
+    "limit": "25"
+  }
+}
+```
 
-- `zap_attack_start`
-- `zap_active_scan_start`
-- `zap_active_scan_as_user`
-- `zap_queue_active_scan`
-- `zap_queue_active_scan_as_user`
+The view includes whole-policy category and rule counts, enabled states, attack strengths, alert thresholds and an override count. Detailed rule rows support:
 
-## Typical Workflow
+- `scanPolicyName`: required; matching is case-insensitive.
+- `ruleFilter`: optional exact rule ID or category ID, or a case-insensitive rule-name substring.
+- `limit`: optional whole-number string from `1` to `100`; defaults to `25`.
 
-1. call `zap_scan_policies_list`
-2. pick an exact policy name
-3. call `zap_scan_policy_view`
-4. capture exact numeric rule IDs from the result
-5. call `zap_scan_policy_rule_set` if you need to enable, disable, or tune specific rules
-6. start the scan with that policy name
+The response states how many matching rules are shown. Narrow the filter or increase the limit to inspect more. Filtering and limits affect only the inspection output; they do not change which rules a scan uses.
 
-## Safe Boundaries
+When active testing is authorized, pass the selected policy name to `zap_attack_start`:
 
-The surface is intentionally bounded:
+```json
+{
+  "tool": "zap_attack_start",
+  "arguments": {
+    "targetUrl": "https://app.example.com/",
+    "recurse": "true",
+    "policy": "approved-policy"
+  }
+}
+```
 
-- policy changes require an exact policy name from `zap_scan_policies_list`
-- rule changes require exact numeric scanner rule IDs
-- one mutation call can change at most 50 rule IDs
-- `attackStrength` must be one of `DEFAULT`, `LOW`, `MEDIUM`, `HIGH`, or `INSANE`
-- `alertThreshold` must be one of `DEFAULT`, `LOW`, `MEDIUM`, `HIGH`, or `OFF`
-- the tools do not create, import, or delete policies
+Omit `policy` from `zap_attack_start` to use the configured default. A policy read grant alone does not permit an attack, and no policy-editing tool is exposed through MCP. Prepare or change approved policies through operator-managed ZAP configuration.
 
-## What `zap_scan_policy_view` Shows
+Policies are shared engine-level configuration. Inspection reads their current state; it does not reserve or freeze that state for a later scan.
 
-`zap_scan_policy_view` returns:
+Choose a policy appropriate to the authorized target and permitted test intensity. Policy selection does not grant active-scan authorization or expand target scope. Track and stop the scan with the Operation ID returned by `zap_attack_start`.
 
-- the chosen policy name
-- category-level defaults
-- scanner rule IDs and names
-- each rule's enabled state
-- attack-strength and alert-threshold overrides
-- current non-default overrides
-
-Use the optional `ruleFilter` when you already know a rule ID or part of the rule name.
+See [Scan Execution](../scan-execution-modes/) and [Upgrading to Guided Tools](../../getting-started/tool-migration/).

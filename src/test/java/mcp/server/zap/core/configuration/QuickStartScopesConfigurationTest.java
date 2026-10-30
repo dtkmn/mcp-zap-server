@@ -2,13 +2,13 @@ package mcp.server.zap.core.configuration;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.function.Executable;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -17,6 +17,7 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.core.io.ClassPathResource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 
 class QuickStartScopesConfigurationTest {
     private static final String EXPLICIT_SCOPES = "mcp:tools:list,zap:scan:read,zap:scan:crawl:run,"
@@ -61,31 +62,6 @@ class QuickStartScopesConfigurationTest {
     }
 
     @Test
-    void existingExplicitCustomClientListReplacesThePackagedDefault() {
-        runner(Map.of("MCP_API_KEY", "unused-key"))
-                .withPropertyValues(
-                        "mcp.server.auth.apiKeys[0].clientId=reader",
-                        "mcp.server.auth.apiKeys[0].key=reader-key",
-                        "mcp.server.auth.apiKeys[0].name=Report reader",
-                        "mcp.server.auth.apiKeys[0].workspaceId=report-workspace",
-                        "mcp.server.auth.apiKeys[0].scopes[0]=zap:report:read",
-                        "mcp.server.auth.apiKeys[1].clientId=legacy-client",
-                        "mcp.server.auth.apiKeys[1].key=legacy-key")
-                .run(context -> {
-                    assertThat(context).hasNotFailed();
-                    List<ApiKeyProperties.ApiKeyClient> clients = context.getBean(ApiKeyProperties.class).getApiKeys();
-                    assertThat(clients).hasSize(2);
-                    assertThat(clients.getFirst().getClientId()).isEqualTo("reader");
-                    assertThat(clients.getFirst().getKey()).isEqualTo("reader-key");
-                    assertThat(clients.getFirst().getName()).isEqualTo("Report reader");
-                    assertThat(clients.getFirst().getWorkspaceId()).isEqualTo("report-workspace");
-                    assertThat(clients.getFirst().getScopes()).containsExactly("zap:report:read");
-                    assertThat(clients.getLast().getClientId()).isEqualTo("legacy-client");
-                    assertThat(clients.getLast().getScopes()).containsExactly("*");
-                });
-    }
-
-    @Test
     void nativeIndexedClientScopesAndMetadataArePreserved() {
         Map<String, Object> variables = Map.ofEntries(
                 Map.entry("MCP_API_KEY", "unused-packaged-key"),
@@ -123,37 +99,48 @@ class QuickStartScopesConfigurationTest {
         });
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "zap_crawl_start", "zap_crawl_status", "zap_crawl_stop", "zap_passive_scan_status",
-            "zap_passive_scan_wait", "zap_findings_summary", "zap_findings_details", "zap_report_generate",
-            "zap_report_read", "zap_report_read_chunk", "zap_scan_history_list", "zap_scan_history_customer_handoff"
-    })
-    void operatorSelectedScopesAllowTheConfiguredCrawlAndReportWorkflow(String toolName) {
+    @Test
+    void operatorSelectedScopesAllowTheConfiguredCrawlAndReportWorkflow() {
         runner(nativeAliases(EXPLICIT_SCOPES)).run(context -> {
             List<String> scopes = context.getBean(ApiKeyProperties.class).getApiKeys().getFirst().getScopes();
             ToolAuthorizationService authorization = authorization(context.getBean(ToolAuthorizationProperties.class));
-            assertThat(authorization.authorizeToolsList(scopes).allowed()).isTrue();
-            assertThat(authorization.authorizeToolCall(scopes, toolName).allowed()).as(toolName).isTrue();
+            List<Executable> checks = new ArrayList<>();
+            checks.add(() -> assertThat(authorization.authorizeToolsList(scopes).allowed()).as("tools/list").isTrue());
+            for (String toolName : List.of(
+                    "zap_crawl_start", "zap_crawl_status", "zap_crawl_stop", "zap_passive_scan_status",
+                    "zap_passive_scan_wait", "zap_findings_summary", "zap_findings_details", "zap_report_generate",
+                    "zap_report_read", "zap_report_read_chunk", "zap_scan_history_list", "zap_scan_history_customer_handoff")) {
+                checks.add(() -> assertThat(authorization.authorizeToolCall(scopes, toolName).allowed()).as(toolName).isTrue());
+            }
+            assertAll(checks);
         });
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "zap_attack_start", "zap_active_scan_start", "zap_active_scan_as_user", "zap_queue_active_scan",
-            "zap_auth_session_prepare", "zap_auth_session_validate", "zap_target_import", "zap_import_openapi_spec_url",
-            "zap_automation_plan_run", "zap_context_upsert", "zap_user_upsert", "zap_scan_policy_rule_set"
-    })
-    void operatorSelectedScopesDenyActionsOutsideTheGrantEvenOnExpertSurface(String toolName) {
+    @Test
+    void operatorSelectedScopesCannotAcquireRetiredOrUngrantableActions() {
         runner(nativeAliases(EXPLICIT_SCOPES))
                 .withPropertyValues("mcp.server.tools.surface=expert")
                 .run(context -> {
                     List<String> scopes = context.getBean(ApiKeyProperties.class).getApiKeys().getFirst().getScopes();
-                    var decision = authorization(context.getBean(ToolAuthorizationProperties.class))
-                            .authorizeToolCall(scopes, toolName);
-                    assertThat(decision.mapped()).as(toolName).isTrue();
-                    assertThat(decision.allowed()).as(toolName).isFalse();
-                    assertThat(decision.missingScopes()).as(toolName).isNotEmpty();
+                    ToolAuthorizationService authorization = authorization(context.getBean(ToolAuthorizationProperties.class));
+                    List<Executable> checks = new ArrayList<>();
+                    for (String toolName : List.of(
+                            "zap_attack_start", "zap_active_scan_start", "zap_active_scan_as_user", "zap_queue_active_scan",
+                            "zap_auth_session_prepare", "zap_auth_session_validate", "zap_target_import", "zap_import_openapi_spec_url",
+                            "zap_automation_plan_run", "zap_context_upsert", "zap_user_upsert", "zap_scan_policy_rule_set")) {
+                        checks.add(() -> {
+                            var decision = authorization.authorizeToolCall(scopes, toolName);
+                            assertThat(decision.allowed()).as(toolName).isFalse();
+                            if (mcp.server.zap.RetiredExpertTools.NAMES.contains(toolName)) {
+                                assertThat(decision.mapped()).as(toolName).isFalse();
+                                assertThat(decision.missingScopes()).as(toolName).isEmpty();
+                            } else {
+                                assertThat(decision.mapped()).as(toolName).isTrue();
+                                assertThat(decision.missingScopes()).as(toolName).isNotEmpty();
+                            }
+                        });
+                    }
+                    assertAll(checks);
                 });
     }
 

@@ -5,6 +5,39 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Resolve the job backend before choosing private memory-journal storage and rollout policy. */}}
+{{- define "mcp-zap-server.scanJobStoreBackend" -}}
+{{- $backend := default "" .Values.mcp.scan.jobs.store.backend | toString | lower | trim -}}
+{{- $explicit := ne $backend "" -}}
+{{- $canonical := "" -}}
+{{- $legacy := "" -}}
+{{- $hasCanonical := false -}}
+{{- $hasLegacy := false -}}
+{{- range .Values.mcp.env -}}
+{{- if or (eq .name "ZAP_SCAN_JOBS_STORE_BACKEND") (eq .name "ZAP_SCAN_QUEUE_STORE_BACKEND") -}}
+{{- if or (hasKey . "valueFrom") (not (hasKey . "value")) -}}
+{{- fail "Scan job backend must be an explicit literal so launch-safety persistence can be selected" -}}
+{{- end -}}
+{{- if eq .name "ZAP_SCAN_JOBS_STORE_BACKEND" -}}
+{{- $canonical = .value | toString | lower | trim -}}{{- $hasCanonical = true -}}
+{{- else -}}
+{{- $legacy = .value | toString | lower | trim -}}{{- $hasLegacy = true -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- if $hasCanonical -}}{{- $backend = $canonical -}}{{- $explicit = true -}}
+{{- else if $hasLegacy -}}{{- $backend = $legacy -}}{{- $explicit = true -}}
+{{- end -}}
+{{- if and .Values.mcp.envFrom (not $explicit) -}}
+{{- fail "Set mcp.scan.jobs.store.backend explicitly when envFrom is used; hidden backend selection cannot safely choose launch-journal storage" -}}
+{{- end -}}
+{{- if not $explicit -}}{{- $backend = "in-memory" -}}{{- end -}}
+{{- if not (or (eq $backend "in-memory") (eq $backend "postgres")) -}}
+{{- fail "Scan job backend must be in-memory or postgres" -}}
+{{- end -}}
+{{- $backend -}}
+{{- end }}
+
 {{/*
 Create a default fully qualified app name.
 */}}
@@ -239,6 +272,16 @@ true
 {{- end -}}
 {{- end }}
 
+{{- define "mcp-zap-server.isScanJobBackendProperty" -}}
+{{- $name := regexReplaceAll "[^a-z0-9]" (lower .) "" -}}
+{{- if has $name (list "zapscanjobsstorebackend" "zapscanqueuestorebackend") -}}true{{- end -}}
+{{- end }}
+
+{{- define "mcp-zap-server.isLaunchSafetyProperty" -}}
+{{- $name := regexReplaceAll "[^a-z0-9]" (lower .) "" -}}
+{{- if or (hasPrefix "zapscanjobslaunchsafety" $name) (eq $name "zapscanlaunchjournaldirectory") -}}true{{- end -}}
+{{- end }}
+
 {{/*
 Reject explicit Spring JSON overrides of chart-owned security controls.
 Other JSON configuration, including bootstrap authentication profiles, remains supported.
@@ -247,6 +290,9 @@ Other JSON configuration, including bootstrap authentication profiles, remains s
 {{- range $key, $value := .values -}}
 {{- $property := printf "%s%s" $.prefix $key -}}
 {{- $normalized := regexReplaceAll "[^a-z0-9]" (lower $property) "" -}}
+{{- if or (eq (include "mcp-zap-server.isScanJobBackendProperty" $property) "true") (eq (include "mcp-zap-server.isLaunchSafetyProperty" $property) "true") -}}
+{{- fail (printf "SPRING_APPLICATION_JSON must not override launch ownership property %s; use mcp.scan.jobs.store.backend or mcp.launchSafety" $property) -}}
+{{- end -}}
 {{- if eq (include "mcp-zap-server.isSecurityProperty" $property) "true" -}}
 {{- fail (printf "SPRING_APPLICATION_JSON must not override %s; configure chart-owned security through mcp.security" $property) -}}
 {{- end -}}
@@ -385,6 +431,12 @@ Validate security-sensitive Helm values before rendering resources.
 {{- if .Values.mcp.enabled -}}
 {{- range .Values.mcp.env -}}
 {{- $name := regexReplaceAll "[^a-z0-9]" (lower .name) "" -}}
+{{- if eq (include "mcp-zap-server.isLaunchSafetyProperty" .name) "true" -}}
+{{- fail (printf "mcp.env must not override chart-owned launch safety variable %s; use mcp.launchSafety" .name) -}}
+{{- end -}}
+{{- if and (eq (include "mcp-zap-server.isScanJobBackendProperty" .name) "true") (not (has .name (list "ZAP_SCAN_JOBS_STORE_BACKEND" "ZAP_SCAN_QUEUE_STORE_BACKEND"))) -}}
+{{- fail "Use the canonical or legacy literal backend environment variable, or mcp.scan.jobs.store.backend" -}}
+{{- end -}}
 {{- if eq (include "mcp-zap-server.isSecurityProperty" .name) "true" -}}
 {{- fail (printf "mcp.env must not override chart-owned security variable %s; use mcp.security" .name) -}}
 {{- end -}}
@@ -411,6 +463,9 @@ Validate security-sensitive Helm values before rendering resources.
 {{- range regexFindAll "-D[^=[:space:]]+" .value -1 -}}
 {{- $property := trimPrefix "-D" . -}}
 {{- $normalized := regexReplaceAll "[^a-z0-9]" (lower $property) "" -}}
+{{- if or (eq (include "mcp-zap-server.isScanJobBackendProperty" $property) "true") (eq (include "mcp-zap-server.isLaunchSafetyProperty" $property) "true") -}}
+{{- fail (printf "JVM options must not override launch ownership property %s; use mcp.scan.jobs.store.backend or mcp.launchSafety" $property) -}}
+{{- end -}}
 {{- if or (eq (include "mcp-zap-server.isSecurityProperty" $property) "true") (eq $normalized "springapplicationjson") -}}
 {{- fail (printf "JVM options must not override chart-owned security property %s; use mcp.security or validated SPRING_APPLICATION_JSON" $property) -}}
 {{- end -}}

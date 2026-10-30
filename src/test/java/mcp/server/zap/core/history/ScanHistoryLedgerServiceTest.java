@@ -8,6 +8,7 @@ import java.util.Map;
 import mcp.server.zap.core.configuration.ApiKeyProperties;
 import mcp.server.zap.core.configuration.ScanHistoryLedgerProperties;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ScanHistoryLedgerServiceTest {
+    private InMemoryScanHistoryStore historyStore;
     private InMemoryScanJobStore scanJobStore;
     private ScanHistoryLedgerService service;
     private ObjectMapper objectMapper;
@@ -30,6 +32,7 @@ class ScanHistoryLedgerServiceTest {
     @BeforeEach
     void setUp() {
         RequestIdentityHolder.set("client-a", "client-a");
+        historyStore = new InMemoryScanHistoryStore();
         scanJobStore = new InMemoryScanJobStore();
         objectMapper = new ObjectMapper().rebuild().findAndAddModules().build();
         ScanHistoryLedgerProperties properties = new ScanHistoryLedgerProperties();
@@ -37,7 +40,7 @@ class ScanHistoryLedgerServiceTest {
         properties.setMaxExportEntries(10);
         properties.setRetentionDays(180);
         service = new ScanHistoryLedgerService(
-                new InMemoryScanHistoryStore(),
+                historyStore,
                 scanJobStore,
                 properties,
                 new ClientWorkspaceResolver(new ApiKeyProperties()),
@@ -153,13 +156,13 @@ class ScanHistoryLedgerServiceTest {
     }
 
     @Test
-    void directScansAndReportArtifactsAreRecordedAndExportable() throws Exception {
-        service.recordDirectScanStarted(
-                "active_scan",
-                "active-77",
-                "https://api.example.com",
+    void historicalDirectScansAndReportArtifactsRemainReadableAndExportable() throws Exception {
+        historyStore.append(historicalDirectEntry(
+                "hist_active_77", "active_scan", "active-77",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://api.example.com", "api.example.com"),
+                "client-a", "client-a",
                 Map.of("policy", "Baseline")
-        );
+        ));
         service.recordReportArtifact(
                 "/zap/wrk/zap-report-77.json",
                 "traditional-json-plus",
@@ -180,10 +183,12 @@ class ScanHistoryLedgerServiceTest {
         assertThat(root.path("entryCount").asInt()).isEqualTo(2);
         assertThat(root.path("entries").findValuesAsString("evidenceType"))
                 .contains("scan_run", "report_artifact");
+        assertThat(service.getHistoryEntry("hist_active_77"))
+                .contains("Evidence Type: scan_run", "Status: started", "Execution Mode: direct", "Backend Reference: active-77");
     }
 
     @Test
-    void evidenceMetadataEnricherAppliesToStoredAndQueuedEvidence() throws Exception {
+    void evidenceMetadataEnricherAppliesToReportAndQueuedEvidence() throws Exception {
         InMemoryScanJobStore enrichedJobStore = new InMemoryScanJobStore();
         EvidenceMetadataEnricher failingEnricher = request -> {
             throw new IllegalStateException("metadata extension failed");
@@ -206,17 +211,11 @@ class ScanHistoryLedgerServiceTest {
                 List.of(failingEnricher, enricher)
         );
 
-        enrichedService.recordDirectScanStarted(
-                "active_scan",
-                "active-extension",
-                "https://api.example.com",
-                Map.of("existing", "kept")
-        );
         enrichedService.recordReportArtifact(
                 "/zap/wrk/zap-report-extension.json",
                 "traditional-json-plus",
                 "https://api.example.com",
-                Map.of("template", "core-template")
+                Map.of("existing", "kept", "template", "core-template")
         );
         ScanJob job = new ScanJob(
                 "job-extension",
@@ -232,13 +231,10 @@ class ScanHistoryLedgerServiceTest {
 
         JsonNode root = objectMapper.readTree(enrichedService.exportHistory(null, null, "api.example.com", 10));
 
-        assertThat(metadataFor(root, "scan_run"))
+        assertThat(metadataFor(root, "report_artifact"))
                 .containsEntry("existing", "kept")
                 .containsEntry("extensionProvider", "test-evidence-extension")
-                .containsEntry("extensionEvidenceType", "scan_run")
-                .containsEntry("extensionStatus", "started")
-                .containsEntry("extensionTarget", "https://api.example.com");
-        assertThat(metadataFor(root, "report_artifact"))
+                .containsEntry("extensionTarget", "https://api.example.com")
                 .containsEntry("extensionEvidenceType", "report_artifact")
                 .containsEntry("extensionStatus", "generated")
                 .containsEntry("template", "core-template");
@@ -250,10 +246,12 @@ class ScanHistoryLedgerServiceTest {
 
     @Test
     void defaultWorkspaceBoundaryFiltersStoredAndJobDerivedHistory() {
-        service.recordDirectScanStarted("spider", "spider-client-a", "https://a.example.com", Map.of());
-
-        RequestIdentityHolder.set("client-b", "client-b");
-        service.recordDirectScanStarted("spider", "spider-client-b", "https://b.example.com", Map.of());
+        historyStore.append(historicalDirectEntry("hist_spider_a", "spider", "spider-client-a",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://a.example.com", "a.example.com"),
+                "client-a", "client-a", Map.of()));
+        historyStore.append(historicalDirectEntry("hist_spider_b", "spider", "spider-client-b",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://b.example.com", "b.example.com"),
+                "client-b", "client-b", Map.of()));
         ScanJob clientBJob = new ScanJob(
                 "job-client-b",
                 ScanJobType.ACTIVE_SCAN,
@@ -279,6 +277,13 @@ class ScanHistoryLedgerServiceTest {
         properties.setMaxExportEntries(10);
         properties.setRetentionDays(180);
         return properties;
+    }
+
+    private ScanHistoryEntry historicalDirectEntry(String id, String operationKind, String backendReference,
+                                                   TargetDescriptor target, String clientId, String workspaceId,
+                                                   Map<String, String> metadata) {
+        return new ScanHistoryEntry(id, Instant.now(), "scan_run", operationKind, "started", "zap", target,
+                "direct", backendReference, null, null, null, null, clientId, workspaceId, metadata);
     }
 
     private Map<String, String> metadataFor(JsonNode root, String evidenceType) {
@@ -308,12 +313,12 @@ class ScanHistoryLedgerServiceTest {
         runningJob.incrementAttempts();
         runningJob.markRunning("zap-active-release");
         scanJobStore.upsertAll(java.util.List.of(runningJob));
-        service.recordDirectScanStarted(
-                "active_scan",
-                "active-release",
-                "https://api.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_active_release", "active_scan", "active-release",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://api.example.com", "api.example.com"),
+                "client-a", "client-a",
                 Map.of("policy", "Baseline")
-        );
+        ));
         service.recordReportArtifact(
                 "/zap/wrk/release-report.json",
                 "traditional-json-plus",
@@ -342,12 +347,12 @@ class ScanHistoryLedgerServiceTest {
 
     @Test
     void releaseEvidenceBundleWarnsWhenEvidenceIsIncomplete() throws Exception {
-        service.recordDirectScanStarted(
-                "spider",
-                "spider-only",
-                "https://scan-only.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_spider_only", "spider", "spider-only",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://scan-only.example.com", "scan-only.example.com"),
+                "client-a", "client-a",
                 Map.of()
-        );
+        ));
 
         JsonNode scanOnly = objectMapper.readTree(
                 service.exportReleaseEvidence(null, "scan-only.example.com", 5)
@@ -434,12 +439,12 @@ class ScanHistoryLedgerServiceTest {
 
     @Test
     void customerHandoffChecklistFlagsMissingReportAndLimitRisk() {
-        service.recordDirectScanStarted(
-                "spider",
-                "spider-checklist-1",
-                "https://checklist.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_spider_checklist", "spider", "spider-checklist-1",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://checklist.example.com", "checklist.example.com"),
+                "client-a", "client-a",
                 Map.of()
-        );
+        ));
 
         String handoff = service.exportCustomerHandoff("pilot-checklist", "checklist.example.com", 1);
 
@@ -527,12 +532,12 @@ class ScanHistoryLedgerServiceTest {
 
     @Test
     void customerHandoffCaveatsMixedDirectAndQueuedTargetProof() {
-        service.recordDirectScanStarted(
-                "spider",
-                "spider-direct-target",
-                "https://direct-only.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_spider_direct_target", "spider", "spider-direct-target",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://direct-only.example.com", "direct-only.example.com"),
+                "client-a", "client-a",
                 Map.of()
-        );
+        ));
         service.recordReportArtifact(
                 "/zap/wrk/direct-only.html",
                 "traditional-html-plus",
@@ -585,12 +590,12 @@ class ScanHistoryLedgerServiceTest {
                 "https://path-filter.example.com",
                 Map.of("template", "traditional-html-plus")
         );
-        service.recordDirectScanStarted(
-                "spider",
-                "spider-private-filter",
-                "https://path-filter.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_spider_private_filter", "spider", "spider-private-filter",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://path-filter.example.com", "path-filter.example.com"),
+                "client-a", "client-a",
                 Map.of()
-        );
+        ));
 
         String handoff = service.exportCustomerHandoff(
                 "pilot-path-filter",
@@ -612,12 +617,12 @@ class ScanHistoryLedgerServiceTest {
 
     @Test
     void customerHandoffFlagsDirectScanStartsAsLaunchEvidenceOnly() {
-        service.recordDirectScanStarted(
-                "active_scan",
-                "active-direct-1",
-                "https://direct.example.com",
+        historyStore.append(historicalDirectEntry(
+                "hist_active_direct", "active_scan", "active-direct-1",
+                new TargetDescriptor(TargetDescriptor.Kind.WEB, "https://direct.example.com", "direct.example.com"),
+                "client-a", "client-a",
                 Map.of("policy", "Baseline")
-        );
+        ));
         service.recordReportArtifact(
                 "/zap/wrk/direct-report.html",
                 "traditional-html-plus",

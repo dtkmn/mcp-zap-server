@@ -46,7 +46,14 @@ public interface ScanJobStore {
             UnaryOperator<ScanJob> updater
     );
 
+    /** Strict compare-and-set for one launch receipt; worker lease expiry cannot authorize a new launch. */
+    Optional<ScanJob> updateLaunchAttempt(String jobId, String attemptId, long resolutionVersion,
+                                        UnaryOperator<ScanJob> updater);
+
     List<ScanJob> list();
+
+    /** A safety decision must never treat a failed read as an empty engine/job view. */
+    default List<ScanJob> listStrict() { return list(); }
 
     /**
      * Atomically update durable job state and return the committed rows.

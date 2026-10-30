@@ -1,25 +1,21 @@
 package mcp.server.zap.core.service;
 
-import lombok.extern.slf4j.Slf4j;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
+
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderStatus;
 import mcp.server.zap.core.gateway.EngineBusyException;
-import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
-import mcp.server.zap.core.service.protection.OperationRegistry;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * Service for managing ZAP AJAX Spider Scans.
@@ -32,14 +28,10 @@ import java.util.function.Consumer;
  * - Sites that require JavaScript to render content
  * - Sites with bot detection mechanisms
  */
-@Slf4j
 @Service
 public class AjaxSpiderService {
     private final EngineAjaxSpiderExecution ajaxSpiderExecution;
     private final UrlValidationService urlValidationService;
-    private OperationRegistry operationRegistry;
-    private ClientWorkspaceResolver clientWorkspaceResolver;
-    private ScanHistoryLedgerService scanHistoryLedgerService;
     private ScanJobStore scanJobStore;
 
     /**
@@ -52,75 +44,31 @@ public class AjaxSpiderService {
     }
 
     @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
-    }
-
-    @Autowired(required = false)
-    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
-        this.clientWorkspaceResolver = clientWorkspaceResolver;
-    }
-
-    @Autowired(required = false)
-    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
-        this.scanHistoryLedgerService = scanHistoryLedgerService;
-    }
-
-    @Autowired(required = false)
     void setScanJobStore(ScanJobStore scanJobStore) {
         this.scanJobStore = scanJobStore;
     }
 
-    /**
-     * Start an AJAX Spider scan against the given URL using a real browser.
-     * This is more effective against JavaScript-heavy sites and WAF protection.
-     *
-     * @param targetUrl Target URL to scan with AJAX Spider
-     * @return Status message with scan information
-     */
-    public String startAjaxSpider(String targetUrl) {
-        String scanId = startAjaxSpider(targetUrl, null, null);
-        trackAjaxSpiderStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("ajax_spider", scanId, targetUrl);
-        log.info("AJAX Spider direct scan id {}", scanId);
-        return formatDirectStartMessage(targetUrl);
+    private String launchAjaxSpider(String targetUrl, NativeScanLaunch launch) {
+        AjaxSpiderScanRequest request = new AjaxSpiderScanRequest(targetUrl);
+        return launch == NativeScanLaunch.UNTRACKED ? ajaxSpiderExecution.startAjaxSpider(request)
+                : ajaxSpiderExecution.startAjaxSpider(request, launch);
     }
 
-    /**
-     * Launch without a queued ownership claim and return a synthetic scan id.
-     */
-    public String startAjaxSpiderJob(String targetUrl) {
-        return startAjaxSpider(targetUrl, null, null);
-    }
-
-    /** Launch a queued crawl only while its original durable claim still owns the job. */
-    public String startAjaxSpiderJob(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
-        return startAjaxSpiderJob(targetUrl, jobId, claimToken, scanId -> { });
-    }
-
-    /** Record accepted queued starts before another managed AJAX lifecycle operation can begin. */
-    public String startAjaxSpiderJob(String targetUrl, String jobId, ScanJobClaimToken claimToken,
-                                    Consumer<String> onAccepted) {
-        if (jobId == null || jobId.isBlank() || claimToken == null) {
-            throw new IllegalArgumentException("A queued AJAX Spider start requires its job and claim");
+    public String startAjaxSpiderJobTracked(String targetUrl, String jobId, ScanJobClaimToken claimToken,
+                                    NativeScanLaunch launch) {
+        if (jobId == null || jobId.isBlank() || claimToken == null || scanJobStore == null) {
+            throw new IllegalArgumentException("A queued AJAX launch requires its durable job and claim");
         }
-        if (scanJobStore == null) {
-            throw new IllegalStateException("A queued AJAX Spider start requires the scan job store");
-        }
-        return startAjaxSpider(targetUrl, jobId, claimToken, Objects.requireNonNull(onAccepted));
-    }
-
-    private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken) {
-        return startAjaxSpider(targetUrl, jobId, claimToken, scanId -> { });
+        return startAjaxSpider(targetUrl, jobId, claimToken, launch);
     }
 
     private String startAjaxSpider(String targetUrl, String jobId, ScanJobClaimToken claimToken,
-                                   Consumer<String> onAccepted) {
+                                   NativeScanLaunch launch) {
         // Validate URL before scanning
         urlValidationService.validateUrl(targetUrl);
 
         if (scanJobStore == null) {
-            return ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
+            return launchAjaxSpider(targetUrl, launch);
         }
         // ZAP exposes one global AJAX crawler. Serialize starts with managed stop retries.
         return scanJobStore.tryWithAjaxLifecycleLock(jobs -> {
@@ -139,27 +87,13 @@ public class AjaxSpiderService {
                     .filter(job -> !job.getStatus().isTerminal())
                     .anyMatch(job -> job.isCancellationRequested()
                             || job.getStatus() == ScanJobStatus.RUNNING
+                            || job.hasUnresolvedLaunch()
                             || (!Objects.equals(jobId, job.getId())
                             && job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
             if (occupied) {
                 throw new EngineBusyException("AJAX Spider has an active job or pending cancellation", null);
             }
-            String scanId = ajaxSpiderExecution.startAjaxSpider(new AjaxSpiderScanRequest(targetUrl));
-            try {
-                onAccepted.accept(scanId);
-            } catch (RuntimeException | Error failure) {
-                // The crawl started, but its owner could not record acceptance. Stop while the
-                // lifecycle lock still guarantees that this cannot target a newer managed crawl.
-                try {
-                    ajaxSpiderExecution.stopAjaxSpider();
-                } catch (RuntimeException | Error stopFailure) {
-                    if (stopFailure != failure) {
-                        failure.addSuppressed(stopFailure);
-                    }
-                }
-                throw failure;
-            }
-            return scanId;
+            return launchAjaxSpider(targetUrl, launch);
         }).orElseThrow(() -> new EngineBusyException("AJAX Spider lifecycle operation is already in progress", null));
     }
 
@@ -170,7 +104,6 @@ public class AjaxSpiderService {
      */
     public String getAjaxSpiderStatus() {
         AjaxSpiderStatus ajaxStatus = ajaxSpiderExecution.readAjaxSpiderStatus();
-        trackAjaxSpiderStatus(ajaxStatus.running());
 
         boolean isRunning = ajaxStatus.running();
 
@@ -192,7 +125,6 @@ public class AjaxSpiderService {
      */
     public String stopAjaxSpider() {
         stopAjaxSpiderJob();
-        trackAjaxSpiderStopped();
         return "AJAX Spider scan stopped successfully";
     }
 
@@ -211,55 +143,6 @@ public class AjaxSpiderService {
 
     public boolean isAjaxSpiderRunning() {
         return ajaxSpiderExecution.readAjaxSpiderStatus().running();
-    }
-
-    private String formatDirectStartMessage(String targetUrl) {
-        return String.format(
-                "AJAX Spider scan started successfully for URL: %s%n" +
-                        "Using browser-based crawling for JavaScript content.%n" +
-                        "Using ZAP's configured duration and browser settings.%n" +
-                        "Use 'zap_ajax_spider_status' to check progress.",
-                targetUrl
-        );
-    }
-
-    private void trackAjaxSpiderStarted(String scanId, String workspaceId) {
-        if (operationRegistry == null || scanId == null || scanId.isBlank()) {
-            return;
-        }
-        operationRegistry.registerDirectScan("ajax:" + scanId, workspaceId);
-    }
-
-    private void recordDirectScanStarted(String operationKind, String scanId, String targetUrl) {
-        if (scanHistoryLedgerService == null) {
-            return;
-        }
-        scanHistoryLedgerService.recordDirectScanStarted(operationKind, scanId, targetUrl, Map.of());
-    }
-
-    private void trackAjaxSpiderStatus(boolean running) {
-        if (operationRegistry == null) {
-            return;
-        }
-        if (running) {
-            operationRegistry.touchDirectScansByPrefix("ajax:");
-            return;
-        }
-        operationRegistry.releaseDirectScansByPrefix("ajax:");
-    }
-
-    private void trackAjaxSpiderStopped() {
-        if (operationRegistry == null) {
-            return;
-        }
-        operationRegistry.releaseDirectScansByPrefix("ajax:");
-    }
-
-    private String resolveWorkspaceId() {
-        if (clientWorkspaceResolver == null) {
-            return "default-workspace";
-        }
-        return clientWorkspaceResolver.resolveCurrentWorkspaceId();
     }
 
 }

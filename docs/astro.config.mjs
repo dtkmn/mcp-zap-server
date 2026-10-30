@@ -50,6 +50,7 @@ export default defineConfig({
 						{ slug: 'getting-started/mcp-client-authentication' },
 						{ slug: 'getting-started/form-login-target-authentication' },
 						{ slug: 'getting-started/tool-surfaces' },
+						{ slug: 'getting-started/tool-migration' },
 						{ slug: 'getting-started/jwt-quick-start' },
 						{ slug: 'getting-started/tool-scope-authorization' },
 					],
@@ -66,7 +67,6 @@ export default defineConfig({
 						{ slug: 'scanning/api-schema-imports' },
 						{ slug: 'scanning/scan-policy-controls' },
 						{ slug: 'scanning/findings-and-reports' },
-						{ slug: 'scanning/automation-framework' },
 						{ slug: 'scanning/authenticated-scanning-best-practices' },
 					],
 				},
@@ -85,6 +85,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'operations/abuse-protection' },
 						{ slug: 'operations/runtime-policy-bundles' },
+						{ slug: 'operations/engine-addons' },
 						{ slug: 'operations/observability' },
 						{ slug: 'operations/structured-logging' },
 						{ slug: 'operations/aws-ec2-compose' },

@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.configuration.ZapInitializationProperties;
 import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineRuntimeAccess;
+import mcp.server.zap.core.gateway.EngineBusyException;
 import mcp.server.zap.core.gateway.EngineRuntimeAccess.NetworkDefaults;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
@@ -66,11 +67,14 @@ public class ZapInitializationService {
     @Before("execution(public * mcp.server.zap.core.gateway.ZapEngineScanExecution.start*(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution.startAjaxSpider(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineApiImportAccess.import*(..))"
-            + " || execution(public * mcp.server.zap.core.gateway.ZapEngineAutomationAccess.runAutomationPlan(..))"
             + " || execution(public * mcp.server.zap.core.gateway.ZapEngineContextAccess.testUserAuthentication(..))")
     public void ensureBeforeOutboundOperation() {
         try {
             ensureInitialized();
+        } catch (EngineBusyException e) {
+            // A maintenance gate rejected configuration before dispatch; queue work must wait
+            // without treating this as an uncertain launch or consuming its startup retries.
+            throw e;
         } catch (RuntimeException e) {
             throw ZapApiException.beforeDispatch("ZAP network configuration is not ready", e);
         }

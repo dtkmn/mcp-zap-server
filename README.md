@@ -24,7 +24,7 @@ Use it when you want:
 - **safe agentic scanning** with guided defaults for spider, active scan, passive scan, API imports, findings, and reports
 - **operator control** through API-key or JWT auth, tool scopes, runtime policy bundles, rate limits, and audit events
 - **self-hosted deployment** with Docker Compose for local adoption and Helm for Kubernetes
-- **expert ZAP access** when you intentionally need lower-level ZAP context, user, scan, and report controls
+- **one guided tool catalog** with queue-managed scan starts, findings baselines, reports and explicit operator recovery
 
 Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap-server/)
 
@@ -141,15 +141,15 @@ Docker Compose remains the easiest installation path because the MCP server is d
 ## What You Get
 
 - **Guided scans**: intent-first tools for spider, active scan, passive scan, API imports, findings, reports, and scan history.
-- **Expert ZAP control**: optional lower-level tools for advanced ZAP context, user, scan, and report workflows.
+- **Guided tool catalog**: policy inspection, authentication setup and queued scan operations with status and stop controls.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
-- **Runtime policy bundles**: dry-run and enforcement support through `zap_policy_dry_run` and policy-mode configuration.
+- **Runtime policy bundles**: configured dry-run and enforcement modes for guided tool calls.
 - **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
-In `v0.13.0`, Client Spider and browser authentication profiles support direct and queued browser crawling. See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for setup, authenticated crawling, and reports. These features are not included in `v0.12.0`.
+See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for browser setup, authenticated guided crawling and reports.
 
 ## Version 0.17.1
 
@@ -164,63 +164,17 @@ its image-release workflow did not complete. See the upgrade guide for availabil
 
 ## Version 0.16.0
 
-Version `v0.16.0` is [released](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.16.0).
-Linux AMD64 and ARM64 images are published on GHCR and Docker Hub, and MCP
-Registry `0.16.0` is active/latest. The
-[release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md) records the
-image digest and installation boundaries.
-
-Automation Framework plans now validate whole-plan durations and required
-engine/add-on capabilities, enforce filesystem containment for plans and
-artifacts, and validate report output directories and filenames. Plan status
-reports `Successful` as `pending`, `no` or `unknown` without treating a finish
-timestamp as proof of a completed scan. Scanner-aware CI comparisons require matching
-measured engine/add-on inventories, and target-scoped reports retain root alert
-evidence from the requested origin.
-
-The local Docker quick start uses an explicitly versioned release image and
-authenticated readiness checks. The Apple Silicon package and private ChatGPT
-connection are optional preview paths; follow their guides for installation and
-network requirements.
-
-- [0.16.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.16.0.md)
-- [Release notes archive](./docs/releases/README.md)
-- [Changelog](./CHANGELOG.md)
+See the [0.16.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.16.0.md) for that release's behavior and requirements.
 
 ## Version 0.15.0
 
-See [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases/latest)
-for the latest published version and its publication date. Version-specific
-documentation describes that version's behavior; it does not announce image
-availability. Deploy only after the corresponding release workflow succeeds
-and the versioned image is available in your registry.
-
-Version `v0.15.0` introduces optional OpenAPI imports from client-supplied content
-and complete paged report retrieval. Target-scoped reports remove unrelated
-shared-session data, HTTP crawl depth is configured independently from child
-count, and health checks reapply mandatory outbound settings when ZAP starts
-late or its engine is replaced. Review the storage and configuration requirements
-before enabling content import or upgrading an existing deployment.
-
-It also includes a [CloudFormation EKS starter](./examples/aws-eks/) and a
-walkthrough for deploying the Helm chart with JWT authentication, persistent
-report storage and network policies.
-
-- [0.15.0 release notes and upgrade guidance](./docs/releases/RELEASE_NOTES_0.15.0.md)
-- [Release notes archive](./docs/releases/README.md)
-- [Changelog](./CHANGELOG.md)
+See the [0.15.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.15.0.md) for that release's behavior and requirements.
 
 ## Version 0.14.0
 
-**Version `v0.14.0`** hardens API-key configuration, JWT revocation and refresh,
-Automation Framework plans, OpenAPI target overrides, HTTP metrics, and Helm
-ingress policy. It also adopts Gateway Core and the Spring WebFlux adapter
-`0.11.0`, including shared governance audits and active-tool validation.
-Read the upgrade notes before deploying: the legacy API-key property is removed,
-JWT backend failures fail closed, and accepted automation inputs and audit fields
-have changed. Use published release images when upgrading.
+See the [0.14.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.14.0.md) for that release's behavior and requirements.
 
-- [0.14.0 release notes and migration requirements](./docs/releases/RELEASE_NOTES_0.14.0.md)
+The [release notes archive](./docs/releases/README.md) and [changelog](./CHANGELOG.md) cover earlier versions. For changes to older MCP integrations, use [Upgrading to Guided Tools](./docs/src/content/docs/getting-started/tool-migration.md). Verify the matching image and distribution in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before deployment.
 
 ## Security Defaults
 
@@ -300,16 +254,17 @@ Start here:
 - [MCP Access Authentication](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Authentication](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 - [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
-- [Tool Surfaces](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
+- [Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
+- [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/)
 
 Scanning:
 
 - [MCP Client Scan To Evidence](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
-- [Scan Execution Modes](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/)
+- [Scan Execution](https://danieltse.org/mcp-zap-server/scanning/scan-execution-modes/)
 - [Seeded API Gate Playbook](https://danieltse.org/mcp-zap-server/scanning/seeded-api-gate-playbook/)
 - [API Schema Imports](https://danieltse.org/mcp-zap-server/scanning/api-schema-imports/)
 - [AJAX Spider](https://danieltse.org/mcp-zap-server/scanning/ajax-spider/)
-- [Client Spider (v0.13.0)](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
+- [Client Spider](https://danieltse.org/mcp-zap-server/scanning/client-spider/)
 - [Findings and Reports](https://danieltse.org/mcp-zap-server/scanning/findings-and-reports/)
 
 Operations:

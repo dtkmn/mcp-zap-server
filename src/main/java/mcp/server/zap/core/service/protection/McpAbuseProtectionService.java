@@ -14,7 +14,6 @@ import mcp.gateway.core.rate.TokenBucketRateLimiter;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
-import mcp.server.zap.core.service.GuidedExecutionModeResolver;
 import mcp.server.zap.core.service.ScanJobQueueService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -29,26 +28,20 @@ public class McpAbuseProtectionService {
     private final AbuseProtectionProperties properties;
     private final ClientRateLimiter clientRateLimiter;
     private final ClientWorkspaceResolver clientWorkspaceResolver;
-    private final OperationRegistry operationRegistry;
     private final ObjectProvider<ScanJobQueueService> scanJobQueueServiceProvider;
-    private final GuidedExecutionModeResolver guidedExecutionModeResolver;
     private final ToolScopeRegistry toolScopeRegistry;
     private final ProtectionMetrics metrics;
 
     public McpAbuseProtectionService(AbuseProtectionProperties properties,
                                      ClientRateLimiter clientRateLimiter,
                                      ClientWorkspaceResolver clientWorkspaceResolver,
-                                     OperationRegistry operationRegistry,
                                      ObjectProvider<ScanJobQueueService> scanJobQueueServiceProvider,
-                                     GuidedExecutionModeResolver guidedExecutionModeResolver,
                                      ToolScopeRegistry toolScopeRegistry,
                                      ObjectProvider<MeterRegistry> meterRegistryProvider) {
         this.properties = properties;
         this.clientRateLimiter = clientRateLimiter;
         this.clientWorkspaceResolver = clientWorkspaceResolver;
-        this.operationRegistry = operationRegistry;
         this.scanJobQueueServiceProvider = scanJobQueueServiceProvider;
-        this.guidedExecutionModeResolver = guidedExecutionModeResolver;
         this.toolScopeRegistry = toolScopeRegistry;
         this.metrics = ProtectionMetrics.create(meterRegistryProvider.getIfAvailable());
     }
@@ -72,7 +65,6 @@ public class McpAbuseProtectionService {
                 toolContext == null ? GatewayToolExecutionContext.of(null, null, null) : toolContext;
         McpAbuseProtectionContext protectionContext = McpAbuseProtectionContext.from(normalizedContext);
         String clientId = normalizedContext.principalId();
-        String workspaceId = normalizedContext.workspaceId();
         String normalizedMethod = normalize(normalizedContext.method());
         String normalizedToolName = normalize(normalizedContext.toolName());
 
@@ -98,63 +90,10 @@ public class McpAbuseProtectionService {
         QueueSnapshot queueSnapshot = snapshotQueue();
 
         if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)) {
-            if (guidedExecutionModeResolver.preferQueue()) {
-                McpAbuseProtectionDecision queueDecision =
-                        evaluateQueueAdmissionLimits(queueSnapshot, protectionContext);
-                if (queueDecision != null) {
-                    return queueDecision;
-                }
-            } else {
-                McpAbuseProtectionDecision directDecision =
-                        evaluateDirectScanLimits(protectionContext);
-                if (directDecision != null) {
-                    return directDecision;
-                }
-            }
-        }
-
-        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.QUEUE_ADMISSION_CAPABILITY)) {
             McpAbuseProtectionDecision queueDecision =
                     evaluateQueueAdmissionLimits(queueSnapshot, protectionContext);
             if (queueDecision != null) {
                 return queueDecision;
-            }
-        }
-
-        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.DIRECT_SCAN_CAPABILITY)) {
-            McpAbuseProtectionDecision directDecision =
-                    evaluateDirectScanLimits(protectionContext);
-            if (directDecision != null) {
-                return directDecision;
-            }
-        }
-
-        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.AUTOMATION_EXECUTION_CAPABILITY)) {
-            if (properties.getWorkspaceQuota().isEnabled()) {
-                McpAbuseProtectionDecision workspaceDecision = evaluateQuotaLimit(
-                        protectionContext,
-                        metrics.workspaceQuotaRejected,
-                        "workspace_quota_exceeded",
-                        "workspace_automation_plans",
-                        operationRegistry.countAutomationPlans(workspaceId),
-                        properties.getWorkspaceQuota().getMaxAutomationPlans()
-                );
-                if (workspaceDecision != null) {
-                    return workspaceDecision;
-                }
-            }
-            if (properties.getBackpressure().isEnabled()) {
-                McpAbuseProtectionDecision backpressureDecision = evaluateQuotaLimit(
-                        protectionContext,
-                        metrics.backpressureRejected,
-                        "overloaded",
-                        "automation_capacity",
-                        operationRegistry.countAutomationPlans(),
-                        properties.getBackpressure().getMaxAutomationPlans()
-                );
-                if (backpressureDecision != null) {
-                    return backpressureDecision;
-                }
             }
         }
 
@@ -203,36 +142,6 @@ public class McpAbuseProtectionService {
         return null;
     }
 
-    private McpAbuseProtectionDecision evaluateDirectScanLimits(McpAbuseProtectionContext context) {
-        if (properties.getWorkspaceQuota().isEnabled()) {
-            McpAbuseProtectionDecision workspaceDecision = evaluateQuotaLimit(
-                    context,
-                    metrics.workspaceQuotaRejected,
-                    "workspace_quota_exceeded",
-                    "workspace_direct_scans",
-                    operationRegistry.countDirectScans(context.workspaceId()),
-                    properties.getWorkspaceQuota().getMaxDirectScans()
-            );
-            if (workspaceDecision != null) {
-                return workspaceDecision;
-            }
-        }
-        if (properties.getBackpressure().isEnabled()) {
-            McpAbuseProtectionDecision backpressureDecision = evaluateQuotaLimit(
-                    context,
-                    metrics.backpressureRejected,
-                    "overloaded",
-                    "direct_scan_capacity",
-                    operationRegistry.countDirectScans(),
-                    properties.getBackpressure().getMaxDirectScans()
-            );
-            if (backpressureDecision != null) {
-                return backpressureDecision;
-            }
-        }
-        return null;
-    }
-
     private McpAbuseProtectionDecision evaluateQuotaLimit(McpAbuseProtectionContext context,
                                                           Counter rejectionCounter,
                                                           String errorCode,
@@ -264,7 +173,7 @@ public class McpAbuseProtectionService {
                 continue;
             }
             nonTerminalJobs++;
-            if (job.getStatus() == ScanJobStatus.RUNNING) {
+            if (job.getStatus() == ScanJobStatus.RUNNING || job.hasUnresolvedLaunch()) {
                 runningJobs++;
             }
         }

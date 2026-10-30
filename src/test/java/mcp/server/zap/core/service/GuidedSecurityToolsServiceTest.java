@@ -37,9 +37,12 @@ import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class GuidedSecurityToolsServiceTest {
@@ -64,7 +67,6 @@ class GuidedSecurityToolsServiceTest {
         verifyNoInteractions(openApiService);
     }
 
-    private GuidedExecutionModeResolver executionModeResolver;
     private SpiderScanService spiderScanService;
     private AjaxSpiderService ajaxSpiderService;
     private ClientSpiderService clientSpiderService;
@@ -83,7 +85,6 @@ class GuidedSecurityToolsServiceTest {
 
     @BeforeEach
     void setUp() {
-        executionModeResolver = mock(GuidedExecutionModeResolver.class);
         spiderScanService = mock(SpiderScanService.class);
         ajaxSpiderService = mock(AjaxSpiderService.class);
         clientSpiderService = mock(ClientSpiderService.class);
@@ -99,7 +100,6 @@ class GuidedSecurityToolsServiceTest {
         guidedToolActions = new GuidedToolActions(new ToolAuthorizationService(new ToolScopeRegistry(), authorizationProperties), true, "api-key");
         useScopes("*");
         guidedScanWorkflowService = new GuidedScanWorkflowService(
-                executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
                 clientSpiderService,
@@ -110,8 +110,16 @@ class GuidedSecurityToolsServiceTest {
                 gatewayRecordFactory,
                 guidedToolActions
         );
+        org.springframework.test.util.ReflectionTestUtils.setField(guidedScanWorkflowService,
+                "operationSigningSecret", "legacy-guided-fixture-secret");
+        when(scanJobQueueService.queueSpiderScan(anyString(), any())).thenReturn("Job ID: default-http\nStatus: RUNNING");
+        when(scanJobQueueService.queueAjaxSpiderScan(anyString(), any())).thenReturn("Job ID: default-browser\nStatus: RUNNING");
+        when(scanJobQueueService.queueClientSpiderScan(anyString(), any(), any())).thenReturn("Job ID: default-client\nStatus: RUNNING");
+        when(scanJobQueueService.getScanJobStatus(anyString())).thenReturn("Status: RUNNING");
+        when(scanJobQueueService.cancelScanJob(anyString())).thenReturn("Status: CANCELLED");
         service = new GuidedSecurityToolsService(
                 guidedScanWorkflowService,
+                activeScanService,
                 reportService,
                 findingsService,
                 openApiService,
@@ -127,74 +135,63 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
-    void startCrawlUsesDirectSpiderWhenQueueNotPreferred() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://example.com"))
-                .thenReturn("""
-                        Direct spider scan started.
-                        Scan ID: spider-1
-                        Target URL: https://example.com
-                        Use 'zap_spider_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.
-                        For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_spider_scan'.
-                        """);
-        when(spiderScanService.getSpiderScanStatus("spider-1"))
-                .thenReturn("""
-                        Direct spider scan status:
-                        Scan ID: spider-1
-                        Progress: 45%
-                        Completed: no
-                        Use 'zap_spider_stop' to stop this direct crawl, or 'zap_queue_spider_scan' for durable queued execution next time.
-                        """);
-
-        String startResponse = service.startCrawl("https://example.com", "auto", null, null);
-        String operationId = extractOperationId(startResponse);
-        String statusResponse = service.getCrawlStatus(operationId);
-
-        assertThat(startResponse).contains("Guided crawl started.")
-            .contains("Execution Mode: direct")
-            .contains("Strategy: http")
-            .contains("Next Actions:")
-            .contains("Poll: call zap_crawl_status")
-            .contains("When crawl is complete: call zap_attack_start")
-            .doesNotContain("zap_spider_status")
-            .doesNotContain("zap_queue_spider_scan");
-
-        assertThat(statusResponse).contains("Guided crawl status.")
-            .contains("Progress: 45%")
-            .contains("Continue: call zap_crawl_status")
-            .doesNotContain("zap_spider_stop")
-            .doesNotContain("zap_queue_spider_scan");
+    void startCrawlAlwaysQueuesAndReturnsAcceptanceBeforeNativeStart() {
+        when(scanJobQueueService.queueSpiderScan("https://example.com", null))
+                .thenReturn("Job ID: crawl-job\nStatus: QUEUED");
+        when(scanJobQueueService.getScanJobStatus("crawl-job"))
+                .thenReturn("Status: RUNNING\nProgress: 45%");
+        String response = service.startCrawl("https://example.com", "auto", null, null);
+        assertThat(response).contains("Guided crawl accepted.", "Execution Mode: queue", "Strategy: http",
+                "Poll: call zap_crawl_status").doesNotContain("zap_spider_status", "zap_queue_spider_scan");
+        assertThat(service.getCrawlStatus(extractOperationId(response)))
+                .contains("Progress: 45%", "Continue: call zap_crawl_status");
+        verify(scanJobQueueService).queueSpiderScan("https://example.com", null);
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, clientSpiderService, activeScanService);
     }
 
     @Test
-    void startCrawlFallsBackToAjaxWhenAutoStrategyFailsInDirectMode() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://spa.example.com"))
-            .thenThrow(new ZapApiException("regular spider blocked", new RuntimeException("blocked")));
-        when(ajaxSpiderService.startAjaxSpider("https://spa.example.com"))
-            .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
-
+    void autoCrawlKeepsQueuedHttpStrategyAfterPreparationFailure() {
+        when(scanJobQueueService.queueSpiderScan("https://spa.example.com", null))
+                .thenReturn("Job ID: http-failed\nStatus: FAILED\nLast Error: HTTP preparation failed");
         String response = service.startCrawl("https://spa.example.com", "auto", null, null);
+        assertThat(response).contains("Execution Mode: queue", "Strategy: http", "without automatic fallback", "Status: FAILED")
+                .doesNotContain("fell back");
+        verify(scanJobQueueService).queueSpiderScan("https://spa.example.com", null);
+        verify(scanJobQueueService, never()).queueAjaxSpiderScan(any(), any());
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, clientSpiderService, activeScanService);
+    }
 
-        assertThat(response)
-            .contains("Guided crawl started.")
-            .contains("Strategy: browser")
-            .contains("Auto strategy fell back");
+    @ParameterizedTest
+    @CsvSource({"auto,timeout", "auto,eof", "auto,missingId", "http,timeout", "http,eof", "http,missingId"})
+    void uncertainQueuedHttpStartRetainsItsOperationWithoutFallback(String strategy, String failure) {
+        when(scanJobQueueService.queueSpiderScan("https://spa.example.com", null))
+                .thenReturn("Job ID: held-http\nStatus: START_OUTCOME_UNKNOWN\nLast Error: " + failure);
+        String response = service.startCrawl("https://spa.example.com", strategy, null, null);
+        String operationId = extractOperationId(response);
+        when(scanJobQueueService.getScanJobStatus("held-http"))
+                .thenReturn("Status: START_OUTCOME_UNKNOWN\nLast Error: " + failure);
+        assertThat(response).contains("Guided crawl accepted.", "capacity remains held", "Do not submit a replacement", failure);
+        assertThat(service.getCrawlStatus(operationId)).contains("START_OUTCOME_UNKNOWN", "Do not submit a replacement");
+        verify(scanJobQueueService).queueSpiderScan("https://spa.example.com", null);
+        verify(scanJobQueueService, never()).queueAjaxSpiderScan(any(), any());
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, clientSpiderService, activeScanService);
     }
 
     @Test
-    void clientCrawlUsesItsNativeIdForDirectStatusAndStop() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
-                .thenReturn("Client Spider started.\nScan ID: 7");
+    void explicitHttpStrategyDoesNotFallBackEvenBeforeDispatch() {
+        ZapApiException failure = ZapApiException.beforeDispatch("HTTP setup failed", new IllegalStateException());
+        when(scanJobQueueService.queueSpiderScan("https://spa.example.com", null)).thenThrow(failure);
+        assertThatThrownBy(() -> service.startCrawl("https://spa.example.com", "http", null, null)).isSameAs(failure);
+        verify(scanJobQueueService, never()).queueAjaxSpiderScan(any(), any());
+        verifyNoInteractions(spiderScanService, ajaxSpiderService, clientSpiderService, activeScanService);
+    }
+
+    @Test
+    void legacyClientCrawlUsesItsNativeIdForStatusAndStop() {
         when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 35%");
         when(clientSpiderService.stopClientSpider("7")).thenReturn("Client Spider stop requested.");
-
-        String response = service.startCrawl("https://spa.example.com", "client", null, null);
-        String operationId = extractOperationId(response);
-
-        assertThat(response).contains("Strategy: client", "Execution Mode: direct");
-        assertThat(service.getCrawlStatus(operationId)).contains("Progress: 35%");
+        String operationId = legacyHandle("crawl", "client", "7");
+        assertThat(service.getCrawlStatus(operationId)).contains("Execution Mode: direct", "Progress: 35%");
         assertThat(service.stopCrawl(operationId)).contains("Client Spider stop requested.");
         verify(clientSpiderService).getClientSpiderStatus("7");
         verify(clientSpiderService).stopClientSpider("7");
@@ -203,7 +200,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void clientCrawlUsesQueueJobForStatusAndCancellation() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, "crawl-key"))
                 .thenReturn("Scan job accepted\nJob ID: client-job\nType: CLIENT_SPIDER");
         when(scanJobQueueService.getScanJobStatus("client-job")).thenReturn("Status: RUNNING");
@@ -220,19 +217,14 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
-    void stoppedClientCrawlsDoNotClaimSuccessfulCoverageInEitherExecutionMode() {
-        when(clientSpiderService.startClientSpider("https://spa.example.com", null))
-                .thenReturn("Client Spider started.\nScan ID: 7");
+    void stoppedClientCrawlsDoNotClaimSuccessfulCoverageForQueuedOrLegacyHandles() {
         when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Progress: 100%");
         when(scanJobQueueService.queueClientSpiderScan("https://spa.example.com", null, null))
-                .thenReturn("Job ID: client-job");
+                .thenReturn("Job ID: client-job\nStatus: RUNNING");
         when(scanJobQueueService.getScanJobStatus("client-job"))
                 .thenReturn("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
-
-        for (GuidedExecutionModeResolver.ExecutionMode mode : GuidedExecutionModeResolver.ExecutionMode.values()) {
-            when(executionModeResolver.resolveDefaultMode()).thenReturn(mode);
-            String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "client", null, null));
-
+        for (String operationId : List.of(legacyHandle("crawl", "client", "7"),
+                extractOperationId(service.startCrawl("https://spa.example.com", "client", null, null)))) {
             assertThat(service.getCrawlStatus(operationId))
                     .contains("successful completion is unconfirmed", "zap_passive_scan_wait")
                     .doesNotContain("Continue security testing: call zap_attack_start", "Continue: call zap_crawl_status");
@@ -241,7 +233,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void startAttackUsesQueueWhenQueuePreferred() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueActiveScan("https://example.com", "true", "Baseline", (String) null))
                 .thenReturn("""
                         Scan job accepted
@@ -255,7 +247,7 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(startResponse).contains("Guided attack started.")
+        assertThat(startResponse).contains("Guided attack accepted.")
             .contains("Execution Mode: queue")
             .contains("Next Actions:")
             .contains("Poll: call zap_attack_status")
@@ -270,13 +262,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void completedCrawlStatusPointsToAttackOrPassiveWait() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://example.com"))
-                .thenReturn("""
-                        Direct spider scan started.
-                        Scan ID: spider-100
-                        Target URL: https://example.com
-                        """);
+
         when(spiderScanService.getSpiderScanStatus("spider-100"))
                 .thenReturn("""
                         Direct spider scan status:
@@ -285,7 +271,7 @@ class GuidedSecurityToolsServiceTest {
                         Completed: yes
                         """);
 
-        String operationId = extractOperationId(service.startCrawl("https://example.com", "http", null, null));
+        String operationId = legacyHandle("crawl", "http", "spider-100");
         String statusResponse = service.getCrawlStatus(operationId);
 
         assertThat(statusResponse).contains("Guided crawl status.")
@@ -296,13 +282,11 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void stoppedDirectBrowserCrawlDoesNotClaimSuccessOrKeepPolling() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(ajaxSpiderService.startAjaxSpider("https://spa.example.com"))
-                .thenReturn("AJAX Spider scan started successfully for URL: https://spa.example.com");
+
         when(ajaxSpiderService.getAjaxSpiderStatus())
                 .thenReturn("AJAX Spider Status: stopped\nPages/URLs discovered: 3");
 
-        String operationId = extractOperationId(service.startCrawl("https://spa.example.com", "browser", null, null));
+        String operationId = legacyHandle("crawl", "browser", "legacy-browser");
         String statusResponse = service.getCrawlStatus(operationId);
 
         assertThat(statusResponse)
@@ -314,7 +298,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void succeededBrowserQueueJobDoesNotImplySuccessfulCrawl() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueAjaxSpiderScan("https://spa.example.com", null))
                 .thenReturn("Scan job accepted\nJob ID: browser-1\nType: AJAX_SPIDER");
         when(scanJobQueueService.getScanJobStatus("browser-1"))
@@ -331,13 +315,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void completedAttackStatusPointsToPassiveWaitAndFindings() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(activeScanService.startActiveScan("https://example.com", "true", (String) null))
-                .thenReturn("""
-                        Active scan started.
-                        Scan ID: active-100
-                        Target URL: https://example.com
-                        """);
+
         when(activeScanService.getActiveScanStatus("active-100"))
                 .thenReturn("""
                         Direct active scan status:
@@ -346,7 +324,7 @@ class GuidedSecurityToolsServiceTest {
                         Completed: yes
                         """);
 
-        String operationId = extractOperationId(service.startAttack("https://example.com", "true", null, null, null));
+        String operationId = legacyHandle("attack", "active", "active-100");
         String statusResponse = service.getAttackStatus(operationId);
 
         assertThat(statusResponse).contains("Guided attack status.")
@@ -357,7 +335,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void failedQueueStatusWithFullProgressDoesNotReturnSuccessNextActions() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueActiveScan("https://example.com", "true", null, null))
                 .thenReturn("""
                         Scan job accepted
@@ -386,7 +364,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void stopCrawlCancelsQueuedJobWhenQueuePreferred() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueSpiderScan("https://example.com", (String) null))
                 .thenReturn("""
                         Scan job accepted
@@ -406,25 +384,78 @@ class GuidedSecurityToolsServiceTest {
         verify(scanJobQueueService).cancelScanJob("job-11");
     }
 
+    @ParameterizedTest
+    @CsvSource({
+            "crawl,STARTING", "attack,STARTING",
+            "crawl,START_OUTCOME_UNKNOWN", "attack,START_OUTCOME_UNKNOWN",
+            "crawl,STARTING (cancellation pending)", "attack,STARTING (cancellation pending)",
+            "crawl,START_OUTCOME_UNKNOWN (cancellation pending)", "attack,START_OUTCOME_UNKNOWN (cancellation pending)",
+            "crawl,RUNNING (cancellation pending)", "attack,RUNNING (cancellation pending)",
+            "crawl,RUNNING (cancellation unconfirmed; automatic stop retries ended)",
+            "attack,RUNNING (cancellation unconfirmed; automatic stop retries ended)"
+    })
+    void queuedUnsettledStartStatusAndStopRetainTheSameOperationWithoutReplacementAdvice(String kind, String status) {
+
+        String delegate = "Scan job details\nJob ID: held-job\nStatus: " + status + "\nProgress: 100%";
+        when(scanJobQueueService.queueSpiderScan("https://example.com", (String) null)).thenReturn(delegate);
+        when(scanJobQueueService.queueActiveScan("https://example.com", "true", null, null)).thenReturn(delegate);
+        when(scanJobQueueService.getScanJobStatus("held-job")).thenReturn(delegate);
+        when(scanJobQueueService.cancelScanJob("held-job")).thenReturn(delegate);
+
+        boolean crawl = "crawl".equals(kind);
+        String started = crawl ? service.startCrawl("https://example.com", "http", null, null)
+                : service.startAttack("https://example.com", "true", null, null, null);
+        String operationId = extractOperationId(started);
+        String statusResponse = crawl ? service.getCrawlStatus(operationId) : service.getAttackStatus(operationId);
+        String stopResponse = crawl ? service.stopCrawl(operationId) : service.stopAttack(operationId);
+
+        assertThat(started).startsWith("Guided " + kind + " accepted.");
+        for (String response : List.of(started, statusResponse, stopResponse)) {
+            assertThat(response).contains(operationId, "zap_" + kind + "_status")
+                    .doesNotContain("Start a new guided", "until the scan is complete", "zap_attack_start",
+                            "zap_passive_scan_wait", "zap_findings_summary", "zap_report_generate");
+            if (status.startsWith("START_OUTCOME_UNKNOWN")) {
+                assertThat(response).contains("An authorized operator must reconcile", "Do not submit a replacement or retry");
+            } else if (status.contains("cancellation")) {
+                assertThat(response).contains("Cancellation is not confirmed", "Do not submit a replacement");
+            } else {
+                assertThat(response).contains("Native dispatch is in progress", "do not submit a replacement");
+            }
+        }
+    }
+
     @Test
-    void stopAttackStopsDirectActiveScanWhenQueueNotPreferred() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(activeScanService.startActiveScan("https://example.com", "true", "Baseline"))
-                .thenReturn("""
-                        Active scan started.
-                        Scan ID: active-9
-                        Target URL: https://example.com
-                        """);
-        when(activeScanService.stopActiveScan("active-9"))
-                .thenReturn("Active scan stop requested for ID: active-9");
-
-        String startResponse = service.startAttack("https://example.com", "true", "Baseline", null, null);
-        String operationId = extractOperationId(startResponse);
-        String stopResponse = service.stopAttack(operationId);
-
-        assertThat(stopResponse).contains("Guided attack stop requested.")
-            .contains("Active scan stop requested for ID: active-9");
+    void legacyAttackHandleStillStopsItsNativeScan() {
+        when(activeScanService.stopActiveScan("active-9")).thenReturn("Active scan stop requested for ID: active-9");
+        String response = service.stopAttack(legacyHandle("attack", "active", "active-9"));
+        assertThat(response).contains("Guided attack stop requested.", "Execution Mode: direct", "Active scan stop requested for ID: active-9");
         verify(activeScanService).stopActiveScan("active-9");
+        verifyNoInteractions(scanJobQueueService);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"crawl,http,spider-100", "crawl,client,7", "crawl,browser,legacy-browser", "attack,active,active-100"})
+    void signedLegacyDirectHandlesKeepTheirStatusAndStopRoutes(String kind, String strategy, String backendId) {
+        when(spiderScanService.getSpiderScanStatus("spider-100")).thenReturn("HTTP legacy status");
+        when(spiderScanService.stopSpiderScan("spider-100")).thenReturn("HTTP legacy stop");
+        when(clientSpiderService.getClientSpiderStatus("7")).thenReturn("Client legacy status");
+        when(clientSpiderService.stopClientSpider("7")).thenReturn("Client legacy stop");
+        when(ajaxSpiderService.getAjaxSpiderStatus()).thenReturn("AJAX legacy status");
+        when(ajaxSpiderService.stopAjaxSpider()).thenReturn("AJAX legacy stop");
+        when(activeScanService.getActiveScanStatus("active-100")).thenReturn("Active legacy status");
+        when(activeScanService.stopActiveScan("active-100")).thenReturn("Active legacy stop");
+        String operationId = legacyHandle(kind, strategy, backendId);
+        String status = "attack".equals(kind) ? service.getAttackStatus(operationId) : service.getCrawlStatus(operationId);
+        String stopped = "attack".equals(kind) ? service.stopAttack(operationId) : service.stopCrawl(operationId);
+        String family = switch (strategy) {
+            case "http" -> "HTTP";
+            case "client" -> "Client";
+            case "browser" -> "AJAX";
+            default -> "Active";
+        };
+        assertThat(status).contains("Execution Mode: direct", family + " legacy status");
+        assertThat(stopped).contains("Execution Mode: direct", family + " legacy stop");
+        verifyNoInteractions(scanJobQueueService);
     }
 
     @Test
@@ -441,7 +472,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void startCrawlExplainsQueuedAutoStrategySelection() {
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueSpiderScan("https://example.com", (String) null))
                 .thenReturn("""
                         Scan job accepted
@@ -453,24 +484,24 @@ class GuidedSecurityToolsServiceTest {
 
         assertThat(startResponse).contains("Execution Mode: queue")
             .contains("Strategy: http")
-            .contains("Auto strategy in queued mode currently selects the HTTP spider by default");
+            .contains("Auto strategy selects the queued HTTP spider without automatic fallback");
     }
 
     @Test
     void startCrawlUsesAuthenticatedSpiderWhenPreparedFormSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-1", "https://app.example.com", "1", "7");
         when(guidedAuthSessionService.getPreparedSession("auth-1")).thenReturn(session);
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScanAsUser("1", "7", "https://app.example.com", (String) null, "true", "false"))
+
+        when(scanJobQueueService.queueSpiderScanAsUser("1", "7", "https://app.example.com", null, "true", "false", null))
                 .thenReturn("""
-                        Direct authenticated spider scan started.
-                        Scan ID: auth-spider-1
+                        Scan job accepted
+                        Job ID: auth-spider-1
                         Target URL: https://app.example.com
                         """);
 
         String response = service.startCrawl("https://app.example.com", "http", null, "auth-1");
 
-        assertThat(response).contains("Guided crawl started.")
+        assertThat(response).contains("Guided crawl accepted.")
             .contains("Authenticated Session: auth-1")
             .contains("Context ID: 1")
             .contains("User ID: 7")
@@ -481,7 +512,7 @@ class GuidedSecurityToolsServiceTest {
     void startAttackUsesQueuedAuthenticatedPathWhenPreparedFormSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-2", "https://app.example.com", "11", "17");
         when(guidedAuthSessionService.getPreparedSession("auth-2")).thenReturn(session);
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueActiveScanAsUser("11", "17", "https://app.example.com", "true", "Baseline", (String) null))
                 .thenReturn("""
                         Scan job accepted
@@ -491,7 +522,7 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startAttack("https://app.example.com", "true", "Baseline", null, "auth-2");
 
-        assertThat(response).contains("Guided attack started.")
+        assertThat(response).contains("Guided attack accepted.")
             .contains("Authenticated Session: auth-2")
             .contains("Execution Mode: queue")
             .contains("Job ID: auth-job-9")
@@ -545,34 +576,29 @@ class GuidedSecurityToolsServiceTest {
     }
 
     @Test
-    void preparedBrowserSessionRoutesDirectClientCrawlAndNativeLifecycle() {
+    void preparedBrowserSessionQueuesAuthenticatedClientCrawlAndLifecycle() {
         when(guidedAuthSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(clientSpiderService.startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user"))
-                .thenReturn("Direct Client Spider scan started.\nScan ID: client-auth-1");
-        when(clientSpiderService.getClientSpiderStatus("client-auth-1")).thenReturn("Progress: 20%");
-        when(clientSpiderService.stopClientSpider("client-auth-1")).thenReturn("Client Spider stop requested");
-
+        when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
+                .thenReturn("Job ID: client-auth-job\nStatus: RUNNING");
         String response = service.startCrawl("https://app.example.com", "client", null, "auth-client");
         String operationId = extractOperationId(response);
         service.getCrawlStatus(operationId);
         service.stopCrawl(operationId);
-
-        assertThat(response).contains("Strategy: client", "Execution Mode: direct", "Authenticated Session: auth-client",
+        assertThat(response).contains("Strategy: client", "Execution Mode: queue", "Authenticated Session: auth-client",
                 "prepared browser session", "browser session supports Client Spider only")
                 .doesNotContain("call zap_attack_start", "env:SHOP_PASSWORD");
-        verify(clientSpiderService).startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user");
-        verify(clientSpiderService).getClientSpiderStatus("client-auth-1");
-        verify(clientSpiderService).stopClientSpider("client-auth-1");
-        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
+        verify(scanJobQueueService).queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null);
+        verify(scanJobQueueService).getScanJobStatus("client-auth-job");
+        verify(scanJobQueueService).cancelScanJob("client-auth-job");
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
     }
 
     @Test
     void preparedBrowserSessionRoutesQueuedClientCrawlWithNamesAndIdempotencyKey() {
         when(guidedAuthSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key"))
                 .thenReturn("Scan job accepted\nJob ID: client-auth-job\nType: CLIENT_SPIDER");
         when(scanJobQueueService.getScanJobStatus("client-auth-job"))
@@ -597,7 +623,7 @@ class GuidedSecurityToolsServiceTest {
     void authenticatedQueuedClientFailureRemainsVisibleWithoutAnonymousFallback() {
         when(guidedAuthSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.QUEUE);
+
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
                 .thenReturn("Scan job accepted\nJob ID: client-auth-failed\nType: CLIENT_SPIDER");
         when(scanJobQueueService.getScanJobStatus("client-auth-failed"))
@@ -657,15 +683,12 @@ class GuidedSecurityToolsServiceTest {
     void authenticatedClientFailureDoesNotFallBackToAnonymousCrawl() {
         when(guidedAuthSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
         ZapApiException failure = new ZapApiException("Browser authentication failed", new RuntimeException("login failed"));
-        when(clientSpiderService.startClientSpider("https://app.example.com", null, "shop-auth", "zap-scan-user"))
+        when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
                 .thenThrow(failure);
-
-        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
-                .isSameAs(failure);
-        verify(clientSpiderService, never()).startClientSpider("https://app.example.com", null);
-        verifyNoInteractions(spiderScanService, ajaxSpiderService, scanJobQueueService);
+        assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client")).isSameAs(failure);
+        verify(scanJobQueueService, never()).queueClientSpiderScan("https://app.example.com", null, null);
+        verifyNoInteractions(clientSpiderService, spiderScanService, ajaxSpiderService);
     }
 
     @Test
@@ -761,6 +784,82 @@ class GuidedSecurityToolsServiceTest {
         }
     }
 
+    @ParameterizedTest
+    @CsvSource({"zap_findings_snapshot,baseUrl", "zap_findings_diff,baseUrl|baselineSnapshot|maxGroups"})
+    void retainedFindingsSnapshotSchemasRemainCompatible(String toolName, String requiredFields) throws Exception {
+        ToolCallback callback = Arrays.stream(MethodToolCallbackProvider.builder().toolObjects(service).build().getToolCallbacks())
+                .filter(tool -> toolName.equals(tool.getToolDefinition().name())).findFirst().orElseThrow();
+        JsonNode schema = new ObjectMapper().readTree(callback.getToolDefinition().inputSchema());
+        List<String> required = new ArrayList<>();
+        for (JsonNode field : schema.path("required")) required.add(field.asString());
+        assertThat(required).containsExactlyInAnyOrder(requiredFields.split("\\|"));
+        assertThat(schema.path("properties").propertyNames()).containsExactlyInAnyOrder(requiredFields.split("\\|"));
+    }
+
+    @Test
+    void retainedSnapshotAndDiffUseTheSameScopedFindingsService() {
+        when(findingsService.exportFindingsSnapshot("https://example.com")).thenReturn("snapshot-result");
+        when(findingsService.diffFindings("https://example.com", "baseline-json", 17)).thenReturn("diff-result");
+        assertThat(service.exportFindingsSnapshot("https://example.com")).isEqualTo("snapshot-result");
+        assertThat(service.diffFindings("https://example.com", "baseline-json", 17)).isEqualTo("diff-result");
+        verify(findingsService).exportFindingsSnapshot("https://example.com");
+        verify(findingsService).diffFindings("https://example.com", "baseline-json", 17);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"zap_scan_policies_list", "zap_scan_policy_view"})
+    void policyInspectionSchemasKeepTheListEmptyAndViewFiltersOptional(String toolName) throws Exception {
+        ToolCallback callback = Arrays.stream(MethodToolCallbackProvider.builder().toolObjects(service).build().getToolCallbacks())
+                .filter(tool -> toolName.equals(tool.getToolDefinition().name())).findFirst().orElseThrow();
+        JsonNode schema = new ObjectMapper().readTree(callback.getToolDefinition().inputSchema());
+        List<String> required = new ArrayList<>();
+        for (JsonNode field : schema.path("required")) required.add(field.asString());
+
+        if ("zap_scan_policies_list".equals(toolName)) {
+            assertThat(required).isEmpty();
+            assertThat(schema.path("properties").propertyNames()).isEmpty();
+        } else {
+            assertThat(required).containsExactly("scanPolicyName");
+            assertThat(schema.path("properties").propertyNames())
+                    .containsExactlyInAnyOrder("scanPolicyName", "ruleFilter", "limit");
+            for (String field : List.of("scanPolicyName", "ruleFilter", "limit")) {
+                assertThat(schema.path("properties").path(field).path("type").asString()).isEqualTo("string");
+            }
+        }
+    }
+
+    @Test
+    void policyReadOnlyCallersInspectWithoutScanActionsOrMutationSuggestions() {
+        useScopes("zap:scan:policy:read");
+        when(activeScanService.listScanPolicies()).thenReturn("Available active-scan policies:\n- API");
+        when(activeScanService.viewScanPolicy("API", "sql", "3")).thenReturn("Policy: API\nShowing: 1 of 1 matched rules");
+
+        assertThat(service.listScanPolicies()).contains("- API", "zap_scan_policy_view")
+                .doesNotContain("zap_attack_start", "zap_scan_policy_rule_set", "direct", "queued");
+        assertThat(service.viewScanPolicy("API", "sql", "3"))
+                .contains("Policy: API", "Showing: 1 of 1 matched rules", "zap_scan_policies_list", "zap_scan_policy_view")
+                .doesNotContain("zap_attack_start", "zap_scan_policy_rule_set", "direct", "queued");
+        verify(activeScanService).listScanPolicies();
+        verify(activeScanService).viewScanPolicy("API", "sql", "3");
+        verifyNoMoreInteractions(activeScanService);
+        verifyNoInteractions(scanJobQueueService, spiderScanService, ajaxSpiderService, clientSpiderService);
+    }
+
+    @Test
+    void permittedPolicyReadersCanUseTheChosenPolicyForAGuidedQueuedAttack() {
+        useScopes("zap:scan:policy:read", "zap:scan:attack:run");
+        when(activeScanService.listScanPolicies()).thenReturn("Available active-scan policies:\n- API");
+        when(activeScanService.viewScanPolicy("API", null, null)).thenReturn("Policy: API");
+        when(scanJobQueueService.queueActiveScan("https://example.com", "true", "API", "chosen-policy"))
+                .thenReturn("Job ID: policy-job\nStatus: QUEUED");
+
+        assertThat(service.listScanPolicies()).contains("zap_attack_start", "authorized");
+        assertThat(service.viewScanPolicy("API", null, null)).contains("zap_attack_start", "authorized");
+        assertThat(service.startAttack("https://example.com", "true", "API", "chosen-policy", null))
+                .contains("Job ID: policy-job", "Operation ID:");
+        verify(scanJobQueueService).queueActiveScan("https://example.com", "true", "API", "chosen-policy");
+    }
+
     @Test
     void guidedFindingsSummaryAddsTriageContextForAgents() {
         when(findingsService.getFindingsSummary("https://example.com/admin"))
@@ -810,7 +909,6 @@ class GuidedSecurityToolsServiceTest {
         EngineAdapter unsupportedEngineAdapter = mock(EngineAdapter.class);
         when(unsupportedEngineAdapter.displayName()).thenReturn("Metadata Only Engine");
         GuidedScanWorkflowService localWorkflow = new GuidedScanWorkflowService(
-                executionModeResolver,
                 spiderScanService,
                 ajaxSpiderService,
                 clientSpiderService,
@@ -862,6 +960,7 @@ class GuidedSecurityToolsServiceTest {
     private GuidedSecurityToolsService serviceWithEngine(EngineAdapter localEngineAdapter) {
         return new GuidedSecurityToolsService(
                 guidedScanWorkflowService,
+                activeScanService,
                 reportService,
                 findingsService,
                 openApiService,
@@ -875,10 +974,9 @@ class GuidedSecurityToolsServiceTest {
     void quickStartScopesKeepCrawlLifecycleAndReportPathWithoutSuggestingAttack() {
         useScopes("mcp:tools:list", "zap:scan:crawl:run", "zap:scan:read", "zap:scan:stop",
                 "zap:alerts:read", "zap:report:read", "zap:report:generate");
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: scoped-crawl");
-        when(spiderScanService.getSpiderScanStatus("scoped-crawl")).thenReturn("Progress: 100%");
-        when(spiderScanService.stopSpiderScan("scoped-crawl")).thenReturn("Stop requested");
+
+        when(scanJobQueueService.getScanJobStatus("default-http")).thenReturn("Progress: 100%");
+        when(scanJobQueueService.cancelScanJob("default-http")).thenReturn("Status: CANCELLED");
 
         String started = service.startCrawl("https://example.com", "http", null, null);
         String operationId = extractOperationId(started);
@@ -900,10 +998,8 @@ class GuidedSecurityToolsServiceTest {
             useScopes("mcp:tools:list", "zap:scan:crawl:run", "zap:scan:read", "zap:scan:stop",
                     "zap:alerts:read", "zap:report:read", "zap:report:generate");
         }
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: running-crawl");
-        when(spiderScanService.getSpiderScanStatus("running-crawl")).thenReturn("Progress: 45%\nCompleted: no");
-        when(ajaxSpiderService.startAjaxSpider("https://example.com")).thenReturn("AJAX Spider started");
+
+        when(scanJobQueueService.getScanJobStatus("default-http")).thenReturn("Status: RUNNING\nProgress: 45%");
         when(ajaxSpiderService.getAjaxSpiderStatus()).thenReturn("AJAX Spider Status: running");
 
         String started = service.startCrawl("https://example.com", strategy, null, null);
@@ -930,10 +1026,9 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void crawlFollowupsOmitMissingStatusStopAndReportPermissions() {
         useScopes("zap:scan:crawl:run");
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(spiderScanService.startSpiderScan("https://example.com")).thenReturn("Scan ID: no-followups");
-        when(spiderScanService.getSpiderScanStatus("no-followups")).thenReturn("Progress: 45%");
-        when(spiderScanService.stopSpiderScan("no-followups")).thenReturn("Stop requested");
+
+        when(scanJobQueueService.getScanJobStatus("default-http")).thenReturn("Status: RUNNING\nProgress: 45%");
+        when(scanJobQueueService.cancelScanJob("default-http")).thenReturn("Status: CANCELLED");
 
         String started = service.startCrawl("https://example.com", "http", null, null);
         String operationId = extractOperationId(started);
@@ -949,8 +1044,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void browserCrawlFollowupsDoNotRecommendUnpermittedAttack() {
         useScopes("zap:scan:crawl:run", "zap:scan:read");
-        when(executionModeResolver.resolveDefaultMode()).thenReturn(GuidedExecutionModeResolver.ExecutionMode.DIRECT);
-        when(ajaxSpiderService.startAjaxSpider("https://example.com")).thenReturn("AJAX Spider started");
+
 
         assertThat(service.startCrawl("https://example.com", "browser", null, null))
                 .contains("zap_crawl_status", "zap_passive_scan_wait")
@@ -990,6 +1084,18 @@ class GuidedSecurityToolsServiceTest {
         assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
                 .contains("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff")
                 .doesNotContain("zap_report_read", "zap_report_read_chunk");
+    }
+
+    /** Fixed old-format fixtures; no production encoder or direct START is used to create them. */
+    private String legacyHandle(String kind, String strategy, String backendId) {
+        return switch (kind + "/" + strategy + "/" + backendId) {
+            case "crawl/client/7" -> "zop_djJ8WTNKaGQyd3xaR2x5WldOMHxZMnhwWlc1MHxOd3xZVzV2Ym5sdGIzVnp8WkdWbVlYVnNkQzEzYjNKcmMzQmhZMlV8YkdWbllXTjVMV1pwZUhSMWNtVXRibTl1WTJVfHdoTXlpSFk0RzJsMVBfRHZFdkd3N1cxanhoMWNZbWhuNV9NSE8wRHpnbkE";
+            case "crawl/http/spider-100" -> "zop_djJ8WTNKaGQyd3xaR2x5WldOMHxhSFIwY0F8YzNCcFpHVnlMVEV3TUF8WVc1dmJubHRiM1Z6fFpHVm1ZWFZzZEMxM2IzSnJjM0JoWTJVfGJHVm5ZV041TFdacGVIUjFjbVV0Ym05dVkyVXxJRkJrZWY1Mkh4U05FVmtLYlljLTA1a2I4RFhUNjU0dkRrZExuTWk0OWNB";
+            case "crawl/browser/legacy-browser" -> "zop_djJ8WTNKaGQyd3xaR2x5WldOMHxZbkp2ZDNObGNnfGJHVm5ZV041TFdKeWIzZHpaWEl8WVc1dmJubHRiM1Z6fFpHVm1ZWFZzZEMxM2IzSnJjM0JoWTJVfGJHVm5ZV041TFdacGVIUjFjbVV0Ym05dVkyVXw5TTlfMFBZcVdpWEtNRU5QanpQaVdKSXdObnRsR3RDVHFIQklTVk5pajg0";
+            case "attack/active/active-100" -> "zop_djJ8WVhSMFlXTnJ8WkdseVpXTjB8WVdOMGFYWmx8WVdOMGFYWmxMVEV3TUF8WVc1dmJubHRiM1Z6fFpHVm1ZWFZzZEMxM2IzSnJjM0JoWTJVfGJHVm5ZV041TFdacGVIUjFjbVV0Ym05dVkyVXxoeEMwWjNrSTYxdnVURVZ6QjRsQnJhT2RqNmw1b1pYUGhfMzVuZk1PZW44";
+            case "attack/active/active-9" -> "zop_djJ8WVhSMFlXTnJ8WkdseVpXTjB8WVdOMGFYWmx8WVdOMGFYWmxMVGt8WVc1dmJubHRiM1Z6fFpHVm1ZWFZzZEMxM2IzSnJjM0JoWTJVfGJHVm5ZV041TFdacGVIUjFjbVV0Ym05dVkyVXxsdTlOQ3p1Y3ZZM1JyVDItZEdSWUFVVVd6SExhaHNybkFSUUhyblZibWRB";
+            default -> throw new IllegalArgumentException("Missing legacy handle fixture");
+        };
     }
 
     private void useScopes(String... scopes) {

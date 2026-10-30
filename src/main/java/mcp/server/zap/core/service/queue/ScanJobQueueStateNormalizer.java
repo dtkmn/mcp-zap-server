@@ -73,7 +73,11 @@ public class ScanJobQueueStateNormalizer {
 
         for (ScanJob job : restoredJobs.values()) {
             if (job.getStatus() == ScanJobStatus.RUNNING && !hasText(job.getZapScanId())) {
-                job.markFailed("Missing ZAP scan ID while restoring durable scan job state");
+                if (job.getLaunchAttempt() == null) {
+                    job.restoreLaunchAttempt(new ScanJob.LaunchAttempt(java.util.UUID.randomUUID().toString(),
+                            "legacy-unverified", job.getCreatedAt(), 0));
+                }
+                job.markLaunchUnknown("Missing native scan receipt while restoring state; possible launch remains held");
                 repairedRunningJobs += 1;
             }
         }

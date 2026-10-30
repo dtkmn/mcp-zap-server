@@ -36,7 +36,7 @@ Modes:
 - `warn`: log missing-scope usage but still allow it
 - `enforce`: reject insufficient-scope requests with HTTP `403`
 
-`allowWildcard=true` lets a client with `*` call the exposed tools. Keep it enabled for the standard local default. Restricted deployments can turn it off after assigning explicit scopes to every intended client.
+`allowWildcard=true` lets a client with `*` pass ordinary tool-scope checks. Keep it enabled for the standard local default. Restricted deployments can turn it off after assigning explicit scopes to every intended client. Add-on updates additionally require their exact operator scope and operator configuration; a wildcard alone does not authorize them.
 
 ## Scope Flow
 
@@ -60,10 +60,17 @@ In JWT mode, the access token inherits the same scopes from the source client. J
 ## Quick-Start Permissions
 
 The packaged local API-key client defaults to `*` with wildcard acceptance
-enabled. This permits every tool exposed by the selected surface. The default
-`guided` surface includes crawling, active attacks, target authentication, API
-imports, findings, history and reports. Selecting `expert` also exposes expert
-tools to that wildcard client; a grant never enables a disabled tool.
+enabled. This permits ordinary tools in the guided catalog, including crawling, active attacks, target authentication, API imports, findings, history and reports.
+
+`zap_addon_update` is a maintenance operation with additional checks. It requires
+the explicit `zap:engine:addons:update` scope, an approved operator client,
+enforced authorization, and enabled maintenance on a dedicated single-controller
+engine. It remains disabled by default. See
+[ZAP add-on inspection and updates](../../operations/engine-addons/).
+
+Uncertain launches retain their holds and capacity. See
+[unresolved launch holds](../../operations/scan-queue-retry-policy/#operator-reconciliation)
+for the current status and resolution limits.
 
 Run only the target and workflow the user requests. MCP grants do not establish
 permission to scan a system, authenticate ZAP to a website or replace target
@@ -84,10 +91,15 @@ needed to reload environment settings. Do not regenerate settings or keys to
 change scopes.
 
 Use the scope inventory below for the intended workflow. Guided active attacks
-use `zap:scan:attack:run`; direct and queued active scans use
-`zap:scan:active:run`. These are distinct grants. Before disabling wildcard
-acceptance, give every intended client its complete explicit scope list,
+use `zap:scan:attack:run`. Before disabling wildcard acceptance, give every
+intended client its complete explicit scope list,
 including discovery and status where required.
+
+Policy inspection uses `zap:scan:policy:read` for `zap_scan_policies_list` and
+`zap_scan_policy_view`. This grant does not permit `zap_attack_start`, change
+policy rules or expand target scope. `zap:scan:read` alone does not grant policy
+inspection. No policy-editing tool is exposed. See
+[Scan Policy Selection](../../scanning/scan-policy-controls/).
 
 A restricted client may still discover tools it cannot call. Follow-up guidance
 and discovery do not override enforced grants. If an operation returns
@@ -101,28 +113,19 @@ Common scopes:
 | Scope | Purpose |
 | --- | --- |
 | `mcp:tools:list` | Allow MCP `tools/list` discovery |
-| `zap:inventory:read` | Read hosts, sites, and URLs |
+| `zap:engine:addons:read` | Inspect engine add-ons, Marketplace candidates and passive-rule readiness |
+| `zap:engine:addons:update` | Request an operator-enabled update of an approved installed add-on; exact grant required |
 | `zap:alerts:read` | Read grouped findings, raw instances, snapshots, and diffs |
-| `zap:report:read` | Read guided summaries, report templates, and generated report artifacts |
+| `zap:report:read` | Read guided summaries and generated report artifacts |
 | `zap:report:generate` | Generate reports |
 | `zap:api:import` | Import OpenAPI, GraphQL, and SOAP/WSDL definitions |
 | `zap:scan:crawl:run` | Start guided crawl flows |
 | `zap:scan:attack:run` | Start guided attack flows |
-| `zap:scan:active:run` | Start direct or queued active scans |
-| `zap:scan:spider:run` | Start direct or queued traditional Spider and Client Spider scans (Client Spider in `v0.13.0`) |
-| `zap:scan:ajax:run` | Start direct or queued AJAX Spider scans |
+| `zap:scan:policy:read` | List configured ZAP active-scan policies and inspect their current rule settings; does not start scans or change rules |
 | `zap:scan:read` | Read scan status, passive backlog, queue job state, scan history evidence, and evidence handoff summaries |
-| `zap:scan:stop` | Stop direct scans or cancel queue jobs |
-| `zap:scan:queue:write` | Retry or requeue queue jobs |
-| `zap:scan:policy:read` | View ZAP active-scan policies and rule state |
-| `zap:scan:policy:write` | Change ZAP active-scan policy rules |
-| `zap:policy:dry-run` | Preview Policy Bundle v1 decisions with `zap_policy_dry_run` |
-| `zap:automation:run` | Start Automation Framework plans |
-| `zap:automation:read` | Read Automation Framework status and artifacts |
-| `zap:context:read` / `zap:context:write` | Read or change ZAP contexts/auth config |
-| `zap:user:read` / `zap:user:write` | Read or change ZAP users |
+| `zap:scan:stop` | Stop or cancel a guided operation |
 | `zap:auth:session:write` | Prepare guided authenticated sessions |
-| `zap:auth:test` | Run authenticated-user verification helpers |
+| `zap:auth:test` | Validate prepared guided auth sessions |
 
 ## Deny Contract
 
@@ -168,7 +171,7 @@ After authentication in API-key or JWT mode, it checks whether the requested
 tool is registered and enabled before checking scopes or abuse-protection
 policies.
 
-A nonexistent tool and a tool disabled by the selected surface receive the same
+A nonexistent or unavailable tool receives the same
 HTTP `200` JSON response, without a `WWW-Authenticate` challenge:
 
 ```json
@@ -186,13 +189,13 @@ also applies in authorization `warn`/`off` and security `none` modes; it does no
 turn authentication back on when security is disabled.
 
 The adapter's immutable registry is derived from the same `ToolCallbackProvider`
-used by Spring AI, reusing descriptors from `ToolScopeRegistry`. The full
-permission inventory may include disabled tools, but discovery and the adapter's
-active registry contain only registered tools. No separate tool-name list is
-maintained. This wiring assumes the application's current single provider;
+used by Spring AI, reusing descriptors from `ToolScopeRegistry`. The permission
+inventory describes supported tools; the active registry includes only callbacks
+registered for the current configuration. A permission mapping alone does not
+expose an optional tool. No separate tool-name list is maintained. This wiring
+assumes the application's current single provider;
 adding another registration path or runtime tool changes requires updating the
-registry assembly and its discovery-consistency tests together. Surface changes
-take effect when the application restarts.
+registry assembly and its discovery-consistency tests together.
 
 Tool calls require a request ID: id-less `tools/call` messages receive HTTP `202`
 with no body and do not execute. Explicit null, fractional, or non-string/non-integer
@@ -215,6 +218,6 @@ Normal MCP clients handle this automatically.
 - assign narrow scopes per client instead of sharing one broad key
 - keep `mcp:tools:list` only on clients that truly need discovery
 - disable wildcard scopes once migration is complete
-- review scope grants when you switch from `guided` to `expert`
+- grant each required guided action explicitly for restricted clients
 
-For surface selection, see [Tool Surfaces](../tool-surfaces/).
+See the [guided catalog](../tool-surfaces/) for supported tools and [Upgrading to Guided Tools](../tool-migration/) for older client and scope configurations.

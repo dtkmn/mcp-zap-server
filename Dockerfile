@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM gradle:9.8.1-jdk25@sha256:e4f9e3d037cc0c7d8fc42cd97edb976dfd19a5b7314212b88b6de3807d13cd47 AS builder
+FROM --platform=$BUILDPLATFORM gradle:9.8.2-jdk25@sha256:ca424744a6a45a575f333edea680696d980999c461be38b1574a4c70d5455f24 AS builder
 WORKDIR /usr/src/app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle
@@ -16,7 +16,9 @@ RUN gradle bootJar -x test && \
       exit 1; \
     fi && \
     cp "${boot_jars}" /tmp/app.jar && \
-    mkdir -p /tmp/runtime-layout/zap/wrk /tmp/runtime-layout/home/app
+    mkdir -p /tmp/runtime-layout/zap/wrk /tmp/runtime-layout/home/app \
+      /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety && \
+    chmod 0700 /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety
 
 # The signed multi-architecture runtime index is kept literal so Dependabot can
 # update its digest. This stage also supplies the canonical distroless passwd
@@ -26,7 +28,7 @@ FROM gcr.io/distroless/java25-debian13:nonroot@sha256:69514ce1edfe8759f5169870e8
 
 # Build a shell-free, statically linked HTTP health probe for the target image
 # architecture. Only /out/http-healthcheck enters the runtime image.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:7fd63dd7c37f5ddaef15bd8fd3f3e4f90f0d50cd9cae255c7cf73887a494d8df AS healthcheck-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS healthcheck-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src/healthcheck
@@ -53,6 +55,7 @@ COPY --from=healthcheck-builder /out/passwd /etc/passwd
 COPY --from=healthcheck-builder /out/group /etc/group
 COPY --from=builder /tmp/runtime-layout/home/app /home/app
 COPY --chown=1000:1000 --from=builder /tmp/runtime-layout/zap/wrk /zap/wrk
+COPY --chown=1000:1000 --from=builder /tmp/runtime-layout/var/lib/mcp-zap/scan-launch-safety /var/lib/mcp-zap/scan-launch-safety
 WORKDIR /app
 COPY --chmod=0444 --from=builder /tmp/app.jar ./app.jar
 COPY --chmod=0555 --from=healthcheck-builder /out/http-healthcheck /usr/local/bin/http-healthcheck

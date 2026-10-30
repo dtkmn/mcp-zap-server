@@ -19,7 +19,7 @@ Authentication answers who is calling. Authorization still answers which MCP too
 - **Security**: Authentication and per-tool scope checks are disabled
 - **Setup**: Minimal configuration required
 
-This does not enable tools outside the selected surface or make every request
+This does not restore retired tools or make every request
 valid. In **v0.11.1 and later**, adapter tool-availability and request-validation
 checks remain active in `none` mode. The
 [unknown/disabled-tool error contract](../getting-started/tool-scope-authorization/#unknown-and-disabled-tools)
@@ -228,7 +228,7 @@ Useful follow-on docs:
 
 - [Tool Scope Authorization](../getting-started/tool-scope-authorization/)
 - [MCP Client Authentication](../getting-started/mcp-client-authentication/)
-- [Tool Surfaces](../getting-started/tool-surfaces/)
+- [Guided Tools](../getting-started/tool-surfaces/)
 
 ---
 

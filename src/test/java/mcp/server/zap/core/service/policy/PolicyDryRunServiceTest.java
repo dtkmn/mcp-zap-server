@@ -7,35 +7,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import mcp.server.zap.core.observability.ObservabilityService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import mcp.server.zap.extension.api.policy.PolicyBundleAccessBoundary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.ArgumentCaptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 class PolicyDryRunServiceTest {
 
-    private ObservabilityService observabilityService;
     private PolicyDryRunService service;
 
     @BeforeEach
     void setUp() {
-        observabilityService = mock(ObservabilityService.class);
-        service = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry(), observabilityService);
+        service = new PolicyDryRunService(new ObjectMapper(), new ToolScopeRegistry());
     }
 
     @Test
     void dryRunMatchesAllowRuleForSandboxGuidedRequest() throws Exception {
         String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"));
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 bundle,
                 "zap_attack_start",
                 "https://api.sandbox.example.com/orders",
@@ -49,29 +43,22 @@ class PolicyDryRunServiceTest {
         assertThat(decision(response)).containsEntry("matchedRuleId", "allow-guided-ci-sandbox-hours");
         assertThat(request(response)).containsEntry("normalizedHost", "api.sandbox.example.com");
         assertThat(request(response)).containsEntry("bundleLocalDay", "tue");
-
-        CapturedPolicyDecision audit = capturedPolicyDecision();
-        assertThat(audit.outcome()).isEqualTo("allow");
-        assertThat(audit.correlationId()).isNull();
-        assertThat(audit.details())
-                .containsEntry("bundleName", "ci-guided-guardrails")
-                .containsEntry("bundleOwner", "security-platform")
-                .containsEntry("evaluatedTool", "zap_attack_start")
-                .containsEntry("normalizedHost", "api.sandbox.example.com")
-                .containsEntry("decisionSource", "rule")
-                .containsEntry("matchedRuleId", "allow-guided-ci-sandbox-hours")
-                .containsEntry("reason", "Sandbox CI is approved during staffed rollout hours.")
-                .containsEntry("validationValid", true);
-        assertThat(traceSummary(audit))
+        assertThat(objectMap(response, "bundle"))
+                .containsEntry("name", "ci-guided-guardrails")
+                .containsEntry("owner", "security-platform");
+        assertThat(request(response)).containsEntry("tool", "zap_attack_start");
+        assertThat(decision(response))
+                .containsEntry("reason", "Sandbox CI is approved during staffed rollout hours.");
+        assertThat(mapList(response, "trace"))
                 .extracting(entry -> entry.get("ruleId"))
                 .contains("allow-guided-ci-sandbox-hours");
     }
 
     @Test
     void dryRunFallsBackToDefaultDecisionWhenNoRuleMatches() throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/expert-readonly-triage.json"));
+        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 bundle,
                 "zap_findings_summary",
                 "https://prod.example.com",
@@ -83,25 +70,22 @@ class PolicyDryRunServiceTest {
         assertThat(decision(response)).containsEntry("source", "default");
         assertThat(mapList(response, "trace"))
                 .extracting(entry -> entry.get("ruleId"))
-                .contains("allow-readonly-review-surface", "deny-expert-mutation-tools");
+                .contains("allow-readonly-review-surface", "deny-mutation-tools");
 
-        CapturedPolicyDecision audit = capturedPolicyDecision();
-        assertThat(audit.outcome()).isEqualTo("deny");
-        assertThat(audit.details())
-                .containsEntry("bundleName", "expert-readonly-triage")
-                .containsEntry("evaluatedTool", "zap_findings_summary")
-                .containsEntry("normalizedHost", "prod.example.com")
-                .containsEntry("decisionSource", "default")
+        assertThat(objectMap(response, "bundle")).containsEntry("name", "guided-readonly-triage");
+        assertThat(request(response))
+                .containsEntry("tool", "zap_findings_summary")
+                .containsEntry("normalizedHost", "prod.example.com");
+        assertThat(decision(response))
                 .containsEntry("defaultDecision", "deny")
-                .containsEntry("validationValid", true)
-                .doesNotContainKey("matchedRuleId");
+                .containsEntry("matchedRuleId", null);
     }
 
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"zap_report_read", "zap_report_read_chunk"})
     void readonlyReportRulesAllowWorkspaceReadsWithoutHostMatching(String toolName) throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/expert-readonly-triage.json"));
-        Map<String, Object> response = service.dryRun(bundle, toolName, null, "2026-04-06T09:00:00Z");
+        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
+        Map<String, Object> response = service.preview(bundle, toolName, null, "2026-04-06T09:00:00Z");
         assertThat(validation(response)).containsEntry("valid", true);
         assertThat(decision(response)).containsEntry("result", "allow")
                 .containsEntry("source", "rule").containsEntry("matchedRuleId", "allow-workspace-report-reads");
@@ -137,7 +121,7 @@ class PolicyDryRunServiceTest {
                 }
                 """;
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 invalidBundle,
                 "zap_unknown_tool",
                 "://bad-target",
@@ -153,16 +137,9 @@ class PolicyDryRunServiceTest {
         assertThat(decision(response)).containsEntry("result", "invalid");
         assertThat(response).containsEntry("trace", List.of());
 
-        CapturedPolicyDecision audit = capturedPolicyDecision();
-        assertThat(audit.outcome()).isEqualTo("invalid");
-        assertThat(audit.details())
-                .containsEntry("decisionSource", "validation")
-                .containsEntry("validationValid", false)
+        assertThat(decision(response))
+                .containsEntry("source", "validation")
                 .containsEntry("reason", "The request or policy bundle is invalid.");
-        assertThat(stringList(audit.details(), "validationErrors"))
-                .anyMatch(error -> error.contains("toolName must be an exact known MCP tool or action"))
-                .anyMatch(error -> error.contains("target must be"))
-                .anyMatch(error -> error.contains("evaluatedAt must be"));
     }
 
     @Test
@@ -173,7 +150,7 @@ class PolicyDryRunServiceTest {
         );
         ((ObjectNode) bundle.at("/spec/rules/0")).remove("description");
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 objectMapper.writeValueAsString(bundle),
                 "zap_attack_start",
                 "https://api.sandbox.example.com/orders",
@@ -197,7 +174,7 @@ class PolicyDryRunServiceTest {
         );
         ((ObjectNode) bundle.at("/spec/rules/0/match")).putArray("hosts").add(host);
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 objectMapper.writeValueAsString(bundle),
                 "zap_attack_start",
                 host,
@@ -253,7 +230,7 @@ class PolicyDryRunServiceTest {
                 }
                 """;
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 invalidBundle,
                 "zap_attack_start",
                 "https://api.sandbox.example.com/orders",
@@ -265,11 +242,6 @@ class PolicyDryRunServiceTest {
                 .anyMatch(error -> error.contains("start and end cannot be identical"));
         assertThat(decision(response)).containsEntry("result", "invalid");
         assertThat(response).containsEntry("trace", List.of());
-
-        CapturedPolicyDecision audit = capturedPolicyDecision();
-        assertThat(audit.outcome()).isEqualTo("invalid");
-        assertThat(stringList(audit.details(), "validationErrors"))
-                .anyMatch(error -> error.contains("start and end cannot be identical"));
     }
 
     @Test
@@ -324,7 +296,7 @@ class PolicyDryRunServiceTest {
                 }
                 """;
 
-        Map<String, Object> response = service.dryRun(
+        Map<String, Object> response = service.preview(
                 bundle,
                 "zap_report_read",
                 "https://prod.example.com",
@@ -340,13 +312,6 @@ class PolicyDryRunServiceTest {
                 .containsEntry("workspace", "workspace-three");
         assertThat(objectMap(response, "bundle"))
                 .containsEntry("tenant", "tenant-alpha");
-
-        CapturedPolicyDecision audit = capturedPolicyDecision();
-        assertThat(audit.outcome()).isEqualTo("invalid");
-        assertThat(audit.details())
-                .containsEntry("bundleTenant", "tenant-alpha")
-                .containsEntry("requestTenant", "tenant-beta")
-                .containsEntry("requestWorkspace", "workspace-three");
     }
 
     @SuppressWarnings("unchecked")
@@ -377,22 +342,5 @@ class PolicyDryRunServiceTest {
     @SuppressWarnings("unchecked")
     private Map<String, Object> objectMap(Map<String, Object> values, String key) {
         return (Map<String, Object>) values.get(key);
-    }
-
-    @SuppressWarnings("unchecked")
-    private CapturedPolicyDecision capturedPolicyDecision() {
-        ArgumentCaptor<String> outcomeCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Map<String, Object>> detailsCaptor = ArgumentCaptor.forClass(Map.class);
-        ArgumentCaptor<String> correlationCaptor = ArgumentCaptor.forClass(String.class);
-        verify(observabilityService).recordPolicyDecision(outcomeCaptor.capture(), detailsCaptor.capture(), correlationCaptor.capture());
-        return new CapturedPolicyDecision(outcomeCaptor.getValue(), detailsCaptor.getValue(), correlationCaptor.getValue());
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> traceSummary(CapturedPolicyDecision audit) {
-        return (List<Map<String, Object>>) audit.details().get("traceSummary");
-    }
-
-    private record CapturedPolicyDecision(String outcome, Map<String, Object> details, String correlationId) {
     }
 }

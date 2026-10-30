@@ -62,11 +62,11 @@ services:
       MCP_API_KEY: ${MCP_API_KEY:?Set a separate random MCP_API_KEY in .env}
       MCP_CLIENT_ID: ec2-operator
       MCP_CLIENT_DESCRIPTION: Private EC2 operator
-      MCP_SERVER_TOOLS_SURFACE: expert
       MCP_SECURITY_MODE: api-key
       MCP_SECURITY_ENABLED: "true"
       MCP_SECURITY_ALLOW_PLACEHOLDER_API_KEY: "false"
       JWT_ENABLED: "false"
+      ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY: /var/lib/mcp-zap/scan-launch-safety/receipts
       ZAP_URL_VALIDATION_ENABLED: "true"
       ZAP_ALLOW_LOCALHOST: "false"
       ZAP_ALLOW_PRIVATE_NETWORKS: "true"
@@ -83,6 +83,7 @@ services:
       ZAP_AUTOMATION_ZAP_DIRECTORY: /zap/wrk/workspaces/ec2-operator/automation
     volumes:
       - ./workspace:/zap/wrk
+      - mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety
     mem_limit: 1g
     restart: unless-stopped
     networks: [isolated]
@@ -97,3 +98,6 @@ networks:
     ipam:
       config:
         - subnet: 172.30.250.0/24
+
+volumes:
+  mcp-launch-safety:

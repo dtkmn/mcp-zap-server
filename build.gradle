@@ -85,6 +85,7 @@ dependencies {
     implementation('org.zaproxy:zap-clientapi:1.17.0') {
         exclude group: 'org.jdom', module: 'jdom'
     }
+    implementation 'org.apache.httpcomponents.client5:httpclient5'
     implementation 'org.jdom:jdom2:2.0.6.1'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'io.micrometer:micrometer-registry-prometheus'

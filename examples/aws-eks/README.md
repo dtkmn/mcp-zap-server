@@ -12,7 +12,7 @@ The single-worker configuration does not provide HA or define production scan
 capacity. NetworkPolicy enforcement has startup and hosting-node limitations
 described below. Complete the infrastructure, network, scan, report and recovery
 checks for your selected image in your own environment, including any optional
-import and automation flows you enable.
+guided API imports or authenticated scans you configure.
 
 | File | Purpose |
 | --- | --- |
@@ -313,9 +313,9 @@ Before real target scans, complete the Helm guide and
 verify allowed MCP access and blocked ZAP API access from a separate workload,
 verify approved target traffic and denied destinations, crawl an owned target,
 wait for passive completion, generate and fully read a report, and exercise any
-import/automation flow you enabled. Replace MCP and repeat report readback and a
-fresh scan. Health, add-on status and successful storage binding alone do not
-prove these application flows or HA.
+guided API imports or authenticated scans you configured. Replace MCP and repeat
+report readback and a fresh scan. Health, add-on status and successful storage
+binding alone do not prove these application flows or HA.
 
 ## 6. Clean up resources by ownership
 

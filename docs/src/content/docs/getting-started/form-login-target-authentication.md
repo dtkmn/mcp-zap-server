@@ -39,7 +39,7 @@ The guided form provider is for a classic URL-encoded form with predictable
 username and password fields. Dynamic CSRF tokens, multi-step flows, JSON login
 APIs, and JavaScript-heavy single-page applications may need browser authentication.
 For Client Spider, use a separate [browser profile](../../scanning/authenticated-scanning-best-practices/#browser-authentication-for-client-spider).
-Custom login steps and scripts still require ZAP's expert controls. ZAP itself recommends
+Custom login steps and scripts require a separately managed ZAP workflow; they are not exposed by the guided MCP tools. ZAP itself recommends
 [browser-based or client-script authentication for modern flows](https://www.zaproxy.org/blog/2025-07-03-authentication-improvements/).
 
 The form-login profile workflow is available in `v0.10.0` and later. `v0.9.1`
@@ -311,7 +311,7 @@ Cursor target URL contains a narrower path. Only the origin's root `/logout`
 path is excluded automatically. If the application uses another logout route
 or has destructive account-management endpoints, do not approve an active
 scan until those paths are controlled through target-side safeguards or an
-expert ZAP context.
+operator-managed ZAP context outside the guided workflow.
 
 ## Changing Or Removing The Profile
 
@@ -373,5 +373,5 @@ steps, MFA, or CAPTCHA handling.
 
 - [MCP Client Authentication](../mcp-client-authentication/) for Cursor API-key or JWT setup
 - [MCP Client Scan To Evidence](../../scanning/mcp-client-scan-to-evidence/) for the full guided workflow
-- [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/) for advanced deployment and expert ZAP controls
+- [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/) for advanced deployment, profile configuration and supported authentication boundaries
 - [ZAP authentication concepts](https://www.zaproxy.org/docs/getting-further/authentication/concepts/) for the underlying engine model

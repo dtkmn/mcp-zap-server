@@ -49,6 +49,12 @@ preview URL:
 | Juice Shop | `http://localhost:3001` | `http://juice-shop:3000` |
 | Petstore | `http://localhost:3002` | `http://petstore:8080` |
 
+When checking a newly announced vulnerability, first use `zap_addon_inspect` to
+check the required add-on and passive rule. An approved operator can update an
+installed add-on through MCP and verify loaded readiness before crawling. See
+[ZAP add-on inspection and updates](../../operations/engine-addons/); a scanner
+readiness result does not establish that a target was checked or is safe.
+
 ## The Short Version
 
 Ask your MCP client:
@@ -137,8 +143,7 @@ it rejects `authSessionId`. See [Client Spider](../client-spider/) for
 JavaScript crawling without authentication and deployment prerequisites.
 
 The response returns a guided `Operation ID`. Use that operation ID with
-`zap_crawl_status`. Do not switch to direct spider IDs unless you are debugging
-with expert tools.
+`zap_crawl_status`. Raw scan IDs are diagnostics; they cannot replace the guided Operation ID.
 
 ### 4. Poll Crawl Status
 
@@ -287,7 +292,7 @@ Use prompts like this:
 ```text
 Scan http://juice-shop:3000 using the guided ZAP tools.
 Use the server's Next Actions after each tool result.
-Do not use expert/direct ZAP tools unless the guided path fails.
+Use the guided status and recovery guidance when a scan fails. An uncertain start must not be submitted again.
 After scanning, wait for passive analysis, summarize findings, generate an HTML
 report, read the report through MCP, and create both internal release evidence
 and a customer-safe handoff.
@@ -327,30 +332,29 @@ start an active scan.
 | --- | --- | --- |
 | Guided operation ID | Stable handle for `zap_crawl_status`, `zap_attack_status`, and stop tools. | Use this in the guided flow. |
 | ZAP scan ID | Engine diagnostic from the underlying ZAP adapter. | Keep for debugging, but do not drive the guided workflow with it. |
-| Queue job ID | Durable worker job handle. | Useful for operator debugging paths; guided status wraps it. |
+| Queue job ID | Worker job handle; history persists across server restarts with PostgreSQL. | Useful for operator debugging paths; guided status wraps it. |
 | Scan history entry ID | Evidence ledger record. | Use it when reading a specific ledger entry. |
 | Report path | Local or mounted report artifact location. | Use it for report readback or artifact collection. |
 
 If the tool response tells you a next action, follow that before trying to use
 lower-level IDs.
 
-## Direct Versus Queue Evidence
+## Queued Execution Evidence
 
-Direct execution proves a scan was launched and can record useful scan history.
-Queue-managed execution gives stronger durable job evidence because the job has
-a managed lifecycle: queued, running, succeeded, failed, or cancelled.
+Guided crawl and attack starts always use the queue and return
+`Execution Mode: queue`, with either in-memory or PostgreSQL storage. Acceptance
+records a job; it does not prove ZAP has started it. Poll the Operation ID to
+follow the actual lifecycle. An uncertain start remains held for recovery and
+must not be submitted again automatically.
 
-For casual local use, direct mode is fine.
+In-memory job history is lost when the server restarts. For evidence that must
+survive restart, use PostgreSQL and configure a stable private operation-signing
+key so existing guided handles remain valid. Preserve the scan-history storage
+required by your evidence workflow as well.
 
-For release or customer evidence, prefer queue-backed execution with durable
-scan history. A customer-handoff caveat about direct-only scan proof means the
-record does not establish the terminal lifecycle of a queued job. Preserve that
-limitation in the evidence you share.
-
-Guided tools do not expose a per-call `use queue` flag. They choose direct or
-queue mode from deployment topology and configuration. For release evidence,
-run the Postgres/queue-backed topology and confirm the guided start response
-shows `Execution Mode: queue`.
+Existing direct-operation handles still support guided status and stop while
+valid. Their records do not establish the terminal lifecycle of a queued job;
+preserve that distinction when reviewing older evidence.
 
 ## What Ships Today
 
@@ -375,7 +379,7 @@ Not today:
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
 | Target works in browser but scan fails | You used `localhost` instead of the container target. | Use `http://juice-shop:3000` or the service name reachable from ZAP. |
-| Client keeps asking for ZAP scan IDs | It is following expert guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
+| Client keeps asking for ZAP scan IDs | It is following retired raw-tool guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
 | Findings look empty immediately after scan | Passive analysis has not drained. | Run `zap_passive_scan_wait`, then check findings again. |
 | Handoff has caveats | Evidence window is incomplete or direct-only. | Review `zap_scan_history_release_evidence` warnings and rerun with stronger coverage if needed. |
 | Authenticated scan fails | Profile origin, login indicators, form fields, or configured credential reference is wrong, or browser login is unconfirmed. | Use the [form-login troubleshooting guide](../../getting-started/form-login-target-authentication/#troubleshooting) or [Client Spider login guide](../client-spider/#crawl-behind-a-login), fix the profile, then prepare and validate a new session. |
@@ -386,7 +390,7 @@ Not today:
 - [Form-Login Target Authentication](../../getting-started/form-login-target-authentication/)
 - [Client Spider](../client-spider/)
 - [Authenticated Scanning Reference](../authenticated-scanning-best-practices/)
-- [Scan Execution Modes](../scan-execution-modes/)
+- [Scan Execution](../scan-execution-modes/)
 - [Passive Scan](../passive-scan/)
 - [Findings And Reports](../findings-and-reports/)
 - [API Schema Imports](../api-schema-imports/)

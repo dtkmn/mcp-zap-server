@@ -18,7 +18,7 @@ public class ScanHistoryMcpToolsService {
 
     @Tool(
             name = "zap_scan_history_list",
-            description = "List recent scan history and release-evidence entries, including queued scans, direct scan starts, and generated report artifacts."
+            description = "List recent scan history and release-evidence entries, including queued scans, retained historical direct-scan records, and generated report artifacts."
     )
     public String listHistory(
             @ToolParam(required = false, description = "Optional evidence type filter: scan_job, scan_run, or report_artifact") String evidenceType,

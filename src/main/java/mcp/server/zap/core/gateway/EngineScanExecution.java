@@ -9,7 +9,21 @@ public interface EngineScanExecution {
 
     String startSpiderScan(SpiderScanRequest request);
 
+    default String startSpiderScan(SpiderScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startSpiderScan(request);
+        launch.accepted(id);
+        return id;
+    }
+
     String startSpiderScanAsUser(AuthenticatedSpiderScanRequest request);
+
+    default String startSpiderScanAsUser(AuthenticatedSpiderScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startSpiderScanAsUser(request);
+        launch.accepted(id);
+        return id;
+    }
 
     int readSpiderProgressPercent(String scanId);
 
@@ -17,13 +31,34 @@ public interface EngineScanExecution {
 
     String startClientSpiderScan(ClientSpiderScanRequest request);
 
+    default String startClientSpiderScan(ClientSpiderScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startClientSpiderScan(request);
+        launch.accepted(id);
+        return id;
+    }
+
     int readClientSpiderProgressPercent(String scanId);
 
     void stopClientSpiderScan(String scanId);
 
     String startActiveScan(ActiveScanRequest request);
 
+    default String startActiveScan(ActiveScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startActiveScan(request);
+        launch.accepted(id);
+        return id;
+    }
+
     String startActiveScanAsUser(AuthenticatedActiveScanRequest request);
+
+    default String startActiveScanAsUser(AuthenticatedActiveScanRequest request, NativeScanLaunch launch) {
+        launch.beforeDispatch();
+        String id = startActiveScanAsUser(request);
+        launch.accepted(id);
+        return id;
+    }
 
     int readActiveScanProgressPercent(String scanId);
 

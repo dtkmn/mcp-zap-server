@@ -24,18 +24,24 @@ The GitLab flow follows the same scan and findings sequence as the GitHub Action
 
 1. start ZAP and `mcp-zap-server`
 2. optionally replay configured HTTP seed requests through the ZAP proxy
-3. run `zap_spider_start`
-4. wait with `zap_spider_status`
-5. run `zap_active_scan_start` when enabled
-6. wait with `zap_active_scan_status`
+3. run `zap_crawl_start`
+4. wait with `zap_crawl_status`
+5. run `zap_attack_start` when enabled
+6. wait with `zap_attack_status`
 7. drain passive analysis with `zap_passive_scan_wait`
 8. save findings summary and snapshot artifacts
-9. run `zap_findings_diff` when a baseline file is present
-10. generate a report with `zap_generate_report`
+9. compare the normalized snapshot against the baseline file when present
+10. generate a report with `zap_report_generate`
 
-The bundled GitLab compose stack forces `mcp-zap-server` into the `expert` tool surface so snapshot and diff contracts are available during CI. If you override the MCP endpoint to use an external server, the artifact set still depends on that server's configured tool surface.
+The helper uses guided start, status and report tools. It detects snapshot support from `tools/list`; the current guided catalog provides it. Older guided servers without snapshots cannot produce an enforceable baseline comparison. The helper never falls back to retired direct-start tools.
 
 Artifacts are written into `.zap-artifacts/` by default and uploaded as GitLab job artifacts.
+
+The Compose stack keeps launch receipts in the MCP-only `mcp-launch-safety`
+volume, outside the shared ZAP workspace and uploaded artifacts. Preserve that
+volume when replacing the MCP container. Do not delete unresolved receipts to
+unblock a scan; follow [launch recovery](../src/content/docs/operations/scan-queue-retry-policy.md).
+The journal protects uncertain starts but does not make in-memory job history durable.
 
 ## Copy The Template
 
@@ -217,6 +223,10 @@ Default artifacts include:
 
 ## Notes
 
-- The GitLab wrapper intentionally uses direct scan tools because they are the simplest fit for a single CI runner.
-- For long-lived shared environments, the queue tools remain the recommended production path.
+- The GitLab wrapper uses guided queued scans and polls their Operation IDs. Failed, cancelled or uncertain outcomes fail the gate without another automatic start.
+- Use PostgreSQL when job history must survive a server restart; storage does not change the guided execution path.
 - The compose example enables `ZAP_ALLOW_LOCALHOST=true` and `ZAP_ALLOW_PRIVATE_NETWORKS=true` because CI targets often live on private runner-local networks.
+
+## Report Format Compatibility
+
+The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and maps them to guided HTML or JSON generation. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.

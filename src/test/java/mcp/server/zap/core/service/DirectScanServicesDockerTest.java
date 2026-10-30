@@ -3,6 +3,7 @@ package mcp.server.zap.core.service;
 import mcp.server.zap.core.configuration.AuthBootstrapProperties;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.gateway.TimeoutZapClientApi;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.gateway.ZapEngineAjaxSpiderExecution;
@@ -21,6 +22,7 @@ import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoo
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -64,6 +66,9 @@ import static org.mockito.Mockito.when;
 @Tag("docker")
 @Testcontainers
 class DirectScanServicesDockerTest {
+    @RegisterExtension
+    final GuardedQueueTestSupport launches = new GuardedQueueTestSupport();
+
     private static final Pattern SCAN_ID_PATTERN = Pattern.compile("Scan ID: ([^\\n]+)");
     private static final Network NETWORK = Network.newNetwork();
 
@@ -203,19 +208,17 @@ class DirectScanServicesDockerTest {
         boolean browserCrawl = !"http".equals(effectiveStrategy);
         String targetUrl = origin + (browserCrawl ? "/client-crawl.html" : "/http-stop.html") + query;
         String discoveredUrl = origin + "/client-discovered" + query;
-        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
-        when(executionMode.resolveDefaultMode()).thenReturn(mode);
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         AjaxSpiderService ajaxSpider = new AjaxSpiderService(
                 new ZapEngineAjaxSpiderExecution(clientApi), mock(UrlValidationService.class));
         ajaxSpider.setScanJobStore(store);
         var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
-        ScanJobQueueService queue = new ScanJobQueueService(
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpider, clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
-                false, store, new SingleNodeQueueLeadershipCoordinator());
+                false, store, new SingleNodeQueueLeadershipCoordinator()));
         GuidedScanWorkflowService guided = new GuidedScanWorkflowService(
-                executionMode, spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
+                spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
                 queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(),
                 mock(GuidedToolActions.class));
         String operationId = null;
@@ -306,8 +309,7 @@ class DirectScanServicesDockerTest {
 
     private static Stream<Arguments> guidedCrawlerModes() {
         return Stream.of("http", "client", "browser", "auto")
-                .flatMap(strategy -> Stream.of(GuidedExecutionModeResolver.ExecutionMode.values())
-                        .map(mode -> Arguments.of(strategy, mode)));
+                .map(strategy -> Arguments.of(strategy, GuidedExecutionModeResolver.ExecutionMode.QUEUE));
     }
 
     private static void printBrowserVersion(String name, String executable) throws Exception {
@@ -328,10 +330,10 @@ class DirectScanServicesDockerTest {
 
     @Test
     void clientSpiderDiscoversJavaScriptTrafficAndStopsOnlyTheRequestedScan() throws Exception {
-        String stoppedScanId = extractScanId(clientSpiderService.startClientSpider(
-                "http://direct-scan-target/client-crawl.html?crawl=stop", 1));
-        String continuingScanId = extractScanId(clientSpiderService.startClientSpider(
-                "http://direct-scan-target/client-crawl.html?crawl=continue", 1));
+        String stoppedScanId = clientSpiderService.startClientSpiderJob(
+                "http://direct-scan-target/client-crawl.html?crawl=stop", 1, null, null, NativeScanLaunch.UNTRACKED);
+        String continuingScanId = clientSpiderService.startClientSpiderJob(
+                "http://direct-scan-target/client-crawl.html?crawl=continue", 1, null, null, NativeScanLaunch.UNTRACKED);
 
         try {
             assertNotEquals(stoppedScanId, continuingScanId);
@@ -362,7 +364,7 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
             GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
@@ -370,7 +372,7 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(GuidedExecutionModeResolver.ExecutionMode.class)
+    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
             GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
@@ -447,15 +449,13 @@ class DirectScanServicesDockerTest {
             assertTrue(nativePoll.getStringValue("responseBody").contains("Signed in as scan-user"));
         }
 
-        GuidedExecutionModeResolver executionMode = mock(GuidedExecutionModeResolver.class);
-        when(executionMode.resolveDefaultMode()).thenReturn(mode);
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         var retryPolicy = new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0);
-        ScanJobQueueService queue = new ScanJobQueueService(
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, mock(AjaxSpiderService.class), clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
-                false, store, new SingleNodeQueueLeadershipCoordinator());
-        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(executionMode,
+                false, store, new SingleNodeQueueLeadershipCoordinator()));
+        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(
                 mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
                 mock(ActiveScanService.class), queue, authSessions,
                 new ZapEngineAdapter(), new GatewayRecordFactory(), mock(GuidedToolActions.class));
@@ -542,7 +542,8 @@ class DirectScanServicesDockerTest {
             clientApi.callApi("clientSpider", "action", "setOptionInitialLoadTimeInSecs", Map.of("Integer", "120"));
             clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "120"));
             clientApi.stats.clearStats(durationStatistic);
-            scanId = clientSpiderService.startClientSpiderJob("http://direct-scan-target/client-idle.html", 1);
+            scanId = clientSpiderService.startClientSpiderJob("http://direct-scan-target/client-idle.html", 1,
+                    null, null, NativeScanLaunch.UNTRACKED);
             String scanToExpire = scanId;
             await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
                     .until(() -> clientSpiderService.getClientSpiderProgressPercent(scanToExpire) == 100);
@@ -575,15 +576,15 @@ class DirectScanServicesDockerTest {
             clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "2"));
             clientApi.stats.clearStats(durationStatistic);
 
-            limitedScanId = extractScanId(clientSpiderService.startClientSpider(
-                    "http://direct-scan-target/client-duration.html?crawl=limited", 0));
+            limitedScanId = clientSpiderService.startClientSpiderJob(
+                    "http://direct-scan-target/client-duration.html?crawl=limited", 0, null, null, NativeScanLaunch.UNTRACKED);
 
             ScanLimitProperties unlimitedProperties = new ScanLimitProperties();
             unlimitedProperties.setMaxSpiderScanDurationInMins(0);
             ClientSpiderService unlimitedService = new ClientSpiderService(
                     new ZapEngineScanExecution(clientApi), mock(UrlValidationService.class), unlimitedProperties);
             unlimitedScanId = unlimitedService.startClientSpiderJob(
-                    "http://direct-scan-target/client-duration.html?crawl=unlimited", 0);
+                    "http://direct-scan-target/client-duration.html?crawl=unlimited", 0, null, null, NativeScanLaunch.UNTRACKED);
 
             String scanToExpire = limitedScanId;
             await().atMost(Duration.ofSeconds(100)).pollInterval(Duration.ofSeconds(1))
@@ -608,20 +609,16 @@ class DirectScanServicesDockerTest {
     }
 
     @Test
-    void directSpiderAndActiveScanToolsWorkAgainstRealZap() throws Exception {
-        String spiderStart = spiderScanService.startSpiderScan("http://direct-scan-target/");
-        String spiderScanId = extractScanId(spiderStart);
+    void spiderAndActiveScanJobsRetainNativeStatusAndStopSupport() throws Exception {
+        String spiderScanId = spiderScanService.startSpiderScanJob("http://direct-scan-target/", NativeScanLaunch.UNTRACKED);
         String spiderStatus = spiderScanService.getSpiderScanStatus(spiderScanId);
 
-        assertTrue(spiderStart.contains("Direct spider scan started."));
         assertTrue(spiderStatus.contains("Scan ID: " + spiderScanId));
 
         clientApi.core.accessUrl("http://direct-scan-target/", "true");
-        String activeStart = activeScanService.startActiveScan("http://direct-scan-target/", "true", null);
-        String activeScanId = extractScanId(activeStart);
+        String activeScanId = activeScanService.startActiveScanJob("http://direct-scan-target/", "true", null, NativeScanLaunch.UNTRACKED);
         String activeStatus = activeScanService.getActiveScanStatus(activeScanId);
 
-        assertTrue(activeStart.contains("Direct active scan started."));
         assertTrue(activeStatus.contains("Scan ID: " + activeScanId));
 
         String activeStop = activeScanService.stopActiveScan(activeScanId);

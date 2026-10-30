@@ -1,7 +1,7 @@
 ---
 title: "Authenticated Scanning Reference"
 editUrl: false
-description: "Advanced deployment, migration, validation, and expert guidance for authenticated scans."
+description: "Operator profile configuration, migration, and validation for guided authenticated scans."
 ---
 This is the advanced operator reference. If this is your first target that
 requires login, start with
@@ -21,7 +21,7 @@ In `v0.10.0` and later, start with guided auth bootstrap:
 - `zap_crawl_start` with `authSessionId`
 - `zap_attack_start` with `authSessionId`
 
-These tools are available on the default `guided` surface. The lower-level ZAP context and user tools still exist on the `expert` surface, but they are the advanced path now.
+These tools are available in the guided catalog. Raw ZAP context and user mutation aliases are no longer exposed.
 
 The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
@@ -29,7 +29,7 @@ OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
 In `v0.13.0`, browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
 
-Treat guided profile contexts as managed state. Do not alter a returned context with expert auth tools; fix the profile and prepare a new session instead.
+Treat guided profile contexts as managed state. Fix the operator profile and prepare a new session instead of altering its ZAP context behind the guided workflow.
 
 ## Operator Secret Setup
 
@@ -111,7 +111,7 @@ authentication prerequisite; still validate a fresh protected response below.
 3. Call `zap_crawl_start` with the target URL, `strategy: client`, and that `authSessionId`.
 4. Use the returned operation ID for `zap_crawl_status` and `zap_crawl_stop`. Verify that protected pages were reached and returned authenticated content before trusting crawl coverage; a stopped crawl or successful start response does not prove authentication. Wait for passive scanning before reviewing findings.
 
-Both direct and queued execution use the prepared ZAP context and user. Browser profiles currently support Client Spider only: `auto`, HTTP, AJAX, and guided active scans reject them. Keep a `kind: form` profile for the existing HTTP/active authentication paths. Authentication Helper, Client Side Integration, Selenium, Firefox, and WebDriver must be available in ZAP; API configuration of browser authentication requires ZAP 2.16.1 or newer.
+Guided starts queue the crawl with the prepared ZAP context and user on either storage backend. Browser profiles currently support Client Spider only: `auto`, HTTP, AJAX, and guided active scans reject them. Keep a `kind: form` profile for the existing HTTP/active authentication paths. Authentication Helper, Client Side Integration, Selenium, Firefox, and WebDriver must be available in ZAP; API configuration of browser authentication requires ZAP 2.16.1 or newer.
 
 ## Upgrade Migration: Profiles Are Explicit
 
@@ -555,45 +555,9 @@ Use bearer and API-key bootstrap for gateway credential-reference preparation to
 9. Keep scan depth and duration conservative until the target is understood.
 10. Capture `correlationId`, a SHA-256 fingerprint of the session ID (never the raw ID), `Context ID`, and `User ID` as release evidence.
 
-## Advanced Expert Workflow
+## Unsupported Authentication Workflows
 
-Use the raw expert path only when the guided workflow cannot express the setup you need or when you are debugging ZAP context/user state directly.
-
-Expert tools:
-
-- `zap_context_upsert`
-- `zap_contexts_list`
-- `zap_context_auth_configure`
-- `zap_user_upsert`
-- `zap_users_list`
-- `zap_auth_test_user`
-- `zap_spider_as_user`
-- `zap_active_scan_as_user`
-- `zap_queue_spider_scan_as_user`
-- `zap_queue_active_scan_as_user`
-
-This path requires:
-
-```bash
-MCP_SERVER_TOOLS_SURFACE=expert
-```
-
-Do not paste real passwords into `authCredentialsConfigParams` in prompts, tickets, screenshots, or docs. If you need the expert path in CI, inject secrets from the CI secret store and keep logs redacted.
-
-## Advanced Expert Order
-
-A reliable expert order is:
-
-1. `zap_context_upsert` with narrow include/exclude regexes
-2. `zap_contexts_list` to capture `contextId`
-3. `zap_context_auth_configure` with form auth method and login indicators
-4. `zap_user_upsert` using a runtime-injected secret
-5. `zap_auth_test_user`
-6. `zap_spider_as_user` or `zap_queue_spider_scan_as_user`
-7. `zap_active_scan_as_user` or `zap_queue_active_scan_as_user`
-8. status polling, passive scan wait, findings, and report generation
-
-If `zap_auth_test_user` cannot prove the user is authenticated, the scan is not release evidence. Fix auth first.
+Guided profiles do not provide arbitrary script or custom login-step configuration. Use a separately managed ZAP workflow when the supported form, browser or header profiles cannot express the required authentication. Do not silently continue an authenticated scan anonymously.
 
 ## Common Pitfalls
 

@@ -48,9 +48,19 @@
           "name": "-v",
           "value": "mcp-zap-wrk:/zap/wrk",
           "description": "Named report workspace volume. The external ZAP container must mount the same volume at /zap/wrk."
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety",
+          "description": "Private scan-start records. Preserve this volume across MCP container replacements and do not mount it in ZAP."
         }
       ],
       "environmentVariables": [
+        {
+          "name": "ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY",
+          "value": "/var/lib/mcp-zap/scan-launch-safety/receipts"
+        },
         {
           "name": "ZAP_API_URL",
           "description": "Hostname or URL of a separately running ZAP daemon reachable from this container.",
@@ -72,11 +82,6 @@
           "description": "API key clients must send as X-API-Key.",
           "isRequired": true,
           "isSecret": true
-        },
-        {
-          "name": "MCP_SERVER_TOOLS_SURFACE",
-          "description": "Tool surface to expose. Use guided for the safer default workflow, including report readback. Use expert only when clients need raw ZAP tools outside the guided surface.",
-          "default": "guided"
         },
         {
           "name": "MCP_SECURITY_MODE",
@@ -132,9 +137,19 @@
           "name": "-v",
           "value": "mcp-zap-wrk:/zap/wrk",
           "description": "Named report workspace volume. The external ZAP container must mount the same volume at /zap/wrk."
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety",
+          "description": "Private scan-start records. Preserve this volume across MCP container replacements and do not mount it in ZAP."
         }
       ],
       "environmentVariables": [
+        {
+          "name": "ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY",
+          "value": "/var/lib/mcp-zap/scan-launch-safety/receipts"
+        },
         {
           "name": "ZAP_API_URL",
           "description": "Hostname or URL of a separately running ZAP daemon reachable from this container.",
@@ -156,11 +171,6 @@
           "description": "API key clients must send as X-API-Key.",
           "isRequired": true,
           "isSecret": true
-        },
-        {
-          "name": "MCP_SERVER_TOOLS_SURFACE",
-          "description": "Tool surface to expose. Use guided for the safer default workflow, including report readback. Use expert only when clients need raw ZAP tools outside the guided surface.",
-          "default": "guided"
         },
         {
           "name": "MCP_SECURITY_MODE",

@@ -58,7 +58,7 @@ zap:
   persistence:
     enabled: true
     existingClaim: ""  # Reuse an operator-provisioned PVC; no chart PVC is created.
-    shareWithMcp: true  # Required for report readback and submitted automation plans.
+    shareWithMcp: true  # Required for guided report readback.
     retainOnDelete: true  # Retain the chart PVC on Helm uninstall; namespace deletion still removes it.
     storageClass: ""  # Use default storage class
     accessMode: ReadWriteOnce
@@ -67,8 +67,10 @@ zap:
     # Empty preserves the existing PVC-root workspace layout. A nonempty value
     # selects a directory within the PVC; migrate existing workspace files first.
     workspaceSubPath: ""
-    # Relative to the shared mount. For one default API-key client, use
-    # workspaces/default-client/automation to allow automation report readback.
+    # Retained operator-managed automation directory, relative to the shared mount.
+    # For one default client, workspaces/default-client/automation keeps native
+    # reports within its report-read boundary. No MCP plan tools are exposed.
+    # Keep this root separate from content-import staging and private launch journals.
     automationSubdirectory: automation
     # Opt-in shared staging for self-contained OpenAPI content imports.
     # Set workspaceSubPath to a separate sibling (e.g. workspace), and use one
@@ -223,6 +225,10 @@ mcp:
   
   # Scan Configuration
   scan:
+    jobs:
+      store:
+        # Empty uses in-memory. Set explicitly when envFrom could contain backend selection.
+        backend: ""
     limits:
       maxActiveScanDurationInMins: 30
       maxSpiderScanDurationInMins: 15
@@ -244,6 +250,15 @@ mcp:
       whitelist: ""
       # Explicit denies override the allow flags and whitelist. Built-in guards are separate.
       blacklist: ""
+
+  launchSafety:
+    # Preserve private launch safety storage when using the in-memory job store.
+    persistence:
+      existingClaim: ""
+      accessMode: ReadWriteOnce
+      size: 64Mi
+      storageClass: ""
+      retainOnDelete: true
   
   # Liveness and readiness probes
   livenessProbe:

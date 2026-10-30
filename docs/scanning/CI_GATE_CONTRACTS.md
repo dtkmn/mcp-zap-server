@@ -16,7 +16,7 @@ The helper now emits these stable contracts under the configured output director
 - `seed-requests-results.json`: `ci_gate_seed_requests/v1` when seed requests are configured
 - `current-findings.json`: `ci_gate_findings_snapshot/v3`, including normalized
   legacy inputs with their original identity mode and unknown provenance
-- `findings-diff.json`: `ci_gate_findings_diff/v3` when a baseline is used on the expert surface
+- `findings-diff.json`: `ci_gate_findings_diff/v3` when a baseline is used and snapshot support is available
 - `artifact-manifest.json`: `ci_gate_artifact_manifest/v1`
 
 Human-readable companions remain alongside those contracts:
@@ -55,10 +55,10 @@ Important behavior:
 
 - artifact paths inside the contract are relative to the output directory
 - the contract avoids embedding runner-local absolute paths
-- expert-surface runs always emit a normalized `current-findings.json`, even when no baseline is supplied
+- guided runs with snapshot support emit a normalized `current-findings.json`, even when no baseline is supplied
 - `baseline-mode: enforce` fails the gate when `fail-on-new-findings=true`
   but the helper cannot produce a comparable diff. This includes a missing
-  baseline, a guided-only MCP endpoint, a changed scanner, or unknown scanner
+  baseline, an older MCP endpoint without snapshot support, a changed scanner, or unknown scanner
   provenance. Informational added/removed records do not satisfy enforcement.
 - `baseline-mode: seed` keeps first-run evidence generation non-blocking while
   the baseline is reviewed
@@ -205,7 +205,7 @@ the concrete evidence before interpreting a missing alert as a fix.
 
 ## Findings Diff v3
 
-`findings-diff.json` is the machine-readable diff contract when a baseline is available on the expert tool surface.
+`findings-diff.json` is the machine-readable diff contract when a baseline and snapshot capability are available.
 
 It contains:
 

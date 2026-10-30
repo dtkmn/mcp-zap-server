@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.zaproxy.clientapi.core.ClientApi;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -29,7 +30,13 @@ class ZapApiConfigTest {
         contextRunner.withPropertyValues(
                         "zap.server.connect-timeout-ms=250",
                         "zap.server.read-timeout-ms=500")
-                .run(context -> assertThat(context).hasNotFailed().hasSingleBean(ClientApi.class));
+                .run(context -> {
+                    assertThat(context).hasNotFailed().hasSingleBean(ClientApi.class);
+                    ClientApi client = context.getBean(ClientApi.class);
+                    assertThat(client).isInstanceOf(TimeoutZapClientApi.class);
+                    assertThat(ReflectionTestUtils.getField(client, "connectTimeoutMs")).isEqualTo(250);
+                    assertThat(ReflectionTestUtils.getField(client, "readTimeoutMs")).isEqualTo(500);
+                });
     }
 
     @ParameterizedTest

@@ -19,7 +19,7 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
 import org.springframework.stereotype.Service;
 
 /**
- * Service for direct and queue-managed active scan operations.
+ * Queued active scan execution, policy controls, and legacy native status and stop operations.
  */
 @Service
 public class ActiveScanService {
@@ -165,7 +165,7 @@ public class ActiveScanService {
                 completed ? "yes" : "no",
                 completed
                         ? "Run 'zap_passive_scan_wait' before reading findings or generating reports."
-                        : "Use 'zap_active_scan_stop' to stop this direct scan, or 'zap_queue_active_scan' for durable queued execution next time."
+                        : ""
         );
     }
 
@@ -175,8 +175,7 @@ public class ActiveScanService {
         String normalizedScanId = requireText(scanId, "scanId");
         stopActiveScanJob(normalizedScanId);
         return "Direct active scan stopped.\n"
-                + "Scan ID: " + normalizedScanId + '\n'
-                + "For retryable or HA-safe execution, prefer 'zap_queue_active_scan'.";
+                + "Scan ID: " + normalizedScanId;
     }
 
     /**

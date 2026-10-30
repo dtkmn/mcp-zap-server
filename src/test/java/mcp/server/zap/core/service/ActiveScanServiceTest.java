@@ -221,13 +221,17 @@ class ActiveScanServiceTest {
 
     @Test
     void getActiveScanStatusReturnsDirectMessage() {
-        when(engineScanExecution.readActiveScanProgressPercent("1")).thenReturn(42);
+        when(engineScanExecution.readActiveScanProgressPercent("1")).thenReturn(42, 100);
 
         String result = service.getActiveScanStatus("1");
 
         assertTrue(result.contains("Direct active scan status:"));
         assertTrue(result.contains("Progress: 42%"));
         assertTrue(result.contains("Completed: no"));
+        assertThat(result).contains("Scan ID: 1").doesNotContain("zap_active_scan_stop", "zap_queue_active_scan");
+        assertThat(service.getActiveScanStatus("1"))
+                .contains("Scan ID: 1", "Progress: 100%", "Completed: yes", "zap_passive_scan_wait")
+                .doesNotContain("zap_active_scan_stop", "zap_queue_active_scan");
     }
 
     @Test
@@ -236,6 +240,7 @@ class ActiveScanServiceTest {
 
         assertTrue(result.contains("Direct active scan stopped."));
         assertTrue(result.contains("Scan ID: 2"));
+        assertThat(result).doesNotContain("zap_active_scan_stop", "zap_queue_active_scan");
         verify(engineScanExecution).stopActiveScan("2");
     }
 

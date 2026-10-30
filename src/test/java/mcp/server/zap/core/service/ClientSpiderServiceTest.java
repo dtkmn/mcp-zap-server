@@ -142,7 +142,8 @@ class ClientSpiderServiceTest {
     void statusTracksOnlyThisScanAndDoesNotClaimStoppedMeansSuccess() {
         when(engine.readClientSpiderProgressPercent("7")).thenReturn(30, 100);
 
-        assertThat(service.getClientSpiderStatus(" 7 ")).contains("Progress: 30%");
+        assertThat(service.getClientSpiderStatus(" 7 ")).contains("Scan ID: 7", "Progress: 30%")
+                .doesNotContain("zap_client_spider_stop");
         assertThat(service.getClientSpiderStatus("7"))
                 .contains("Scan is no longer running", "stopped scans", "zap_passive_scan_wait");
     }

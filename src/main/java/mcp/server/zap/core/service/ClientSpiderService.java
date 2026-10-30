@@ -7,7 +7,7 @@ import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ClientSpiderScanRequest;
 import org.springframework.stereotype.Service;
 
-/** Direct and queued browser crawls with ZAP's scan-specific Client Spider API. */
+/** Queued Client Spider execution and legacy native status and stop operations. */
 @Service
 public class ClientSpiderService {
     private final EngineScanExecution engineScanExecution;
@@ -57,7 +57,7 @@ public String startClientSpiderJob(String targetUrl, Integer maxDepth, String co
                 finished
                         ? "Scan is no longer running. ZAP reports 100% for stopped scans as well. "
                                 + "Run 'zap_passive_scan_wait' before reading findings or generating reports."
-                        : "Use 'zap_client_spider_stop' to stop this direct crawl.");
+                        : "");
     }
 
     public int getClientSpiderProgressPercent(String scanId) {

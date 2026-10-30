@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -110,13 +111,17 @@ class SpiderScanServiceTest {
 
     @Test
     void getSpiderScanStatusReturnsDirectMessage() {
-        when(engineScanExecution.readSpiderProgressPercent("1")).thenReturn(80);
+        when(engineScanExecution.readSpiderProgressPercent("1")).thenReturn(80, 100);
 
         String result = service.getSpiderScanStatus("1");
 
         assertTrue(result.contains("Direct spider scan status:"));
         assertTrue(result.contains("Progress: 80%"));
         assertTrue(result.contains("Completed: no"));
+        assertThat(result).contains("Scan ID: 1").doesNotContain("zap_spider_stop", "zap_queue_spider_scan");
+        assertThat(service.getSpiderScanStatus("1"))
+                .contains("Scan ID: 1", "Progress: 100%", "Completed: yes", "zap_passive_scan_wait")
+                .doesNotContain("zap_spider_stop", "zap_queue_spider_scan");
     }
 
     @Test
@@ -125,6 +130,7 @@ class SpiderScanServiceTest {
 
         assertTrue(result.contains("Direct spider scan stopped."));
         assertTrue(result.contains("Scan ID: 9"));
+        assertThat(result).doesNotContain("zap_spider_stop", "zap_queue_spider_scan");
         verify(engineScanExecution).stopSpiderScan("9");
     }
 

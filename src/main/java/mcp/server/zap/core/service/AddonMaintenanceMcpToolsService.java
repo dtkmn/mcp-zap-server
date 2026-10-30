@@ -5,7 +5,7 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
-/** Available on both guided and expert surfaces; no scan target or prior scan is required. */
+/** Guided add-on tools; no scan target or prior scan is required. */
 @Service
 public class AddonMaintenanceMcpToolsService {
     private final AddonMaintenanceService service;

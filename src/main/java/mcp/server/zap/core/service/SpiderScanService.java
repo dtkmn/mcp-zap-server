@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 
 /**
- * Service for direct and queue-managed spider scan operations.
+ * Queued spider execution and legacy native status and stop operations.
  */
 @Service
 public class SpiderScanService {
@@ -45,7 +45,7 @@ public class SpiderScanService {
                 completed ? "yes" : "no",
                 completed
                         ? "Run 'zap_passive_scan_wait' before reading findings or generating reports."
-                        : "Use 'zap_spider_stop' to stop this direct crawl, or 'zap_queue_spider_scan' for durable queued execution next time."
+                        : ""
         );
     }
 
@@ -53,8 +53,7 @@ public class SpiderScanService {
         String normalizedScanId = requireText(scanId, "scanId");
         stopSpiderScanJob(normalizedScanId);
         return "Direct spider scan stopped.\n"
-                + "Scan ID: " + normalizedScanId + '\n'
-                + "For retryable or HA-safe execution, prefer 'zap_queue_spider_scan'.";
+                + "Scan ID: " + normalizedScanId;
     }
 
     /**

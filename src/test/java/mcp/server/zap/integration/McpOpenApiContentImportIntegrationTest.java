@@ -38,7 +38,6 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-                "mcp.server.tools.surface=guided",
                 "mcp.server.security.enabled=true",
                 "mcp.server.security.mode=api-key",
                 "mcp.server.security.authorization.mode=enforce",

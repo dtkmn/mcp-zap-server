@@ -8,8 +8,6 @@ spring:
 # Disable security for tests
 mcp:
   server:
-    tools:
-      surface: expert
     security:
       enabled: false
     

@@ -15,11 +15,10 @@ Versions `0.17.0` and `0.17.1` keep explicit operator target denies authoritativ
 and private-network allowances. Existing explicit deny lists remain binding;
 remove only the restrictions you deliberately intend to lift.
 
-Version `0.16.0` validates Automation Framework duration capabilities, enforces
-plan/artifact filesystem containment, validates report output paths, and corrects
-plan success reporting. CI findings comparisons now require matching measured
-scanner inventories. Review the
-[0.16.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.16.0.md) before rollout.
+For the behavior and requirements of `v0.16.0`, consult the
+[0.16.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.16.0.md). Follow
+[Upgrading to Guided Tools](../../docs/src/content/docs/getting-started/tool-migration.md)
+when adapting an older MCP integration.
 
 Version `0.15.0` adds OpenAPI content import and complete report retrieval through
 `zap_report_read_chunk`, corrects HTTP crawl depth, and reapplies mandatory ZAP
@@ -280,8 +279,8 @@ workspace identity or extension report boundary can change that workspace.
 Keep this read boundary in place rather than broadening access to the whole
 shared mount. See [Findings and Reports](../../docs/src/content/docs/scanning/findings-and-reports.md).
 
-The existing automation storage settings remain available for operator-managed
-storage, but [Automation Framework tools are not exposed through MCP](../../docs/src/content/docs/scanning/automation-framework.md).
+The automation storage settings configure operator-managed native ZAP files
+separately from the guided MCP workflow. See the [native plan boundary](../../docs/src/content/docs/getting-started/tool-migration.md#automation-framework).
 The default automation directory remains `<shared-mount>/automation`.
 `zap.persistence.automationSubdirectory` must be a nonempty relative directory
 using letters, digits, dots, underscores, hyphens and `/` separators; absolute

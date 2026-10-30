@@ -279,7 +279,7 @@ true
 
 {{- define "mcp-zap-server.isLaunchSafetyProperty" -}}
 {{- $name := regexReplaceAll "[^a-z0-9]" (lower .) "" -}}
-{{- if or (hasPrefix "zapscanjobslaunchsafety" $name) (has $name (list "zapscanlaunchjournaldirectory" "zapscanreconcileoperatorclientids")) -}}true{{- end -}}
+{{- if or (hasPrefix "zapscanjobslaunchsafety" $name) (eq $name "zapscanlaunchjournaldirectory") -}}true{{- end -}}
 {{- end }}
 
 {{/*

@@ -86,8 +86,6 @@ spec:
           value: "{{ default (printf "%s-zap" (include "mcp-zap-server.fullname" .)) .Values.mcp.zapClient.url }}"
         - name: ZAP_SCAN_JOBS_STORE_BACKEND
           value: {{ $jobStoreBackend | quote }}
-        - name: ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS
-          value: {{ join "," .Values.mcp.launchSafety.operatorClientIds | quote }}
         {{- if $memoryLaunchSafety }}
         - name: ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY
           value: /var/lib/mcp-zap/scan-launch-safety/receipts

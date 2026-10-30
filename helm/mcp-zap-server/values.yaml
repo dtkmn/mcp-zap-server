@@ -252,9 +252,7 @@ mcp:
       blacklist: ""
 
   launchSafety:
-    # Reconciliation tools are not exposed through MCP; IDs do not enable them
-    # or clear uncertain launch holds. Keep launch safety storage intact.
-    operatorClientIds: []
+    # Preserve private launch safety storage when using the in-memory job store.
     persistence:
       existingClaim: ""
       accessMode: ReadWriteOnce

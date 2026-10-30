@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 import mcp.server.zap.core.configuration.AddonMaintenanceProperties;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -174,14 +175,14 @@ class TimeoutZapClientApiTest {
     void everyScanStartResponseEntryPointUsesTheNoReplayTransport(String format, String method) throws Exception {
         try (LostResponseServer lost = new LostResponseServer(LostReply.EOF)) {
             ClientApi scanClient = new TimeoutZapClientApi("127.0.0.1", lost.port(), "test-key", 500, 200);
-            assertThrows(ClientApiException.class, () -> {
-                switch (format) {
-                    case "xml" -> scanClient.callApi(method, "ascan", "action", "scan", Map.of("url", "http://fixture.invalid"));
-                    case "JSON" -> scanClient.callApiJson("ascan", "action", "scan", Map.of("url", "http://fixture.invalid"));
-                    case "other" -> scanClient.callApiOther(method, "ascan", "action", "scan", Map.of("url", "http://fixture.invalid"));
-                    default -> fail("Unknown response format");
-                }
-            });
+            Map<String, String> params = Map.of("url", "http://fixture.invalid");
+            Executable start = switch (format) {
+                case "xml" -> () -> scanClient.callApi(method, "ascan", "action", "scan", params);
+                case "JSON" -> () -> scanClient.callApiJson("ascan", "action", "scan", params);
+                case "other" -> () -> scanClient.callApiOther(method, "ascan", "action", "scan", params);
+                default -> fail("Unknown response format");
+            };
+            assertThrows(ClientApiException.class, start);
             assertEquals(1, lost.requests.get());
             assertNull(lost.failure.get());
         }

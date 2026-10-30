@@ -150,7 +150,7 @@ public class ScanJobResultApplier {
                         log.error("Failed to prepare scan job {}: {}", job.getId(), result.error());
                     }
                     return job;
-                }).orElse(null);
+                });
             } catch (RuntimeException e) {
                 if (firstPersistenceFailure == null) {
                     firstPersistenceFailure = e;

@@ -518,18 +518,16 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void heldLaunchViewsAllowAnotherRequesterInTheSameWorkspaceWithoutNativeEffects() {
+    void heldLaunchStatusAllowsAnotherRequesterInTheSameWorkspaceWithoutNativeEffects() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
-        ScanJob held = reconciliationHeldJob("routine-scanner");
+        ScanJobQueueService queue = heldStatusVisibilityQueue(store);
+        ScanJob held = heldStatusJob("routine-scanner");
         store.upsertAll(List.of(held));
 
-        assertThat(queue.getReconciliationStatus(null)).contains(held.getId(), held.getLaunchAttempt().id(),
-                        "Reconciliation Version: 2")
-                .doesNotContain("sensitive-target.test");
-        assertThat(queue.getReconciliationStatus(held.getId()))
-                .contains(held.getId(), held.getLaunchAttempt().id()).doesNotContain("sensitive-target.test");
-        assertEquals(held.getId(), queue.requireReconciliationVisibleJob(held.getId()).getId());
+        assertThat(queue.getScanJobStatus(held.getId()))
+                .contains("Job ID: " + held.getId(), "Status: START_OUTCOME_UNKNOWN",
+                        "Progress: unknown (possible execution remains held)")
+                .doesNotContain("sensitive-target.test", "Launch Attempt:", "Reconciliation Version:");
         assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
         assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
         assertEquals(2, store.load(held.getId()).orElseThrow().getLaunchAttempt().resolutionVersion());
@@ -537,16 +535,13 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void heldLaunchViewsHideOtherWorkspaceJobsWithoutNativeEffects() {
+    void heldLaunchStatusHidesOtherWorkspaceJobsWithoutNativeEffects() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
-        ScanJob held = reconciliationHeldJob("other-scanner");
+        ScanJobQueueService queue = heldStatusVisibilityQueue(store);
+        ScanJob held = heldStatusJob("other-scanner");
         store.upsertAll(List.of(held));
 
-        assertThat(queue.getReconciliationStatus(null)).doesNotContain(held.getId(), held.getLaunchAttempt().id());
-        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.getReconciliationStatus(held.getId())))
-                .hasMessage("No scan job found for ID: " + held.getId());
-        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.requireReconciliationVisibleJob(held.getId())))
+        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.getScanJobStatus(held.getId())))
                 .hasMessage("No scan job found for ID: " + held.getId());
         assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
         assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
@@ -555,23 +550,22 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void heldLaunchViewsRespectACustomSameWorkspaceDenialWithoutNativeEffects() {
+    void heldLaunchStatusRespectsACustomSameWorkspaceDenialWithoutNativeEffects() {
         InMemoryScanJobStore store = new InMemoryScanJobStore();
-        ScanJobQueueService queue = reconciliationVisibilityQueue(store);
-        ScanJob held = reconciliationHeldJob("routine-scanner");
+        ScanJobQueueService queue = heldStatusVisibilityQueue(store);
+        ScanJob held = heldStatusJob("routine-scanner");
         store.upsertAll(List.of(held));
         queue.setScanJobAccessBoundary(job -> false);
 
-        assertThat(queue.getReconciliationStatus(null)).doesNotContain(held.getId(), held.getLaunchAttempt().id());
-        assertThrowsExactly(IllegalArgumentException.class, () -> queue.getReconciliationStatus(held.getId()));
-        assertThrowsExactly(IllegalArgumentException.class, () -> queue.requireReconciliationVisibleJob(held.getId()));
+        assertThat(assertThrowsExactly(IllegalArgumentException.class, () -> queue.getScanJobStatus(held.getId())))
+                .hasMessage("No scan job found for ID: " + held.getId());
         assertEquals(ScanJobStatus.START_OUTCOME_UNKNOWN, store.load(held.getId()).orElseThrow().getStatus());
         assertEquals("attempt-reconciliation-view", store.load(held.getId()).orElseThrow().getLaunchAttempt().id());
         assertEquals(2, store.load(held.getId()).orElseThrow().getLaunchAttempt().resolutionVersion());
         verifyNoInteractions(activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService);
     }
 
-    private ScanJobQueueService reconciliationVisibilityQueue(InMemoryScanJobStore store) {
+    private ScanJobQueueService heldStatusVisibilityQueue(InMemoryScanJobStore store) {
         ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
                 activeScanService, spiderScanService, ajaxSpiderService, clientSpiderService,
                 urlValidationService, scanLimitProperties,
@@ -579,22 +573,22 @@ public class ScanJobQueueServiceTest {
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1), false, store,
                 new SingleNodeQueueLeadershipCoordinator()));
         ApiKeyProperties clients = new ApiKeyProperties();
-        clients.setApiKeys(List.of(reconciliationClient("recovery-operator", "shared-workspace"),
-                reconciliationClient("routine-scanner", "shared-workspace"),
-                reconciliationClient("other-scanner", "other-workspace")));
+        clients.setApiKeys(List.of(heldStatusClient("status-reader", "shared-workspace"),
+                heldStatusClient("routine-scanner", "shared-workspace"),
+                heldStatusClient("other-scanner", "other-workspace")));
         queue.setClientWorkspaceResolver(new ClientWorkspaceResolver(clients));
-        RequestIdentityHolder.set("recovery-operator", "shared-workspace");
+        RequestIdentityHolder.set("status-reader", "shared-workspace");
         return queue;
     }
 
-    private ApiKeyProperties.ApiKeyClient reconciliationClient(String id, String workspace) {
+    private ApiKeyProperties.ApiKeyClient heldStatusClient(String id, String workspace) {
         ApiKeyProperties.ApiKeyClient client = new ApiKeyProperties.ApiKeyClient();
         client.setClientId(id);
         client.setWorkspaceId(workspace);
         return client;
     }
 
-    private ScanJob reconciliationHeldJob(String requester) {
+    private ScanJob heldStatusJob(String requester) {
         ScanJob job = new ScanJob("held-reconciliation-view", ScanJobType.ACTIVE_SCAN,
                 Map.of("targetUrl", "https://sensitive-target.test"), Instant.now(), 3, requester, null);
         job.beginLaunch(new ScanJob.LaunchAttempt("attempt-reconciliation-view", "old-controller", Instant.now(), 2));

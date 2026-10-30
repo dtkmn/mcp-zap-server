@@ -102,35 +102,6 @@ public class ScanJobQueueService {
         restoreStateFromStore();
     }
 
-    public ScanJob requireReconciliationVisibleJob(String jobId) {
-        String normalized = requireText(jobId, "jobId");
-        return requireVisibleJob(normalized, scanJobStore.load(normalized).orElse(null));
-    }
-
-    public String reconciliationWorkspaceId() { return resolveCurrentWorkspaceId(); }
-
-    public String getReconciliationStatus(String jobId) {
-        List<ScanJob> visible = hasText(jobId)
-                ? List.of(requireReconciliationVisibleJob(jobId))
-                : scanJobStore.listStrict().stream().filter(this::canCurrentRequesterAccess)
-                    .filter(ScanJob::hasUnresolvedLaunch).limit(100).toList();
-        StringBuilder result = new StringBuilder("Launch reconciliation status (operator recovery; no native calls):\n");
-        for (ScanJob job : visible) {
-            result.append("Job ID: ").append(job.getId()).append("\nType: ").append(job.getType())
-                    .append("\nStatus: ").append(job.getStatus()).append('\n');
-            if (job.getLaunchAttempt() != null) {
-                result.append("Launch Attempt: ").append(job.getLaunchAttempt().id())
-                        .append("\nReconciliation Version: ").append(job.getLaunchAttempt().resolutionVersion())
-                        .append("\nOrigin Controller: ").append(job.getLaunchAttempt().controllerId()).append('\n');
-            }
-            if (job.getZapScanId() != null) result.append("Recorded Native Scan ID: ").append(job.getZapScanId()).append('\n');
-            if (job.hasUnresolvedLaunch()) result.append("Possible execution remains held; no automatic relaunch or unverified stop.\n");
-        }
-        if (visible.isEmpty()) result.append("No visible held launch receipts.\n");
-        if (visible.size() == 100) result.append("Listing limited to 100 jobs; inspect a known job ID individually.\n");
-        return result.toString();
-    }
-
     private final Map<String, ScanJob> jobs = new ConcurrentHashMap<>();
     private final Deque<String> queuedJobIds = new ArrayDeque<>();
     private final ReentrantLock queueLock = new ReentrantLock();

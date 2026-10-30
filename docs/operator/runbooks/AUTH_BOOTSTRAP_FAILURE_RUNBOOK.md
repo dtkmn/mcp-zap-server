@@ -97,7 +97,7 @@ If preparation returns a session but validation fails:
 5. Confirm `logged-out-indicator-regex`, if supplied, does not also match
    authenticated pages.
 6. Do not mutate a guided profile's managed context with lower-level tools.
-   Fix the profile and prepare a new session; use separate contexts for expert flows.
+   Fix the profile and prepare a new session; raw context mutation is not exposed through MCP.
 
 Validation output should include:
 

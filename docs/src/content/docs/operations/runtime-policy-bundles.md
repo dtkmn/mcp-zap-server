@@ -1,7 +1,7 @@
 ---
 title: "Runtime Policy Bundles"
 editUrl: false
-description: "Dry-run and enforce Policy Bundle v1 guardrails for MCP tool execution."
+description: "Configure dry-run and enforcement modes for Policy Bundle v1 guardrails."
 ---
 Runtime policy is the 0.7.0 control plane for deciding which MCP tool calls are allowed before the server executes them.
 
@@ -138,50 +138,19 @@ check the running server's tool catalog before calling it.
 The repository ships example bundles at:
 
 - `examples/policy-bundles/ci-guided-guardrails.json`
-- `examples/policy-bundles/expert-readonly-triage.json`
+- `examples/policy-bundles/guided-readonly-triage.json`
 
 Use those as starting points, not as production policy. Your actual bundle must name your approved hosts, tools, owners, and rollout windows.
 
-## Dry-run Tool
+## Previewing Decisions
 
-The expert surface exposes `zap_policy_dry_run` for previewing a bundle against one tool call before you publish it.
-
-Required setup:
-
-- `MCP_SERVER_TOOLS_SURFACE=expert`
-- caller has `zap:policy:dry-run` scope when authorization is enforced
-
-Example:
-
-```json
-{
-  "tool": "zap_policy_dry_run",
-  "arguments": {
-    "policyBundle": "{\"apiVersion\":\"mcp.zap.policy/v1\",\"kind\":\"PolicyBundle\",\"metadata\":{\"name\":\"ci-guided-guardrails\",\"description\":\"CI sandbox guardrails\",\"owner\":\"security-platform\"},\"spec\":{\"defaultDecision\":\"deny\",\"evaluationOrder\":\"first-match\",\"timezone\":\"Australia/Sydney\",\"rules\":[{\"id\":\"allow-sandbox-attack\",\"description\":\"Allow sandbox attack\",\"decision\":\"allow\",\"reason\":\"Sandbox target is approved.\",\"match\":{\"tools\":[\"zap_attack_start\"],\"hosts\":[\"*.sandbox.example.com\"]}}]}}}",
-    "toolName": "zap_attack_start",
-    "target": "https://api.sandbox.example.com/orders",
-    "evaluatedAt": "2026-06-02T01:00:00Z"
-  }
-}
-```
-
-The response includes:
-
-- `contractVersion`
-- `validation.valid` and validation errors
-- `decision.result`, `decision.source`, `decision.reason`, and `matchedRuleId` when a rule matched
-- normalized request details, including host and bundle-local time
-- a rule trace for explainability
-
-If the dry run says `invalid`, do not deploy the bundle. Fix unknown tool names, malformed targets, bad timestamps, duplicate rule IDs, or invalid time windows first.
+The former expert policy-preview tool is retired. Runtime policy configuration still supports `dry-run`, which records decisions for actual tool calls without blocking them. It is not a simulation: only perform actions that are authorized to execute. Rules must name tools in the current guided catalog; granting an old name does not restore it.
 
 ## Rollout Guidance
 
 Start with policy disabled while you confirm authentication, scopes, URL validation, and scan workflows.
 
-Then run local or CI previews with `zap_policy_dry_run` for every tool and target pattern the client needs.
-
-Next deploy the bundle with:
+Configure the bundle in `dry-run` mode for an authorized workflow:
 
 ```bash
 MCP_POLICY_MODE=dry-run

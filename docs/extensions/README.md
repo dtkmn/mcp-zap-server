@@ -104,7 +104,7 @@ extension API.
 | Passive scan state | `EnginePassiveScanAccess` | Read passive-scan backlog and completion state without coupling services to engine-native APIs. |
 | Findings and inventory | `EngineFindingAccess`, `EngineInventoryAccess` | Read normalized findings, sites, URLs, hosts, and alert summaries without leaking engine-native calls into services. |
 | Reports and artifacts | `EngineReportAccess` | Generate reports and feed evidence without exposing raw engine storage details to callers. |
-| API imports and automation | `EngineApiImportAccess`, `EngineAutomationAccess` | Keep OpenAPI, GraphQL, SOAP, and automation-plan behavior behind engine boundaries. |
+| API imports | `EngineApiImportAccess` | Keep OpenAPI, GraphQL and SOAP import behavior behind engine boundaries. |
 | Context and auth bootstrap | `EngineContextAccess`, `AuthBootstrapProvider` | Prepare sessions, users, contexts, and target auth without hard-coding customer-specific flows into core. |
 | Policy | `ToolExecutionPolicyHook`, `PolicyBundlePreviewer` | Add governance decisions and dry-run preview behavior without replacing MCP tools. |
 | Requester identity and access | `WorkspaceIdentityResolver`, `ScanJobAccessBoundary`, `ReportArtifactBoundary`, `PolicyBundleAccessBoundary`, `ScanHistoryAccessBoundary` | Add tenant/workspace-aware visibility and access checks around shared gateway data. |

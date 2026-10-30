@@ -274,10 +274,15 @@ Both automation settings point at that same directory:
 This places automation reports inside the caller's report-read boundary.
 The report-read tools will not grant access to a file merely because ZAP generated it.
 With different mount paths, map both settings to the same underlying storage.
-See the [automation workspace requirements](https://danieltse.org/mcp-zap-server/scanning/automation-framework/#align-automation-and-report-workspaces).
+Automation workspace settings do not expose plan execution through MCP. See the [Automation Framework boundary](https://danieltse.org/mcp-zap-server/scanning/automation-framework/).
 
-The sample enables the expert tool surface for import and automation checks and
-limits scan concurrency and duration. It permits private network targets solely
+The separate `mcp-launch-safety` named volume stores launch receipts for MCP only,
+outside the shared ZAP workspace and report artifacts. Preserve it when replacing
+the MCP container. Do not delete unresolved receipts to unblock scanning; use
+[launch recovery](https://danieltse.org/mcp-zap-server/operations/scan-queue-retry-policy/).
+This journal protects uncertain starts without restoring in-memory job history.
+
+The sample exposes the guided tool catalog and limits scan concurrency and duration. It permits private network targets solely
 for the exact `smoke-target` hostname. Keep those settings for the isolated
 example; they are not a general permission to scan your VPC.
 
@@ -403,31 +408,9 @@ download port to work around it.
 The sample intentionally omits security headers so reports can contain findings.
 Those findings describe the sample API, not the MCP server's security.
 
-For expert mode, import
-`http://smoke-target:8080/openapi.json` with `zap_import_openapi_spec_url` and
-`hostOverride` set to `http://smoke-target:8080`. The specification contains an
-unlinked `/imported-only` operation. Check that it appears after import, rather
-than counting a URL the crawl had already discovered as proof of import.
+To exercise schema import, call `zap_target_import` with `definitionType: openapi`, `sourceKind: url`, `source: http://smoke-target:8080/openapi.json`, and `hostOverride: http://smoke-target:8080`. The specification contains an unlinked `/imported-only` operation. Follow import with a guided crawl or explicitly authorized attack before reading target findings.
 
-Host setup installs the supplied [Automation Framework plan](https://danieltse.org/mcp-zap-server/scanning/automation-framework/)
-inside the shared workspace. It runs requestor, bounded HTTP spider,
-passive-wait and JSON-report jobs against the sample. Call
-`zap_automation_plan_run` with these arguments:
-
-```json
-{
-  "planPath": "/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml"
-}
-```
-
-Poll `zap_automation_plan_status` with the returned `Plan ID` until completion;
-check the success result and any errors or warnings. Call
-`zap_automation_plan_artifacts` with the returned `Plan File` as `planPath`, then
-read the generated JSON report's exact path using the same preview or complete
-retrieval procedure above. Both successful completion and complete report
-retrieval matter. Native Automation Framework report jobs use ZAP's templates
-and can include metadata from the shared session; the MCP target-report metadata
-filter does not apply to those jobs.
+Host setup also installs a native Automation Framework example in the shared workspace. The guided MCP catalog does not run that plan; it is available only as an operator reference for a separately managed ZAP workflow. Use the guided scan/report sequence above for this MCP deployment.
 
 ## 8. Verify restart and reboot
 
@@ -438,7 +421,8 @@ docker compose restart
 ```
 
 Wait for health to recover, connect with a new MCP client/session, read the saved
-report and compare its content, then complete a fresh scan. Next, use the EC2
+report and compare its content. Resolve any held launch receipts before completing
+a fresh scan. Next, use the EC2
 console to reboot the instance. Reconnect through Session Manager, return to the
 example directory, check health and firewall rules, and reopen the private tunnel
 using the newly observed container address. Repeat report readback and a new scan.
@@ -516,7 +500,7 @@ Do not treat a stopped instance as completed cleanup.
 | Missing MCP image or failed image pull | Check registry access and the selected published release, then configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
-| No automation tools | Inspect the actual surface; this example uses expert, while the main local Compose setup defaults to guided |
+| No automation tools | Expected: native Automation Framework plan tools are retired from the MCP catalog; use the guided scan/report sequence |
 | Healthy services but report readback fails | Shared mount permissions, client workspace and both automation directory settings |
 | External scan cannot connect | Expected for this example; approve and validate engine egress before changing scope |
 | Need a shell/curl inside MCP | The released Java image is distroless; use health status, logs and supported MCP tools |

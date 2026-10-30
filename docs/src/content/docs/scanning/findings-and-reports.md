@@ -1,7 +1,7 @@
 ---
 title: "Findings and Reports"
 editUrl: false
-description: "Choose the right guided or expert findings and report tools for triage, evidence, baselines, and artifacts."
+description: "Use guided findings and report tools for triage, evidence, baselines, and artifacts."
 ---
 MCP ZAP Server supports multiple findings and report layers. The right tool depends on whether you want a fast summary, grouped detail, raw evidence, or a stable artifact.
 
@@ -9,7 +9,7 @@ MCP ZAP Server supports multiple findings and report layers. The right tool depe
 
 Findings reads require a nonblank `baseUrl` for the scanned target and visible
 scan-history evidence for that target. This applies to guided summary/details
-and expert summary, details, instances, snapshots and diffs. Supply the target
+as well as snapshots and diffs. Supply the target
 you scanned, such as `http://juice-shop:3000`; other supported filters narrow
 that target's findings. Missing `baseUrl` or visible evidence is rejected.
 
@@ -17,43 +17,29 @@ These tools do not provide a global read of the shared ZAP session. A target
 scope also does not isolate results to one scan ID; see
 [Client Spider findings](#client-spider-findings) below.
 
-## Guided Surface
+## Guided Tools
 
 Guided findings and report tools:
 
 - `zap_findings_summary`
 - `zap_findings_details`
+- `zap_findings_snapshot`
+- `zap_findings_diff`
 - `zap_report_generate`
 - `zap_report_read`
 - `zap_report_read_chunk` (introduced in `v0.15.0`)
 
 Use these when:
 
-- you are on the default `guided` surface
 - you want quick triage with less tool selection overhead
 - you want report generation and readback without selecting a raw ZAP template
-- you do not need expert snapshots or diffs
-
-## Expert Surface
-
-Expert adds the following tools to the guided surface and requires `MCP_SERVER_TOOLS_SURFACE=expert`.
-
-Expert tools:
-
-- `zap_get_findings_summary`
-- `zap_alert_details`
-- `zap_alert_instances`
-- `zap_findings_snapshot`
-- `zap_findings_diff`
-- `zap_view_templates`
-- `zap_generate_report`
+- you want snapshots and diffs for reviewed baselines
 
 ## Summary Layer
 
 Use:
 
-- `zap_findings_summary` on guided
-- `zap_get_findings_summary` on expert
+- `zap_findings_summary`
 
 This is the first-pass risk picture. It is the cheapest place to start.
 
@@ -61,8 +47,7 @@ This is the first-pass risk picture. It is the cheapest place to start.
 
 Use:
 
-- `zap_findings_details` on guided for grouped detail or bounded instances
-- `zap_alert_details` on expert for grouped metadata
+- `zap_findings_details` for grouped detail or bounded instances
 
 Choose grouped detail when you need description, remediation guidance, CWE, WASC, or alert-family context before drilling into raw evidence.
 
@@ -70,8 +55,7 @@ Choose grouped detail when you need description, remediation guidance, CWE, WASC
 
 Use:
 
-- `zap_findings_details` with `includeInstances=true` on guided
-- `zap_alert_instances` on expert
+- `zap_findings_details` with `includeInstances=true`
 
 Choose raw instances when you need:
 
@@ -91,7 +75,7 @@ may limit additional examples; the tag alone does not prove a limit was reached.
 
 ## Snapshot And Diff
 
-Expert-only tools:
+Guided snapshot tools:
 
 - `zap_findings_snapshot`
 - `zap_findings_diff`
@@ -147,16 +131,11 @@ The scoped-report protection and paged readback below are introduced in
 `v0.15.0`. They are not included in `v0.14.0`. Check `tools/list` on your running
 server before using `zap_report_read_chunk`.
 
-Available on both surfaces:
+Available tools:
 
 - `zap_report_generate`
 - `zap_report_read`
 - `zap_report_read_chunk` (introduced in `v0.15.0`)
-
-Additional expert controls:
-
-- `zap_view_templates`
-- `zap_generate_report`
 
 Guided report generation accepts `baseUrl`, `format` (`html` or `json`), and
 `theme`, and returns the artifact path. Supply `baseUrl` for an absolute HTTP(S)
@@ -176,12 +155,7 @@ necessarily interchangeable with individual alert records returned by the
 findings API. Compare the concrete URLs and evidence when investigating a
 difference; a count difference alone does not establish missing findings.
 
-Omitting `baseUrl` explicitly requests the full ZAP session. Expert reports with
-a nonblank `sites` filter support the reviewed traditional JSON, HTML and
-Markdown templates; unsupported scoped templates are rejected. Native Automation
-Framework report jobs use ZAP's own templates and are not sanitized by this MCP
-generation path. Use separate ZAP sessions or engines when workloads require
-client isolation.
+Omitting `baseUrl` explicitly requests the full ZAP session. The guided interface supports HTML and JSON output; raw template selection is not exposed. Reports generated outside this MCP path use their own isolation and sanitization rules. Use separate ZAP sessions or engines when workloads require client isolation.
 
 ### Preview Or Complete Retrieval
 
@@ -220,15 +194,13 @@ symbolic-link paths, generation staging files and multiple hard links where the
 file system exposes link counts. The report directory must remain controlled by
 trusted server processes.
 
-Expert reporting additionally lets you choose a ZAP report template.
-
 ## Client Spider Findings
 
 In `v0.13.0`, [Client Spider](../client-spider/) uses these same findings and report tools. Wait for crawl completion and `zap_passive_scan_wait`, then filter the summary, details, and report by the target's `baseUrl`.
 
 These tools read the shared ZAP session, not an exclusive set of findings for one crawl. A `baseUrl` filter narrows the target but does not isolate a scan ID. Other crawls, authentication checks, and active scans against that target can contribute alerts. Recorded alert instances are not necessarily distinct confirmed vulnerabilities.
 
-There is no dedicated Client Spider results-list or Client Map export tool in the server yet. `zap_ajax_spider_results` belongs to AJAX Spider. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
+There is no dedicated crawler results-list or Client Map export tool in the guided catalog. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
 
 ## Typical Flow
 
@@ -240,5 +212,5 @@ There is no dedicated Client Spider results-list or Client Map export tool in th
 5. Expand to raw instances only when you need evidence
 6. Generate a report artifact
 7. Retrieve the complete report, following page offsets if the preview truncates
-8. In expert mode, snapshot or diff findings for later comparison
+8. Snapshot or diff findings for later comparison
 ```

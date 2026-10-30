@@ -134,7 +134,7 @@ Run sequence:
 Evidence exports are bounded snapshots of retained, caller-accessible ledger
 entries. Labels identify the package; they do not filter the run. Choose the
 target filter and limit carefully, check for truncation warnings, and confirm the
-selected records belong to this staged exercise. Direct scan launch records do
+selected records belong to this staged exercise. Historical direct scan launch records do
 not establish successful completion. Review report contents separately before
 sharing them; the curated summary does not attach or redact report files.
 

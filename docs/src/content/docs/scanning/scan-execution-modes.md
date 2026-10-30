@@ -1,185 +1,64 @@
 ---
-title: "Scan Execution Modes"
+title: "Scan Execution"
 editUrl: false
-description: "Choose between guided, direct, queue-managed, and Automation Framework workflows."
+description: "Start, monitor, and stop guided scans through the protected queue with in-memory or PostgreSQL storage."
 ---
-MCP ZAP Server supports multiple scan execution paths. If you do not understand which one you are using, you will misread the behavior around durability, retries, and failover.
+Guided crawl and attack starts always use the existing scan-job queue. Storage determines persistence, not execution routing. Agents cannot select a direct-start mode.
 
-> **Version `v0.13.0`:** In this version, Client Spider (`strategy=client`, `zap_client_spider_*`, and `zap_queue_client_spider_scan`) and browser authentication profiles support direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
+## Start and Track a Scan
 
-For a complete crawl-to-report workflow, see the [Client Spider guide](../client-spider/), including browser login, tool identifiers, and shared findings limitations.
+Use `zap_crawl_start` for discovery or `zap_attack_start` for an explicitly authorized active scan. Keep the returned **Operation ID** and pass it to the matching status or stop tool:
 
-## Guided Mode
+- `zap_crawl_status` / `zap_crawl_stop`
+- `zap_attack_status` / `zap_attack_stop`
 
-The default `guided` surface exposes:
+Acceptance records a job; it does not prove ZAP has started it. The job can wait for capacity, then prepare and start. A confirmed native start is tracked as `RUNNING`. A lost or uncertain start reply remains held for recovery and must not trigger another automatic start.
 
-- `zap_crawl_start`
-- `zap_crawl_status`
-- `zap_crawl_stop`
-- `zap_attack_start`
-- `zap_attack_status`
-- `zap_attack_stop`
+An optional `idempotencyKey` reuses an equivalent request from the same requester. Reusing the key with different parameters is rejected. Requests without a key can create separate jobs. Retry budgets do not permit repeating an uncertain start.
 
-Guided mode is intent-first. The server chooses direct versus queue execution from deployment topology:
+## Choose a Crawler
 
-- it prefers `queue` when Postgres-backed job storage or the `postgres-lock` coordinator is enabled
-- otherwise it uses `direct`
+| Strategy | Queued crawler |
+| --- | --- |
+| `http` | Traditional HTTP Spider |
+| `auto` or omitted | HTTP Spider, without automatic fallback |
+| `client` | Client Spider for browser-based discovery |
+| `browser` | AJAX Spider |
 
-Guided crawl strategy:
+`auto` does not detect JavaScript coverage and never switches to another crawler after a start failure. Select the crawler appropriate for the authorized target. A successful HTTP crawl does not prove JavaScript routes were explored.
 
-- `strategy=http` for the traditional spider
-- `strategy=browser` for AJAX Spider behavior
-- `strategy=client` for Client Spider browser crawling
-- `strategy=auto` to start with the HTTP spider; this does not detect JavaScript coverage
+Client Spider jobs share the configured spider concurrency limit. AJAX Spider uses a server-generated tracking ID because its native status and stop APIs are global. See [Client Spider](../client-spider/) and [AJAX Spider](../ajax-spider/) for prerequisites, limits and outcome interpretation.
 
-Important nuance:
+## Authentication and Scan Options
 
-- guided queue mode currently defaults `strategy=auto` to the HTTP spider
-- unauthenticated direct `auto` falls back to the AJAX Spider API only if the HTTP start fails; a successful HTTP crawl does not trigger browser crawling
-- prepared form-login sessions use HTTP for `http` and `auto`, without an anonymous browser fallback
-- pass `strategy=browser` if you need queued AJAX Spider explicitly
-- pass `strategy=client` to use Client Spider explicitly in either execution mode
+Prepared `kind: form` sessions support HTTP/auto crawling and active scans. Prepared `kind: browser` sessions require `strategy=client`; `strategy=browser` means AJAX Spider and does not accept a guided auth session. See [Authenticated Scanning](../authenticated-scanning-best-practices/).
 
-Client Spider is useful for JavaScript-heavy applications. It runs one headless Firefox browser per crawl and returns a ZAP scan ID, so status and stop operations address that specific crawl. Queued Client Spider jobs share the existing spider concurrency limit, retry settings, and cancellation handling. `strategy=browser` continues to use AJAX Spider.
-
-Client Spider uses `ZAP_MAX_SPIDER_SCAN_DURATION` (minutes; default 15, 0 means unlimited) for both direct and queued crawls. Before starting a crawl, the server sets ZAP's native Client Spider duration option, which ZAP copies into that scan. The limit therefore continues to apply if the MCP server restarts. Keep this setting consistent across MCP replicas sharing one ZAP instance. If ZAP cannot accept the duration option, the crawl is not started.
-
-This uses ZAP's native duration enforcement. Client Side Integration **0.33.0** fixes expiry when no new nodes or components are discovered; earlier versions could depend on browser events to notice the deadline. Browser shutdown remains cooperative, so the duration is not a guarantee that all in-flight requests end at that instant. API request, queue startup/wait, and cancellation timeouts remain separate.
-
-Client Spider requires ZAP's Client Side Integration (`client`) add-on version 0.27.0 or newer, Selenium, Firefox, and a compatible WebDriver. The supplied Compose and Helm configurations install `client`, and the default ZAP image includes the browser and WebDriver. If you connect to your own ZAP deployment, provide those prerequisites there.
-
-For authenticated guided Client Spider crawling, configure an operator auth profile with `kind: browser`, prepare it using `zap_auth_session_prepare`, and check it with `zap_auth_session_validate`. Pass the returned session ID to `zap_crawl_start` as `authSessionId` with `strategy=client`. This works in direct and queued modes. The profile uses the existing login URL, username, credential reference, and login indicators; ZAP logs into headless Firefox itself. See the [browser profile example](../authenticated-scanning-best-practices/#browser-authentication-for-client-spider).
-
-HTTP `kind: form` sessions remain supported with `strategy=http` or `auto` and active scans. Browser sessions currently require explicit `strategy=client`; HTTP, auto, AJAX, and active-scan routes reject them. The crawl strategy `browser` still means AJAX Spider, which is separate from the auth profile kind `browser`.
-
-The expert path can use the existing `zap_context_upsert`, `zap_context_auth_configure`, and `zap_user_upsert` tools to set up a separate browser-auth context. Configure `authMethodName=browserBasedAuthentication`, with `loginPageUrl` and `browserId=firefox-headless` in the URL-encoded `authMethodConfigParams`, and enable the user. Browser authentication requires ZAP's Authentication Helper add-on and ZAP 2.16.1 or newer for API configuration. Keep guided profile contexts managed by their profiles.
-
-The expert Client Spider start and queue tools accept an optional `maxDepth` (0 means unlimited); omission uses `ZAP_SPIDER_MAX_DEPTH`. For authenticated crawling, supply both `contextName` and `userName` from an existing ZAP configuration. These are ZAP names, not numeric IDs or login credentials. They use the existing `zap:scan:spider:run` permission, with `zap:scan:read` and `zap:scan:stop` for lifecycle access.
-
-Upgrade all workers sharing a queue before submitting Client Spider jobs; older workers do not recognize the new job type. This also applies to stored terminal `CLIENT_SPIDER` records, so completing or cancelling jobs alone does not make a worker rollback safe. Account for the stored queue state before rolling workers back.
-
-After the crawl finishes, use `zap_passive_scan_wait` before reading findings. A Client Spider scan ID identifies the crawl; it does not make the shared ZAP findings store exclusive to that crawl.
+Guided attacks preserve the `recurse` and `policy` options. Use an operator-configured policy name; the MCP catalog does not expose policy editing. See [Scan Policy Selection](../scan-policy-controls/).
 
 <a id="http-crawl-limits-unreleased-correction"></a>
 
 ## HTTP Crawl Limits
 
-The HTTP crawler correction, introduced in `v0.15.0`, applies
-`ZAP_SPIDER_MAX_DEPTH` to ZAP's actual depth
-setting and uses the independent `ZAP_SPIDER_MAX_CHILDREN` for children per page.
-Both default to **10**; **0** means unlimited. These limits apply to direct and
-queued HTTP crawls, including authenticated HTTP crawling. Explicit expert
-`maxChildren` overrides affect breadth only. Client Spider continues to use its
-own depth option; Automation Framework plans configure their own jobs.
+`ZAP_SPIDER_MAX_DEPTH` bounds HTTP depth, while `ZAP_SPIDER_MAX_CHILDREN` controls children per page. Both default to **10**; **0** means unlimited. These are independent limits, including for authenticated crawls. Client Spider uses its own depth option.
 
-This correction is not included in `v0.14.0`: that version sends the HTTP depth
-value as a child-count limit. Setting the environment variable on that image
-does not establish an actual depth bound. Use `v0.15.0` or later to apply the
-corrected depth limit. Use a release with verified available images; this source selects `v0.17.1`
-after its image publication. ZAP's HTTP depth
-setting is engine-wide; keep limits consistent across MCP servers sharing an engine.
+The corrected HTTP depth handling was introduced in `v0.15.0`; `v0.14.0` sent the depth value as a child-count limit. ZAP checks the child limit against its evolving Sites tree, so sibling links already queued can still be fetched. These settings do not guarantee an exact request count. Use duration limits and target scope alongside them.
 
-ZAP checks the child limit against its evolving Sites tree. Sibling links
-already queued can still be fetched before the cap takes effect; this setting
-does not guarantee an exact request count. Use duration limits and target scope
-alongside crawl limits.
+## Storage and Recovery
 
-## Direct Mode
+In-memory job history lasts for the server process. PostgreSQL persists job history and supports shared claim-based worker ownership. Preserve the configured operation-signing key when guided handles must survive server restart. Database persistence alone does not prove the outcome of an external ZAP call.
 
-Direct mode is available on the `expert` surface.
+Both stores use the same launch-safety checks. Unresolved launches retain capacity and require evidence or an explicit authorized resolution. See [Queue Retry and Launch Recovery](../../operations/scan-queue-retry-policy/).
 
-Direct tools:
+Valid previously issued signed guided direct-operation handles retain status and stop support. Raw scan IDs and expert queue-job IDs cannot be substituted for those handles. The old expert start, status, retry and queue-administration aliases are no longer exposed; see [Tool Migration](../../getting-started/tool-surfaces/#migration-from-the-expert-interface).
 
-- `zap_spider_start`
-- `zap_spider_status`
-- `zap_spider_stop`
-- `zap_spider_as_user`
-- `zap_active_scan_start`
-- `zap_active_scan_status`
-- `zap_active_scan_stop`
-- `zap_active_scan_as_user`
-- `zap_ajax_spider`
-- `zap_ajax_spider_status`
-- `zap_ajax_spider_stop`
-- `zap_client_spider_start`
-- `zap_client_spider_status`
-- `zap_client_spider_stop`
-
-Use direct mode when:
-
-- you run a single MCP replica
-- you want a lightweight start and poll workflow
-- you do not need durable job state or idempotent retries
-
-Tradeoffs:
-
-- no durable `ScanJob`
-- no dead-letter lifecycle
-- no HA failover semantics
-
-## Queue Mode
-
-Queue mode is available on the `expert` surface.
-
-Queue-managed tools:
-
-- `zap_queue_spider_scan`
-- `zap_queue_spider_scan_as_user`
-- `zap_queue_ajax_spider`
-- `zap_queue_client_spider_scan`
-- `zap_queue_active_scan`
-- `zap_queue_active_scan_as_user`
-- `zap_scan_job_status`
-- `zap_scan_job_list`
-- `zap_scan_job_cancel`
-- `zap_scan_job_retry`
-- `zap_scan_job_dead_letter_list`
-- `zap_scan_job_dead_letter_requeue`
-
-Use queue mode when:
-
-- you want durable status and history
-- client retries should be deduplicated with `idempotencyKey`
-- you need cancel, retry, and dead-letter behavior
-- you run multiple replicas or expect failover
-
-Queue advantages:
-
-- durable shared job state
-- claim-based worker ownership
-- retry budgets and backoff
-- claim recovery after worker loss
-
-## Automation Framework Plans
-
-Automation Framework tools are also `expert` only:
-
-- `zap_automation_plan_run`
-- `zap_automation_plan_status`
-- `zap_automation_plan_artifacts`
-
-Use them when you want one repeatable ZAP-native plan file to orchestrate multiple steps.
-
-Do not confuse this with queue mode:
-
-- automation plans are not the durable `ScanJob` queue abstraction
-- queue mode remains the main HA-safe orchestration path for long-running shared scans
-
-## Passive Scan Still Applies
-
-Direct mode, queue mode, and guided mode all generate traffic that passive rules analyze in the background.
+## Finish the Evidence Workflow
 
 After crawl or attack completion:
 
-1. confirm the crawl or scan is finished
-2. run `zap_passive_scan_wait`
-3. then read findings or generate reports
+1. Run `zap_passive_scan_wait` and confirm analysis has drained.
+2. Read findings for the target's `baseUrl`.
+3. Generate and retrieve reports or snapshots as needed.
 
-See [Passive Scan](../passive-scan/).
+Completion alone does not prove coverage or a clean security result. See [Findings and Reports](../findings-and-reports/).
 
-## Recommendation
-
-- use `guided` for the default experience
-- use `expert` when you need raw control
-- use `queue` for shared, automated, or HA-sensitive workloads
-- use direct mode for one-off local work where simplicity matters more than durability
+ZAP Automation Framework plans are separate native workflows and are not exposed through this MCP catalog. See [Automation Framework](../automation-framework/) for that boundary.

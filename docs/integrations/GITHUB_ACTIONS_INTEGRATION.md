@@ -23,17 +23,17 @@ For pilot installation, rollback, and preflight checks, use the
 The action brings up a minimal ZAP + MCP stack, optionally replays configured HTTP seed requests through the ZAP proxy, then uses the MCP tools already exposed by this repository:
 
 1. optional seed HTTP requests through the ZAP proxy
-2. `zap_spider_start`
-3. `zap_spider_status`
-4. `zap_active_scan_start` (optional)
-5. `zap_active_scan_status` (optional)
+2. `zap_crawl_start`
+3. `zap_crawl_status`
+4. `zap_attack_start` (optional)
+5. `zap_attack_status` (optional)
 6. `zap_passive_scan_wait`
-7. `zap_get_findings_summary`
+7. `zap_findings_summary`
 8. `zap_findings_snapshot`
-9. `zap_findings_diff` when a baseline file is present
-10. `zap_generate_report`
+9. compare the normalized snapshot against the baseline file when present
+10. `zap_report_generate`
 
-When the action starts its own bundled CI stack, it forces the MCP server into the `expert` tool surface so baseline replay, snapshot generation, and findings diff contracts are actually available. If you point the helper at an externally managed MCP server instead, the available artifacts still depend on that server's configured tool surface.
+The helper uses guided start, status and report tools. It detects snapshot support from `tools/list`; the current guided catalog provides it. Older guided servers without snapshots cannot produce an enforceable baseline comparison. The helper never falls back to retired direct-start tools.
 
 Artifacts emitted into the configured output directory include:
 
@@ -45,6 +45,12 @@ Artifacts emitted into the configured output directory include:
 - `artifact-manifest.json`
 - `webhook-delivery.json` when the optional callback step is enabled
 - copied report artifacts under `reports/` when the generated report file can be mapped back to the runner workspace
+
+The Compose stack keeps launch receipts in the MCP-only `mcp-launch-safety`
+volume, outside the shared ZAP workspace and uploaded artifacts. Preserve that
+volume when replacing the MCP container. Do not delete unresolved receipts to
+unblock a scan; follow [launch recovery](../src/content/docs/operations/scan-queue-retry-policy.md).
+The journal protects uncertain starts but does not make in-memory job history durable.
 
 ## Default Use Case
 
@@ -300,17 +306,9 @@ For `max-new-findings=0`, select a controlled target with stable content, seeds,
 scanner inventory and scan settings, and review repeated runs before enforcing
 the baseline.
 
-## Queue Versus Direct Mode In CI
+## Guided Queue Execution in CI
 
-The GitHub Actions template intentionally uses direct spider/active scan tools because they are simpler for a single ephemeral runner.
-
-Use the queue tools instead when:
-
-- you need durable multi-step orchestration
-- you run multiple MCP replicas
-- you want idempotent queue admission and claim-based failover semantics
-
-For long-lived shared environments, the queue remains the recommended production path. For a single GitHub Actions runner, direct mode is the practical default.
+All crawl and attack starts use guided Operation IDs backed by the protected queue, including a single ephemeral runner. Explicit failed, cancelled or uncertain start outcomes fail the gate rather than being treated as completed scans or automatically retried. In-memory storage is sufficient for process-local job history; use PostgreSQL when history must survive server restart.
 
 ## Tuning Inputs
 
@@ -353,3 +351,7 @@ The action exposes these outputs for follow-on workflow steps:
 - It generates ephemeral API keys when you do not supply `zap-api-key` or `mcp-api-key`.
 - The default compose stack enables `ZAP_ALLOW_LOCALHOST=true` and `ZAP_ALLOW_PRIVATE_NETWORKS=true` because CI often scans services living on runner-local or compose-private networks.
 - If your target blocks shared runner traffic or ZAP-style crawling, start with a cooperative staging target before turning the gate into a required PR check.
+
+## Report Format Compatibility
+
+The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and maps them to guided HTML or JSON generation. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.

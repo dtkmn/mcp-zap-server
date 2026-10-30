@@ -1,162 +1,72 @@
 ---
-title: "Tool Surfaces"
+title: "Guided Tools"
 editUrl: false
-description: "Understand the default guided MCP surface and the optional expert surface."
+description: "Use guided MCP tools for scans, policy inspection, authentication, findings, reports, and add-on maintenance."
 ---
-MCP ZAP Server ships two MCP tool surfaces:
+MCP ZAP Server exposes one guided tool catalog. New crawl and attack requests use the protected scan-job queue with either in-memory or PostgreSQL storage. There is no selectable expert mode or agent-facing direct scan-start route.
 
-- `guided` is the default
-- `expert` adds the raw low-level tool families on top of `guided`
-
-If you miss this distinction, the rest of the docs can look inconsistent. They are not inconsistent. The server is exposing different tool sets depending on configuration.
-
-## Configuration
-
-Environment variable:
-
-```bash
-MCP_SERVER_TOOLS_SURFACE=guided
-```
-
-Application config:
-
-```yaml
-mcp:
-  server:
-    tools:
-      surface: guided
-```
-
-Valid values:
-
-- `guided`
-- `expert`
-
-## Availability And Permissions
-
-The selected surface determines which tools are registered at startup. A scope
-grant, including `*`, does not register or enable an expert-only tool in the
-guided surface. Change the surface configuration and restart the server to
-change the registered tool set. Startup validation rejects registered tools
-without permission mappings.
-
-The packaged local client uses `*` to permit the curated guided surface,
-including active attacks, target authentication and API imports. Run only the
-target and workflow the user requests. Operators can configure explicit scopes
-for restricted clients; discovery may then include tools that caller cannot use.
-Existing credentials retain their configured grants. See
-[Quick-Start Permissions](../tool-scope-authorization/#quick-start-permissions)
-for the default and optional restrictions. With `*`, selecting `expert` also
-makes expert tools callable; explicit scopes still apply to restricted clients.
-
-**In v0.11.1 and later**, calls to unknown tools and tools disabled
-by the selected surface receive the same generic MCP error before scope checks.
-This error contract is not included in v0.11.0. See
-[Unknown And Disabled Tools](../tool-scope-authorization/#unknown-and-disabled-tools)
-for the exact response and version requirements.
-
-## Guided Surface
-
-`guided` is the default because most users do not need the full ZAP control plane on day one.
-
-Guided tools:
+## Scan and Authentication Tools
 
 - `zap_target_import`
-- `zap_crawl_start`
-- `zap_crawl_status`
-- `zap_crawl_stop`
-- `zap_attack_start`
-- `zap_attack_status`
-- `zap_attack_stop`
-- `zap_auth_session_prepare`
-- `zap_auth_session_validate`
-- `zap_findings_summary`
-- `zap_findings_details`
-- `zap_report_generate`
-- `zap_report_read`
-- `zap_report_read_chunk` (introduced in `v0.15.0`; complete paged report retrieval)
-- `zap_passive_scan_status`
-- `zap_passive_scan_wait`
-- `zap_addon_inspect`
-- `zap_addon_update`
-- `zap_addon_update_status`
-- `zap_scan_history_list`
-- `zap_scan_history_get`
-- `zap_scan_history_export`
-- `zap_scan_history_release_evidence`
-- `zap_scan_history_customer_handoff`
+- `zap_crawl_start`, `zap_crawl_status`, `zap_crawl_stop`
+- `zap_scan_policies_list`, `zap_scan_policy_view`
+- `zap_attack_start`, `zap_attack_status`, `zap_attack_stop`
+- `zap_auth_session_prepare`, `zap_auth_session_validate`
+- `zap_passive_scan_status`, `zap_passive_scan_wait`
 
-Use `guided` when:
+Use the Operation ID returned by a guided start for its status and stop calls. Admission can precede the native scan start; check status before treating it as running. See [Scan Execution](../../scanning/scan-execution-modes/).
 
-- you want a smaller, intent-first tool surface
-- you are onboarding a new client quickly
-- you want the server to choose direct versus queue execution for crawl and attack flows
-- you want guided target authentication without exposing raw ZAP context/user tools
-- you want scan history evidence without switching to the raw queue or report surfaces
-- you want to inspect scanner add-ons and passive rules before scanning; add-on
-  updates additionally require [operator maintenance configuration](../../operations/engine-addons/)
-- you do not need raw queue administration, raw auth-context setup, scan-policy tuning, or Automation Framework control
+Policy list and view tools inspect current ZAP configuration without starting a scan or changing rules. They require `zap:scan:policy:read`, separately from attack permission. See [Scan Policy Selection](../../scanning/scan-policy-controls/).
 
-## Expert Surface
+## Findings and Evidence Tools
 
-`expert` includes everything in `guided` and adds the raw tool families:
+- `zap_findings_summary`, `zap_findings_details`
+- `zap_findings_snapshot`, `zap_findings_diff`
+- `zap_report_generate`, `zap_report_read`, `zap_report_read_chunk`
+- `zap_scan_history_list`, `zap_scan_history_get`, `zap_scan_history_export`
+- `zap_scan_history_release_evidence`, `zap_scan_history_customer_handoff`
 
-- inventory: `zap_hosts`, `zap_sites`, `zap_urls`
-- direct scans: `zap_spider_*`, `zap_active_scan_*`, `zap_ajax_spider*`, `zap_client_spider_*` (Client Spider is introduced in `v0.13.0`)
-- queue lifecycle: `zap_queue_*`, `zap_scan_job_*`
-- API imports: `zap_import_*`
-- findings and reports: `zap_alert_*`, `zap_get_findings_summary`, `zap_findings_snapshot`, `zap_findings_diff`, `zap_view_templates`, `zap_generate_report`
-- authenticated scanning setup: `zap_context_*`, `zap_user_*`, `zap_auth_test_user`
-- Automation Framework: `zap_automation_*`
-- scan-policy controls: `zap_scan_policies_list`, `zap_scan_policy_view`, `zap_scan_policy_rule_set`
-- runtime policy preview: `zap_policy_dry_run`
+Snapshots and diffs retain their existing contracts and target authorization. They support baseline comparisons without enabling a separate tool surface. See [Findings and Reports](../../scanning/findings-and-reports/).
 
-Use `expert` when:
+## Operator Tools
 
-- you need low-level authenticated scanning workflows
-- you need queue job inspection, retry, or dead-letter control
-- you want raw API schema import tools instead of the guided import wrapper
-- you want findings snapshots, diffs, or custom report templates
-- you want Automation Framework plans
-- you need direct control over ZAP active-scan policies
+- `zap_addon_inspect`, `zap_addon_update`, `zap_addon_update_status`
 
-## How The Docs Map To Surfaces
+Add-on updates require explicit operator permissions and configuration. A wildcard alone does not grant an update. See [Add-on Maintenance](../../operations/engine-addons/).
 
-Check each page's tool names and surface requirements. A page can describe
-guided workflows and optional expert tools without requiring expert mode for
-the guided workflow.
+Manual launch reconciliation is unavailable through MCP. The catalog does not register `zap_scan_job_reconciliation_status` or `zap_scan_job_reconcile`; operator configuration and scope grants cannot enable them. Internal launch protection remains active, and unresolved jobs retain their holds and capacity. See [Unresolved Launch Holds](../../operations/scan-queue-retry-policy/#operator-reconciliation).
 
-Pages that matter to almost everyone:
+## Availability and Permissions
 
-- [MCP Access Authentication](../authentication-quick-start/)
-- [MCP Client Authentication](../mcp-client-authentication/)
-- [Optional Target Form-Login](../form-login-target-authentication/)
-- [JWT Quick Start](../jwt-quick-start/)
-- [Tool Scope Authorization](../tool-scope-authorization/)
-- [Scan Execution Modes](../../scanning/scan-execution-modes/)
-- [Client Spider (v0.13.0)](../../scanning/client-spider/)
-- [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/)
-- [Passive Scan](../../scanning/passive-scan/)
-- [Scan History Ledger](../../operations/scan-history-ledger/)
+Tool registration determines availability. Scope grants restrict calls to registered tools; they cannot restore retired names. This also applies to wildcard grants and authorization `warn` or `off` modes. Unknown and retired tools return the same generic MCP `Unknown tool` response.
 
-Pages covering both guided and expert workflows:
+The packaged local client uses `*` for ordinary guided tools, including active attacks, authentication and imports. Run only the target and workflow the user requests. Operators can configure explicit scopes for restricted clients. See [Tool Scope Authorization](../tool-scope-authorization/).
 
-- [AJAX Spider](../../scanning/ajax-spider/)
-- [API Schema Imports](../../scanning/api-schema-imports/)
-- [Findings and Reports](../../scanning/findings-and-reports/)
+## Migration from the Expert Interface
 
-Use `expert` only for the raw tools and additional controls marked as expert
-on those pages. Report previews are available on both surfaces.
-`zap_report_read_chunk`, introduced in `v0.15.0`, also belongs to both surfaces
-and uses the existing `zap:report:read` permission; `v0.14.0` does not expose it.
+`MCP_SERVER_TOOLS_SURFACE` and `mcp.server.tools.surface` are retired settings. Remove them from deployment configuration. Old values, including `expert`, are ignored and cannot restore retired tools.
 
-Pages that require `expert`:
+| Previous workflow | Current interface |
+| --- | --- |
+| Direct or explicit queue crawler starts | `zap_crawl_start`, then guided status/stop using its Operation ID |
+| Direct or explicit queue active-scan starts | `zap_attack_start`, then guided status/stop using its Operation ID |
+| Policy listing and inspection | `zap_scan_policies_list` and `zap_scan_policy_view` are guided read-only tools |
+| Family-specific schema imports | `zap_target_import` |
+| Raw findings summary, details or instances | `zap_findings_summary` and `zap_findings_details` |
+| Snapshot and diff | Existing `zap_findings_snapshot` and `zap_findings_diff` names remain available |
+| Raw report-template generation | `zap_report_generate` with its supported format/theme options |
+| Raw context/user setup | Operator-managed auth profiles and guided session preparation/validation |
 
-- [Scan Policy Controls](../../scanning/scan-policy-controls/)
-- [Automation Framework](../../scanning/automation-framework/)
+Raw inventory, job-ID administration/retry/dead-letter, scan-policy editing, policy-preview and Automation Framework aliases have been retired. They have no equivalent raw MCP entrypoint. The server does not silently reinterpret their old scopes as guided scan grants.
 
-## Recommendation
+Finish or deliberately stop existing expert workflows before upgrading. A raw ZAP scan ID or queue job ID is not a guided Operation ID. Valid previously issued signed guided direct-operation handles retain status and stop support, subject to their existing signing-key lifetime. Retaining those controls does not permit new direct starts.
 
-Start with `guided` unless you already know you need the raw ZAP workflow surface.
+## Current Capability Limits
 
-Switch to `expert` when your workflow needs precision, replayability, or operator controls that the guided layer intentionally hides.
+The guided catalog does not expose every ZAP inspection API:
+
+| Capability | Current guided behavior |
+| --- | --- |
+| Report-template discovery and arbitrary template selection | `zap_report_generate` supports `html` and `json` using predefined templates. It cannot list templates or accept an arbitrary template name. Light/dark themes apply to full-session HTML; target-scoped HTML uses the engine default appearance, and JSON has no theme. |
+| Complete AJAX Spider URL inventory | `zap_crawl_start` with `strategy=browser` provides status and stop controls through its Operation ID. No guided tool returns the complete AJAX Spider discovered-URL inventory; findings and scan history are not that inventory. |
+| ZAP context and user inventories | `zap_auth_session_prepare` takes an operator-configured profile and target, and `zap_auth_session_validate` checks the prepared session. Neither tool lists all existing ZAP contexts or users. |

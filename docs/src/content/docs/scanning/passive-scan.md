@@ -12,7 +12,7 @@ Use the passive scan tools when you need to know whether findings are still chan
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
 
-These tools are available on both the `guided` and `expert` surfaces.
+These tools are available in the guided catalog.
 
 ## `zap_passive_scan_status`
 
@@ -57,13 +57,6 @@ Use `zap_passive_scan_wait` after:
 
 - `zap_crawl_start`
 - `zap_attack_start`
-- `zap_spider_start`
-- `zap_ajax_spider`
-- `zap_client_spider_start` (in `v0.13.0`)
-- `zap_queue_spider_scan`
-- `zap_queue_ajax_spider`
-- `zap_queue_client_spider_scan` (in `v0.13.0`)
-- `zap_queue_active_scan`
 
 The rule is simple: if the next step is findings review or report generation, passive wait should usually come first.
 

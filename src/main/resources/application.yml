@@ -183,7 +183,6 @@ zap:
     jobs:
       launch-safety:
         journal-directory: ${ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY:${user.home}/.mcp-zap/scan-launch-safety}
-        operator-client-ids: ${ZAP_SCAN_RECONCILE_OPERATOR_CLIENT_IDS:}
       store:
         backend: ${ZAP_SCAN_JOBS_STORE_BACKEND:${ZAP_SCAN_QUEUE_STORE_BACKEND:in-memory}}
         postgres:

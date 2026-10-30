@@ -54,8 +54,6 @@ public class ToolScopeRegistry {
         register(rules, "zap_passive_scan_wait", McpToolSurface.GUIDED, "zap:scan:read");
 
         // Scan ownership and history
-        register(rules, "zap_scan_job_reconcile", McpToolSurface.GUIDED, "zap:scan:queue:reconcile");
-        register(rules, "zap_scan_job_reconciliation_status", McpToolSurface.GUIDED, "zap:scan:queue:reconcile");
         register(rules, "zap_scan_history_list", McpToolSurface.GUIDED, "zap:scan:read");
         register(rules, "zap_scan_history_get", McpToolSurface.GUIDED, "zap:scan:read");
         register(rules, "zap_scan_history_export", McpToolSurface.GUIDED, "zap:scan:read");

@@ -45,7 +45,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedHashMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -68,7 +67,6 @@ public class ScanJobQueueService {
     private static final String PARAM_USER_ID = ScanJobParameterNames.USER_ID;
     private static final String PARAM_MAX_CHILDREN = ScanJobParameterNames.MAX_CHILDREN;
     private static final String PARAM_SUBTREE_ONLY = ScanJobParameterNames.SUBTREE_ONLY;
-    private static final String PARAM_REPLAY_OF_JOB_ID = ScanJobParameterNames.REPLAY_OF_JOB_ID;
     private static final String PARAM_IDEMPOTENCY_KEY = ScanJobParameterNames.IDEMPOTENCY_KEY;
     private static final String DEFAULT_REQUESTER_ID = "anonymous";
     private static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -596,19 +594,6 @@ public class ScanJobQueueService {
         return cleanupIds.isEmpty() ? detail : detail + "\nUnresolved cleanup jobs: " + String.join(", ", cleanupIds);
     }
 
-    public String listScanJobs(
-            String statusFilter
-    ) {
-        ScanJobStatus filter = parseStatusFilter(statusFilter);
-        processQueue();
-
-        List<ScanJob> snapshot = scanJobStore.list().stream()
-                .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
-                .toList();
-        snapshot = filterVisibleJobs(snapshot);
-        return responseFormatter.formatJobList(snapshot, filter, Instant.now());
-    }
-
     /**
      * Return the current durable job snapshot for runtime protection and diagnostics.
      */
@@ -668,99 +653,6 @@ public class ScanJobQueueService {
         return response[0];
     }
 
-    public String retryScanJob(
-            String jobId
-    ) {
-        String normalizedJobId = requireText(jobId, "jobId");
-        List<ScanJob> committedJobs = updateQueueState(currentState -> {
-            ScanJob job = currentState.jobs().get(normalizedJobId);
-            job = requireVisibleJob(normalizedJobId, job);
-
-            requireNoOutstandingCleanup(job, currentState);
-            if (job.getStatus() != ScanJobStatus.FAILED && job.getStatus() != ScanJobStatus.CANCELLED) {
-                throw new IllegalStateException("Only FAILED or CANCELLED jobs can be retried. Current status: " + job.getStatus());
-            }
-
-            if (job.getAttempts() >= job.getMaxAttempts()) {
-                throw new IllegalStateException("Retry budget exhausted for job " + normalizedJobId + " (attempts="
-                        + job.getAttempts() + "/" + job.getMaxAttempts() + ")");
-            }
-
-            currentState.queuedJobIds().remove(normalizedJobId);
-            job.markQueuedForRetry(Instant.now(), job.getLastError());
-            currentState.queuedJobIds().addLast(normalizedJobId);
-            return currentState;
-        });
-        applyCommittedStoredJobs(committedJobs);
-
-        processQueue();
-
-        queueLock.lock();
-        try {
-            ScanJob job = jobs.get(normalizedJobId);
-            return "Retry queued for job " + normalizedJobId + ". Current status: " + (job != null ? job.getStatus() : "UNKNOWN");
-        } finally {
-            queueLock.unlock();
-        }
-    }
-
-    /**
-     * List jobs that exhausted retry budget and remain in FAILED state.
-     */
-    public String listDeadLetterJobs() {
-        processQueue();
-
-        List<ScanJob> deadLetterJobs = scanJobStore.list().stream()
-                .filter(this::isDeadLetterJob)
-                .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
-                .toList();
-        deadLetterJobs = filterVisibleJobs(deadLetterJobs);
-
-        return responseFormatter.formatDeadLetterJobs(deadLetterJobs);
-    }
-
-    public String requeueDeadLetterJob(
-            String jobId
-    ) {
-        String normalizedJobId = requireText(jobId, "jobId");
-        ScanJob[] replayJob = new ScanJob[1];
-        List<ScanJob> committedJobs = updateQueueState(currentState -> {
-            ScanJob deadLetterJob = currentState.jobs().get(normalizedJobId);
-            deadLetterJob = requireVisibleJob(normalizedJobId, deadLetterJob);
-            requireNoOutstandingCleanup(deadLetterJob, currentState);
-            if (!isDeadLetterJob(deadLetterJob)) {
-                throw new IllegalStateException("Job " + normalizedJobId + " is not a dead-letter job. Current status="
-                        + deadLetterJob.getStatus() + ", attempts=" + deadLetterJob.getAttempts()
-                        + "/" + deadLetterJob.getMaxAttempts());
-            }
-
-            Map<String, String> replayParameters = new HashMap<>(deadLetterJob.getParameters());
-            replayParameters.put(PARAM_REPLAY_OF_JOB_ID, deadLetterJob.getId());
-
-            replayJob[0] = new ScanJob(
-                    UUID.randomUUID().toString(),
-                    deadLetterJob.getType(),
-                    replayParameters,
-                    Instant.now(),
-                    policyFor(deadLetterJob.getType()).maxAttempts(),
-                    deadLetterJob.getRequesterId(),
-                    null
-            );
-
-            currentState.jobs().put(replayJob[0].getId(), replayJob[0]);
-            currentState.queuedJobIds().addLast(replayJob[0].getId());
-            return currentState;
-        });
-        applyCommittedStoredJobs(committedJobs);
-        log.info("Requeued dead-letter scan job {} as {}", normalizedJobId, replayJob[0].getId());
-
-        processQueue();
-        return "Dead-letter replay queued\n"
-                + "Source Job ID: " + normalizedJobId + '\n'
-                + "New Job ID: " + replayJob[0].getId() + '\n'
-                + "New Status: " + replayJob[0].getStatus();
-    }
-
     /**
      * Dispatch queued work, refresh running progress, and persist resulting state.
      */
@@ -807,17 +699,6 @@ public class ScanJobQueueService {
 
     private ScanJobLaunchSafety requireLaunchSafety() {
         return Objects.requireNonNull(launchSafety, "Queued execution requires configured launch safety");
-    }
-
-    private void requireNoOutstandingCleanup(ScanJob source, ScanJobQueueState state) {
-        if (source.isCleanupJob()) {
-            throw new IllegalStateException("Cleanup records cannot launch new scans; request cancellation again to retry cleanup");
-        }
-        boolean outstanding = state.jobs().values().stream().anyMatch(job ->
-                source.getId().equals(job.getCleanupOfJobId()) && !job.getStatus().isTerminal());
-        if (outstanding) {
-            throw new IllegalStateException("Scan job " + source.getId() + " has unconfirmed cleanup; resolve it before retrying");
-        }
     }
 
     private void processNativeCancellations(Instant now) {
@@ -1218,21 +1099,6 @@ public class ScanJobQueueService {
     }
 
     /**
-     * Parse optional list filter value into enum status.
-     */
-    private ScanJobStatus parseStatusFilter(String statusFilter) {
-        if (!hasText(statusFilter)) {
-            return null;
-        }
-        try {
-            return ScanJobStatus.valueOf(statusFilter.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid status filter: " + statusFilter +
-                    ". Expected one of: QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED");
-        }
-    }
-
-    /**
      * Normalize blank strings to null for optional API parameters.
      */
     private String normalizeBlankToNull(String value) {
@@ -1291,13 +1157,6 @@ public class ScanJobQueueService {
             return activeRetryPolicy;
         }
         return spiderRetryPolicy;
-    }
-
-    /**
-     * Return true when a job failed and exhausted attempts budget.
-     */
-    private boolean isDeadLetterJob(ScanJob job) {
-        return !job.isCleanupJob() && job.getStatus() == ScanJobStatus.FAILED && job.getAttempts() >= job.getMaxAttempts();
     }
 
     private String sanitizeWorkerNodeId(String workerNodeId) {

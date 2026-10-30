@@ -327,7 +327,6 @@ public class ScanJobQueueServiceTest {
         assertNull(failed.getZapScanId());
         assertThat(service.getScanJobStatus(jobId))
                 .contains("Status: FAILED", "Browser authentication failed", "Dead Letter: true");
-        assertThat(service.listDeadLetterJobs()).contains(jobId);
         verify(clientSpiderService, times(3)).startClientSpiderJob(eq("http://example.com/client"), eq(null), eq("Application"), eq("alice"), any(NativeScanLaunch.class));
         verify(clientSpiderService, never()).startClientSpiderJob(anyString(), any(), eq(null), eq(null), any(NativeScanLaunch.class));
         verify(spiderScanService, never()).startSpiderScanJob(anyString(), any(NativeScanLaunch.class));
@@ -453,17 +452,24 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void listScanJobsHidesJobsRejectedByAccessBoundary() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-101"));
+    void scanJobStatusHidesCleanupJobsRejectedByAccessBoundary() {
+        InMemoryScanJobStore store = new InMemoryScanJobStore();
+        when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
+        ScanJobQueueService queue = launches.guarded(new ScanJobQueueService(
+                activeScanService, spiderScanService, urlValidationService, scanLimitProperties,
+                3, false, store));
+        String sourceId = extractJobId(queue.queueActiveScan("http://example.com", null, null, null));
+        ScanJob cleanup = new ScanJob("hidden-cleanup", ScanJobType.ACTIVE_SCAN,
+                Map.of("targetUrl", "http://example.com", ScanJob.CLEANUP_OF_JOB_ID, sourceId), Instant.now(), 1);
+        store.upsertAll(List.of(store.load(sourceId).orElseThrow(), cleanup));
+        assertThat(queue.getScanJobStatus(sourceId)).contains("Unresolved cleanup jobs: " + cleanup.getId());
 
-        service.queueActiveScan("http://example.com", null, null, null);
-        service.setScanJobAccessBoundary(job -> false);
+        queue.setScanJobAccessBoundary(job -> !cleanup.getId().equals(job.getId()));
 
-        String summary = service.listScanJobs(null);
-
-        assertTrue(summary.contains("Total jobs: 0"));
-        assertTrue(summary.contains("Queue depth: 0"));
-        assertTrue(summary.contains("No jobs match current filter."));
+        assertThat(queue.getScanJobStatus(sourceId)).contains("Job ID: " + sourceId)
+                .doesNotContain(cleanup.getId(), "Unresolved cleanup jobs:");
+        assertTrue(store.load(cleanup.getId()).isPresent());
+        verify(activeScanService, never()).startActiveScanJob(any(), any(), any(), any());
     }
 
     @Test
@@ -502,9 +508,9 @@ public class ScanJobQueueServiceTest {
         RequestIdentityHolder.set("client-b", "workspace-b");
         String clientBJobId = extractJobId(service.queueActiveScan("http://b.example.com", null, null, null));
 
-        String clientBList = service.listScanJobs(null);
-        assertTrue(clientBList.contains(clientBJobId));
-        assertTrue(!clientBList.contains(clientAJobId));
+        String clientBStatus = service.getScanJobStatus(clientBJobId);
+        assertTrue(clientBStatus.contains(clientBJobId));
+        assertTrue(!clientBStatus.contains(clientAJobId));
         assertThrowsExactly(IllegalArgumentException.class, () -> service.getScanJobStatus(clientAJobId));
 
         RequestIdentityHolder.set("client-a", "workspace-a");
@@ -639,7 +645,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void restartRecoveryNormalizesDuplicateQueuedIds() {
+    void restartRecoveryRestoresPersistedQueuedJobAndPosition() {
         InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
         when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0);
 
@@ -673,8 +679,12 @@ public class ScanJobQueueServiceTest {
                 new SingleNodeQueueLeadershipCoordinator()
         ));
 
-        String summary = restoredService.listScanJobs(null);
-        assertTrue(summary.contains("Queue depth: 1"));
+        restoredService.processQueueOnceForTesting();
+        assertThat(sharedJobStore.listStrict()).singleElement().satisfies(job -> {
+            assertEquals("job-dup", job.getId());
+            assertEquals(ScanJobStatus.QUEUED, job.getStatus());
+            assertEquals(1, job.getQueuePosition());
+        });
     }
 
     @Test
@@ -783,7 +793,7 @@ public class ScanJobQueueServiceTest {
         assertNotNull(storedJob);
         assertEquals("req-123", storedJob.getIdempotencyKey());
         assertTrue(secondResponse.contains("existing job returned for idempotent retry"));
-        assertTrue(service.listScanJobs(null).contains("Total jobs: 1"));
+        assertThat(service.listJobsSnapshot()).extracting(ScanJob::getId).containsExactly(firstJobId);
     }
 
     @Test
@@ -1485,7 +1495,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void recoveredLegacyNativeCleanupRetainsCapacityAndCannotLaunchThroughRetryOrReplay() {
+    void recoveredLegacyNativeCleanupRetainsCapacityAndAllowsExplicitCancellationRetry() {
         Instant now = Instant.now();
         InMemoryScanJobStore store = new InMemoryScanJobStore();
         ScanJob source = new ScanJob("legacy-source", ScanJobType.ACTIVE_SCAN,
@@ -1519,14 +1529,6 @@ public class ScanJobQueueServiceTest {
         assertFalse(expired.isCancellationPending());
         assertEquals(expiredAt, expired.getCancelDeadlineAt());
         assertThat(expired.getLastError()).contains("Unable to confirm cancellation");
-        assertThat(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(source.getId())))
-                .hasMessageContaining("unconfirmed cleanup");
-        assertThat(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(source.getId())))
-                .hasMessageContaining("unconfirmed cleanup");
-        assertThat(assertThrows(IllegalStateException.class, () -> queue.retryScanJob(cleanup.getId())))
-                .hasMessageContaining("Cleanup records cannot launch");
-        assertThat(assertThrows(IllegalStateException.class, () -> queue.requeueDeadLetterJob(cleanup.getId())))
-                .hasMessageContaining("Cleanup records cannot launch");
 
         String waitingId = extractJobId(queue.queueActiveScan("http://example.com/waiting", "true", null, null));
         queue.processQueueOnceForTesting();
@@ -1592,7 +1594,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void restoredBusyWaitExpiresDespiteFullCapacityAndLaterBackoffAndCanBeRetried() {
+    void restoredBusyWaitExpiresDespiteFullCapacityAndLaterBackoff() {
         Instant now = Instant.now();
         ScanJob waiting = new ScanJob("busy-expired", ScanJobType.AJAX_SPIDER,
                 Map.of("targetUrl", "http://example.com"), now.minusSeconds(300), 2);
@@ -1609,14 +1611,6 @@ public class ScanJobQueueServiceTest {
             assertEquals(0, expired.getAttempts());
             assertTrue(expired.getLastError().contains("Engine busy wait timed out after 180000 ms"));
             verify(ajaxSpiderService, never()).startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class));
-
-            when(scanLimitProperties.getMaxConcurrentSpiderScans()).thenReturn(1);
-            when(ajaxSpiderService.startAjaxSpiderJobTracked(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("ajax-after-manual-retry"));
-            restored.retryScanJob("busy-expired");
-
-            assertEquals(ScanJobStatus.RUNNING, store.load("busy-expired").orElseThrow().getStatus());
-            assertEquals(1, store.load("busy-expired").orElseThrow().getAttempts());
-            assertNull(store.load("busy-expired").orElseThrow().getBusyWaitStartedAt());
         } finally {
             restored.shutdownExecutor();
         }
@@ -1818,101 +1812,6 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void followerReplicaCanRetryCancelledJob() {
-        InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
-        SharedLeadershipState leadershipState = new SharedLeadershipState("node-a");
-        TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
-        TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
-
-        when(scanLimitProperties.getMaxConcurrentActiveScans()).thenReturn(0, 0, 1, 1);
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-retried"));
-
-        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
-                activeScanService,
-                spiderScanService,
-                urlValidationService,
-                scanLimitProperties,
-                3,
-                false,
-                sharedJobStore,
-                leaderCoordinator
-        ));
-        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
-                activeScanService,
-                spiderScanService,
-                urlValidationService,
-                scanLimitProperties,
-                3,
-                false,
-                sharedJobStore,
-                followerCoordinator
-        ));
-
-        String jobId = extractJobId(leaderService.queueActiveScan("http://example.com/retry", "true", null, null));
-        leaderService.cancelScanJob(jobId);
-
-        String retryMessage = followerService.retryScanJob(jobId);
-        assertTrue(retryMessage.contains("Retry queued"));
-
-        leadershipState.setLeaderId("node-a");
-        leaderService.processQueueOnceForTesting();
-
-        ScanJob retriedJob = leaderService.getJobForTesting(jobId);
-        assertNotNull(retriedJob);
-        assertEquals(ScanJobStatus.RUNNING, retriedJob.getStatus());
-        assertEquals("A-retried", retriedJob.getZapScanId());
-    }
-
-    @Test
-    void followerReplicaCanRequeueDeadLetterJob() {
-        InMemoryScanJobStore sharedJobStore = new InMemoryScanJobStore();
-        SharedLeadershipState leadershipState = new SharedLeadershipState("node-a");
-        TestQueueLeadershipCoordinator leaderCoordinator = new TestQueueLeadershipCoordinator("node-a", leadershipState);
-        TestQueueLeadershipCoordinator followerCoordinator = new TestQueueLeadershipCoordinator("node-b", leadershipState);
-
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
-                .thenThrow(new ZapApiException("first failure", new RuntimeException("first failure")))
-                .thenAnswer(startReplies("A-replayed"));
-
-        ScanJobQueueService leaderService = launches.guarded(new ScanJobQueueService(
-                activeScanService,
-                spiderScanService,
-                urlValidationService,
-                scanLimitProperties,
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
-                false,
-                sharedJobStore,
-                leaderCoordinator
-        ));
-        ScanJobQueueService followerService = launches.guarded(new ScanJobQueueService(
-                activeScanService,
-                spiderScanService,
-                urlValidationService,
-                scanLimitProperties,
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
-                false,
-                sharedJobStore,
-                followerCoordinator
-        ));
-
-        String sourceJobId = extractJobId(leaderService.queueActiveScan("http://example.com/dead-letter-follower", "true", null, null));
-        ScanJob sourceJob = leaderService.getJobForTesting(sourceJobId);
-        assertEquals(ScanJobStatus.FAILED, sourceJob.getStatus());
-
-        String replayResponse = followerService.requeueDeadLetterJob(sourceJobId);
-        String replayJobId = extractValueByPrefix(replayResponse, "New Job ID: ");
-
-        leaderService.processQueueOnceForTesting();
-
-        ScanJob replayJob = leaderService.getJobForTesting(replayJobId);
-        assertNotNull(replayJob);
-        assertEquals(ScanJobStatus.RUNNING, replayJob.getStatus());
-        assertEquals("A-replayed", replayJob.getZapScanId());
-    }
-
-    @Test
     void scanJobStoreTracksEnqueuedAndRunningJobs() {
         InMemoryScanJobStore scanJobStore = new InMemoryScanJobStore();
         when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class))).thenAnswer(startReplies("A-store"));
@@ -1965,10 +1864,8 @@ public class ScanJobQueueServiceTest {
         assertEquals(2, secondStoredJob.getQueuePosition());
 
         String detail = storeBackedService.getScanJobStatus(secondJobId);
-        String queuedSummary = storeBackedService.listScanJobs("QUEUED");
         assertTrue(detail.contains("Queue Position: 2"));
-        assertTrue(queuedSummary.contains("queuePosition=1"));
-        assertTrue(queuedSummary.contains("queuePosition=2"));
+        assertTrue(storeBackedService.getScanJobStatus(firstJobId).contains("Queue Position: 1"));
     }
 
     @Test
@@ -2114,31 +2011,6 @@ public class ScanJobQueueServiceTest {
         assertTrue(cancelMessage.contains("cancelled"));
         assertEquals(ScanJobStatus.CANCELLED, job.getStatus());
         verify(activeScanService, never()).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
-    }
-
-    @Test
-    void retryCancelledJobStartsAgainWhenRetryBudgetAvailable() {
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
-                .thenAnswer(startReplies("A-1"))
-                .thenAnswer(startReplies("A-retry"));
-
-        String response = service.queueActiveScan("http://example.com", "true", null, null);
-        String jobId = extractJobId(response);
-
-        service.cancelScanJob(jobId);
-        ScanJob cancelledJob = service.getJobForTesting(jobId);
-        assertEquals(ScanJobStatus.CANCELLED, cancelledJob.getStatus());
-        assertEquals(1, cancelledJob.getAttempts());
-
-        String retryMessage = service.retryScanJob(jobId);
-
-        ScanJob retriedJob = service.getJobForTesting(jobId);
-        assertTrue(retryMessage.contains("Retry queued"));
-        assertEquals(ScanJobStatus.RUNNING, retriedJob.getStatus());
-        assertEquals(2, retriedJob.getAttempts());
-        assertEquals("A-retry", retriedJob.getZapScanId());
-        verify(activeScanService).stopActiveScanJob("A-1");
-        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
     }
 
     @Test
@@ -2301,7 +2173,7 @@ public class ScanJobQueueServiceTest {
     }
 
     @Test
-    void deadLetterListShowsRetryExhaustedJobs() {
+    void exhaustedPreparationRetriesRemainFailedWithDeadLetterDetails() {
         ScanJobQueueService policyService = newServiceWithPolicies(
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0),
                 new ScanJobQueueService.RetryPolicy(2, 0, 0, 1.0)
@@ -2317,35 +2189,8 @@ public class ScanJobQueueServiceTest {
         assertEquals(ScanJobStatus.FAILED, failedJob.getStatus());
         assertEquals(2, failedJob.getAttempts());
 
-        String deadLetterOutput = policyService.listDeadLetterJobs();
-        assertTrue(deadLetterOutput.contains("Dead-letter jobs: 1"));
-        assertTrue(deadLetterOutput.contains(failedJobId));
-    }
-
-    @Test
-    void deadLetterRequeueCreatesNewJobWithFreshBudget() {
-        ScanJobQueueService policyService = newServiceWithPolicies(
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0),
-                new ScanJobQueueService.RetryPolicy(1, 0, 0, 1.0)
-        );
-        when(activeScanService.startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class)))
-                .thenThrow(new ZapApiException("first failure", new RuntimeException("first failure")))
-                .thenAnswer(startReplies("A-replayed"));
-
-        String sourceJobId = extractJobId(policyService.queueActiveScan("http://example.com/requeue", "true", null, null));
-        ScanJob sourceJob = policyService.getJobForTesting(sourceJobId);
-        assertEquals(ScanJobStatus.FAILED, sourceJob.getStatus());
-
-        String replayResponse = policyService.requeueDeadLetterJob(sourceJobId);
-        String replayJobId = extractValueByPrefix(replayResponse, "New Job ID: ");
-        ScanJob replayJob = policyService.getJobForTesting(replayJobId);
-
-        assertNotNull(replayJob);
-        assertEquals(ScanJobStatus.RUNNING, replayJob.getStatus());
-        assertEquals("A-replayed", replayJob.getZapScanId());
-        assertEquals(1, replayJob.getAttempts());
-        assertTrue(replayResponse.contains("Source Job ID: " + sourceJobId));
-        verify(activeScanService, times(2)).startActiveScanJob(anyString(), anyString(), any(), any(NativeScanLaunch.class));
+        assertThat(policyService.getScanJobStatus(failedJobId))
+                .contains("Job ID: " + failedJobId, "Status: FAILED", "Attempts: 2/2", "Dead Letter: true", "active boom");
     }
 
     @Test
@@ -2381,16 +2226,6 @@ public class ScanJobQueueServiceTest {
             }
         }
         fail("Unable to extract job ID from response: " + response);
-        return null;
-    }
-
-    private String extractValueByPrefix(String response, String prefix) {
-        for (String line : response.split("\\R")) {
-            if (line.startsWith(prefix)) {
-                return line.substring(prefix.length()).trim();
-            }
-        }
-        fail("Unable to extract value with prefix '" + prefix + "' from response: " + response);
         return null;
     }
 

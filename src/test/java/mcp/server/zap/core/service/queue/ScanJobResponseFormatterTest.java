@@ -18,7 +18,7 @@ class ScanJobResponseFormatterTest {
     private final ScanJobResponseFormatter formatter = new ScanJobResponseFormatter();
 
     @Test
-    void identifiesCleanupJobsAndTheirSourceInDetailsAndListing() {
+    void identifiesCleanupJobsAndTheirSourceInDetails() {
         Instant now = Instant.parse("2026-05-06T00:00:00Z");
         ScanJob cleanup = new ScanJob("cleanup-1", ScanJobType.ACTIVE_SCAN,
                 Map.of(ScanJob.CLEANUP_OF_JOB_ID, "source-1"), now, 1);
@@ -27,8 +27,6 @@ class ScanJobResponseFormatterTest {
 
         assertThat(formatter.formatJobDetail(cleanup, 0, now))
                 .contains("Cleanup for Job ID: source-1", "ZAP Scan ID: 123", "cancellation pending");
-        assertThat(formatter.formatJobList(List.of(cleanup), null, now))
-                .contains("cleanupForJob=source-1", "cleanup-1 | ACTIVE_SCAN | RUNNING (cancellation pending)");
     }
 
     @Test
@@ -99,44 +97,6 @@ class ScanJobResponseFormatterTest {
     }
 
     @Test
-    void formatsFilteredJobListWithFullContract() {
-        Instant now = Instant.parse("2026-05-06T00:00:00Z");
-        ScanJob queuedJob = new ScanJob(
-                "job-queued",
-                ScanJobType.ACTIVE_SCAN,
-                Map.of("targetUrl", "https://example.com/queued"),
-                now.minusSeconds(30),
-                3
-        );
-        queuedJob.assignQueuePosition(1);
-        queuedJob.claim("worker-a", now.minusSeconds(1), now.plusSeconds(30));
-
-        ScanJob runningJob = new ScanJob(
-                "job-running",
-                ScanJobType.SPIDER_SCAN,
-                Map.of("targetUrl", "https://example.com/running"),
-                now.minusSeconds(20),
-                2
-        );
-        runningJob.incrementAttempts();
-        runningJob.markRunning("spider-1");
-        runningJob.updateProgress(50);
-
-        String output = formatter.formatJobList(List.of(queuedJob, runningJob), ScanJobStatus.QUEUED, now);
-
-        assertEquals("""
-                Scan job summary
-                Total jobs: 2
-                Queue depth: 1
-                Claimed for Dispatch: 1
-                Running: 1
-                Launches held: 0
-                Filter: QUEUED
-                - job-queued | ACTIVE_SCAN | QUEUED | attempts=0/3 | progress=0% | queuePosition=1 | claimOwner=worker-a | claimExpiresAt=2026-05-06T00:00:30Z | claimState=active
-                """, output);
-    }
-
-    @Test
     void ajaxTerminalJobsDoNotExposeQueueLifecycleValuesAsCrawlPercentages() {
         Instant now = Instant.parse("2026-05-06T00:00:00Z");
         ScanJob succeededJob = new ScanJob("ajax-ended", ScanJobType.AJAX_SPIDER, Map.of(), now, 3);
@@ -159,11 +119,6 @@ class ScanJobResponseFormatterTest {
                 .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
         assertThat(formatter.formatSubmission(succeededJob, true, now))
                 .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
-        assertThat(formatter.formatJobList(List.of(succeededJob, cancelledJob), null, now))
-                .contains("ajax-ended | AJAX_SPIDER | SUCCEEDED (ZAP reports stopped; crawl outcome unknown)")
-                .contains("ajax-cancelled | AJAX_SPIDER | CANCELLED")
-                .contains("progress=unavailable (ZAP does not report a percentage)")
-                .doesNotContain("100%");
     }
 
     @Test
@@ -177,8 +132,6 @@ class ScanJobResponseFormatterTest {
                 .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)", "Progress: 100%");
         assertThat(formatter.formatSubmission(job, true, now))
                 .contains("Status: SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
-        assertThat(formatter.formatJobList(List.of(job), null, now))
-                .contains("client-ended | CLIENT_SPIDER | SUCCEEDED (ZAP reports stopped; crawl outcome unknown)");
     }
 
     @Test
@@ -197,11 +150,6 @@ class ScanJobResponseFormatterTest {
                     .contains("Retry Not Before: 2026-05-06T00:00:10Z")
                     .doesNotContain("Last Error:", "Dead Letter:");
         }
-        assertThat(formatter.formatJobList(List.of(job), null, now))
-                .contains("QUEUED (waiting for engine)", "attempts=0/2")
-                .contains("waitingSince=2026-05-06T00:00:00Z")
-                .contains("reason=Engine is finishing another scan")
-                .contains("retryAt=2026-05-06T00:00:10Z");
     }
 
     @ParameterizedTest
@@ -229,40 +177,5 @@ class ScanJobResponseFormatterTest {
             }
         }
         assertThat(formatter.formatJobDetail(job, 0, now)).contains("Last Error: " + reason);
-        String listing = formatter.formatJobList(List.of(job), null, now);
-        assertThat(listing).contains("ajax-cancelling | AJAX_SPIDER | " + status,
-                "cancellationDeadline=2026-05-06T00:00:30Z", "reason=" + reason);
-        if (pending) {
-            assertThat(listing).contains("nextStopAttempt=2026-05-06T00:00:01Z");
-        } else {
-            assertThat(listing).doesNotContain("nextStopAttempt=");
-        }
-    }
-
-    @Test
-    void formatsDeadLetterListWithFullContract() {
-        Instant now = Instant.parse("2026-05-06T00:00:00Z");
-        ScanJob job = ScanJob.restore(
-                "job-dead",
-                ScanJobType.SPIDER_SCAN,
-                Map.of("targetUrl", "https://example.com"),
-                now.minusSeconds(60),
-                2,
-                ScanJobStatus.FAILED,
-                2,
-                null,
-                "startup failed",
-                null,
-                now,
-                null,
-                0,
-                0
-        );
-
-        String output = formatter.formatDeadLetterJobs(List.of(job));
-
-        assertEquals("""
-                Dead-letter jobs: 1
-                - job-dead | SPIDER_SCAN | attempts=2/2 | lastError=startup failed""", output);
     }
 }

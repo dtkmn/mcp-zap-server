@@ -5,7 +5,6 @@ import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 
 import java.time.Instant;
-import java.util.List;
 
 public class ScanJobResponseFormatter {
 
@@ -94,109 +93,6 @@ public class ScanJobResponseFormatter {
         return sb.toString();
     }
 
-    public String formatJobList(List<ScanJob> snapshot, ScanJobStatus filter, Instant now) {
-        List<ScanJob> jobs = snapshot == null ? List.of() : snapshot;
-        StringBuilder output = new StringBuilder();
-        output.append("Scan job summary")
-                .append('\n')
-                .append("Total jobs: ")
-                .append(jobs.size())
-                .append('\n')
-                .append("Queue depth: ")
-                .append(jobs.stream().filter(job -> job.getStatus() == ScanJobStatus.QUEUED).count())
-                .append('\n')
-                .append("Claimed for Dispatch: ")
-                .append(jobs.stream().filter(job -> job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)).count())
-                .append('\n')
-                .append("Running: ")
-                .append(jobs.stream().filter(job -> job.getStatus() == ScanJobStatus.RUNNING).count())
-                .append('\n').append("Launches held: ").append(jobs.stream().filter(ScanJob::hasUnresolvedLaunch).count())
-                .append('\n');
-
-        if (filter != null) {
-            output.append("Filter: ").append(filter).append('\n');
-        }
-
-        int visible = 0;
-        for (ScanJob job : jobs) {
-            if (filter != null && job.getStatus() != filter) {
-                continue;
-            }
-            visible += 1;
-            output.append("- ")
-                    .append(job.getId())
-                    .append(" | ")
-                    .append(job.getType())
-                    .append(" | ")
-                    .append(formatStatus(job))
-                    .append(" | attempts=")
-                    .append(job.getAttempts())
-                    .append('/')
-                    .append(job.getMaxAttempts())
-                    .append(" | progress=")
-                    .append(formatProgress(job));
-            if (job.isCleanupJob()) {
-                output.append(" | cleanupForJob=").append(job.getCleanupOfJobId());
-            }
-            if (job.getQueuePosition() > 0) {
-                output.append(" | queuePosition=").append(job.getQueuePosition());
-            }
-            if (isDeadLetterJob(job)) {
-                output.append(" | dead-letter=true");
-            }
-            if (job.getStatus() == ScanJobStatus.QUEUED && job.getNextAttemptAt() != null) {
-                output.append(" | retryAt=").append(job.getNextAttemptAt());
-            }
-            if (isWaitingForEngine(job)) {
-                output.append(" | waitingSince=").append(job.getBusyWaitStartedAt())
-                        .append(" | reason=").append(job.getLastError());
-            }
-            if (job.isCancellationRequested()) {
-                output.append(" | cancellationDeadline=").append(job.getCancelDeadlineAt());
-                if (job.getCancelNextAttemptAt() != null) {
-                    output.append(" | nextStopAttempt=").append(job.getCancelNextAttemptAt());
-                }
-                if (hasText(job.getLastError())) {
-                    output.append(" | reason=").append(job.getLastError());
-                }
-            }
-            appendClaimSummary(output, job, now);
-            output.append('\n');
-        }
-
-        if (visible == 0) {
-            output.append("No jobs match current filter.");
-        }
-
-        return output.toString();
-    }
-
-    public String formatDeadLetterJobs(List<ScanJob> deadLetterJobs) {
-        List<ScanJob> jobs = deadLetterJobs == null ? List.of() : deadLetterJobs;
-        StringBuilder output = new StringBuilder();
-        output.append("Dead-letter jobs: ").append(jobs.size());
-        if (jobs.isEmpty()) {
-            return output.toString();
-        }
-
-        output.append('\n');
-        for (ScanJob job : jobs) {
-            output.append("- ")
-                    .append(job.getId())
-                    .append(" | ")
-                    .append(job.getType())
-                    .append(" | attempts=")
-                    .append(job.getAttempts())
-                    .append('/')
-                    .append(job.getMaxAttempts());
-            if (hasText(job.getLastError())) {
-                output.append(" | lastError=").append(job.getLastError());
-            }
-            output.append('\n');
-        }
-        return output.toString().trim();
-    }
-
     private String formatStatus(ScanJob job) {
         if (job.isCancellationRequested()) {
             return job.getStatus().name() + (job.isCancellationPending()
@@ -238,21 +134,6 @@ public class ScanJobResponseFormatter {
         if (isWaitingForEngine(job)) {
             output.append('\n').append("Waiting Since: ").append(job.getBusyWaitStartedAt())
                     .append('\n').append("Waiting Reason: ").append(job.getLastError());
-        }
-    }
-
-    private void appendClaimSummary(StringBuilder output, ScanJob job, Instant now) {
-        if (!hasText(job.getClaimOwnerId())) {
-            return;
-        }
-        output.append(" | claimOwner=").append(job.getClaimOwnerId());
-        if (job.getClaimExpiresAt() != null) {
-            output.append(" | claimExpiresAt=").append(job.getClaimExpiresAt());
-            if (job.hasLiveClaim(now)) {
-                output.append(" | claimState=active");
-            } else {
-                output.append(" | claimState=expired");
-            }
         }
     }
 

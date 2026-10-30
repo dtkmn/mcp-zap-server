@@ -32,7 +32,6 @@ import org.zaproxy.clientapi.core.ClientApi;
 import org.zaproxy.clientapi.core.ClientApiException;
 import org.zaproxy.clientapi.gen.AjaxSpider;
 import org.zaproxy.clientapi.gen.Authentication;
-import org.zaproxy.clientapi.gen.Automation;
 import org.zaproxy.clientapi.gen.Autoupdate;
 import org.zaproxy.clientapi.gen.Context;
 import org.zaproxy.clientapi.gen.Core;
@@ -70,7 +69,6 @@ class ZapEngineBoundaryAccessTest {
     private SessionManagement sessionManagement;
     private Pscan pscan;
     private AjaxSpider ajaxSpider;
-    private Automation automation;
     private Autoupdate autoupdate;
     private Core core;
     private Network network;
@@ -80,7 +78,6 @@ class ZapEngineBoundaryAccessTest {
     private ZapEngineContextAccess contextAccess;
     private ZapEnginePassiveScanAccess passiveScanAccess;
     private ZapEngineAjaxSpiderExecution ajaxSpiderExecution;
-    private ZapEngineAutomationAccess automationAccess;
     private ZapEngineInventoryAccess inventoryAccess;
     private ZapEngineRuntimeAccess runtimeAccess;
 
@@ -98,7 +95,6 @@ class ZapEngineBoundaryAccessTest {
         sessionManagement = mock(SessionManagement.class);
         pscan = mock(Pscan.class);
         ajaxSpider = mock(AjaxSpider.class);
-        automation = mock(Automation.class);
         autoupdate = mock(Autoupdate.class);
         core = mock(Core.class);
         network = mock(Network.class);
@@ -113,7 +109,6 @@ class ZapEngineBoundaryAccessTest {
         clientApi.sessionManagement = sessionManagement;
         clientApi.pscan = pscan;
         clientApi.ajaxSpider = ajaxSpider;
-        clientApi.automation = automation;
         clientApi.autoupdate = autoupdate;
         clientApi.core = core;
         clientApi.network = network;
@@ -124,7 +119,6 @@ class ZapEngineBoundaryAccessTest {
         contextAccess = new ZapEngineContextAccess(clientApi);
         passiveScanAccess = new ZapEnginePassiveScanAccess(clientApi);
         ajaxSpiderExecution = new ZapEngineAjaxSpiderExecution(clientApi);
-        automationAccess = new ZapEngineAutomationAccess(clientApi);
         inventoryAccess = new ZapEngineInventoryAccess(clientApi);
         runtimeAccess = new ZapEngineRuntimeAccess(clientApi);
     }
@@ -629,25 +623,6 @@ class ZapEngineBoundaryAccessTest {
         assertThatThrownBy(() -> ajaxSpiderExecution.startAjaxSpider(
                 new EngineAjaxSpiderExecution.AjaxSpiderScanRequest("http://target")))
                 .isExactlyInstanceOf(ZapApiException.class).hasCause(failure);
-    }
-
-    @Test
-    void automationAdapterParsesPlanProgress() throws Exception {
-        when(automation.runPlan("/zap/automation/plan.yaml")).thenReturn(element("planId", "33"));
-        when(automation.planProgress("33")).thenReturn(set("planProgress", Map.of(
-                "started", element("started", "2026-05-03T00:00:00Z"),
-                "finished", element("finished", "2026-05-03T00:00:10Z"),
-                "info", new ApiResponseList("info", List.of(element("info", "requestor finished"))),
-                "warn", new ApiResponseList("warn", List.of()),
-                "error", new ApiResponseList("error", List.of())
-        )));
-
-        String planId = automationAccess.runAutomationPlan("/zap/automation/plan.yaml");
-        EngineAutomationAccess.AutomationPlanProgress progress = automationAccess.loadAutomationPlanProgress(planId);
-
-        assertThat(planId).isEqualTo("33");
-        assertThat(progress.completed()).isTrue();
-        assertThat(progress.info()).containsExactly("requestor finished");
     }
 
     @Test

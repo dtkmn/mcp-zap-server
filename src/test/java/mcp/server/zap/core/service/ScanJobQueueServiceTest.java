@@ -932,7 +932,7 @@ public class ScanJobQueueServiceTest {
                     "A late AJAX crawl whose cleanup failed must remain tracked; actual status: " + pending.getStatus());
             assertEquals("ajax-spider:late", pending.getZapScanId());
             assertTrue(pending.isCancellationPending(), "Failed late cleanup must enter the cancellation retry path");
-            assertThrows(EngineBusyException.class, () -> ajax.startAjaxSpider("http://example.com/direct"));
+            assertThrows(EngineBusyException.class, () -> ajax.startAjaxSpiderJob("http://example.com/direct"));
             assertEquals(1, startCalls.get(), "Pending cleanup must reserve AJAX ownership before contacting ZAP");
 
             // Submitting another job dispatches the next cleanup retry before its launch.
@@ -1074,7 +1074,7 @@ public class ScanJobQueueServiceTest {
             queue.processQueueOnceForTesting();
             assertEquals(ScanJobStatus.QUEUED, store.load(next.getId()).orElseThrow().getStatus());
             assertThrows(EngineBusyException.class,
-                    () -> ajaxSpiderService.startAjaxSpider("http://example.com/direct"));
+                    () -> ajaxSpiderService.startAjaxSpiderJob("http://example.com/direct"));
             assertEquals(1, requestCount.get(), "A timed-out stop must not release capacity or trigger immediate retries");
         } finally {
             releaseResponse.countDown();

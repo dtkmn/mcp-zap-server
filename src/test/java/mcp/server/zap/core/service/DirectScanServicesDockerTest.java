@@ -329,10 +329,10 @@ class DirectScanServicesDockerTest {
 
     @Test
     void clientSpiderDiscoversJavaScriptTrafficAndStopsOnlyTheRequestedScan() throws Exception {
-        String stoppedScanId = extractScanId(clientSpiderService.startClientSpider(
-                "http://direct-scan-target/client-crawl.html?crawl=stop", 1));
-        String continuingScanId = extractScanId(clientSpiderService.startClientSpider(
-                "http://direct-scan-target/client-crawl.html?crawl=continue", 1));
+        String stoppedScanId = clientSpiderService.startClientSpiderJob(
+                "http://direct-scan-target/client-crawl.html?crawl=stop", 1);
+        String continuingScanId = clientSpiderService.startClientSpiderJob(
+                "http://direct-scan-target/client-crawl.html?crawl=continue", 1);
 
         try {
             assertNotEquals(stoppedScanId, continuingScanId);
@@ -574,8 +574,8 @@ class DirectScanServicesDockerTest {
             clientApi.callApi("clientSpider", "action", "setOptionPageLoadTimeInSecs", Map.of("Integer", "2"));
             clientApi.stats.clearStats(durationStatistic);
 
-            limitedScanId = extractScanId(clientSpiderService.startClientSpider(
-                    "http://direct-scan-target/client-duration.html?crawl=limited", 0));
+            limitedScanId = clientSpiderService.startClientSpiderJob(
+                    "http://direct-scan-target/client-duration.html?crawl=limited", 0);
 
             ScanLimitProperties unlimitedProperties = new ScanLimitProperties();
             unlimitedProperties.setMaxSpiderScanDurationInMins(0);
@@ -607,20 +607,16 @@ class DirectScanServicesDockerTest {
     }
 
     @Test
-    void directSpiderAndActiveScanToolsWorkAgainstRealZap() throws Exception {
-        String spiderStart = spiderScanService.startSpiderScan("http://direct-scan-target/");
-        String spiderScanId = extractScanId(spiderStart);
+    void spiderAndActiveScanJobsRetainNativeStatusAndStopSupport() throws Exception {
+        String spiderScanId = spiderScanService.startSpiderScanJob("http://direct-scan-target/");
         String spiderStatus = spiderScanService.getSpiderScanStatus(spiderScanId);
 
-        assertTrue(spiderStart.contains("Direct spider scan started."));
         assertTrue(spiderStatus.contains("Scan ID: " + spiderScanId));
 
         clientApi.core.accessUrl("http://direct-scan-target/", "true");
-        String activeStart = activeScanService.startActiveScan("http://direct-scan-target/", "true", null);
-        String activeScanId = extractScanId(activeStart);
+        String activeScanId = activeScanService.startActiveScanJob("http://direct-scan-target/", "true", null);
         String activeStatus = activeScanService.getActiveScanStatus(activeScanId);
 
-        assertTrue(activeStart.contains("Direct active scan started."));
         assertTrue(activeStatus.contains("Scan ID: " + activeScanId));
 
         String activeStop = activeScanService.stopActiveScan(activeScanId);

@@ -8,10 +8,12 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.PolicyCategorySnapshot;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -22,12 +24,14 @@ class ActiveScanServiceTest {
     private ActiveScanService service;
     private UrlValidationService urlValidationService;
     private ScanLimitProperties scanLimitProperties;
+    private NativeScanLaunch launch;
 
     @BeforeEach
     void setup() {
         engineScanExecution = mock(EngineScanExecution.class);
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
+        launch = mock(NativeScanLaunch.class);
 
         when(scanLimitProperties.getMaxActiveScanDurationInMins()).thenReturn(30);
         when(scanLimitProperties.getHostPerScan()).thenReturn(5);
@@ -115,34 +119,31 @@ class ActiveScanServiceTest {
     }
 
     @Test
-    void startActiveScanReturnsDirectMessage() {
+    void startActiveScanJobPassesDefaultsLimitsAndLaunchOwnership() {
         when(engineScanExecution.startActiveScan(
-                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10)))
+                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10), launch))
                 .thenReturn("101");
 
-        String result = service.startActiveScan("http://example.com", null, "Baseline");
+        String result = service.startActiveScanJob("http://example.com", null, "Baseline", launch);
 
-        assertTrue(result.contains("Direct active scan started."));
-        assertTrue(result.contains("Scan ID: 101"));
-        assertTrue(result.contains("Use 'zap_active_scan_status'"));
+        assertEquals("101", result);
         verify(urlValidationService).validateUrl("http://example.com");
         verify(engineScanExecution).startActiveScan(
-                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10));
+                new ActiveScanRequest("http://example.com", "true", "Baseline", 30, 5, 10), launch);
     }
 
     @Test
-    void startActiveScanAsUserReturnsDirectMessage() {
+    void startActiveScanAsUserJobPassesAuthenticationAndLaunchOwnership() {
         when(engineScanExecution.startActiveScanAsUser(new AuthenticatedActiveScanRequest(
-                "1", "3", "http://example.com", "true", "Default Policy", 30, 5, 10)))
+                "1", "3", "http://example.com", "true", "Default Policy", 30, 5, 10), launch))
                 .thenReturn("202");
 
-        String result = service.startActiveScanAsUser("1", "3", "http://example.com", null, "Default Policy");
+        String result = service.startActiveScanAsUserJob("1", "3", "http://example.com", null, "Default Policy", launch);
 
-        assertTrue(result.contains("Direct authenticated active scan started."));
-        assertTrue(result.contains("Scan ID: 202"));
-        assertTrue(result.contains("Context ID: 1"));
-        assertTrue(result.contains("User ID: 3"));
+        assertEquals("202", result);
         verify(urlValidationService).validateUrl("http://example.com");
+        verify(engineScanExecution).startActiveScanAsUser(new AuthenticatedActiveScanRequest(
+                "1", "3", "http://example.com", "true", "Default Policy", 30, 5, 10), launch);
     }
 
     @Test

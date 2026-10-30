@@ -54,14 +54,14 @@ class AjaxSpiderServiceTest {
     }
 
     @Test
-    void pendingCancellationBlocksDirectAndQueuedStarts() {
+    void pendingCancellationBlocksUnclaimedAndClaimedJobStarts() {
         Instant now = Instant.now();
         ScanJob job = ajaxJob("cancelling", now);
         job.claim("worker", now, now.plusSeconds(60));
         job.requestCancellation(now, now.plusSeconds(60));
         setStoredJobs(job);
 
-        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target"))
                 .isInstanceOf(EngineBusyException.class)
                 .hasMessageContaining("pending cancellation");
         assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
@@ -70,14 +70,14 @@ class AjaxSpiderServiceTest {
     }
 
     @Test
-    void runningManagedCrawlBlocksDirectAndQueuedStarts() {
+    void runningManagedCrawlBlocksUnclaimedAndClaimedJobStarts() {
         ScanJob job = ajaxJob("running", Instant.now());
         job.markRunning("ajax-spider:running");
         setStoredJobs(job);
 
-        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
-                .isInstanceOf(EngineBusyException.class);
         assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target"))
+                .isInstanceOf(EngineBusyException.class);
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target", job.getId(), ScanJobClaimToken.from(job)))
                 .isInstanceOf(EngineBusyException.class);
         verifyNoInteractions(ajaxSpiderExecution);
     }
@@ -235,13 +235,13 @@ class AjaxSpiderServiceTest {
     }
 
     @Test
-    void directStartCannotOvertakeClaimedQueuedJob() {
+    void unclaimedStartCannotOvertakeClaimedQueuedJob() {
         Instant now = Instant.now();
         ScanJob job = ajaxJob("claimed", now);
         job.claim("worker", now, now.plusSeconds(60));
         setStoredJobs(job);
 
-        assertThatThrownBy(() -> service.startAjaxSpider("http://target"))
+        assertThatThrownBy(() -> service.startAjaxSpiderJob("http://target"))
                 .isInstanceOf(EngineBusyException.class);
         verifyNoInteractions(ajaxSpiderExecution);
     }
@@ -255,7 +255,7 @@ class AjaxSpiderServiceTest {
         setStoredJobs(job);
         when(ajaxSpiderExecution.startAjaxSpider(any(AjaxSpiderScanRequest.class))).thenReturn("ajax-spider:2");
 
-        assertThat(service.startAjaxSpider("http://target")).contains("started successfully");
+        assertThat(service.startAjaxSpiderJob("http://target")).isEqualTo("ajax-spider:2");
         verify(ajaxSpiderExecution).startAjaxSpider(new AjaxSpiderScanRequest("http://target"));
     }
 

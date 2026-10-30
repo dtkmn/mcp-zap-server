@@ -6,13 +6,10 @@ import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
-import mcp.server.zap.core.history.ScanHistoryLedgerService;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 
 /**
  * Service for direct and queue-managed spider scan operations.
@@ -24,8 +21,6 @@ public class SpiderScanService {
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
     private OperationRegistry operationRegistry;
-    private ClientWorkspaceResolver clientWorkspaceResolver;
-    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     /**
      * Build-time dependency injection constructor.
@@ -41,45 +36,6 @@ public class SpiderScanService {
     @Autowired(required = false)
     void setOperationRegistry(OperationRegistry operationRegistry) {
         this.operationRegistry = operationRegistry;
-    }
-
-    @Autowired(required = false)
-    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
-        this.clientWorkspaceResolver = clientWorkspaceResolver;
-    }
-
-    @Autowired(required = false)
-    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
-        this.scanHistoryLedgerService = scanHistoryLedgerService;
-    }
-
-    public String startSpiderScan(String targetUrl) {
-        String scanId = startSpiderScanJob(targetUrl);
-        trackDirectScanStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("spider_scan", scanId, targetUrl, Map.of());
-        return formatDirectStartMessage(scanId, targetUrl);
-    }
-
-    public String startSpiderScanAsUser(
-            String contextId,
-            String userId,
-            String targetUrl,
-            String maxChildren,
-            String recurse,
-            String subtreeOnly
-    ) {
-        String effectiveMaxChildren = resolveMaxChildren(maxChildren);
-        String effectiveRecurse = hasText(recurse) ? recurse.trim() : "true";
-        String effectiveSubtreeOnly = hasText(subtreeOnly) ? subtreeOnly.trim() : "false";
-        String scanId = startSpiderScanAsUserJob(contextId, userId, targetUrl, effectiveMaxChildren, effectiveRecurse, effectiveSubtreeOnly);
-        trackDirectScanStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("spider_scan_as_user", scanId, targetUrl, Map.of(
-                "authenticated", "true",
-                "maxChildren", effectiveMaxChildren,
-                "recurse", effectiveRecurse,
-                "subtreeOnly", effectiveSubtreeOnly
-        ));
-        return formatDirectAuthenticatedStartMessage(scanId, contextId, userId, targetUrl, effectiveMaxChildren, effectiveRecurse, effectiveSubtreeOnly);
     }
 
     public String getSpiderScanStatus(String scanId) {
@@ -220,63 +176,6 @@ public String startSpiderScanAsUserJob(String contextId,
         return value != null && !value.trim().isEmpty();
     }
 
-    private String formatDirectStartMessage(String scanId, String targetUrl) {
-        return String.format(
-                "Direct spider scan started.%n" +
-                        "Scan ID: %s%n" +
-                        "Target URL: %s%n" +
-                        "Use 'zap_spider_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.%n" +
-                        "For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_spider_scan'.",
-                scanId,
-                targetUrl
-        );
-    }
-
-    private String formatDirectAuthenticatedStartMessage(String scanId,
-                                                         String contextId,
-                                                         String userId,
-                                                         String targetUrl,
-                                                         String maxChildren,
-                                                         String recurse,
-                                                         String subtreeOnly) {
-        return String.format(
-                "Direct authenticated spider scan started.%n" +
-                        "Scan ID: %s%n" +
-                        "Context ID: %s%n" +
-                        "User ID: %s%n" +
-                        "Target URL: %s%n" +
-                        "Max Children: %s%n" +
-                        "Recurse: %s%n" +
-                        "Subtree Only: %s%n" +
-                        "Use 'zap_spider_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.%n" +
-                        "For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_spider_scan_as_user'.",
-                scanId,
-                contextId,
-                userId,
-                targetUrl,
-                maxChildren,
-                recurse,
-                subtreeOnly
-        );
-    }
-
-    private void trackDirectScanStarted(String scanId, String workspaceId) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        operationRegistry.registerDirectScan("spider:" + scanId, workspaceId);
-    }
-
-    private void recordDirectScanStarted(String operationKind,
-                                         String scanId,
-                                         String targetUrl,
-                                         Map<String, String> metadata) {
-        if (scanHistoryLedgerService == null) {
-            return;
-        }
-        scanHistoryLedgerService.recordDirectScanStarted(operationKind, scanId, targetUrl, metadata);
-    }
-
     private void trackDirectScanStatus(String scanId, boolean completed) {
         if (operationRegistry == null || !hasText(scanId)) {
             return;
@@ -296,10 +195,4 @@ public String startSpiderScanAsUserJob(String contextId,
         operationRegistry.releaseDirectScan("spider:" + scanId);
     }
 
-    private String resolveWorkspaceId() {
-        if (clientWorkspaceResolver == null) {
-            return "default-workspace";
-        }
-        return clientWorkspaceResolver.resolveCurrentWorkspaceId();
-    }
 }

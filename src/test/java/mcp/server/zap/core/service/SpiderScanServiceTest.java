@@ -4,12 +4,14 @@ import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
+import mcp.server.zap.core.gateway.NativeScanLaunch;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -22,12 +24,14 @@ class SpiderScanServiceTest {
     private SpiderScanService service;
     private UrlValidationService urlValidationService;
     private ScanLimitProperties scanLimitProperties;
+    private NativeScanLaunch launch;
 
     @BeforeEach
     void setup() {
         engineScanExecution = mock(EngineScanExecution.class);
         urlValidationService = mock(UrlValidationService.class);
         scanLimitProperties = mock(ScanLimitProperties.class);
+        launch = mock(NativeScanLaunch.class);
 
         when(scanLimitProperties.getSpiderThreadCount()).thenReturn(5);
         when(scanLimitProperties.getMaxSpiderScanDurationInMins()).thenReturn(15);
@@ -38,31 +42,29 @@ class SpiderScanServiceTest {
     }
 
     @Test
-    void startSpiderScanReturnsDirectMessage() {
-        when(engineScanExecution.startSpiderScan(new SpiderScanRequest("http://example.com", 10, 5, 15, 3)))
+    void startSpiderScanJobPassesSharedLimitsAndLaunchOwnership() {
+        when(engineScanExecution.startSpiderScan(new SpiderScanRequest("http://example.com", 10, 5, 15, 3), launch))
                 .thenReturn("55");
 
-        String result = service.startSpiderScan("http://example.com");
+        String result = service.startSpiderScanJob("http://example.com", launch);
 
-        assertTrue(result.contains("Direct spider scan started."));
-        assertTrue(result.contains("Scan ID: 55"));
-        assertTrue(result.contains("Use 'zap_spider_status'"));
+        assertEquals("55", result);
         verify(urlValidationService).validateUrl("http://example.com");
+        verify(engineScanExecution).startSpiderScan(new SpiderScanRequest("http://example.com", 10, 5, 15, 3), launch);
     }
 
     @Test
-    void startSpiderScanAsUserReturnsDirectMessage() {
+    void startSpiderScanAsUserJobPassesAuthenticationDefaultsAndLaunchOwnership() {
         when(engineScanExecution.startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
-                "2", "9", "http://example.com", "3", "true", "false", 5, 15, 10)))
+                "2", "9", "http://example.com", "3", "true", "false", 5, 15, 10), launch))
                 .thenReturn("77");
 
-        String result = service.startSpiderScanAsUser("2", "9", "http://example.com", null, null, null);
+        String result = service.startSpiderScanAsUserJob("2", "9", "http://example.com", null, null, null, launch);
 
-        assertTrue(result.contains("Direct authenticated spider scan started."));
-        assertTrue(result.contains("Scan ID: 77"));
-        assertTrue(result.contains("Context ID: 2"));
-        assertTrue(result.contains("User ID: 9"));
+        assertEquals("77", result);
         verify(urlValidationService).validateUrl("http://example.com");
+        verify(engineScanExecution).startSpiderScanAsUser(new AuthenticatedSpiderScanRequest(
+                "2", "9", "http://example.com", "3", "true", "false", 5, 15, 10), launch);
     }
 
     @ParameterizedTest

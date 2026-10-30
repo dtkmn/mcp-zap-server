@@ -2,12 +2,9 @@ package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.gateway.NativeScanLaunch;
 
-import java.util.Map;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ClientSpiderScanRequest;
-import mcp.server.zap.core.history.ScanHistoryLedgerService;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,8 +18,6 @@ public class ClientSpiderService {
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
     private OperationRegistry operationRegistry;
-    private ClientWorkspaceResolver clientWorkspaceResolver;
-    private ScanHistoryLedgerService scanHistoryLedgerService;
 
     public ClientSpiderService(EngineScanExecution engineScanExecution,
                                UrlValidationService urlValidationService,
@@ -35,40 +30,6 @@ public class ClientSpiderService {
     @Autowired(required = false)
     void setOperationRegistry(OperationRegistry operationRegistry) {
         this.operationRegistry = operationRegistry;
-    }
-
-    @Autowired(required = false)
-    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
-        this.clientWorkspaceResolver = clientWorkspaceResolver;
-    }
-
-    @Autowired(required = false)
-    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
-        this.scanHistoryLedgerService = scanHistoryLedgerService;
-    }
-
-    public String startClientSpider(String targetUrl, Integer maxDepth) {
-        return startClientSpider(targetUrl, maxDepth, null, null);
-    }
-
-    public String startClientSpider(String targetUrl, Integer maxDepth, String contextName, String userName) {
-        String scanId = startClientSpiderJob(targetUrl, maxDepth, contextName, userName);
-        if (operationRegistry != null) {
-            String workspaceId = clientWorkspaceResolver == null ? "default-workspace"
-                    : clientWorkspaceResolver.resolveCurrentWorkspaceId();
-            operationRegistry.registerDirectScan(OPERATION_ID_PREFIX + scanId, workspaceId);
-        }
-        if (scanHistoryLedgerService != null) {
-            scanHistoryLedgerService.recordDirectScanStarted("client_spider", scanId, targetUrl,
-                    contextName != null && !contextName.isBlank() ? Map.of("authenticated", "true") : Map.of());
-        }
-        return String.format(
-                "Direct Client Spider scan started.%n"
-                        + "Scan ID: %s%n"
-                        + "Target URL: %s%n"
-                        + "Use 'zap_client_spider_status' to monitor progress and 'zap_passive_scan_wait' before reading findings.%n"
-                        + "For durable retries, queue visibility, or HA-safe execution, prefer 'zap_queue_client_spider_scan'.",
-                scanId, targetUrl);
     }
 
     public String startClientSpiderJob(String targetUrl, Integer maxDepth) {

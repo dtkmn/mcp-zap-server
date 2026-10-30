@@ -2,24 +2,20 @@ package mcp.server.zap.core.service;
 
 import mcp.server.zap.core.gateway.NativeScanLaunch;
 
-import lombok.extern.slf4j.Slf4j;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineAjaxSpiderExecution.AjaxSpiderStatus;
 import mcp.server.zap.core.gateway.EngineBusyException;
-import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
-import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import mcp.server.zap.core.service.protection.OperationRegistry;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -34,14 +30,11 @@ import java.util.function.Consumer;
  * - Sites that require JavaScript to render content
  * - Sites with bot detection mechanisms
  */
-@Slf4j
 @Service
 public class AjaxSpiderService {
     private final EngineAjaxSpiderExecution ajaxSpiderExecution;
     private final UrlValidationService urlValidationService;
     private OperationRegistry operationRegistry;
-    private ClientWorkspaceResolver clientWorkspaceResolver;
-    private ScanHistoryLedgerService scanHistoryLedgerService;
     private ScanJobStore scanJobStore;
 
     /**
@@ -59,33 +52,8 @@ public class AjaxSpiderService {
     }
 
     @Autowired(required = false)
-    void setClientWorkspaceResolver(ClientWorkspaceResolver clientWorkspaceResolver) {
-        this.clientWorkspaceResolver = clientWorkspaceResolver;
-    }
-
-    @Autowired(required = false)
-    void setScanHistoryLedgerService(ScanHistoryLedgerService scanHistoryLedgerService) {
-        this.scanHistoryLedgerService = scanHistoryLedgerService;
-    }
-
-    @Autowired(required = false)
     void setScanJobStore(ScanJobStore scanJobStore) {
         this.scanJobStore = scanJobStore;
-    }
-
-    /**
-     * Start an AJAX Spider scan against the given URL using a real browser.
-     * This is more effective against JavaScript-heavy sites and WAF protection.
-     *
-     * @param targetUrl Target URL to scan with AJAX Spider
-     * @return Status message with scan information
-     */
-    public String startAjaxSpider(String targetUrl) {
-        String scanId = startAjaxSpider(targetUrl, null, null);
-        trackAjaxSpiderStarted(scanId, resolveWorkspaceId());
-        recordDirectScanStarted("ajax_spider", scanId, targetUrl);
-        log.info("AJAX Spider direct scan id {}", scanId);
-        return formatDirectStartMessage(targetUrl);
     }
 
     /**
@@ -235,30 +203,6 @@ public class AjaxSpiderService {
         return ajaxSpiderExecution.readAjaxSpiderStatus().running();
     }
 
-    private String formatDirectStartMessage(String targetUrl) {
-        return String.format(
-                "AJAX Spider scan started successfully for URL: %s%n" +
-                        "Using browser-based crawling for JavaScript content.%n" +
-                        "Using ZAP's configured duration and browser settings.%n" +
-                        "Use 'zap_ajax_spider_status' to check progress.",
-                targetUrl
-        );
-    }
-
-    private void trackAjaxSpiderStarted(String scanId, String workspaceId) {
-        if (operationRegistry == null || scanId == null || scanId.isBlank()) {
-            return;
-        }
-        operationRegistry.registerDirectScan("ajax:" + scanId, workspaceId);
-    }
-
-    private void recordDirectScanStarted(String operationKind, String scanId, String targetUrl) {
-        if (scanHistoryLedgerService == null) {
-            return;
-        }
-        scanHistoryLedgerService.recordDirectScanStarted(operationKind, scanId, targetUrl, Map.of());
-    }
-
     private void trackAjaxSpiderStatus(boolean running) {
         if (operationRegistry == null) {
             return;
@@ -275,13 +219,6 @@ public class AjaxSpiderService {
             return;
         }
         operationRegistry.releaseDirectScansByPrefix("ajax:");
-    }
-
-    private String resolveWorkspaceId() {
-        if (clientWorkspaceResolver == null) {
-            return "default-workspace";
-        }
-        return clientWorkspaceResolver.resolveCurrentWorkspaceId();
     }
 
 }

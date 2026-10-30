@@ -65,7 +65,6 @@
             "zap_auth_session_prepare",
             "zap_auth_session_validate",
             "zap_addon_update",
-            "zap_scan_job_reconcile",
             "zap_report_generate"
           ]
         }

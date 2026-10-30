@@ -6,7 +6,7 @@ Verify the matching image before deployment; until then use the published
 It uses a dedicated Amazon Linux 2023 x86_64 instance
 and serves one trusted MCP client through AWS Session Manager. It publishes no
 container ports. The included `smoke-target`
-is an owned API for checking crawling, OpenAPI import, automation and reports
+is an owned API for checking guided crawling, OpenAPI import and reports
 without granting scanning containers Internet access.
 
 The [AWS deployment walkthrough](../../docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md)
@@ -32,11 +32,15 @@ restart. It does not create AWS resources, generate credentials, or start
 containers. It assumes a fresh, dedicated host using Docker's default iptables
 backend; do not use it to reconfigure a shared Docker host.
 
+## Optional Native ZAP Reference
+
 Host setup also copies `automation-plan.yaml` to
 `workspace/workspaces/ec2-operator/automation/example-plan.yaml`, owned by
 UID/GID 1000 with mode 0640. Both containers see this plan at
-`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. The guided MCP catalog does not run this native plan. Use guided crawl/attack tools for the internal fixture and retrieve reports through the guided report tools. Re-running
+`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. Treat this as an optional reference for a separately managed native ZAP workflow. Use guided crawl/attack tools for the MCP fixture and retrieve reports through the guided report tools. Re-running
 host setup restores the example plan from this source file.
+
+## Workspace and Identity
 
 The client identity `ec2-operator` is fixed in Compose. If you change it, change
 both automation directories to the matching `workspaces/<client-id>/automation`

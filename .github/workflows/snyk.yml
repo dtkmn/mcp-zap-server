@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('build/snyk-reports/source/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: build/snyk-reports/source/report.sarif
           category: snyk-open-source
@@ -130,7 +130,7 @@ jobs:
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('build/snyk-reports/container/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: build/snyk-reports/container/report.sarif
           category: snyk-container
@@ -196,7 +196,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('build/snyk-reports/iac/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: build/snyk-reports/iac/report.sarif
           category: snyk-iac

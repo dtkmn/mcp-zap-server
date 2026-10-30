@@ -5,7 +5,6 @@ import mcp.server.zap.core.exception.ZapApiException;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ClientSpiderScanRequest;
 import mcp.server.zap.core.gateway.NativeScanLaunch;
-import mcp.server.zap.core.service.protection.OperationRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,7 +14,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -24,7 +22,6 @@ class ClientSpiderServiceTest {
 
     private EngineScanExecution engine;
     private UrlValidationService urlValidation;
-    private OperationRegistry operations;
     private NativeScanLaunch launch;
     private ClientSpiderService service;
     private ScanLimitProperties scanLimits;
@@ -33,11 +30,9 @@ class ClientSpiderServiceTest {
     void setup() {
         engine = mock(EngineScanExecution.class);
         urlValidation = mock(UrlValidationService.class);
-        operations = mock(OperationRegistry.class);
         launch = mock(NativeScanLaunch.class);
         scanLimits = new ScanLimitProperties();
         service = new ClientSpiderService(engine, urlValidation, scanLimits);
-        service.setOperationRegistry(operations);
     }
 
     @Test
@@ -48,7 +43,6 @@ class ClientSpiderServiceTest {
 
         verify(urlValidation).validateUrl("http://example.com");
         verify(engine).startClientSpiderScan(new ClientSpiderScanRequest("http://example.com", 10, 15), launch);
-        verifyNoInteractions(operations);
     }
 
     @Test
@@ -57,7 +51,6 @@ class ClientSpiderServiceTest {
 
         assertThat(service.startClientSpiderJob("http://example.com", 0, null, null, launch)).isEqualTo("8");
 
-        verifyNoInteractions(operations);
     }
 
     @Test
@@ -70,7 +63,6 @@ class ClientSpiderServiceTest {
                 .isEqualTo("9");
 
         verify(engine).startClientSpiderScan(request, launch);
-        verifyNoInteractions(operations);
     }
 
     @Test
@@ -84,7 +76,6 @@ class ClientSpiderServiceTest {
                 .isEqualTo("10");
 
         verify(engine).startClientSpiderScan(request, launch);
-        verifyNoInteractions(operations);
     }
 
     @Test
@@ -96,7 +87,6 @@ class ClientSpiderServiceTest {
                 .isEqualTo("11");
 
         verify(engine).startClientSpiderScan(request, launch);
-        verifyNoInteractions(operations);
     }
 
     @Test
@@ -110,7 +100,7 @@ class ClientSpiderServiceTest {
         assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, " ", "user", launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("contextName and userName");
 
-        verifyNoInteractions(engine, operations, launch);
+        verifyNoInteractions(engine, launch);
     }
 
     @ParameterizedTest
@@ -134,7 +124,7 @@ class ClientSpiderServiceTest {
 
         assertThatThrownBy(() -> service.startClientSpiderJob("http://example.com", null, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("maxSpiderScanDurationInMins");
-        verifyNoInteractions(engine, operations, launch);
+        verifyNoInteractions(engine, launch);
     }
 
     @Test
@@ -145,7 +135,7 @@ class ClientSpiderServiceTest {
         assertThatThrownBy(() -> service.startClientSpiderJob("http://blocked", 1, null, null, launch))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("URL not allowed");
 
-        verifyNoInteractions(engine, operations);
+        verifyNoInteractions(engine);
     }
 
     @Test
@@ -153,10 +143,8 @@ class ClientSpiderServiceTest {
         when(engine.readClientSpiderProgressPercent("7")).thenReturn(30, 100);
 
         assertThat(service.getClientSpiderStatus(" 7 ")).contains("Progress: 30%");
-        verify(operations).touchDirectScan("client-spider:7");
         assertThat(service.getClientSpiderStatus("7"))
                 .contains("Scan is no longer running", "stopped scans", "zap_passive_scan_wait");
-        verify(operations).releaseDirectScan("client-spider:7");
     }
 
     @Test
@@ -165,11 +153,9 @@ class ClientSpiderServiceTest {
         doThrow(failure).when(engine).stopClientSpiderScan("7");
 
         assertThatThrownBy(() -> service.stopClientSpider(" 7 ")).isSameAs(failure);
-        verify(operations, never()).releaseDirectScan("client-spider:7");
 
         assertThat(service.stopClientSpider(" 8 ")).contains("stop requested", "Scan ID: 8");
         verify(engine).stopClientSpiderScan("8");
-        verify(operations).releaseDirectScan("client-spider:8");
     }
 
     @Test
@@ -177,6 +163,6 @@ class ClientSpiderServiceTest {
         assertThatThrownBy(() -> service.getClientSpiderStatus(" ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.stopClientSpider(null)).isInstanceOf(IllegalArgumentException.class);
 
-        verifyNoInteractions(engine, operations);
+        verifyNoInteractions(engine);
     }
 }

@@ -10,7 +10,6 @@ import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
-import mcp.server.zap.core.service.protection.OperationRegistry;
 import mcp.server.zap.core.service.queue.ScanJobClaimToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,7 +32,6 @@ import java.util.Objects;
 public class AjaxSpiderService {
     private final EngineAjaxSpiderExecution ajaxSpiderExecution;
     private final UrlValidationService urlValidationService;
-    private OperationRegistry operationRegistry;
     private ScanJobStore scanJobStore;
 
     /**
@@ -43,11 +41,6 @@ public class AjaxSpiderService {
                             UrlValidationService urlValidationService) {
         this.ajaxSpiderExecution = ajaxSpiderExecution;
         this.urlValidationService = urlValidationService;
-    }
-
-    @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
     }
 
     @Autowired(required = false)
@@ -111,7 +104,6 @@ public class AjaxSpiderService {
      */
     public String getAjaxSpiderStatus() {
         AjaxSpiderStatus ajaxStatus = ajaxSpiderExecution.readAjaxSpiderStatus();
-        trackAjaxSpiderStatus(ajaxStatus.running());
 
         boolean isRunning = ajaxStatus.running();
 
@@ -133,7 +125,6 @@ public class AjaxSpiderService {
      */
     public String stopAjaxSpider() {
         stopAjaxSpiderJob();
-        trackAjaxSpiderStopped();
         return "AJAX Spider scan stopped successfully";
     }
 
@@ -152,24 +143,6 @@ public class AjaxSpiderService {
 
     public boolean isAjaxSpiderRunning() {
         return ajaxSpiderExecution.readAjaxSpiderStatus().running();
-    }
-
-    private void trackAjaxSpiderStatus(boolean running) {
-        if (operationRegistry == null) {
-            return;
-        }
-        if (running) {
-            operationRegistry.touchDirectScansByPrefix("ajax:");
-            return;
-        }
-        operationRegistry.releaseDirectScansByPrefix("ajax:");
-    }
-
-    private void trackAjaxSpiderStopped() {
-        if (operationRegistry == null) {
-            return;
-        }
-        operationRegistry.releaseDirectScansByPrefix("ajax:");
     }
 
 }

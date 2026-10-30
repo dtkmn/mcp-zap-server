@@ -5,19 +5,14 @@ import mcp.server.zap.core.gateway.NativeScanLaunch;
 import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.ClientSpiderScanRequest;
-import mcp.server.zap.core.service.protection.OperationRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /** Direct and queued browser crawls with ZAP's scan-specific Client Spider API. */
 @Service
 public class ClientSpiderService {
-    private static final String OPERATION_ID_PREFIX = "client-spider:";
-
     private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
-    private OperationRegistry operationRegistry;
 
     public ClientSpiderService(EngineScanExecution engineScanExecution,
                                UrlValidationService urlValidationService,
@@ -25,11 +20,6 @@ public class ClientSpiderService {
         this.engineScanExecution = engineScanExecution;
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
-    }
-
-    @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
     }
 
 public String startClientSpiderJob(String targetUrl, Integer maxDepth, String contextName, String userName, NativeScanLaunch launch) {
@@ -58,13 +48,6 @@ public String startClientSpiderJob(String targetUrl, Integer maxDepth, String co
         String normalizedScanId = requireScanId(scanId);
         int progress = getClientSpiderProgressPercent(normalizedScanId);
         boolean finished = progress >= 100;
-        if (operationRegistry != null) {
-            if (finished) {
-                operationRegistry.releaseDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
-            } else {
-                operationRegistry.touchDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
-            }
-        }
         return String.format(
                 "Direct Client Spider scan status:%n"
                         + "Scan ID: %s%n"
@@ -84,9 +67,6 @@ public String startClientSpiderJob(String targetUrl, Integer maxDepth, String co
     public String stopClientSpider(String scanId) {
         String normalizedScanId = requireScanId(scanId);
         stopClientSpiderJob(normalizedScanId);
-        if (operationRegistry != null) {
-            operationRegistry.releaseDirectScan(OPERATION_ID_PREFIX + normalizedScanId);
-        }
         return "Direct Client Spider stop requested.\nScan ID: " + normalizedScanId;
     }
 

@@ -16,8 +16,6 @@ import mcp.server.zap.core.gateway.EngineScanExecution.ActiveScanRuleMutation;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedActiveScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.PolicyCategorySnapshot;
 import mcp.server.zap.core.gateway.EngineScanExecution.ScannerRuleSnapshot;
-import mcp.server.zap.core.service.protection.OperationRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -36,7 +34,6 @@ public class ActiveScanService {
     private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
-    private OperationRegistry operationRegistry;
 
     /**
      * Build-time dependency injection constructor.
@@ -47,11 +44,6 @@ public class ActiveScanService {
         this.engineScanExecution = engineScanExecution;
         this.urlValidationService = urlValidationService;
         this.scanLimitProperties = scanLimitProperties;
-    }
-
-    @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
     }
 
     /**
@@ -162,7 +154,6 @@ public class ActiveScanService {
         String normalizedScanId = requireText(scanId, "scanId");
         int progress = getActiveScanProgressPercent(normalizedScanId);
         boolean completed = progress >= 100;
-        trackDirectScanStatus(normalizedScanId, completed);
         return String.format(
                 "Direct active scan status:%n" +
                         "Scan ID: %s%n" +
@@ -183,7 +174,6 @@ public class ActiveScanService {
     ) {
         String normalizedScanId = requireText(scanId, "scanId");
         stopActiveScanJob(normalizedScanId);
-        trackDirectScanStopped(normalizedScanId);
         return "Direct active scan stopped.\n"
                 + "Scan ID: " + normalizedScanId + '\n'
                 + "For retryable or HA-safe execution, prefer 'zap_queue_active_scan'.";
@@ -371,25 +361,6 @@ public String startActiveScanAsUserJob(String contextId,
                     "alertThreshold must be one of " + String.join(", ", VALID_ALERT_THRESHOLDS));
         }
         return normalizedAlertThreshold;
-    }
-
-    private void trackDirectScanStatus(String scanId, boolean completed) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        String operationId = "active:" + scanId;
-        if (completed) {
-            operationRegistry.releaseDirectScan(operationId);
-            return;
-        }
-        operationRegistry.touchDirectScan(operationId);
-    }
-
-    private void trackDirectScanStopped(String scanId) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        operationRegistry.releaseDirectScan("active:" + scanId);
     }
 
     private String formatScanPolicyView(String scanPolicyName,

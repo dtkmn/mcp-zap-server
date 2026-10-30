@@ -80,7 +80,6 @@ mcp:
     protection:
       enabled: ${MCP_PROTECTION_ENABLED:true}
       retryAfterSeconds: ${MCP_PROTECTION_RETRY_AFTER_SECONDS:30}
-      operationStaleAfterSeconds: ${MCP_PROTECTION_OPERATION_STALE_AFTER_SECONDS:21600}
       rate-limit:
         enabled: ${MCP_PROTECTION_RATE_LIMIT_ENABLED:true}
         capacity: ${MCP_PROTECTION_RATE_LIMIT_CAPACITY:60}

@@ -6,8 +6,6 @@ import mcp.server.zap.core.configuration.ScanLimitProperties;
 import mcp.server.zap.core.gateway.EngineScanExecution;
 import mcp.server.zap.core.gateway.EngineScanExecution.AuthenticatedSpiderScanRequest;
 import mcp.server.zap.core.gateway.EngineScanExecution.SpiderScanRequest;
-import mcp.server.zap.core.service.protection.OperationRegistry;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 
@@ -20,7 +18,6 @@ public class SpiderScanService {
     private final EngineScanExecution engineScanExecution;
     private final UrlValidationService urlValidationService;
     private final ScanLimitProperties scanLimitProperties;
-    private OperationRegistry operationRegistry;
 
     /**
      * Build-time dependency injection constructor.
@@ -33,16 +30,10 @@ public class SpiderScanService {
         this.scanLimitProperties = scanLimitProperties;
     }
 
-    @Autowired(required = false)
-    void setOperationRegistry(OperationRegistry operationRegistry) {
-        this.operationRegistry = operationRegistry;
-    }
-
     public String getSpiderScanStatus(String scanId) {
         String normalizedScanId = requireText(scanId, "scanId");
         int progress = getSpiderScanProgressPercent(normalizedScanId);
         boolean completed = progress >= 100;
-        trackDirectScanStatus(normalizedScanId, completed);
         return String.format(
                 "Direct spider scan status:%n" +
                         "Scan ID: %s%n" +
@@ -61,7 +52,6 @@ public class SpiderScanService {
     public String stopSpiderScan(String scanId) {
         String normalizedScanId = requireText(scanId, "scanId");
         stopSpiderScanJob(normalizedScanId);
-        trackDirectScanStopped(normalizedScanId);
         return "Direct spider scan stopped.\n"
                 + "Scan ID: " + normalizedScanId + '\n'
                 + "For retryable or HA-safe execution, prefer 'zap_queue_spider_scan'.";
@@ -161,25 +151,6 @@ public String startSpiderScanAsUserJob(String contextId,
      */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
-    }
-
-    private void trackDirectScanStatus(String scanId, boolean completed) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        String operationId = "spider:" + scanId;
-        if (completed) {
-            operationRegistry.releaseDirectScan(operationId);
-            return;
-        }
-        operationRegistry.touchDirectScan(operationId);
-    }
-
-    private void trackDirectScanStopped(String scanId) {
-        if (operationRegistry == null || !hasText(scanId)) {
-            return;
-        }
-        operationRegistry.releaseDirectScan("spider:" + scanId);
     }
 
 }

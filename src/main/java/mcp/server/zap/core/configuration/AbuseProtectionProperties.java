@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 public class AbuseProtectionProperties {
     private boolean enabled = true;
     private long retryAfterSeconds = 30L;
-    private long operationStaleAfterSeconds = 21600L;
     private final RateLimit rateLimit = new RateLimit();
     private final WorkspaceQuota workspaceQuota = new WorkspaceQuota();
     private final Backpressure backpressure = new Backpressure();
@@ -30,14 +29,6 @@ public class AbuseProtectionProperties {
 
     public void setRetryAfterSeconds(long retryAfterSeconds) {
         this.retryAfterSeconds = retryAfterSeconds;
-    }
-
-    public long getOperationStaleAfterSeconds() {
-        return operationStaleAfterSeconds;
-    }
-
-    public void setOperationStaleAfterSeconds(long operationStaleAfterSeconds) {
-        this.operationStaleAfterSeconds = operationStaleAfterSeconds;
     }
 
     public RateLimit getRateLimit() {

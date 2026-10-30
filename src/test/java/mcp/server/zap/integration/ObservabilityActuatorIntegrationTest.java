@@ -134,7 +134,7 @@ class ObservabilityActuatorIntegrationTest {
                 .contains("mcp_zap_tool_executions_seconds_count")
                 .contains("mcp_zap_audit_events_total")
                 .contains("mcp_zap_queue_jobs")
-                .contains("mcp_zap_operations_active");
+                .doesNotContain("mcp_zap_operations_active");
 
         EntityExchangeResult<String> auditEvents = actuator("observer-api-key", "/actuator/auditevents");
         assertThat(auditEvents.getResponseBody())

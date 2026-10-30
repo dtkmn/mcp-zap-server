@@ -122,36 +122,6 @@ public class ScanHistoryLedgerService {
         this.scanHistoryAccessBoundary = scanHistoryAccessBoundary;
     }
 
-    public void recordDirectScanStarted(String operationKind,
-                                        String scanId,
-                                        String targetUrl,
-                                        Map<String, String> metadata) {
-        if (!hasText(scanId)) {
-            return;
-        }
-        TargetDescriptor target = gatewayRecordFactory.optionalTarget(targetUrl, TargetDescriptor.Kind.WEB);
-        String operation = normalize(operationKind, "scan");
-        String status = "started";
-        append(new ScanHistoryEntry(
-                newLedgerId(),
-                Instant.now(),
-                TYPE_SCAN_RUN,
-                operation,
-                status,
-                ENGINE_ZAP,
-                target,
-                "direct",
-                scanId.trim(),
-                null,
-                null,
-                null,
-                null,
-                currentClientId(),
-                currentWorkspaceId(),
-                enrichedMetadata(TYPE_SCAN_RUN, operation, status, target, metadata)
-        ));
-    }
-
     public void recordReportArtifact(String artifactLocation,
                                      String reportTemplate,
                                      String sites,

@@ -6,9 +6,9 @@ description: Set up or reconnect local MCP ZAP Server in Codex, Cursor or Claude
 # Set up the local scanner
 
 Help the user reach an authenticated local MCP connection using the existing
-Docker Compose setup. This skills-only plugin supplies instructions; installing
-it does not install Docker, start containers or register MCP tools. Explicit user
-instructions take precedence.
+Docker Compose setup. This plugin supplies shared skills and a read-only release
+checker; installing it does not install Docker, start containers or register MCP
+tools. Explicit user instructions take precedence.
 
 Configure only the client the user requested. Leave the other clients' settings
 unchanged. Claude Code means a local session on the scanner's machine; a Claude
@@ -23,8 +23,8 @@ that client's passive-status call; setup prerequisites must not block it.
   establish access to the user's local scanner.
 - For setup or restart, identify the host OS and architecture. Check Bash,
   Docker with a reachable engine, and Compose supporting `--wait` and
-  `--wait-timeout`. Check Git when cloning is needed, OpenSSL when creating new
-  settings, and the bootstrap/doctor utilities documented in the project.
+  `--wait-timeout`. Check Git for release-checkout verification, OpenSSL when
+  creating new settings, and the bootstrap/doctor utilities documented in the project.
   Java and ZAP run inside containers; no host Java installation is required.
 - If a prerequisite check fails, follow the recovery steps below before
   continuing. Preserve existing installations and the selected Docker context.
@@ -63,7 +63,7 @@ that client's passive-status call; setup prerequisites must not block it.
   error, diagnose the selected endpoint and permissions before proposing a
   repair; do not run setup as root or change permissions automatically.
 - After approved changes or the user's manual step, rediscover executable
-  paths and recheck Bash, required utilities, Git when needed, `docker info`,
+  paths and recheck Bash, required utilities, Git, `docker info`,
   `docker compose version`, and both flags in `docker compose up --help`.
   Continue the original setup below only when the needed checks pass. If they
   still fail, explain the remaining blocker; retry after an identified fix,
@@ -77,10 +77,36 @@ that client's passive-status call; setup prerequisites must not block it.
 
 ### Reuse the project
 
-- Reuse a suitable existing `mcp-zap-server` checkout. Otherwise clone
-  `https://github.com/dtkmn/mcp-zap-server.git` into a new user-owned directory;
-  never overwrite a directory or reset existing changes. Read
-  `docs/getting-started/SELF_SERVE_FIRST_RUN.md` before executing setup.
+- Reuse the selected existing `mcp-zap-server` checkout without updating it.
+  For a fresh installation only, clone the supported published scanner release
+  into a new user-owned directory:
+
+  ```bash
+  git clone --branch v0.17.1 --single-branch https://github.com/dtkmn/mcp-zap-server.git "<new-scanner-directory>"
+  ```
+
+  Never overwrite a directory, clone floating `main`, pull, reset or switch an
+  existing checkout. This plugin supports scanner release `v0.17.1`, commit
+  `02161be8f30cd3d3b18e7eb0a4d3dcd77c0bec7a`, and image
+  `dtkmn/mcp-zap-server:v0.17.1`. The plugin's own version and containing release
+  are independent of this scanner compatibility target.
+- Before executing checkout setup/readiness/recovery helpers or changing client
+  settings, run the bundled read-only compatibility check with a bounded command
+  deadline. Resolve its path from this installed skill's plugin directory,
+  not the scanner checkout (the released checkout does not include this checker):
+
+  ```bash
+  bash "<installed-plugin-directory>/scripts/check-scanner-release.sh" --directory "<absolute-scanner-directory>"
+  ```
+
+  Continue only on exit 0 with `COMPATIBLE`; then read the verified checkout's
+  `docs/getting-started/SELF_SERVE_FIRST_RUN.md`. Missing output, a timeout or a
+  mismatch blocks this setup workflow. Report the reason and preserve the
+  checkout, `.env`, selected image, keys, workspaces and client settings. Do not
+  repair the mismatch, override `IMAGE_TAG` to make it pass, or automatically
+  upgrade/downgrade an existing scanner; use its own deployment procedure after
+  a separate explicit decision. Pure
+  native status calls through an existing connection still bypass setup checks.
 - Use the documented published release image. Do not build from source, switch
   to `latest`, add an installer or create a second Compose configuration.
   Preserve existing `.env`, API keys, workspace files and target restrictions.
@@ -124,7 +150,8 @@ that request. Installing this plugin alone does not authorize execution.
    endpoint and effective credential has already been proved during this setup.
    Historical success or container health alone is insufficient.
 
-   For first setup or a requested restart, run `./bin/bootstrap-local.sh --start`
+   For first setup or a requested restart, require the compatibility check above
+   immediately before running `./bin/bootstrap-local.sh --start`
    from the checkout. It prepares private
    settings, starts the versioned release containers, waits for health and runs
    the authenticated MCP doctor. After success, do not repeat doctor checks.

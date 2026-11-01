@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-zap-connect",
-  "version": "0.5.0",
+  "version": "0.18.0",
   "description": "Guided local MCP ZAP setup, pre-scan readiness checks and explicit recovery for Codex, Cursor and Claude Code.",
   "author": {
     "name": "Daniel Tse",
@@ -29,7 +29,7 @@
         "logo": "./assets/icon.svg"
       },
       "publication": {
-        "release_notes": "Add scan-local-target for current readiness checks, selected-client verification and approved recovery after Docker or scanner changes. Preserve existing settings and credentials; do not automatically restart software or replay failed scan calls."
+        "release_notes": "Pin fresh scanner setup to published v0.17.1 and check release files plus the effective scanner image before setup or recovery. Report incompatible installations without updating their checkout, settings or selected image. Existing native status calls remain available."
       }
     }
   }

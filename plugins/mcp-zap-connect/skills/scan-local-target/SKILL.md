@@ -24,8 +24,9 @@ preflight commands, recovery or another client's status call to that request.
   client's scanner alias and endpoint. Reuse the selected installation; do not
   search for another working scanner as a fallback. If several installations
   or aliases conflict, stop and ask which one to use.
-- Read `docs/getting-started/SELF_SERVE_FIRST_RUN.md` in that checkout. This
-  skill supports its standard local Docker Compose installation. For a native
+- This skill supports the standard local Docker Compose installation described
+  in the verified release's `docs/getting-started/SELF_SERVE_FIRST_RUN.md`; read
+  it only after the compatibility check below succeeds. For a native
   package, remote engine or customized deployment, explain the difference and
   follow that deployment's documented readiness procedure. Do not apply Docker
   recovery to a different installation type.
@@ -37,7 +38,17 @@ preflight commands, recovery or another client's status call to that request.
 
 ## Read-only preflight
 
-1. From the selected scanner checkout, run `./bin/scanner-readiness.sh` with a
+1. First run the installed plugin's bundled
+   `scripts/check-scanner-release.sh --directory <absolute-scanner-directory>`
+   with Bash and a bounded command deadline. Resolve the script relative to this
+   skill's installed plugin directory, not inside the scanner checkout. It
+   checks the supported `v0.17.1` checkout/commit and effective scanner image
+   without updating anything; see the setup skill for the exact compatibility
+   target. Require exit 0 and `COMPATIBLE`. If it blocks or times out, preserve
+   the selected installation and use its own deployment procedure; do not fetch,
+   switch versions, replace files or change client settings to make it pass.
+
+   From that compatible scanner checkout, run `./bin/scanner-readiness.sh` with a
    bounded command deadline. Docker requests have a 15-second timeout each;
    an overall command timeout also blocks the workflow.
    This check must precede any new crawl or scan tool call. It checks the
@@ -79,10 +90,10 @@ preflight commands, recovery or another client's status call to that request.
   environment, context or configuration conflict. Use the existing `.env` and
   Compose file. A stopped/missing diagnosis does not replace startup checks:
   follow the setup skill's current port, project ownership and inherited-setting
-  checks before bootstrap. Review Compose and startup scripts against the
-  trusted tracked version; if they were customized or cannot be established as
-  the intended standard installation, explain the manual recovery path instead
-  of executing them. Never use `--force`, delete settings, remove volumes or prune
+  checks before bootstrap. Run the bundled release compatibility check again
+  immediately before bootstrap. If it does not report `COMPATIBLE`, explain the
+  manual recovery path instead of executing checkout helpers. Never use
+  `--force`, delete settings, remove volumes or prune
   resources. Explain that the existing bootstrap may obtain missing published
   images and start bundled demo services. Recheck preflight after recovery and
   verify the selected client's status before proceeding.

@@ -6,9 +6,9 @@ Claude Code, Node.js, npm, Git, or a repository checkout.
 
 ## 1. Get the extension
 
-Open the [GitHub Releases page](https://github.com/dtkmn/mcp-zap-server/releases)
-and choose a published normal scanner release (`vX.Y.Z`) with the Claude Desktop
-downloads under **Assets**. The extension and this guide ship with the scanner
+Open the [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1),
+which includes the Claude Desktop `0.1.0` downloads under **Assets**.
+The extension and this guide ship with the scanner
 release in the same repository; there is no separate Desktop release.
 
 Under **Assets**, download:
@@ -18,9 +18,11 @@ Under **Assets**, download:
 
 Use the connector version listed in that release if it differs from `0.1.0`;
 it can differ from the scanner release version. Download the matching guide
-and `.mcpb` together. The adjacent `.sha256` files are checksums for these
-downloads. Choose the `.mcpb`, rather than GitHub's automatic **Source code**
-archives. If no release lists these assets, developers can use the
+and `.mcpb` together. Download the adjacent `.sha256` files and check the bundle
+and guide against their matching checksums before installation. When choosing
+another scanner release, verify that all four matching files are present.
+Choose the `.mcpb`, rather than GitHub's automatic **Source code**
+archives. Developers can also use the
 [local build instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md#build-and-check-the-bundle).
 
 This is a macOS preview for Claude Desktop Chat, including Free accounts.
@@ -41,8 +43,9 @@ the scanner.
 
 ## 3. Install MCP ZAP Connect
 
-1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
-   Install Extension**.
+1. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
+   **Extensions** (or **Settings → Extensions** in older layouts). Under
+   **Advanced settings**, find **Extension Developer** and select **Install Extension**.
 2. Select the downloaded `.mcpb`, review the extension, and approve installation
    if you trust the release. This preview is unsigned and runs with your local
    user permissions; its tools use Docker and read the scanner's credential
@@ -93,9 +96,12 @@ with a different key. Reuse the existing scanner when you want to keep those
 connections working without reconfiguration.
 
 The extension bundles a snapshot of the scanner setup files and defaults.
-Connector `0.1.0` currently defaults a new installation to scanner `v0.17.1`;
-verify that the scanner image is published before a fresh installation.
-Until `v0.17.1` is available, use a published scanner release and matching bundle.
+The released connector `0.1.0` defaults a new installation to scanner `v0.17.1`,
+whose Linux AMD64 and ARM64 images are published on Docker Hub and GHCR.
+That scanner release defaults to guided tools with direct execution for a
+standard local installation; it also supports optional queued execution and expert tools.
+Current-source guided-only and always-queued scan starts require a source build;
+they are not added to the released scanner by installing an updated guide.
 Downloading a bundle from a scanner release does not itself change its embedded default.
 An existing scanner keeps its selected version and settings.
 

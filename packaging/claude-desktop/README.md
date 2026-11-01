@@ -11,24 +11,26 @@ prompts, and the first demo report. No repository checkout or host Node/npm is
 required to use a published bundle.
 
 This bundle is separate from the [Claude Code skills-only plugin](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#claude-code-local-preview),
-version `0.5.0`. Install the `.mcpb` in Claude Desktop; Claude Code plugin commands
+(`0.5.0` in released `v0.17.1`; `0.18.0` in unreleased source). Install the `.mcpb` in Claude Desktop; Claude Code plugin commands
 do not install this extension. This preview does not establish an Anthropic
 directory listing or approval.
 
 ## Install the local preview
 
-1. Open [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and
-   choose a published normal scanner release (`vX.Y.Z`) whose **Assets** include
-   the Claude Desktop downloads. Download
+1. Open the [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1),
+   which includes the Claude Desktop `0.1.0` downloads. Download
    `mcp-zap-connect-claude-desktop-0.1.0.mcpb` and the matching
    `mcp-zap-connect-claude-desktop-0.1.0-setup.md` guide, or the connector version
    listed by that release. Both have adjacent `.sha256` files. These assets are
    distributed with normal scanner releases in this repository; there is no
-   separate Desktop release or repository. If no published release has them,
-   developers can build the local preview below.
-2. In Claude Desktop, open **Settings → Extensions → Advanced settings**, choose
-   **Install Extension**, and select the `.mcpb` file. Review the extension and
-   complete the installation prompts.
+   separate Desktop release or repository. When choosing another scanner release,
+   verify that it includes all four matching files. Check the bundle and guide
+   against their companion checksums before installation. Developers can also
+   build the local preview below.
+2. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
+   **Extensions** (or **Settings → Extensions** in older layouts). Under
+   **Advanced settings**, find **Extension Developer**, select **Install Extension**
+   and choose the `.mcpb` file. Review the extension and complete the installation prompts.
 3. Leave **Scanner directory** and **Scanner API key override** blank for the
    normal setup. The connector detects an existing Docker installation and reads
    its effective credential privately. You do not need to copy an API key into a
@@ -175,16 +177,16 @@ scanner resources. It includes the public `.env.example` template, not a real
 from this checkout; source hashes are included in the bundle. Building this
 preview does not publish a release or rebuild the scanner images.
 
-Connector and scanner versions are independent. For example, a future scanner
-release `v0.17.1` can include connector `0.1.0`; the asset filenames use the
+Connector and scanner versions are independent. Scanner release `v0.17.1`
+includes connector `0.1.0`; the asset filenames use the
 connector version. After publication, bump the connector version when its packaged
 code, dependencies, scanner resources or setup guide change. Ordinary scanner
 changes outside the bundle do not require a connector version bump.
 
 Bundled Compose files, scripts and defaults are snapshots of the selected
 source, not a promise to install that release's newest scanner. The current
-packaged `.env.example` selects scanner `v0.17.1`; verify image publication
-before distributing or starting a fresh installation. Update and validate those
+packaged `.env.example` selects the published scanner `v0.17.1`. Verify the
+selected image's availability when changing that default. Update and validate those
 resources deliberately when changing the fresh-install scanner version; preserve
 the selected settings when reusing an existing scanner.
 

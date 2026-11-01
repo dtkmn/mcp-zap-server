@@ -27,7 +27,8 @@ case "${action}" in
   init)
     [[ $# == 1 || ( $# == 2 && "$2" == --replace ) ]] || { usage; exit 1; }
     tunnel_id="$1"
-    [[ "${tunnel_id}" =~ ^tunnel_[0-9a-f]{32}$ ]] || die "Use the complete tunnel ID from Platform tunnel settings."
+    # Explicit characters keep both ID forms ASCII-only in every locale.
+    [[ "${tunnel_id}" =~ ^tunnel_([0123456789abcdefghijklmnopqrstuvwxyz]{4}_)?[0123456789abcdefghijklmnopqrstuvwxyz]{32}$ ]] || die "Use the complete tunnel ID from Platform tunnel settings."
     [[ $# == 1 ]] || replace=1
     ;;
   doctor|run) [[ $# == 0 ]] || { usage; exit 1; } ;;

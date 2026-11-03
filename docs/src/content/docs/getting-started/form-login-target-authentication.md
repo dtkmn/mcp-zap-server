@@ -1,7 +1,7 @@
 ---
 title: "Optional: Form-Login Target Authentication"
 editUrl: false
-description: "Configure a website login for ZAP, validate it from Cursor, and use it with the guided HTTP crawl and active scan paths."
+description: "Configure a website login for ZAP, validate it from Cursor, and use it for HTTP crawls and active scans."
 ---
 
 Skip this guide unless the application you are authorized to scan requires a
@@ -27,19 +27,19 @@ build a second login engine from scratch.
 
 ## Authentication Support
 
-| Target authentication | Prepare and validate | Guided crawl and attack use it |
+| Target authentication | Prepare and validate | Crawls and active scans use it |
 | --- | --- | --- |
 | Traditional HTML username/password form | Yes | Yes, with the HTTP spider and active scan |
 | Browser username/password login (`kind: browser`) | Yes, in `v0.13.0` | Client Spider only, with `strategy: client` |
 | Target bearer token | Credential reference only | No automatic header injection yet |
 | Target API key | Credential reference only | No automatic header injection yet |
-| Custom login steps/scripts, OAuth, SSO, MFA, or CAPTCHA | No guided configuration | No guided support |
+| Custom login steps/scripts, OAuth, SSO, MFA, or CAPTCHA | Unavailable through MCP | Unsupported through MCP |
 
-The guided form provider is for a classic URL-encoded form with predictable
+The form-login provider is for a classic URL-encoded form with predictable
 username and password fields. Dynamic CSRF tokens, multi-step flows, JSON login
 APIs, and JavaScript-heavy single-page applications may need browser authentication.
 For Client Spider, use a separate [browser profile](../../scanning/authenticated-scanning-best-practices/#browser-authentication-for-client-spider).
-Custom login steps and scripts require a separately managed ZAP workflow; they are not exposed by the guided MCP tools. ZAP itself recommends
+Custom login steps and scripts require a separately managed ZAP workflow; they are not exposed by the MCP tools. ZAP itself recommends
 [browser-based or client-script authentication for modern flows](https://www.zaproxy.org/blog/2025-07-03-authentication-improvements/).
 
 The form-login profile workflow is available in `v0.10.0` and later. `v0.9.1`
@@ -52,7 +52,7 @@ successful image publication in the release workflow.
 ## Before You Start
 
 Complete [Self-Serve First Run](../self-serve-first-run/) first. Confirm that
-Cursor can list the guided ZAP tools using the MCP API key or JWT you chose.
+Cursor can list the ZAP tools using the MCP API key or JWT you chose.
 
 For the target application, gather:
 
@@ -254,7 +254,7 @@ Give Cursor this prompt, replacing the profile and target URL if you changed
 them:
 
 ```text
-Use only the guided ZAP tools.
+Use only the ZAP tools.
 
 Prepare target form-login authentication with profile `local-form-app` for
 http://host.docker.internal:8080/account.
@@ -297,8 +297,8 @@ effects. It is never implied by this setup. When the target owner has approved
 it, use a separate prompt:
 
 ```text
-Using the already prepared and validated form-login auth session, start a
-guided active scan against http://host.docker.internal:8080/account. Use the same
+Using the already prepared and validated form-login auth session, start an
+active scan against http://host.docker.internal:8080/account. Use the same
 authSessionId and exact origin. Poll until complete, wait for passive analysis,
 then summarize findings. Stop if the auth session is missing or invalid.
 ```
@@ -306,12 +306,12 @@ then summarize findings. Stop if the auth session is missing or invalid.
 The authorized target may be local, in a private cloud, or in Kubernetes. MCP
 ZAP Server does not require anyone to call it "staging" or "production".
 
-The guided ZAP context covers the profile's entire allowed origin, even if the
+The ZAP context created for this session covers the profile's entire allowed origin, even if the
 Cursor target URL contains a narrower path. Only the origin's root `/logout`
 path is excluded automatically. If the application uses another logout route
 or has destructive account-management endpoints, do not approve an active
 scan until those paths are controlled through target-side safeguards or an
-operator-managed ZAP context outside the guided workflow.
+operator-managed ZAP context outside this MCP workflow.
 
 ## Changing Or Removing The Profile
 
@@ -372,6 +372,6 @@ steps, MFA, or CAPTCHA handling.
 ## Next Reading
 
 - [MCP Client Authentication](../mcp-client-authentication/) for Cursor API-key or JWT setup
-- [MCP Client Scan To Evidence](../../scanning/mcp-client-scan-to-evidence/) for the full guided workflow
+- [MCP Client Scan To Evidence](../../scanning/mcp-client-scan-to-evidence/) for the full scan and reporting workflow
 - [Authenticated Scanning Reference](../../scanning/authenticated-scanning-best-practices/) for advanced deployment, profile configuration and supported authentication boundaries
 - [ZAP authentication concepts](https://www.zaproxy.org/docs/getting-further/authentication/concepts/) for the underlying engine model

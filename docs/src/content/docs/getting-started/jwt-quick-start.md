@@ -188,5 +188,5 @@ Common causes:
 
 - read the [full JWT guide](../../security-modes/jwt-authentication/)
 - configure client scopes with [Tool Scope Authorization](../tool-scope-authorization/)
-- review the [guided tool catalog](../tool-surfaces/) and its permission requirements
+- review the [scan tools](../tool-surfaces/) and its permission requirements
 - configure your real client with [MCP Client Authentication](../mcp-client-authentication/)

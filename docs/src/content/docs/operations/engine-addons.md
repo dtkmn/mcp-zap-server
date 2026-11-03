@@ -9,8 +9,7 @@ approval, update it and verify what ZAP loaded. You type the prompts below; the
 LLM selects and calls the server's native MCP tools. You do not need to issue
 JSON, HTTP or shell commands to perform the add-on workflow.
 
-The tools are available in the guided catalog. No target
-scan is required. Updates are disabled by default and must first be enabled by
+You can manage add-ons without scanning a target. Updates are disabled by default and must first be enabled by
 the operator; a prompt cannot grant the LLM maintenance authority.
 
 | Tool | Purpose | Required scope |
@@ -364,7 +363,7 @@ remains available, but further engine actions wait for operator reconciliation.
 
 ## Continue with the Target Check
 
-Once the loaded configuration is verified, use the normal guided sequence:
+Once you have verified the loaded configuration, check the authorized target with these tools.
 
 1. `zap_crawl_start` with the authorized target and `strategy: http`.
 2. Poll `zap_crawl_status` using its returned operation ID.

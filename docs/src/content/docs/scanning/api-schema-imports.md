@@ -1,7 +1,7 @@
 ---
 title: "API Schema Imports"
 editUrl: false
-description: "Import OpenAPI, GraphQL, and SOAP definitions through the guided target import tool."
+description: "Import OpenAPI, GraphQL, and SOAP definitions with zap_target_import."
 ---
 MCP ZAP Server supports schema-driven API imports across three common families:
 
@@ -9,7 +9,9 @@ MCP ZAP Server supports schema-driven API imports across three common families:
 - GraphQL
 - SOAP / WSDL
 
-## Guided Import
+<a id="guided-import"></a>
+
+## Import an API Definition
 
 Use `zap_target_import` for all supported definition families. Set `definitionType` to `openapi`, `graphql`, or `soap`, `sourceKind` to `url` or `file`, and `source` to the definition URL or ZAP-visible path. OpenAPI also supports `sourceKind=content` as described below.
 
@@ -65,7 +67,7 @@ Use this when:
 
 ### Client-Supplied OpenAPI Content
 
-Guided `zap_target_import` supports `sourceKind=content` for
+`zap_target_import` supports `sourceKind=content` for
 `definitionType=openapi`, introduced in `v0.15.0` and disabled by default. Use
 the matching server image and deployment files; check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and verify
@@ -253,7 +255,9 @@ Important:
 
 Use `definitionType=soap`, `sourceKind=url` or `file`, and `source` for the WSDL URL or ZAP-visible path.
 
-## Guided Import Example
+<a id="guided-import-example"></a>
+
+## Import an OpenAPI Definition from a URL
 
 ```json
 {

@@ -33,7 +33,7 @@ The action brings up a minimal ZAP + MCP stack, optionally replays configured HT
 9. compare the normalized snapshot against the baseline file when present
 10. `zap_report_generate`
 
-The helper uses guided start, status and report tools. It detects snapshot support from `tools/list`; the current guided catalog provides it. Older guided servers without snapshots cannot produce an enforceable baseline comparison. The helper never falls back to retired direct-start tools.
+The helper starts scans, checks their status, and generates reports. It uses `tools/list` to check for snapshot support. The current server supports snapshots. Older servers without snapshots cannot enforce a baseline comparison. The helper never falls back to retired direct-start tools.
 
 Artifacts emitted into the configured output directory include:
 
@@ -306,9 +306,11 @@ For `max-new-findings=0`, select a controlled target with stable content, seeds,
 scanner inventory and scan settings, and review repeated runs before enforcing
 the baseline.
 
-## Guided Queue Execution in CI
+<a id="guided-queue-execution-in-ci"></a>
 
-All crawl and attack starts use guided Operation IDs backed by the protected queue, including a single ephemeral runner. Explicit failed, cancelled or uncertain start outcomes fail the gate rather than being treated as completed scans or automatically retried. In-memory storage is sufficient for process-local job history; use PostgreSQL when history must survive server restart.
+## How CI Tracks Queued Scans
+
+Each crawl or active scan enters the job queue and returns an Operation ID for tracking, even on a single ephemeral runner. Explicit failed, cancelled or uncertain start outcomes fail the gate rather than being treated as completed scans or automatically retried. In-memory storage is sufficient for process-local job history; use PostgreSQL when history must survive server restart.
 
 ## Tuning Inputs
 
@@ -354,4 +356,4 @@ The action exposes these outputs for follow-on workflow steps:
 
 ## Report Format Compatibility
 
-The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and maps them to guided HTML or JSON generation. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.
+The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and requests an HTML or JSON report. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.

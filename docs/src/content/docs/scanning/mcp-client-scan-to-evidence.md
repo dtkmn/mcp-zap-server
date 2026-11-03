@@ -1,7 +1,7 @@
 ---
 title: "MCP Client Scan To Evidence"
 editUrl: false
-description: "Run the guided MCP workflow from target selection through findings, report readback, release evidence, and customer-safe handoff."
+description: "Use MCP tools to scan a target, review findings, retrieve the report and prepare evidence to share."
 ---
 
 Use this guide to run MCP ZAP Server from your own MCP client, from the first
@@ -13,8 +13,8 @@ This path takes a user from:
 
 1. target selection
 2. optional auth or API import
-3. guided crawl
-4. optional guided active scan
+3. crawl the target
+4. optional active scan
 5. passive analysis drain
 6. findings review
 7. report generation and readback
@@ -33,7 +33,7 @@ local setup uses `http://localhost:7456/mcp` with an `X-API-Key` header.
 Other clients need Streamable HTTP and custom-header support; no browser chat
 UI is bundled.
 
-The packaged local client's `*` grant permits the exposed guided tools for the
+The packaged local client's `*` grant permits the scan tools for the
 steps below. Request active testing, imports or authentication setup only when
 needed for the authorized workflow. Operators using explicit per-client scopes
 must grant each selected step; see
@@ -60,7 +60,7 @@ readiness result does not establish that a target was checked or is safe.
 Ask your MCP client:
 
 ```text
-Run only a guided crawl against http://juice-shop:3000.
+Run only a crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish, summarize findings for this target,
 generate an HTML report, and read the report back through MCP.
@@ -102,7 +102,7 @@ operator-managed profile for the authorized target:
   Follow the [Client Spider login guide](../client-spider/#crawl-behind-a-login)
   for prerequisites and protected-response validation.
 
-Then prepare and validate a guided auth session:
+Prepare and validate an authentication session with these tools:
 
 1. `zap_auth_session_prepare`
 2. `zap_auth_session_validate`
@@ -116,17 +116,19 @@ profile's allowed origin. Profiles hold exact `env:NAME` or
 `file:/absolute/path` credential references; MCP callers never provide secret
 references or inline secrets.
 
-Prepared form-login sessions support HTTP crawling and guided active scans.
+Prepared form-login sessions support HTTP crawling and active scans.
 In `v0.13.0`, prepared browser sessions support direct and queued Client Spider
-crawls with `strategy=client`; they do not support guided active scans. Bearer
+crawls with `strategy=client`; they do not support active scans. Bearer
 and API-key session preparation is useful as a contract and validation path,
-but do not assume every guided scan mode consumes those session types yet.
+but support for these session types depends on the scan tool.
 
 The target's website password never belongs in the MCP client or prompt. The
 operator stores it in a mounted secret; MCP Server resolves it server-side to
 configure the corresponding ZAP user.
 
-### 3. Start A Guided Crawl
+<a id="3-start-a-guided-crawl"></a>
+
+### 3. Start a Crawl
 
 Call `zap_crawl_start`.
 
@@ -142,8 +144,7 @@ Recommended parameters:
 it rejects `authSessionId`. See [Client Spider](../client-spider/) for
 JavaScript crawling without authentication and deployment prerequisites.
 
-The response returns a guided `Operation ID`. Use that operation ID with
-`zap_crawl_status`. Raw scan IDs are diagnostics; they cannot replace the guided Operation ID.
+Pass the returned `Operation ID` to `zap_crawl_status`. The ZAP scan ID is for engine diagnostics.
 
 ### 4. Poll Crawl Status
 
@@ -163,7 +164,9 @@ For other crawls, when the crawl completes, choose one:
 Do not read findings immediately after crawl completion. Passive rules can
 still be processing discovered traffic.
 
-### 5. Optional Guided Active Scan
+<a id="5-optional-guided-active-scan"></a>
+
+### 5. Optional Active Scan
 
 Call `zap_attack_start` only when the target is yours to actively test.
 
@@ -175,7 +178,7 @@ Recommended parameters:
 - `authSessionId`: only when you prepared and validated a supported form-login
   session
 
-A prepared browser session cannot be used here. Guided authenticated active
+A prepared browser session cannot be used here. Authenticated active
 testing requires a separately prepared and validated form-login session for
 targets that support that login flow.
 
@@ -290,9 +293,9 @@ has been reviewed and explicitly approved.
 Use prompts like this:
 
 ```text
-Scan http://juice-shop:3000 using the guided ZAP tools.
+Scan http://juice-shop:3000 with ZAP.
 Use the server's Next Actions after each tool result.
-Use the guided status and recovery guidance when a scan fails. An uncertain start must not be submitted again.
+If a scan fails, check its status and follow the recovery instructions. An uncertain start must not be submitted again.
 After scanning, wait for passive analysis, summarize findings, generate an HTML
 report, read the report through MCP, and create both internal release evidence
 and a customer-safe handoff.
@@ -301,7 +304,7 @@ and a customer-safe handoff.
 For an active-scan-safe target:
 
 ```text
-Run a guided crawl and then a guided active scan against http://juice-shop:3000.
+Run a crawl and then an active scan against http://juice-shop:3000.
 Poll each operation until complete, wait for passive analysis, then produce
 findings, report readback, release evidence, and customer handoff.
 ```
@@ -309,7 +312,7 @@ findings, report readback, release evidence, and customer handoff.
 For crawl-only evidence:
 
 ```text
-Run only a guided crawl against http://juice-shop:3000.
+Run only a crawl against http://juice-shop:3000.
 When the crawl completes, wait for passive analysis, then produce findings,
 report, release evidence, and customer handoff. Do not start an active scan.
 ```
@@ -317,7 +320,7 @@ report, release evidence, and customer handoff. Do not start an active scan.
 For a target with a configured form-login profile:
 
 ```text
-Use only the guided ZAP tools. Prepare form-login profile `local-form-app` for
+Use only the ZAP tools available through MCP. Prepare form-login profile `local-form-app` for
 http://host.docker.internal:8080/account and validate the returned session. Stop unless
 the result contains `Valid: true`, `Outcome: authenticated`, and
 `likelyAuthenticated=true`. If validation succeeds, start an HTTP crawl with
@@ -330,9 +333,9 @@ start an active scan.
 
 | ID | Why it appears | What to do with it |
 | --- | --- | --- |
-| Guided operation ID | Stable handle for `zap_crawl_status`, `zap_attack_status`, and stop tools. | Use this in the guided flow. |
-| ZAP scan ID | Engine diagnostic from the underlying ZAP adapter. | Keep for debugging, but do not drive the guided workflow with it. |
-| Queue job ID | Worker job handle; history persists across server restarts with PostgreSQL. | Useful for operator debugging paths; guided status wraps it. |
+| Operation ID | Stable handle for `zap_crawl_status`, `zap_attack_status`, and stop tools. | Pass this ID to the matching status or stop tool. |
+| ZAP scan ID | Engine diagnostic from the underlying ZAP adapter. | Use this when inspecting the scan on the ZAP engine. |
+| Queue job ID | Worker job handle; history persists across server restarts with PostgreSQL. | Use this when inspecting a job in the server queue. |
 | Scan history entry ID | Evidence ledger record. | Use it when reading a specific ledger entry. |
 | Report path | Local or mounted report artifact location. | Use it for report readback or artifact collection. |
 
@@ -341,7 +344,7 @@ lower-level IDs.
 
 ## Queued Execution Evidence
 
-Guided crawl and attack starts always use the queue and return
+New crawls and active scans always use the queue and return
 `Execution Mode: queue`, with either in-memory or PostgreSQL storage. Acceptance
 records a job; it does not prove ZAP has started it. Poll the Operation ID to
 follow the actual lifecycle. An uncertain start remains held for recovery and
@@ -349,21 +352,21 @@ must not be submitted again automatically.
 
 In-memory job history is lost when the server restarts. For evidence that must
 survive restart, use PostgreSQL and configure a stable private operation-signing
-key so existing guided handles remain valid. Preserve the scan-history storage
+key so existing Operation IDs remain valid. Preserve the scan-history storage
 required by your evidence workflow as well.
 
-Existing direct-operation handles still support guided status and stop while
-valid. Their records do not establish the terminal lifecycle of a queued job;
+Clients can still check status or stop a scan using a valid Operation ID
+from an older direct scan. Their records do not establish the terminal lifecycle of a queued job;
 preserve that distinction when reviewing older evidence.
 
 ## What Ships Today
 
 Today:
 
-- ZAP-backed guided crawl and attack workflows
+- ZAP crawls and active scans
 - passive scan wait and status
-- guided findings summary and details
-- guided report generation and readback
+- findings summaries and details
+- report generation and retrieval
 - scan history, release evidence, and customer handoff tools
 - public extension API work for selected non-engine contracts
 
@@ -379,7 +382,7 @@ Not today:
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
 | Target works in browser but scan fails | You used `localhost` instead of the container target. | Use `http://juice-shop:3000` or the service name reachable from ZAP. |
-| Client keeps asking for ZAP scan IDs | It is following retired raw-tool guidance or old context. | Tell it to follow guided `Next Actions` and use guided operation IDs. |
+| Client keeps asking for ZAP scan IDs | It is following retired raw-tool guidance or old context. | Tell it to follow the tool’s `Next Actions` and use the returned Operation ID. |
 | Findings look empty immediately after scan | Passive analysis has not drained. | Run `zap_passive_scan_wait`, then check findings again. |
 | Handoff has caveats | Evidence window is incomplete or direct-only. | Review `zap_scan_history_release_evidence` warnings and rerun with stronger coverage if needed. |
 | Authenticated scan fails | Profile origin, login indicators, form fields, or configured credential reference is wrong, or browser login is unconfirmed. | Use the [form-login troubleshooting guide](../../getting-started/form-login-target-authentication/#troubleshooting) or [Client Spider login guide](../client-spider/#crawl-behind-a-login), fix the profile, then prepare and validate a new session. |

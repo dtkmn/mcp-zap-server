@@ -42,7 +42,7 @@ editUrl: false
     </div>
     <div class="telemetry-chip">
       <span>Coverage</span>
-      <strong>Guided Scans and Evidence</strong>
+      <strong>Scans and Reports</strong>
     </div>
     <div class="telemetry-chip">
       <span>Search Index</span>
@@ -50,7 +50,11 @@ editUrl: false
     </div>
   </div>
 
-  <p>The v0.17.1 upgrade guide covers neutral findings responses, authoritative explicit target denies, permission-aware guidance and local client setup options. Verify the matching release, images and downloads before installing this source version; v0.17.0 was published without its Desktop downloads and its image-release workflow did not complete. Use a version with verified available images until the matching distribution is ready. Read the <a href="./releases/0.17.1/">release and upgrade guide</a> before changing an existing installation.</p>
+  <p><strong>Available release: v0.17.1.</strong> Linux AMD64 and ARM64 images are published on Docker Hub and GHCR. The <a href="https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1">GitHub release</a> includes the Claude Desktop 0.1.0 bundle, setup guide and checksum files. Read the <a href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md">tagged release and upgrade guide</a> before changing an existing installation.</p>
+
+  <p><strong>Release and source behavior differ.</strong> The first-run Docker commands use v0.17.1: scans start directly with the default local settings. Optional queue controls and the former expert tools remain available. In current source, every new crawl and active scan runs through the job queue. The feature and operations pages below describe current source unless labeled for a release; use the <a href="https://github.com/dtkmn/mcp-zap-server/tree/v0.17.1/docs">tagged v0.17.1 documentation</a> for the released runtime. Its migrations are V1–V8; current-source launch-safety guidance includes V9.</p>
+
+  <p>The earlier v0.17.0 GitHub release remains incomplete: its Desktop downloads are absent and its image-release workflow did not complete. Registry discovery is separate from image and download availability.</p>
 
   <p>Ask Codex to handle your local scanner setup. <a href="./getting-started/agent-guided-setup/#codex-local-installation">Install MCP ZAP Connect locally</a>, then ask it to check prerequisites, start the Docker stack, configure your private MCP connection and verify status. The skill can help install missing prerequisites with your approval, then recheck and continue setup. Scans are a separate request.</p>
 
@@ -59,15 +63,15 @@ editUrl: false
   <div class="mission-grid">
     <a class="mission-card" href="./getting-started/self-serve-first-run/">
       <h3>&gt; [01] SELF_SERVE_FIRST_RUN</h3>
-      <p>Choose agent-guided setup or Docker commands, connect your MCP client, and generate your first scan report.</p>
+      <p>Set up the scanner with your AI client or run the Docker commands yourself, then generate your first report.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-surfaces/">
-      <h3>&gt; [02] GUIDED_TOOLS</h3>
-      <p>Use the guided tool catalog and migrate older raw-tool workflows.</p>
+      <h3>&gt; [02] SCAN_TOOLS</h3>
+      <p>Find the tools to crawl a site, run an active scan and read the results.</p>
     </a>
     <a class="mission-card" href="./scanning/scan-execution-modes/">
       <h3>&gt; [03] SCAN_EXECUTION</h3>
-      <p>Understand guided queue admission, storage and scan lifecycle controls.</p>
+      <p>Learn when a queued scan starts and how to check its progress or stop it.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-scope-authorization/">
       <h3>&gt; [04] TOOL_SCOPE_AUTHZ</h3>
@@ -85,9 +89,9 @@ editUrl: false
       <h3>&gt; [07] EXTENSION_POLICY</h3>
       <p>See what must be true before the extension API becomes a public compatibility promise.</p>
     </a>
-    <a class="mission-card" href="./releases/0.17.1/">
+    <a class="mission-card" href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md">
       <h3>&gt; [v0.17.1] RELEASE_AND_UPGRADE</h3>
-      <p>Review explicit target denies, findings semantics, client defaults and publication requirements before upgrading.</p>
+      <p>Review the published release's explicit target denies, findings semantics, client defaults and upgrade requirements.</p>
     </a>
     <a class="mission-card" href="./security-modes/#registered-api-keys-in-v0140">
       <h3>&gt; [v0.14.0] SECURITY_UPGRADE</h3>
@@ -105,8 +109,10 @@ editUrl: false
 
   <span class="section-label">tail -f /var/log/capabilities.txt</span>
 
+  <p>The capabilities below describe current source.</p>
+
   <ul class="capability-list">
-    <li><strong>Guided_Flows</strong>: Queue crawl and attack operations with in-memory or PostgreSQL storage, then track them through guided status and stop tools.</li>
+    <li><strong>Scan_Tracking</strong>: Queue a crawl or active scan, then use its Operation ID to check progress or stop it. Both in-memory and PostgreSQL storage support this workflow.</li>
     <li><strong>Findings_Evidence</strong>: Read target-scoped findings, export snapshots, compare baselines and retrieve reports.</li>
     <li><strong>Operational_Guardrails</strong>: Enforce scopes, rate limits, correlation IDs, queue observability, and scan-history evidence.</li>
   </ul>

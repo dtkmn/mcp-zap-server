@@ -1,7 +1,7 @@
 ---
 title: "Scan Policy Selection"
 editUrl: false
-description: "Inspect configured ZAP active-scan policies and select one for guided active testing."
+description: "Inspect configured ZAP active-scan policies and select one before starting an active scan."
 ---
 Use `zap_scan_policies_list` and `zap_scan_policy_view` to inspect ZAP's current active-scan policies before choosing one. Both are read-only and require `zap:scan:policy:read`; they do not start a scan or change rules. Starting an attack separately requires `zap:scan:attack:run` and authorization to test the target.
 
@@ -53,4 +53,4 @@ Policies are shared engine-level configuration. Inspection reads their current s
 
 Choose a policy appropriate to the authorized target and permitted test intensity. Policy selection does not grant active-scan authorization or expand target scope. Track and stop the scan with the Operation ID returned by `zap_attack_start`.
 
-See [Scan Execution](../scan-execution-modes/) and [Upgrading to Guided Tools](../../getting-started/tool-migration/).
+See [Scan Execution](../scan-execution-modes/) and [Migrating Older Clients](../../getting-started/tool-migration/).

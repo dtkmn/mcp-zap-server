@@ -47,8 +47,8 @@ scanner's `/mcp` endpoint; cloud-hosted clients need a reachable remote endpoint
 
 | Client / connection | Setup | Requirements |
 | --- | --- | --- |
-| Codex app or CLI | [Guided setup](../self-serve-first-run/#guided-setup-in-codex) or [manual HTTP configuration](#codex) | Local scanner access and `X-API-Key`; model access follows your Codex plan. |
-| Cursor Desktop | [Guided setup](../self-serve-first-run/#guided-setup-in-cursor) or [manual HTTP configuration](#cursor) | Local scanner access, `X-API-Key`, and available Agent usage on Free or paid accounts. |
+| Codex app or CLI | [Plugin setup](../self-serve-first-run/#guided-setup-in-codex) or [manual HTTP configuration](#codex) | Local scanner access and `X-API-Key`; model access follows your Codex plan. |
+| Cursor Desktop | [Plugin setup](../self-serve-first-run/#guided-setup-in-cursor) or [manual HTTP configuration](#cursor) | Local scanner access, `X-API-Key`, and available Agent usage on Free or paid accounts. |
 | Claude Code | [Local plugin preview](../self-serve-first-run/#guided-setup-in-claude-code) or [manual HTTP configuration](#claude-code) | Local scanner access, `X-API-Key`, and access to Claude Code. |
 | Claude Desktop | [Local MCPB extension](#claude-desktop), macOS preview | Docker and Claude Desktop, including Free accounts; no Claude Code subscription required. |
 | ChatGPT | [Secure MCP Tunnel guide](../chatgpt-local-tunnel/) | Platform tunnel permissions and ChatGPT developer-mode access. A cloud client cannot connect directly to this machine's loopback endpoint. |
@@ -140,7 +140,7 @@ Cursor supports streamable HTTP connections with custom headers. Its
 [MCP documentation](https://cursor.com/docs/mcp) describes configuration
 locations and environment-variable interpolation.
 
-For agent-guided setup, follow [Guided Setup in Cursor](../self-serve-first-run/#guided-setup-in-cursor).
+To set up with Cursor, follow the [plugin instructions](../self-serve-first-run/#guided-setup-in-cursor).
 The following manual configuration is also available.
 
 First complete [Self-Serve First Run](../self-serve-first-run/), including
@@ -225,7 +225,7 @@ Claude chat remote connector, whose remote execution cannot reach your local
 `127.0.0.1` endpoint.
 
 First complete [Self-Serve First Run](../self-serve-first-run/), including
-authenticated readiness. For agent-guided setup, use the
+authenticated readiness. To set up with Claude Code, use the
 [local plugin preview](../self-serve-first-run/#guided-setup-in-claude-code).
 Preserve Codex, Cursor and other client settings.
 
@@ -290,28 +290,27 @@ connection. Request a scan separately after establishing the connection.
 
 ## First Scan And Expected Result
 
-With the local Compose demo stack running, ask your connected client:
+Follow [Generate Your First Report](../self-serve-first-run/#3-generate-your-first-report)
+for the canonical prompt and completion checks. Use the readiness procedure for
+your installation first, then call `zap_passive_scan_status` through your
+connected client's own MCP connection before starting the crawl.
 
-```text
-Run only a guided HTTP crawl against http://juice-shop:3000.
-Poll until the crawl completes, wait for passive analysis, and summarize
-findings for that target. Generate an HTML report scoped to that target and
-read it back through MCP. Follow the tools' Next Actions. Do not start an
-active scan.
-```
+For the [native Mac preview](../macos-package/), use `./bin/mcp-zap doctor` and
+your own authorized target reachable from ZAP. That package does not include
+the Compose demo targets; substitute your target in the canonical prompt.
 
-Expected result: a completed crawl, passive analysis finished, a target-scoped
-findings summary, and an HTML report path with report content returned through
-MCP. Finding counts vary; a tool list alone does not prove the scan worked.
-If any operation fails or times out, resolve it before treating the report as
-complete.
+For the Docker demo stack, `http://juice-shop:3000` is the scan target;
+`http://localhost:3001` is only the browser preview on your host. For other
+deployments, use an authorized URL reachable from their ZAP engine.
 
-ZAP runs inside Docker, so `http://juice-shop:3000` is the scan target.
-`http://localhost:3001` is only the browser preview on your host.
-For your own authorized target, substitute a URL reachable from ZAP.
-
-Continue with the [MCP Client Scan-To-Evidence Guide](../../scanning/mcp-client-scan-to-evidence/)
-for optional active scanning, release evidence, and handoff.
+Success means the crawl completes, passive analysis drains, findings are
+summarized for the target, and the complete target-scoped HTML report is read
+back through MCP, including every chunk.
+A preview or tool list alone does not prove this worked. Finding counts vary.
+Do not start active scanning without explicit authorization. If any operation
+fails or times out, resolve it before treating the report as complete or the
+target as clean. The canonical guide links the version-appropriate optional
+active-scanning and evidence-handoff instructions.
 
 ## Generic Streamable HTTP Clients
 
@@ -328,7 +327,7 @@ there is no universal MCP client JSON schema:
 The client must support MCP initialization, session handling, and sending the
 auth header on subsequent requests. If it runs in a container or on another
 machine, use an MCP server address reachable from there instead of `localhost`.
-Verify tool discovery, then use the first-scan prompt above before treating
+Verify tool discovery, then follow the first-scan procedure above before treating
 the integration as working.
 
 ## Open WebUI
@@ -344,7 +343,7 @@ and an `X-API-Key` header using the values above.
 If Open WebUI runs in Docker, `localhost` refers to its own container. Use a
 host address or shared-network service name reachable from that container;
 `mcp-server` only resolves when both services share the appropriate Docker
-network. Validate with tool discovery and the first-scan prompt above.
+network. Validate with tool discovery and the first-scan procedure above.
 
 ## Claude Desktop
 
@@ -368,8 +367,10 @@ accounts. Claude's account usage limits still apply when calling tools.
 
 For a downloaded or locally built bundle:
 
-1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
-   Install Extension…** and select the `.mcpb` file.
+1. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
+   **Extensions** (or open **Settings → Extensions** in older layouts). Under
+   **Advanced settings**, find **Extension Developer**, select **Install Extension**
+   and choose the `.mcpb` file.
 2. Leave the optional scanner directory and key override blank. The extension
    reuses an existing scanner and reads its credential privately, or uses
    `~/.mcp-zap-server` for a new installation.

@@ -55,6 +55,11 @@ without custom engineering, the pack is not ready for that pilot yet.
 - [ ] Replace the local action reference with the release action ref, such as
   `dtkmn/mcp-zap-server/.github/actions/zap-security-gate@<release-tag>`,
   or vendor `.github/actions/zap-security-gate` into the pilot repository.
+- [ ] If enabling `ZAP_WEBHOOK_URL`, also replace the callback step's local
+  action reference with
+  `dtkmn/mcp-zap-server/.github/actions/zap-webhook-callback@<release-tag>`,
+  using the same selected release, or vendor `.github/actions/zap-webhook-callback`
+  into the pilot repository. Copying the workflow alone does not copy either action.
 - [ ] Copy `examples/github-actions/docker-compose.app-under-test.yml` if the
   target service should start inside the workflow.
 - [ ] Replace the example `app` image with the pilot service image.

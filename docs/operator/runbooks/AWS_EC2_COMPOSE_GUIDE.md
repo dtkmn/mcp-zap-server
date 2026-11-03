@@ -281,7 +281,7 @@ the MCP container. Do not delete unresolved receipts to unblock scanning; use
 [launch recovery](https://danieltse.org/mcp-zap-server/operations/scan-queue-retry-policy/).
 This journal protects uncertain starts without restoring in-memory job history.
 
-The sample exposes the guided tool catalog and limits scan concurrency and duration. It permits private network targets solely
+The sample limits scan concurrency and duration. It permits private network targets solely
 for the exact `smoke-target` hostname. Keep those settings for the isolated
 example; they are not a general permission to scan your VPC.
 
@@ -407,7 +407,7 @@ download port to work around it.
 The sample intentionally omits security headers so reports can contain findings.
 Those findings describe the sample API, not the MCP server's security.
 
-To exercise schema import, call `zap_target_import` with `definitionType: openapi`, `sourceKind: url`, `source: http://smoke-target:8080/openapi.json`, and `hostOverride: http://smoke-target:8080`. The specification contains an unlinked `/imported-only` operation. Follow import with a guided crawl or explicitly authorized attack before reading target findings.
+To exercise schema import, call `zap_target_import` with `definitionType: openapi`, `sourceKind: url`, `source: http://smoke-target:8080/openapi.json`, and `hostOverride: http://smoke-target:8080`. The specification contains an unlinked `/imported-only` operation. Follow import with a crawl or an explicitly authorized active scan before reading target findings.
 
 ## 8. Verify restart and reboot
 
@@ -497,7 +497,7 @@ Do not treat a stopped instance as completed cleanup.
 | Missing MCP image or failed image pull | Check registry access and the selected published release, then configure its verified digest as `MCP_ZAP_IMAGE` |
 | Session starts but forwarding fails | Current container address, MCP health, host-to-container connectivity, remote-host session document and local plugin |
 | API-key rejection | Use the MCP key rather than the ZAP key; recreate MCP after changing `.env` |
-| Client calls an unavailable tool | Use the current guided catalog; follow [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/) for an older integration |
+| Client calls an unavailable tool | Use the tools advertised by the server. See [Migrating Older Clients](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/) for an older integration |
 | Healthy services but report readback fails | Shared mount permissions, client workspace and both automation directory settings |
 | External scan cannot connect | Expected for this example; approve and validate engine egress before changing scope |
 | Need a shell/curl inside MCP | The released Java image is distroless; use health status, logs and supported MCP tools |
@@ -508,4 +508,4 @@ Remove API keys, tokens, account/resource identifiers and private report content
 
 ## Optional Native ZAP Reference
 
-Host setup also installs a native Automation Framework example in the shared workspace as an optional reference for a separately managed ZAP workflow. Use the guided scan/report sequence above for MCP. See [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/#automation-framework) for the native plan boundary.
+Host setup also installs a native Automation Framework example in the shared workspace as an optional reference for a separately managed ZAP workflow. Use the scan and report tools described above for MCP. See [Migrating Older Clients](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/#automation-framework) for the native plan boundary.

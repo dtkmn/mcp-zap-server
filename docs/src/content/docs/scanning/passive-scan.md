@@ -12,8 +12,6 @@ Use the passive scan tools when you need to know whether findings are still chan
 - `zap_passive_scan_status`
 - `zap_passive_scan_wait`
 
-These tools are available in the guided catalog.
-
 ## `zap_passive_scan_status`
 
 Returns:
@@ -62,23 +60,15 @@ The rule is simple: if the next step is findings review or report generation, pa
 
 ## Example Workflow
 
-### Guided flow
+<a id="guided-flow"></a>
+<a id="queue-managed-flow"></a>
 
-```text
-1. Run zap_crawl_start or zap_attack_start
-2. Wait for completion with zap_crawl_status or zap_attack_status
-3. Run zap_passive_scan_wait
-4. Read findings or generate a report
-```
+### Wait for Findings After a Crawl or Active Scan
 
-### Queue-managed flow
-
-```text
-1. Submit a queued spider (traditional, AJAX, or Client Spider) or active scan
-2. Wait for the queued job to reach SUCCEEDED
-3. Run zap_passive_scan_wait
-4. Read findings or generate a report
-```
+1. Submit a crawl with `zap_crawl_start` or an active scan with `zap_attack_start`.
+2. Use the returned Operation ID with `zap_crawl_status` or `zap_attack_status`. Follow the **Next Actions** in the reply. For browser and client crawls, a stopped crawl tells you ZAP has finished crawling. Check the captured traffic to see what it reached.
+3. When you are ready to review the captured traffic, run `zap_passive_scan_wait` to let passive rules finish analyzing it.
+4. Read the available findings or generate a report.
 
 ## Notes
 

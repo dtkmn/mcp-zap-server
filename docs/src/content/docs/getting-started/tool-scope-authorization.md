@@ -60,7 +60,7 @@ In JWT mode, the access token inherits the same scopes from the source client. J
 ## Quick-Start Permissions
 
 The packaged local API-key client defaults to `*` with wildcard acceptance
-enabled. This permits ordinary tools in the guided catalog, including crawling, active attacks, target authentication, API imports, findings, history and reports.
+enabled. This permits standard MCP tools, including crawling, active attacks, target authentication, API imports, findings, history and reports.
 
 `zap_addon_update` is a maintenance operation with additional checks. It requires
 the explicit `zap:engine:addons:update` scope, an approved operator client,
@@ -90,7 +90,7 @@ through that deployment's configuration procedure; recreating a service may be
 needed to reload environment settings. Do not regenerate settings or keys to
 change scopes.
 
-Use the scope inventory below for the intended workflow. Guided active attacks
+Use the scope inventory below for the intended workflow. Active scans
 use `zap:scan:attack:run`. Before disabling wildcard acceptance, give every
 intended client its complete explicit scope list,
 including discovery and status where required.
@@ -116,16 +116,16 @@ Common scopes:
 | `zap:engine:addons:read` | Inspect engine add-ons, Marketplace candidates and passive-rule readiness |
 | `zap:engine:addons:update` | Request an operator-enabled update of an approved installed add-on; exact grant required |
 | `zap:alerts:read` | Read grouped findings, raw instances, snapshots, and diffs |
-| `zap:report:read` | Read guided summaries and generated report artifacts |
+| `zap:report:read` | Read summaries and generated report artifacts |
 | `zap:report:generate` | Generate reports |
 | `zap:api:import` | Import OpenAPI, GraphQL, and SOAP/WSDL definitions |
-| `zap:scan:crawl:run` | Start guided crawl flows |
-| `zap:scan:attack:run` | Start guided attack flows |
+| `zap:scan:crawl:run` | Start a crawl |
+| `zap:scan:attack:run` | Start an active scan |
 | `zap:scan:policy:read` | List configured ZAP active-scan policies and inspect their current rule settings; does not start scans or change rules |
 | `zap:scan:read` | Read scan status, passive backlog, queue job state, scan history evidence, and evidence handoff summaries |
-| `zap:scan:stop` | Stop or cancel a guided operation |
-| `zap:auth:session:write` | Prepare guided authenticated sessions |
-| `zap:auth:test` | Validate prepared guided auth sessions |
+| `zap:scan:stop` | Stop or cancel a scan operation |
+| `zap:auth:session:write` | Prepare authentication sessions |
+| `zap:auth:test` | Validate prepared authentication sessions |
 
 ## Deny Contract
 
@@ -218,6 +218,6 @@ Normal MCP clients handle this automatically.
 - assign narrow scopes per client instead of sharing one broad key
 - keep `mcp:tools:list` only on clients that truly need discovery
 - disable wildcard scopes once migration is complete
-- grant each required guided action explicitly for restricted clients
+- grant each required action explicitly for restricted clients
 
-See the [guided catalog](../tool-surfaces/) for supported tools and [Upgrading to Guided Tools](../tool-migration/) for older client and scope configurations.
+See the [tool catalog](../tool-surfaces/) for supported tools and [Migrating older clients](../tool-migration/) for older client and scope configurations.

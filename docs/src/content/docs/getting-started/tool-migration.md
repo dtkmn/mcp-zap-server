@@ -1,26 +1,28 @@
 ---
-title: "Upgrading to Guided Tools"
+title: "Migrating Older Clients"
 editUrl: false
-description: "Migrate former expert tools, permissions and operation handles to the supported guided workflow."
+description: "Update tool calls, permissions, and scan tracking when upgrading an older client."
 ---
-Use this guide when upgrading an installation or client that used the former expert interface. For a new installation, start with the [guided tool catalog](../tool-surfaces/) and [scan-to-evidence workflow](../../scanning/mcp-client-scan-to-evidence/).
+<a id="upgrading-to-guided-tools"></a>
+
+Use this guide when upgrading an installation or client that used the former expert interface or started scans directly. For a new installation, start with the [scan tools](../tool-surfaces/) and [scan-to-evidence workflow](../../scanning/mcp-client-scan-to-evidence/).
 
 ## Replace Former Tool Calls
 
-New guided crawl and attack requests always use the protected scan-job queue, with either in-memory or PostgreSQL storage.
+Every new crawl or active scan enters the job queue, whether it uses in-memory or PostgreSQL storage.
 
 | Previous workflow | Current interface |
 | --- | --- |
-| Direct or explicit queue crawler starts | `zap_crawl_start`, then guided status/stop using its Operation ID |
-| Direct or explicit queue active-scan starts | `zap_attack_start`, then guided status/stop using its Operation ID |
+| Direct or explicit queue crawler starts | `zap_crawl_start`, then `zap_crawl_status` or `zap_crawl_stop` with its Operation ID |
+| Direct or explicit queue active-scan starts | `zap_attack_start`, then `zap_attack_status` or `zap_attack_stop` with its Operation ID |
 | Policy listing and inspection | `zap_scan_policies_list` and `zap_scan_policy_view`, requiring `zap:scan:policy:read` |
 | Family-specific schema imports | `zap_target_import` |
 | Raw findings summary, details or instances | `zap_findings_summary` and `zap_findings_details` |
 | Snapshot and diff | Existing `zap_findings_snapshot` and `zap_findings_diff` names remain available |
 | Raw report-template generation | `zap_report_generate` with its supported format/theme options |
-| Raw context/user setup | Operator-managed auth profiles and guided session preparation/validation |
+| Raw context/user setup | Operator-managed auth profiles, `zap_auth_session_prepare`, and `zap_auth_session_validate` |
 
-Raw inventory, job-ID administration/retry/dead-letter, scan-policy editing and policy-preview aliases have no equivalent raw MCP entrypoint. The guided catalog also has specific [inspection limits](../tool-surfaces/#current-capability-limits), including report templates, AJAX URL inventory and context/user inventories.
+Raw inventory, job-ID administration/retry/dead-letter, scan-policy editing and policy-preview aliases have no equivalent raw MCP entrypoint. The current tools also have [inspection limits](../tool-surfaces/#current-capability-limits), including report templates, AJAX URL inventory and context/user inventories.
 
 ## Remove Obsolete Mode Settings
 
@@ -33,21 +35,21 @@ Scope grants apply only to registered tools. Update restricted clients to grant 
 | Action | Required scope |
 | --- | --- |
 | Discover tools | `mcp:tools:list` |
-| Start a guided crawl | `zap:scan:crawl:run` |
-| Start a guided active scan | `zap:scan:attack:run` |
-| Read guided scan status | `zap:scan:read` |
-| Stop a guided scan | `zap:scan:stop` |
+| Start a crawl | `zap:scan:crawl:run` |
+| Start an active scan | `zap:scan:attack:run` |
+| Read scan status | `zap:scan:read` |
+| Stop a scan | `zap:scan:stop` |
 | List or inspect active-scan policies | `zap:scan:policy:read` |
 
-Legacy expert scopes are not automatically remapped to guided scan grants. In particular, `zap:scan:active:run` does not authorize `zap_attack_start`. Policy inspection does not grant permission to run attacks or edit rules. See [Tool Scope Authorization](../tool-scope-authorization/) for authentication, import, findings, report and maintenance scopes.
+Clients using legacy scopes need explicit grants for the current scan tools. In particular, `zap:scan:active:run` does not authorize `zap_attack_start`. Policy inspection does not grant permission to run attacks or edit rules. See [Tool Scope Authorization](../tool-scope-authorization/) for authentication, import, findings, report and maintenance scopes.
 
 Wildcard grants and authorization `warn` or `off` modes cannot restore an unregistered tool. Unknown and retired names receive the same generic MCP `Unknown tool` response. Add-on maintenance retains its separate explicit operator checks.
 
 ## Existing Operation Handles
 
-Finish or deliberately stop existing expert workflows before upgrading. Raw ZAP scan IDs and queue job IDs are not guided Operation IDs and cannot be substituted for them.
+Finish or stop workflows that use retired tools before upgrading. The status and stop tools require an Operation ID. A raw ZAP scan ID or queue job ID cannot substitute for it.
 
-Valid previously issued signed guided direct-operation handles retain status and stop support, subject to their existing signing-key lifetime. Preserve the configured signing key when handles must remain valid across MCP replacement. These compatibility controls do not permit new direct starts.
+If an older client received a signed Operation ID for a direct start, it can still check or stop that scan while its signing key remains valid. Preserve the configured signing key when handles must remain valid across MCP replacement. These compatibility controls do not permit new direct starts.
 
 ## Unresolved Launches and Reconciliation
 
@@ -63,7 +65,7 @@ There is no supported MCP command to attach a native scan ID, manually clear a l
 
 ## Automation Framework
 
-The former MCP Automation Framework plan-run, plan-status and plan-artifact tools are retired. Plan IDs and plan paths cannot be converted into guided Operation IDs.
+The former MCP Automation Framework plan-run, plan-status and plan-artifact tools are retired. Plan IDs and plan paths cannot be converted into scan Operation IDs.
 
 For agent-driven scanning, sequence the supported tools: prepare authentication or import an API definition when required, start an authorized crawl or attack, monitor its Operation ID, wait for passive analysis, then read findings and retrieve reports. See [Scan Execution](../../scanning/scan-execution-modes/).
 
@@ -73,4 +75,4 @@ Automation workspace settings and optional native examples do not expose plan ex
 
 ## Release-Specific Upgrade Notes
 
-This page describes the current guided interface. Consult the [release notes archive](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/README.md) for the behavior and upgrade requirements of an older release, and deploy matching source, chart and image versions.
+This page describes the current MCP tools. Consult the [release notes archive](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/releases/README.md) for the behavior and upgrade requirements of an older release, and deploy matching source, chart and image versions.

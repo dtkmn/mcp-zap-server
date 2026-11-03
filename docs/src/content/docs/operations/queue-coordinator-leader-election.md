@@ -52,13 +52,18 @@ Environment variables:
 - any replica can serve durable read paths and job mutations
 - any replica can claim queued work, start scans, and poll running progress once it owns the durable claim
 - running scans keep a renewable claim lease
-- if a worker disappears and the lease expires, another replica can recover polling ownership from the stored ZAP scan ID
-- queue workers only apply start/poll results if they still own the same fenced claim
+- if a worker disappears and its lease expires, outstanding launch receipts are held as `START_OUTCOME_UNKNOWN`; another replica does not automatically adopt the stored ZAP scan ID
+- queue workers only apply poll results if they still own the same fenced claim
 - lease renewal keeps the same fence; reclaim after expiry creates a new fence
-- if a late start result arrives after ownership moved, the stale result is rejected and the stray scan is stopped instead of being adopted twice
+- a late scan ID is accepted only for its exact outstanding launch attempt and resolution version; rejecting a stale result does not prove that its scan stopped
 - queued active/spider capacity is checked under the Postgres queue mutation boundary so replicas cannot over-claim the same global capacity slot
 - queue admission supports an optional client-generated `idempotencyKey`; a safe retry returns the existing durable job rather than creating a duplicate
 - queue status responses surface claim owner and claim expiry
+
+Held jobs retain their capacity reservations, and ZAP may still be running the
+scan. The current MCP tools cannot manually adopt the scan or clear its hold.
+See [Restart and Ownership](../scan-queue-retry-policy/#restart-and-ownership)
+for the recovery limitations.
 
 ## Observability
 
@@ -82,9 +87,10 @@ Queue claim events include:
 
 1. start 2 replicas with shared queue state
 2. submit queued jobs and confirm no duplicate scan starts
-3. terminate the worker currently polling a running job
-4. wait for the claim lease to expire
-5. verify another replica recovers polling without starting a duplicate scan
+3. confirm a running job has a recorded native scan ID, then terminate its worker
+4. wait for the claim lease to expire and another worker to process the queue
+5. verify the outstanding launch is held as `START_OUTCOME_UNKNOWN`, with its capacity reserved and no duplicate scan start
+6. confirm another replica does not automatically resume polling that native scan ID
 
 If you use `postgres-lock`, also verify the coordinator leadership metrics still behave as expected.
 
@@ -93,7 +99,10 @@ If you use `postgres-lock`, also verify the coordinator leadership metrics still
 - MCP replicas fail with missing-schema errors:
   - run Flyway migrations before scaling replicas
   - verify the expected shared tables exist (`scan_jobs`, `jwt_token_revocation`, and `scan_history_entries` when the ledger is Postgres-backed)
-- Claims are not recovering:
+- A job remains held after worker loss:
+  - this is expected for an outstanding launch whose ownership is unconfirmed; a saved scan ID alone does not permit adoption
+  - preserve the job database and journal; do not delete recovery state or submit a replacement scan to bypass the hold
+- Claims expire unexpectedly:
   - verify worker clocks are reasonably in sync
   - confirm Flyway/schema readiness completed and `claim_owner_id`, `claim_fence_id`, `claim_heartbeat_at`, and `claim_expires_at` columns are present in `scan_jobs`
   - increase `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS` if startup or polling calls can legitimately run longer

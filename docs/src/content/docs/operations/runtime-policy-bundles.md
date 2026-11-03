@@ -57,7 +57,7 @@ A bundle is a JSON document with this shape:
   "kind": "PolicyBundle",
   "metadata": {
     "name": "ci-guided-guardrails",
-    "description": "Allow guided CI scans on sandbox hosts during staffed hours.",
+    "description": "Allow CI scans on sandbox hosts during staffed hours.",
     "owner": "security-platform",
     "labels": {
       "channel": "ci",
@@ -71,7 +71,7 @@ A bundle is a JSON document with this shape:
     "rules": [
       {
         "id": "allow-guided-ci-sandbox-hours",
-        "description": "Permit target-bearing guided CI calls for sandbox hosts during staffed hours.",
+        "description": "Permit CI calls with a target for sandbox hosts during staffed hours.",
         "decision": "allow",
         "reason": "Sandbox CI is approved during staffed rollout hours.",
         "match": {
@@ -95,9 +95,9 @@ A bundle is a JSON document with this shape:
       },
       {
         "id": "allow-guided-ci-followups-staffed-hours",
-        "description": "Permit guided lifecycle checks and workspace-confined report readback that do not carry a target parameter.",
+        "description": "Permit scan status checks and workspace-confined report readback that do not carry a target parameter.",
         "decision": "allow",
-        "reason": "Guided follow-up calls are approved during staffed hours; report readback is bounded by report/workspace artifact confinement, not host matching.",
+        "reason": "Follow-up calls are approved during staffed hours. Report reads are restricted to the workspace artifact path.",
         "match": {
           "tools": [
             "zap_crawl_status",
@@ -124,7 +124,7 @@ A bundle is a JSON document with this shape:
 Rules are evaluated in `first-match` order. Put explicit deny rules before broad allow rules. Keep `defaultDecision` set to `deny` unless you have a narrow, documented reason to do otherwise.
 
 Host-free requests do not match rules that require `hosts`.
-For guided lifecycle calls such as operation status, passive wait/status, or
+For calls that check scan status, wait for passive scanning, or request
 report readback, use a separate host-free rule unless the runtime can recover a
 target from signed operation/report state. A host-free report preview or chunk rule is
 not sandbox-host scoped; it authorizes report readback by path, with safety
@@ -144,7 +144,7 @@ Use those as starting points, not as production policy. Your actual bundle must 
 
 ## Previewing Decisions
 
-Runtime policy configuration supports `dry-run`, which records decisions for actual tool calls without blocking them. It is not a simulation: only perform actions that are authorized to execute. Rules must name tools in the current guided catalog.
+Runtime policy configuration supports `dry-run`, which records decisions for actual tool calls without blocking them. It is not a simulation: only perform actions that are authorized to execute. Rules must use tool names advertised by the server.
 
 ## Rollout Guidance
 

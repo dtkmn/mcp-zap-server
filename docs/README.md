@@ -78,12 +78,13 @@ directory; do not maintain a second copy of their bodies in the website tree.
 
 | Page | Canonical source | Website route |
 | --- | --- | --- |
+| v0.18.0 Release and Upgrade Guide | [RELEASE_NOTES_0.18.0.md](releases/RELEASE_NOTES_0.18.0.md) | `/releases/0.18.0/` |
 | v0.17.1 Release and Upgrade Guide | [RELEASE_NOTES_0.17.1.md](releases/RELEASE_NOTES_0.17.1.md) | `/releases/0.17.1/` |
 | Publishing a Scanner Release | [PUBLISHING.md](releases/PUBLISHING.md) | `/releases/publishing/` |
 | v0.17.0 Release and Upgrade Guide | [RELEASE_NOTES_0.17.0.md](releases/RELEASE_NOTES_0.17.0.md) | `/releases/0.17.0/` |
 | v0.16.0 Release and Upgrade Guide | [RELEASE_NOTES_0.16.0.md](releases/RELEASE_NOTES_0.16.0.md) | `/releases/0.16.0/` |
 | Self-Serve First Run | [SELF_SERVE_FIRST_RUN.md](getting-started/SELF_SERVE_FIRST_RUN.md) | `/getting-started/self-serve-first-run/` |
-| Agent-Guided Setup | [MCP ZAP Connect README](../plugins/mcp-zap-connect/README.md) | `/getting-started/agent-guided-setup/` |
+| Set Up with Your AI Client | [MCP ZAP Connect README](../plugins/mcp-zap-connect/README.md) | `/getting-started/agent-guided-setup/` |
 | MCP ZAP Connect Terms of Service | [MCP_ZAP_CONNECT_TERMS.md](getting-started/MCP_ZAP_CONNECT_TERMS.md) | `/getting-started/mcp-zap-connect-terms/` |
 | MCP ZAP Connect Privacy Policy | [MCP_ZAP_CONNECT_PRIVACY.md](getting-started/MCP_ZAP_CONNECT_PRIVACY.md) | `/getting-started/mcp-zap-connect-privacy/` |
 | AWS EC2 with Docker Compose | [AWS_EC2_COMPOSE_GUIDE.md](operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md) | `/operations/aws-ec2-compose/` |

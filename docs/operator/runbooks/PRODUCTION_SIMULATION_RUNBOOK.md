@@ -81,8 +81,8 @@ Pre-flight configuration:
 
 - target is a staging app you are authorized to test
 - MCP auth is enabled for the pilot client
-- the pilot client has only the scopes needed for auth prepare/validate, guided
-  crawl, guided attack, passive scan wait, findings, report generation, and
+- the pilot client has only the scopes needed to prepare and validate sessions, crawl,
+  run an active scan, wait for passive scanning, read findings, generate reports, and access
   scan-history evidence; include report-read permission when using MCP readback
 - `MCP_POLICY_MODE` is `enforce` or `dry-run`
 - `MCP_POLICY_BUNDLE_FILE` or `MCP_POLICY_BUNDLE` points at the pilot policy
@@ -104,12 +104,12 @@ Run sequence:
    `likelyAuthenticated=true`.
 5. Call `zap_crawl_start` with the same target, `strategy=http`, and the
    `authSessionId`.
-6. Record the crawl `correlationId`, guided `Operation ID`, execution mode, and
+6. Record the crawl `correlationId`, `Operation ID`, execution mode, and
    backend scan/job ID if present.
 7. Poll `zap_crawl_status` until complete enough for the pilot target.
 8. Call `zap_passive_scan_wait` and record the passive-scan outcome.
 9. Call `zap_attack_start` with the same target and `authSessionId`.
-10. Record the attack `correlationId`, guided `Operation ID`, execution mode,
+10. Record the attack `correlationId`, `Operation ID`, execution mode,
     and backend scan/job ID if present.
 11. Poll `zap_attack_status` until complete enough for the pilot target.
 12. Call `zap_passive_scan_wait` again before reading evidence.
@@ -145,7 +145,7 @@ Expected operator evidence:
 | Correlation IDs | One for auth prepare, auth validate, crawl, attack, passive wait, findings, and report generation. |
 | Auth evidence | Session ID SHA-256 fingerprint (never raw), context ID, user ID, provider, engine binding, validation outcome, and diagnostics. |
 | Policy evidence | `policy_decision` audit event with bounded tags and the same correlation ID as the tool call. |
-| Scan evidence | Guided operation ID plus backend scan ID or queued job ID where available. |
+| Scan evidence | Operation ID plus backend scan ID or queued job ID where available. |
 | Passive evidence | Passive scan wait result after crawl and after attack. |
 | Findings evidence | Findings summary and one details drilldown when findings exist. |
 | Report evidence | Generated report artifact path and readback/storage confirmation where available. |
@@ -155,8 +155,8 @@ Expected operator evidence:
 
 Concrete blockers must become follow-up issues before sign-off. Common examples:
 
-- authenticated guided AJAX crawl (`strategy=browser`) is required
-- bearer/API-key header injection is required for guided execution
+- authenticated AJAX crawl (`strategy=browser`) is required
+- bearer/API-key header injection is required during scanning
 - policy mode cannot emit an audit decision for the pilot tool call
 - scan job or operation IDs cannot be correlated with logs
 - report artifacts cannot be read back or mapped to durable storage
@@ -170,9 +170,15 @@ or passed with an explicit caveat.
 
 If the deployment uses multiple MCP replicas:
 
-- terminate or restart one MCP replica while a claimed queued job is active
-- confirm another replica resumes polling after lease expiry
+- terminate or restart one MCP replica while it owns a running scan with a recorded launch receipt
+- after lease expiry, confirm the job is held as `START_OUTCOME_UNKNOWN` with its capacity reserved
+- confirm another replica does not automatically adopt the native scan ID or resume polling it
 - confirm no duplicate scan start occurs
+
+A hold does not stop the original scan in ZAP. The current MCP tools cannot
+manually adopt that scan or clear the hold. Preserve the job database and
+journal, and review [Restart and Ownership](https://danieltse.org/mcp-zap-server/operations/scan-queue-retry-policy/#restart-and-ownership).
+Do not delete recovery state or submit another scan to bypass an unknown outcome.
 
 If the deployment is single-replica, record that HA recovery is out of scope for this run.
 
@@ -194,7 +200,7 @@ If the deployment is single-replica, record that HA recovery is out of scope for
 - health checks for MCP and ZAP
 - one authenticated MCP interaction trace
 - one policy decision audit event for the governed scan path
-- one guided operation ID plus backend scan or job ID where available
+- one Operation ID plus backend scan or job ID where available
 - one passive-scan wait result after scan traffic
 - one findings summary result
 - one generated report artifact reference
@@ -249,7 +255,7 @@ Evidence:
 - links or artifact references
 - representative correlation IDs
 - policy_decision audit event reference
-- guided operation ID and backend scan/job ID
+- Operation ID and backend scan/job ID
 - report artifact location
 - release evidence bundle summary, warnings, and customer handoff checklist result
 - restore timestamps / rollback revision

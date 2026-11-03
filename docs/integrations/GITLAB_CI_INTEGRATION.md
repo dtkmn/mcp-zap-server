@@ -33,7 +33,7 @@ The GitLab flow follows the same scan and findings sequence as the GitHub Action
 9. compare the normalized snapshot against the baseline file when present
 10. generate a report with `zap_report_generate`
 
-The helper uses guided start, status and report tools. It detects snapshot support from `tools/list`; the current guided catalog provides it. Older guided servers without snapshots cannot produce an enforceable baseline comparison. The helper never falls back to retired direct-start tools.
+The helper starts scans, checks their status, and generates reports. It uses `tools/list` to check for snapshot support. The current server supports snapshots. Older servers without snapshots cannot enforce a baseline comparison. The helper never falls back to retired direct-start tools.
 
 Artifacts are written into `.zap-artifacts/` by default and uploaded as GitLab job artifacts.
 
@@ -223,10 +223,10 @@ Default artifacts include:
 
 ## Notes
 
-- The GitLab wrapper uses guided queued scans and polls their Operation IDs. Failed, cancelled or uncertain outcomes fail the gate without another automatic start.
-- Use PostgreSQL when job history must survive a server restart; storage does not change the guided execution path.
+- The GitLab wrapper submits scans to the queue and polls their Operation IDs. Failed, cancelled or uncertain outcomes fail the gate without another automatic start.
+- Use PostgreSQL when job history must survive a server restart; both storage options use the same queue.
 - The compose example enables `ZAP_ALLOW_LOCALHOST=true` and `ZAP_ALLOW_PRIVATE_NETWORKS=true` because CI targets often live on private runner-local networks.
 
 ## Report Format Compatibility
 
-The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and maps them to guided HTML or JSON generation. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.
+The shared helper accepts `traditional-html-plus` and `traditional-json-plus` for its report-template option and requests an HTML or JSON report. Other template names are rejected before any scan starts. Arbitrary raw ZAP report-template selection is no longer exposed.

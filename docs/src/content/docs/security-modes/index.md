@@ -228,7 +228,7 @@ Useful follow-on docs:
 
 - [Tool Scope Authorization](../getting-started/tool-scope-authorization/)
 - [MCP Client Authentication](../getting-started/mcp-client-authentication/)
-- [Guided Tools](../getting-started/tool-surfaces/)
+- [Scan Tools](../getting-started/tool-surfaces/)
 
 ---
 

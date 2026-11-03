@@ -96,8 +96,7 @@ and make a harmless status call in ChatGPT.
    connector's login mode; the local MCP server still requires its API key,
    which the tunnel helper supplies. Do not paste either API key into the form.
 4. Review the risk notice and create the private plugin when you are ready to
-   grant ChatGPT access to its tools. Confirm that ChatGPT discovers the guided
-   ZAP tool names and schemas, then install/select the plugin in a conversation.
+   grant ChatGPT access to its tools. Confirm that ChatGPT discovers the ZAP tool names and schemas, then install/select the plugin in a conversation.
 
 The [official private-tunnel example](https://developers.openai.com/cookbook/examples/partners/aws/chatgpt_agents_sdk_aws_agentcore_cookbook/notebooks/chatgpt_agents_sdk_aws_agentcore_cookbook#7-test-the-plugin-connection-in-chatgpt-through-secure-mcp-tunnel)
 uses this connector authentication choice. This setup gives allowed tunnel
@@ -114,8 +113,7 @@ because the Mac package is running.
 For an HTTP target, ask:
 
 ```text
-Use only my MCP ZAP plugin. Run a guided crawl with strategy=http against my
-authorized target.
+Use only my MCP ZAP plugin. Run an HTTP crawl against my authorized target using strategy=http.
 Follow the tools' Next Actions and poll until the crawl completes. Wait for
 passive analysis, summarize findings scoped to this target, generate an HTML
 report for this target, and read the report back through MCP. Do not start an

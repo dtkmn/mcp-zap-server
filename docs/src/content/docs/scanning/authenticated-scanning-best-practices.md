@@ -1,7 +1,7 @@
 ---
 title: "Authenticated Scanning Reference"
 editUrl: false
-description: "Operator profile configuration, migration, and validation for guided authenticated scans."
+description: "Operator profile configuration, migration, and validation for authenticated scans."
 ---
 This is the advanced operator reference. If this is your first target that
 requires login, start with
@@ -14,26 +14,26 @@ If authentication is not proven immediately before the crawl or attack, the scan
 
 ## Recommended Path
 
-In `v0.10.0` and later, start with guided auth bootstrap:
+In `v0.10.0` and later, prepare and validate an authentication session before starting a scan.
 
 - `zap_auth_session_prepare`
 - `zap_auth_session_validate`
 - `zap_crawl_start` with `authSessionId`
 - `zap_attack_start` with `authSessionId`
 
-These tools are available in the guided catalog. Raw ZAP context and user mutation aliases are no longer exposed.
+The server manages the ZAP context and user for the session.
 
 The profile contract is available in `v0.10.0` and later. Traditional form-login
 support is limited to the HTTP spider and active scan paths; it does not imply
 OAuth, SSO, MFA, CAPTCHA, or JavaScript-heavy browser login support.
 
-In `v0.13.0`, browser profiles (`kind: browser`) support guided Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
+In `v0.13.0`, browser profiles (`kind: browser`) support Client Spider crawling through ZAP's native browser authentication. They use the same operator-managed profile and credential-reference mechanism, with the scope described below.
 
-Treat guided profile contexts as managed state. Fix the operator profile and prepare a new session instead of altering its ZAP context behind the guided workflow.
+To update a managed ZAP context, change the operator profile and prepare a new session.
 
 ## Operator Secret Setup
 
-Guided auth uses operator-managed profiles. MCP callers select a profile and a target URL; they cannot choose or recombine its credential, login URL, or allowed origin.
+Scan authentication uses operator-managed profiles. MCP callers select a profile and a target URL; they cannot choose or recombine its credential, login URL, or allowed origin.
 
 This is a deployment-level trust boundary, not tenant isolation:
 
@@ -74,7 +74,7 @@ The ZAP context name is derived from the unique profile ID with an `-auth` suffi
 
 ## Browser Authentication for Client Spider
 
-> **Version `v0.13.0`:** In this version, Client Spider supports guided browser authentication in direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
+> **Version `v0.13.0`:** In this version, Client Spider supports browser authentication in direct and queued crawls. These features are not included in `v0.12.0`. Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and successful image publication before installing.
 
 Add a separate browser profile to the same deployment configuration:
 
@@ -94,7 +94,7 @@ mcp:
             logged-out-indicator-regex: ".*Sign in.*"
 ```
 
-ZAP discovers the username/password fields and logs into headless Firefox. Browser profiles enable automatic session detection so ZAP can replay cookies or header tokens, including bearer tokens, when verifying authentication. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This guided profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
+ZAP discovers the username/password fields and logs into headless Firefox. Browser profiles enable automatic session detection so ZAP can replay cookies or header tokens, including bearer tokens, when verifying authentication. Omit `username-field` and `password-field`; these HTTP form settings are rejected for browser profiles. The login URL and target must share the configured origin. This browser profile supports automatic username/password login, without custom authentication steps, client scripts, or MFA configuration.
 
 Set the existing `ZAP_API_READ_TIMEOUT_MS=60000` for browser-auth deployments (`mcp.zapClient.readTimeoutMs: 60000` in Helm). Validation launches Firefox and waits for login; the default 10-second API read timeout can expire before it finishes. This changes the existing ZAP API timeout, without adding a separate browser timeout.
 
@@ -102,8 +102,8 @@ Set the existing `ZAP_API_READ_TIMEOUT_MS=60000` for browser-auth deployments (`
 has no saved page record, follow the
 [browser-storage troubleshooting steps and native API example](../client-spider/#browser-storage-alerts-missing-during-login).
 You can ask the same ZAP session to visit the application's home page before
-browser login; a full spider run is not needed. The guided workflow does not
-perform this step automatically. It is a troubleshooting option, not an
+browser login; a full spider run is not needed. The scanner does not visit that page
+automatically before login. It is a troubleshooting option, not an
 authentication prerequisite; still validate a fresh protected response below.
 
 1. Call `zap_auth_session_prepare` with `profileId: shop-browser` and a protected target URL whose response matches the configured logged-in indicator.
@@ -111,13 +111,13 @@ authentication prerequisite; still validate a fresh protected response below.
 3. Call `zap_crawl_start` with the target URL, `strategy: client`, and that `authSessionId`.
 4. Use the returned operation ID for `zap_crawl_status` and `zap_crawl_stop`. Verify that protected pages were reached and returned authenticated content before trusting crawl coverage; a stopped crawl or successful start response does not prove authentication. Wait for passive scanning before reviewing findings.
 
-Guided starts queue the crawl with the prepared ZAP context and user on either storage backend. Browser profiles currently support Client Spider only: `auto`, HTTP, AJAX, and guided active scans reject them. Keep a `kind: form` profile for the existing HTTP/active authentication paths. Authentication Helper, Client Side Integration, Selenium, Firefox, and WebDriver must be available in ZAP; API configuration of browser authentication requires ZAP 2.16.1 or newer.
+The server queues the crawl with the prepared ZAP context and user on either storage backend. Browser profiles currently support Client Spider only: `auto`, HTTP, AJAX, and active scans reject them. Keep a `kind: form` profile for the existing HTTP/active authentication paths. Authentication Helper, Client Side Integration, Selenium, Firefox, and WebDriver must be available in ZAP; API configuration of browser authentication requires ZAP 2.16.1 or newer.
 
 ## Upgrade Migration: Profiles Are Explicit
 
 Replace the removed `MCP_AUTH_BOOTSTRAP_ALLOWED_CREDENTIAL_REFERENCES` and
 `MCP_AUTH_BOOTSTRAP_ALLOW_INLINE_SECRETS` settings. The new profile list defaults
-to empty. A deployment can therefore report healthy while exposing no guided auth
+to empty. A deployment can therefore report healthy while exposing no auth
 profiles.
 
 Profiles are compiled only at process startup. After changing profile configuration
@@ -231,6 +231,12 @@ kubectl -n "$NAMESPACE" create secret generic mcp-zap-auth-profile \
 Each protected file must contain only the raw secret value, without a trailing
 newline.
 
+The example below uses the in-memory job store for a single MCP controller.
+Because it uses `mcp.envFrom`, the chart requires an explicit job backend to
+select the matching launch-safety storage. For an existing Postgres deployment,
+keep `mcp.scan.jobs.store.backend: postgres` and its database configuration;
+do not switch stores when adding an authentication profile.
+
 Merge this into the values used by the deployment as `auth-profile-values.yml`:
 
 ```yaml
@@ -241,6 +247,10 @@ zap:
       apiKeyKey: ZAP_API_KEY
 
 mcp:
+  scan:
+    jobs:
+      store:
+        backend: in-memory # Keep postgres for an existing Postgres deployment.
   security:
     existingSecret:
       name: mcp-zap-runtime
@@ -411,7 +421,6 @@ PREPARE_TEXT=$(printf '%s' "$PREPARE_JSON" | jq -er '
   .result.content[] | select(.type == "text") | .text |
   if startswith("\"") and endswith("\"") then fromjson else . end
 ')
-printf '%s\n' "$PREPARE_TEXT" | grep -F 'Guided auth session prepared.'
 printf '%s\n' "$PREPARE_TEXT" | grep -F 'Auth Profile: shop-form'
 printf '%s\n' "$PREPARE_TEXT" | grep -F 'Authorized Origin: https://shop.example.com'
 AUTH_SESSION_ID=$(printf '%s\n' "$PREPARE_TEXT" | sed -n 's/^Session ID: //p')
@@ -506,7 +515,7 @@ authenticated scan.
 }
 ```
 
-Guided authenticated crawl accepts prepared form-login sessions with `strategy=http` or `auto`, and prepared browser sessions with `strategy=client`. AJAX crawl (`strategy=browser`) with `authSessionId` is not supported. A browser session cannot currently be used for guided active scanning.
+`zap_crawl_start` accepts prepared form-login sessions with `strategy=http` or `auto`, and prepared browser sessions with `strategy=client`. AJAX crawl (`strategy=browser`) with `authSessionId` is not supported. A browser session cannot currently be used for active scanning.
 
 ### 4. Attack as the Prepared Session
 
@@ -538,7 +547,7 @@ Auth profiles also accept:
 - `kind: bearer`
 - `kind: api-key`
 
-For those flows, validation proves the credential reference resolves. It does not prove the target accepts the header, and current guided ZAP execution does not automatically inject those headers into crawl or attack execution.
+For those flows, validation proves the credential reference resolves. It does not prove the target accepts the header, and the scanner does not automatically send those headers during a crawl or active scan.
 
 Use bearer and API-key bootstrap for gateway credential-reference preparation today. Do not sell it as authenticated scan execution until header injection is implemented in the engine path.
 
@@ -557,7 +566,7 @@ Use bearer and API-key bootstrap for gateway credential-reference preparation to
 
 ## Unsupported Authentication Workflows
 
-Guided profiles do not provide arbitrary script or custom login-step configuration. Use a separately managed ZAP workflow when the supported form, browser or header profiles cannot express the required authentication. Do not silently continue an authenticated scan anonymously.
+Authentication profiles do not provide arbitrary script or custom login-step configuration. Use a separately managed ZAP workflow when the supported form, browser or header profiles cannot express the required authentication. Do not silently continue an authenticated scan anonymously.
 
 ## Common Pitfalls
 
@@ -565,8 +574,8 @@ Guided profiles do not provide arbitrary script or custom login-step configurati
 - `targetUrl origin is not authorized for auth profile`: the caller tried to use a profile outside its operator-approved origin.
 - `Auth profile ... is invalid`: fix the operator configuration before retrying.
 - `likelyAuthenticated` is not `true`: indicators, field names, credentials, target behavior, or ZAP diagnostics are wrong or indeterminate.
-- Header session validates but crawl is still unauthenticated: bearer/API-key header injection is not in the guided engine path yet.
-- Crawl strategy `browser` rejects auth: this selects AJAX Spider, which does not support guided `authSessionId`. For Client Spider, use `strategy=client` with a `kind: browser` profile as described above.
+- Header session validates but crawl is still unauthenticated: the scanner does not automatically send bearer or API-key headers.
+- Crawl strategy `browser` rejects auth: this selects AJAX Spider, which does not support `authSessionId`. For Client Spider, use `strategy=client` with a `kind: browser` profile as described above.
 
 If you are debugging an incident, use the
 [Auth Bootstrap Failure Runbook](https://github.com/dtkmn/mcp-zap-server/blob/main/docs/operator/runbooks/AUTH_BOOTSTRAP_FAILURE_RUNBOOK.md).

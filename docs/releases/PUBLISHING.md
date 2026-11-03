@@ -14,8 +14,13 @@ build produces Actions artifacts; it does not attach public release downloads.
 
 - The final release commit is on `main`, reviewed, and has passed its required
   checks. Use its approved full commit SHA throughout these steps.
-- Scanner/application, chart, Registry-source and fresh-install defaults match
-  the scanner release version. Desktop and plugin versions are independent.
+- Scanner/application, all three plugin manifests, chart, Registry-source and
+  server installation defaults match the intended scanner release version.
+  The source version in `build.gradle` is the shared repository/plugin version;
+  the release tag adds the leading `v`. Desktop retains its separate version.
+  The plugin's supported-scanner pin may target an earlier published release.
+  Development source may advance before image, chart and Registry preparation;
+  complete that preparation before creating the release tag.
 - GitHub immutable releases are enabled. GitHub CLI is already authenticated
   with access to the repository and its draft releases; Python 3 is available.
 - The release notes explain supported behavior, compatibility, upgrade steps and
@@ -29,11 +34,38 @@ that step.
 
 ```bash
 REPOSITORY=dtkmn/mcp-zap-server
-RELEASE_TAG=v0.17.1
+RELEASE_TAG=REPLACE_WITH_INTENDED_RELEASE_TAG
 RELEASE_COMMIT=REPLACE_WITH_APPROVED_FULL_COMMIT_SHA
 ```
 
 ## 1. Create the tag and save a draft
+
+Before tagging a release that contains MCP ZAP Connect, run its version check
+against the preceding published release, for example:
+
+```bash
+python3 scripts/check-plugin-version.py --base-ref v0.17.1
+```
+
+Use the actual preceding release as the baseline, not the candidate's own tag.
+The check requires all client manifests to equal the `build.gradle` source
+version. Changed plugin files must advance both the previous plugin version
+and repository release version, including the transition from the historical
+`0.5.x` plugin series. CI runs this check, and the Release workflow runs it
+after verifying that the tag matches the source version, before publishing
+images. It does not verify remote publication or perform an installation.
+Record the shared repository/plugin version and supported scanner release in
+the release notes. Keep published releases unchanged; a plugin-only fix needs
+a new repository release, and a server-only release advances the plugin too.
+
+The plugin's scanner compatibility pin targets an already-published scanner
+release, including its reviewed commit and image; it need not match the tag
+containing the plugin. Update that pin only after the scanner release is
+available and the setup path has been checked. Never move a published tag to
+include a plugin fix. Verify fresh plugin installation and deliberate updates
+preserve existing client/scanner settings before advertising the new plugin.
+Update normal installation instructions to the new tag only after publication;
+keep `main` instructions limited to explicit development use.
 
 Verify the selected commit and required checks before creating a new tag. Check
 the Git remote points to the intended repository. Do not move or reuse an

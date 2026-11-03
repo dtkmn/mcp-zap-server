@@ -7,6 +7,26 @@ const generatedRoot = join(repoRoot, 'docs/src/content/docs/generated');
 
 const pages = [
   {
+    source: 'docs/releases/RELEASE_NOTES_0.18.0.md',
+    slug: 'releases/0.18.0',
+    title: 'v0.18.0 Release and Upgrade Guide',
+    description: 'Upgrade from v0.17.1 to queued scan starts and plan for tool changes, storage migration and recovery limits.',
+    links: {
+      'RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
+      '../../CHANGELOG.md#unreleased': 'https://github.com/dtkmn/mcp-zap-server/blob/main/CHANGELOG.md#unreleased',
+      '../../CONTRIBUTING.md#local-stack': 'https://github.com/dtkmn/mcp-zap-server/blob/main/CONTRIBUTING.md#local-stack',
+      '../src/content/docs/getting-started/tool-surfaces.md': '/mcp-zap-server/getting-started/tool-surfaces/',
+      '../src/content/docs/getting-started/tool-migration.md': '/mcp-zap-server/getting-started/tool-migration/',
+      '../src/content/docs/operations/scan-queue-retry-policy.md': '/mcp-zap-server/operations/scan-queue-retry-policy/',
+      '../src/content/docs/scanning/scan-policy-controls.md': '/mcp-zap-server/scanning/scan-policy-controls/',
+      '../src/content/docs/operations/engine-addons.md': '/mcp-zap-server/operations/engine-addons/',
+      '../src/content/docs/operations/observability.md': '/mcp-zap-server/operations/observability/',
+      '../scanning/CI_GATE_CONTRACTS.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/docs/scanning/CI_GATE_CONTRACTS.md',
+      '../../helm/mcp-zap-server/README.md#scan-launch-safety-storage': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#scan-launch-safety-storage',
+      '../../helm/mcp-zap-server/README.md#preserve-launch-ownership-before-replacing-controllers': 'https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#preserve-launch-ownership-before-replacing-controllers',
+    },
+  },
+  {
     source: 'docs/releases/RELEASE_NOTES_0.17.1.md',
     slug: 'releases/0.17.1',
     title: 'v0.17.1 Release and Upgrade Guide',
@@ -86,7 +106,7 @@ const pages = [
   {
     source: 'plugins/mcp-zap-connect/README.md',
     slug: 'getting-started/agent-guided-setup',
-    title: 'Agent-Guided Setup',
+    title: 'Set Up with Your AI Client',
     description: 'Install MCP ZAP Connect in your local AI client and request scanner setup.',
     links: {
       '../../packaging/claude-desktop/README.md': 'https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md',

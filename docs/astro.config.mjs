@@ -39,6 +39,7 @@ export default defineConfig({
 					label: 'Mission Control',
 					items: [
 						{ label: 'root@localhost:~', link: '/' },
+						{ slug: 'releases/0.18.0' },
 						{ slug: 'releases/0.17.1' },
 						{ slug: 'releases/publishing' },
 						{ slug: 'releases/0.17.0' },
@@ -50,7 +51,7 @@ export default defineConfig({
 						{ slug: 'getting-started/mcp-client-authentication' },
 						{ slug: 'getting-started/form-login-target-authentication' },
 						{ slug: 'getting-started/tool-surfaces' },
-						{ slug: 'getting-started/tool-migration' },
+						{ slug: 'getting-started/tool-migration', label: 'Migrating Older Clients' },
 						{ slug: 'getting-started/jwt-quick-start' },
 						{ slug: 'getting-started/tool-scope-authorization' },
 					],

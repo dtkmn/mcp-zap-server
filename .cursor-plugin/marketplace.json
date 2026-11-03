@@ -7,7 +7,7 @@
     {
       "name": "mcp-zap-connect",
       "source": "plugins/mcp-zap-connect",
-      "description": "Guided Docker Compose setup for local MCP ZAP Server in Codex, Cursor or Claude Code."
+      "description": "Set up MCP ZAP Server locally with Docker Compose in Codex, Cursor or Claude Code."
     }
   ]
 }

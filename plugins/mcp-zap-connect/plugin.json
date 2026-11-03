@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-zap-connect",
   "version": "0.18.0",
-  "description": "Guided local MCP ZAP setup, pre-scan readiness checks and explicit recovery for Codex, Cursor and Claude Code.",
+  "description": "Set up MCP ZAP locally with Codex, Cursor or Claude Code. Check readiness before scans and approve recovery steps when needed.",
   "author": {
     "name": "Daniel Tse",
     "url": "https://github.com/dtkmn"

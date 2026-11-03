@@ -111,7 +111,7 @@ that client's passive-status call; setup prerequisites must not block it.
   to `latest`, add an installer or create a second Compose configuration.
   Preserve existing `.env`, API keys, workspace files and target restrictions.
   Never print credentials or put them in command arguments, prompts or reports.
-- The packaged local client defaults to `*` for the curated guided tools.
+- The packaged local client uses the `*` grant for the standard scanner tools.
   Preserve existing grants, custom client lists, Compose overrides and
   `env_file` entries. Operators can use native per-client scope configuration
   for restricted or shared deployments. Do not insert, remove or widen scopes,
@@ -299,7 +299,7 @@ incomplete.
 ```text
 Use the scan-local-target skill to check the existing scanner and this client's
 connection first. If recovery is needed, explain it and wait for my approval.
-Run only a guided HTTP crawl against http://juice-shop:3000.
+Run only an HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish, summarize findings for this target,
 generate an HTML report scoped to that target, and retrieve the complete

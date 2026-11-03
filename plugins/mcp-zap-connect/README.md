@@ -189,8 +189,8 @@ Verify with a status call only; do not run a scan.
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning
 requires a separate request identifying your authorized target and intended
-workflow. The packaged local client uses `*` for the curated guided tools,
-including active attacks, authentication setup and imports. Run only the
+workflow. The packaged local client uses the `*` grant, which covers active scans,
+authentication setup and API imports. Run only the
 requested workflow. Existing settings and scopes are preserved; installing or
 reconnecting this plugin does not change permissions.
 See [Quick-Start Permissions](https://danieltse.org/mcp-zap-server/getting-started/tool-scope-authorization/#quick-start-permissions)
@@ -208,10 +208,22 @@ and intended workflow. For example:
 ```text
 Check my existing local scanner and this client's connection before starting.
 If recovery is needed, explain the required action and wait for my approval.
-Run only a guided HTTP crawl against http://juice-shop:3000, wait for passive
+Run only an HTTP crawl against http://juice-shop:3000, wait for passive
 analysis, summarize this target's findings, and return its complete HTML report.
 Do not start an active attack or change client settings or target restrictions.
 ```
+
+With version 0.18.0 of the plugin, you can request a crawl in plain language:
+
+| Ask the agent | What it runs |
+| --- | --- |
+| “Crawl this site.” | One HTTP Spider crawl of the authorized URL. |
+| “Crawl this site thoroughly.” | An HTTP Spider crawl, then a Client Spider crawl of the same URL to explore pages rendered by JavaScript. The browser pass starts only after the HTTP pass confirms success. |
+
+You can also request just HTTP, Client Spider or AJAX Spider. A thorough crawl
+uses two operations. If you stop the first one or its outcome is uncertain,
+the agent does not start the second one. For an authenticated site, each pass
+needs a compatible authorized session. Neither example starts an active scan.
 
 The skill runs `./bin/scanner-readiness.sh` from the selected scanner checkout,
 then verifies the selected connection with one native passive-status call. If
@@ -222,7 +234,7 @@ credentials and client settings are preserved. Recovery does not change Docker's
 startup-at-login settings. After a successful approved recovery, the skill
 rechecks readiness and resumes only your original request.
 
-These checks are an agent-guided workflow. The skills-only plugin cannot
+The agent runs these checks when you invoke the skill. The plugin cannot
 intercept calls sent directly to a separately configured MCP server. Invoke
 the scan skill to use this flow. A pure status-only request goes directly to
 the selected client's status tool without setup or recovery.

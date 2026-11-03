@@ -1,6 +1,6 @@
 ---
 name: scan-local-target
-description: Check local MCP ZAP scanner readiness before a requested crawl or scan in Codex, Cursor or Claude Code. Use for scanning a local Docker scanner target, including guided crawl-to-report requests and recovery after Docker or scanner changes. Preserve the selected client settings and require approval for recovery actions.
+description: Check local MCP ZAP scanner readiness before a requested crawl or scan in Codex, Cursor or Claude Code. Use for scanning a local Docker scanner target, including requests to crawl a site and generate a report and recovery after Docker or scanner changes. Preserve the selected client settings and require approval for recovery actions.
 ---
 
 # Check readiness and run the requested local workflow
@@ -123,13 +123,43 @@ after the status response.
 
 ## Run only the requested workflow
 
-Once preflight and the client's native status succeed, use the server's guided
-tools and Next Actions for the requested target and operations. Poll an already
-started crawl or scan as directed; do not start a duplicate workflow. Generate
-or retrieve reports only when requested. Preserve target restrictions and
-client settings throughout. The packaged local client uses `*` for the curated
-guided tools; an available tool does not authorize work outside the requested
-target and workflow. Preserve any explicit per-client restrictions.
+After preflight and the client's status check succeed, translate the user's
+request into crawl calls. Keep the exact authorized target URL for every pass.
+
+- **“Crawl this site”**: call `zap_crawl_start` once with `strategy="http"`.
+- **“Crawl this site thoroughly”**: call `zap_crawl_start` with `strategy="http"`. Only
+  after its status confirms success, call `zap_crawl_start` once on the same target with
+  `strategy="client"` so Client Spider can explore pages rendered by JavaScript.
+  Keep each pass's Operation ID separate. If using idempotency keys, use a
+  different key for each pass.
+- Explicit limits take precedence. “HTTP only” means one HTTP pass. A request
+  for Client Spider alone uses `strategy="client"`; AJAX Spider uses
+  `strategy="browser"`. Neither crawl request authorizes active scanning.
+  For authenticated crawling, use an authorized form-login session for HTTP
+  and an authorized browser session for Client Spider. If the needed session,
+  browser or add-on is unavailable, report which pass could not run. Never
+  switch to anonymous crawling or a different spider to finish it.
+
+Poll `zap_crawl_status` with the Operation ID returned by each start. A queued
+HTTP pass succeeds only when its status reply contains an unqualified
+`Status: SUCCEEDED`. While it is `QUEUED` (including waiting for capacity),
+`STARTING` or `RUNNING`, poll the same ID. For a direct HTTP crawl on v0.17.1,
+`Completed: no` means keep polling and `Completed: yes` confirms completion.
+A start acknowledgement or progress percentage alone does not establish success.
+
+Stop the sequence on failure, denial, timeout, missing status, or cancellation
+(including pending or unconfirmed cancellation). If a start returns no ID or
+a job is held with `START_OUTCOME_UNKNOWN`, report the uncertainty. Do not
+submit a replacement or start the second pass. If the user asks to stop, end the sequence and call
+`zap_crawl_stop` with the current pass’s Operation ID if it is still outstanding,
+even if the next pass would otherwise be eligible. Report a Client Spider result marked
+stopped or outcome unknown as such, even when progress reaches 100%.
+
+Follow the server's Next Actions within the user's request. For a crawl or active
+scan already in progress, poll its existing Operation ID. Generate or retrieve
+reports only when requested. Preserve target restrictions and
+client settings throughout. The packaged local client uses the `*` grant for the standard
+scanner tools. Use them only for the requested target and workflow. Preserve any explicit per-client restrictions.
 If a required tool returns `insufficient_scope`, stop that operation and explain
 its missing permission using the checkout's scope guide. A scan request, a tool
 appearing in discovery or a Next Action does not authorize widening scopes,

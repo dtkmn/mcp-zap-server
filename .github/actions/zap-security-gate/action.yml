@@ -26,11 +26,11 @@ inputs:
     required: false
     default: "zap-artifacts"
   report-template:
-    description: Guided report template, either traditional-html-plus or traditional-json-plus. Other templates are rejected before scanning.
+    description: Report template, either traditional-html-plus or traditional-json-plus. Other templates are rejected before scanning.
     required: false
     default: "traditional-html-plus"
   report-theme:
-    description: Report theme passed to guided report generation.
+    description: Theme used to generate the report.
     required: false
     default: "light"
   run-active-scan:
@@ -38,7 +38,7 @@ inputs:
     required: false
     default: "true"
   scan-policy:
-    description: Optional active-scan policy name to pass to the guided attack.
+    description: Optional active-scan policy name to use for the active scan.
     required: false
     default: ""
   fail-on-new-findings:
@@ -118,7 +118,7 @@ outputs:
     description: Baseline findings absent from the current run under matching scanner inventories. Empty when comparison is unavailable or incomparable; absence does not prove remediation.
     value: ${{ steps.gate.outputs.resolved_findings }}
   baseline-used:
-    description: Whether a baseline file was actually used. Guided self-serve flows may request a baseline but skip diff if snapshot tools are unavailable.
+    description: Whether a baseline file was actually used. The gate skips the comparison if the server does not expose snapshot tools.
     value: ${{ steps.gate.outputs.baseline_used }}
   gate-passed:
     description: Whether the gate stayed within the configured tolerance.
@@ -139,13 +139,13 @@ outputs:
     description: Path to the artifact manifest that ties the gate result, summary, diff, and report outputs together.
     value: ${{ steps.gate.outputs.manifest_path }}
   report-path:
-    description: Container-side report path returned by guided report generation.
+    description: Container-side report path returned by zap_report_generate.
     value: ${{ steps.gate.outputs.report_path }}
   report-local-path:
     description: Local copied report artifact path, when available.
     value: ${{ steps.gate.outputs.report_local_path }}
   metadata-path:
-    description: Path to the versioned CI Gate Result v1 JSON emitted by the helper script.
+    description: Path to the versioned CI Gate Result v2 JSON emitted by the helper script.
     value: ${{ steps.gate.outputs.metadata_path }}
 
 runs:

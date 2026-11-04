@@ -25,7 +25,7 @@ Checks the local self-serve API-key path end-to-end:
 - Docker and Compose availability
 - MCP and ZAP reachability
 - MCP authentication rejection, initialize + tools/list
-- guided scan, report, and evidence tool visibility
+- scan, report, and evidence tool visibility
 - one harmless tool call (zap_passive_scan_status)
 
 Options:
@@ -68,9 +68,9 @@ require_tool_in_list() {
   local body_file="$2"
 
   if grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${tool}\"" "${body_file}"; then
-    pass "Guided tool available: ${tool}"
+    pass "Tool available: ${tool}"
   else
-    fail "Guided tool missing from tools/list: ${tool}"
+    fail "Tool missing from tools/list: ${tool}"
   fi
 }
 

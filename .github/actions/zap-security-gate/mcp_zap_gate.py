@@ -1218,7 +1218,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--report-template",
         choices=("traditional-html-plus", "traditional-json-plus"),
         default="traditional-html-plus",
-        help="Supported guided report template; custom ZAP templates are not supported by this gate.",
+        help="Report template supported by the gate. Custom ZAP templates are unsupported.",
     )
     parser.add_argument("--report-theme", default="light")
     parser.add_argument("--run-active-scan", type=parse_bool, default=True)
@@ -1266,7 +1266,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not guided_surface:
         raise RuntimeError(
-            "The security gate requires guided MCP scan and report tools. "
+            "The security gate requires MCP scan and report tools. "
             f"Available tools were: {sorted(available_tools)}"
         )
 
@@ -1390,7 +1390,7 @@ def main(argv: list[str] | None = None) -> int:
             suppressions_note_path = output_dir / "suppressions-note.txt"
             write_text(
                 suppressions_note_path,
-                "Suppressions were requested, but the active guided tool surface does not expose snapshot support.\n",
+                "Suppressions were requested, but zap_findings_snapshot is unavailable.\n",
             )
             suppressions_summary["reason"] = "guided_surface_without_snapshot_support"
         else:
@@ -1416,7 +1416,7 @@ def main(argv: list[str] | None = None) -> int:
         baseline_note_path = output_dir / "baseline-note.txt"
         write_text(
             baseline_note_path,
-            "Baseline diff was requested, but the guided tool surface does not expose snapshot/diff tools.\n"
+            "Baseline comparison was requested, but zap_findings_snapshot is unavailable.\n"
             "This run still validated the self-serve crawl/attack/summary/report flow.\n",
         )
     elif baseline_requested:
@@ -1574,11 +1574,15 @@ def main(argv: list[str] | None = None) -> int:
     }
     write_json(metadata_path, metadata)
 
+    enforcement_explanation = (
+        "zap_findings_snapshot is unavailable"
+        if enforcement_failure_reason == "guided_surface_without_snapshot_support"
+        else enforcement_failure_reason
+    )
     gate_summary_lines = [
         "## MCP ZAP Security Gate",
         "",
         f"- Target: `{args.target_url}`",
-        f"- Tool surface: `{surface}`",
         f"- Crawl reference: `{crawl_reference}`",
         f"- Active scan: `{'enabled' if args.run_active_scan else 'skipped'}`",
         f"- Seed requests: `{0 if seed_results_contract is None else seed_results_contract['request_count']}`",
@@ -1611,7 +1615,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.baseline_mode == "seed" and enforcement_requested:
             gate_summary_lines.append("- Seed mode allows baseline review; no comparable new-findings assessment was made.")
     elif baseline_requested and not snapshot_supported:
-        gate_summary_lines.append("- Baseline diff was skipped because the guided self-serve surface does not expose snapshot/diff tools.")
+        gate_summary_lines.append("- Baseline comparison was skipped because zap_findings_snapshot is unavailable.")
     elif baseline_requested and not baseline_used:
         gate_summary_lines.append("- Baseline file was requested but not found.")
     else:
@@ -1619,10 +1623,10 @@ def main(argv: list[str] | None = None) -> int:
     if enforcement_failure_reason and not diff_available:
         gate_summary_lines.append(
             "- Gate failed: enforcement requested but no comparable findings diff could be produced "
-            f"(`{enforcement_failure_reason}`)."
+            f"({enforcement_explanation})."
         )
     if suppressions_requested and suppressions_summary["reason"]:
-        gate_summary_lines.append(f"- Suppressions skipped: `{suppressions_summary['reason']}`")
+        gate_summary_lines.append("- Suppressions skipped because zap_findings_snapshot is unavailable.")
     elif suppressions_requested:
         gate_summary_lines.append(
             f"- Suppression rules applied: `{len(suppressions_summary['matched_rule_ids'])}`"
@@ -1686,7 +1690,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(
                 "Security gate failed: enforcement requested but no comparable findings diff could be produced "
-                f"({enforcement_failure_reason}). Use --baseline-mode seed or "
+                f"({enforcement_explanation}). Use --baseline-mode seed or "
                 "--fail-on-new-findings false for first-run baseline review.",
                 file=sys.stderr,
             )

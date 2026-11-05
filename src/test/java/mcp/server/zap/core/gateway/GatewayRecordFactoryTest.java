@@ -42,14 +42,14 @@ class GatewayRecordFactoryTest {
         assertThatThrownBy(() -> factory.requireCapability(
                 engineAdapter,
                 EngineCapability.GUIDED_ATTACK,
-                "guided attack"
+                "active scanning"
         ))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
-                    assertThat(exception).hasMessage("Engine 'Metadata Only' does not support guided attack.");
+                    assertThat(exception).hasMessage("Engine 'Metadata Only' does not support active scanning.");
                     assertThat(exception.engineId()).isEqualTo("metadata");
                     assertThat(exception.engineDisplayName()).isEqualTo("Metadata Only");
                     assertThat(exception.capability()).isEqualTo(EngineCapability.GUIDED_ATTACK);
-                    assertThat(exception.operationLabel()).isEqualTo("guided attack");
+                    assertThat(exception.operationLabel()).isEqualTo("active scanning");
                     assertThat(exception.getMessage()).doesNotContain("https://", "token=", "secret");
                 });
     }

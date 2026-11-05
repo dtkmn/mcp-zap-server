@@ -5,8 +5,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import mcp.gateway.core.tool.McpToolSurface;
 import mcp.server.zap.core.service.AddonMaintenanceMcpToolsService;
-import mcp.server.zap.core.service.GuidedAuthSessionMcpToolsService;
-import mcp.server.zap.core.service.GuidedSecurityToolsService;
+import mcp.server.zap.core.service.AuthSessionMcpToolsService;
+import mcp.server.zap.core.service.SecurityMcpToolsService;
 import mcp.server.zap.core.service.PassiveScanMcpToolsService;
 import mcp.server.zap.core.service.ScanHistoryMcpToolsService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
@@ -69,7 +69,7 @@ class ToolSurfaceProviderTest {
 
     private ToolCallbackProvider provider() {
         return new McpServerApplication().toolCallbackProvider(
-                mock(GuidedSecurityToolsService.class), mock(GuidedAuthSessionMcpToolsService.class),
+                mock(SecurityMcpToolsService.class), mock(AuthSessionMcpToolsService.class),
                 mock(PassiveScanMcpToolsService.class), mock(ScanHistoryMcpToolsService.class),
                 mock(AddonMaintenanceMcpToolsService.class));
     }

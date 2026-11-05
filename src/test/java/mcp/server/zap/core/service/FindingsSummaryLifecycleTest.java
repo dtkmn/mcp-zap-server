@@ -18,7 +18,7 @@ import mcp.server.zap.core.history.ScanHistoryLedgerService;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
@@ -47,7 +47,7 @@ class FindingsSummaryLifecycleTest {
     private InMemoryScanJobStore jobs;
     private EngineFindingAccess findingAccess;
     private FindingsService findings;
-    private GuidedSecurityToolsService guided;
+    private SecurityMcpToolsService securityTools;
 
     @BeforeEach
     void setUp() {
@@ -67,11 +67,11 @@ class FindingsSummaryLifecycleTest {
         findingAccess = mock(EngineFindingAccess.class);
         findings = new FindingsService(findingAccess);
         findings.setScanHistoryLedgerService(ledger);
-        GuidedToolActions actions = mock(GuidedToolActions.class);
+        ToolActionAvailability actions = mock(ToolActionAvailability.class);
         when(actions.canCall(anyString())).thenReturn(true);
         ReportService reports = mock(ReportService.class);
-        guided = new GuidedSecurityToolsService(
-                mock(GuidedScanWorkflowService.class), mock(ActiveScanService.class), reports, findings,
+        securityTools = new SecurityMcpToolsService(
+                mock(ScanWorkflowService.class), mock(ActiveScanService.class), reports, findings,
                 mock(OpenApiService.class), new ZapEngineAdapter(), records, actions);
     }
 
@@ -174,8 +174,8 @@ class FindingsSummaryLifecycleTest {
     void retainedSnapshotToolsRejectForeignWorkspaceEvidenceBeforeEngineRead(String operation) {
         history.append(entry("scan_run", "started", TARGET, "client-b", Instant.now()));
         assertThatThrownBy(() -> {
-            if ("snapshot".equals(operation)) guided.exportFindingsSnapshot(TARGET);
-            else guided.diffFindings(TARGET, "{\"version\":2,\"fingerprints\":[]}", 10);
+            if ("snapshot".equals(operation)) securityTools.exportFindingsSnapshot(TARGET);
+            else securityTools.diffFindings(TARGET, "{\"version\":2,\"fingerprints\":[]}", 10);
         }).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No visible scan evidence exists");
         verifyNoInteractions(findingAccess);
     }
@@ -185,8 +185,8 @@ class FindingsSummaryLifecycleTest {
     void retainedSnapshotToolsRejectUnscannedTargetsBeforeEngineRead(String operation) {
         recordJob(ScanJobStatus.RUNNING);
         assertThatThrownBy(() -> {
-            if ("snapshot".equals(operation)) guided.exportFindingsSnapshot("https://target.example/other");
-            else guided.diffFindings("https://target.example/other", "{\"version\":2,\"fingerprints\":[]}", 10);
+            if ("snapshot".equals(operation)) securityTools.exportFindingsSnapshot("https://target.example/other");
+            else securityTools.diffFindings("https://target.example/other", "{\"version\":2,\"fingerprints\":[]}", 10);
         }).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No visible scan evidence exists");
         verifyNoInteractions(findingAccess);
     }
@@ -220,7 +220,7 @@ class FindingsSummaryLifecycleTest {
     private String read(EntryPoint entryPoint, String target) {
         return switch (entryPoint) {
             case SERVICE -> findings.getFindingsSummary(target);
-            case GUIDED -> guided.getGuidedFindingsSummary(target);
+            case GUIDED -> securityTools.getGuidedFindingsSummary(target);
         };
     }
 

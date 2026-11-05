@@ -14,8 +14,8 @@ import mcp.server.zap.core.model.ScanJobType;
 import mcp.server.zap.core.service.auth.bootstrap.AuthProfileResolver;
 import mcp.server.zap.core.service.auth.bootstrap.CredentialReferenceResolver;
 import mcp.server.zap.core.service.auth.bootstrap.FormLoginAuthBootstrapProvider;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import mcp.server.zap.core.service.auth.bootstrap.InMemoryPreparedAuthSessionRegistry;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
@@ -193,7 +193,7 @@ class DirectScanServicesDockerTest {
     @ParameterizedTest
     @MethodSource("guidedCrawlerModes")
     void guidedCrawlerSelectionKeepsNativeLifecycleAndMeasuredJavaScriptCoverage(
-            String strategy, GuidedExecutionModeResolver.ExecutionMode mode) throws Exception {
+            String strategy, ScanExecutionMode mode) throws Exception {
         if ("browser".equals(strategy)) {
             // AJAX stop status does not prove that its global engine is idle. Give these
             // independent contract cases a fresh class-owned engine; this is test isolation,
@@ -217,24 +217,24 @@ class DirectScanServicesDockerTest {
                 activeScanService, spiderScanService, ajaxSpider, clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
                 false, store, new SingleNodeQueueLeadershipCoordinator()));
-        GuidedScanWorkflowService guided = new GuidedScanWorkflowService(
+        ScanWorkflowService scanWorkflow = new ScanWorkflowService(
                 spiderScanService, ajaxSpider, clientSpiderService, activeScanService,
-                queue, mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(),
-                mock(GuidedToolActions.class));
+                queue, mock(AuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(),
+                mock(ToolActionAvailability.class));
         String operationId = null;
         try {
-            String started = guided.startCrawl(targetUrl, strategy, null, null);
+            String started = scanWorkflow.startCrawl(targetUrl, strategy, null, null);
             operationId = extractResponseValue(started, "Operation ID: ");
             assertTrue(started.contains("Strategy: " + effectiveStrategy), started);
             assertTrue(started.contains("Execution Mode: " + mode.name().toLowerCase(Locale.ROOT)), started);
-            String jobId = mode == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+            String jobId = mode == ScanExecutionMode.QUEUE
                     ? extractResponseValue(started, "Job ID: ") : null;
             String scanId;
             if (jobId != null) {
                 String operationToPoll = operationId;
                 // Queue admission can precede backend startup. Poll through normal dispatch.
                 await().atMost(Duration.ofSeconds(90)).pollInterval(Duration.ofMillis(250)).untilAsserted(() -> {
-                    String queuedStatus = guided.getCrawlStatus(operationToPoll);
+                    String queuedStatus = scanWorkflow.getCrawlStatus(operationToPoll);
                     var pending = store.load(jobId).orElseThrow();
                     assertTrue(pending.getZapScanId() != null && !pending.getZapScanId().isBlank(), queuedStatus);
                 });
@@ -249,7 +249,7 @@ class DirectScanServicesDockerTest {
             } else {
                 scanId = "browser".equals(effectiveStrategy) ? null : extractScanId(started);
             }
-            String status = guided.getCrawlStatus(operationId);
+            String status = scanWorkflow.getCrawlStatus(operationId);
             assertTrue(status.contains("Strategy: " + effectiveStrategy), status);
             if (jobId != null) {
                 assertTrue(status.contains("Job ID: " + jobId), status);
@@ -281,9 +281,9 @@ class DirectScanServicesDockerTest {
                         "HTTP crawl must still be running when cancellation is requested");
             }
             String operationToStop = operationId;
-            assertTrue(guided.stopCrawl(operationToStop).contains("Guided crawl stop requested."));
+            assertTrue(scanWorkflow.stopCrawl(operationToStop).contains("Crawl stop requested."));
             await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
-                String stopped = guided.getCrawlStatus(operationToStop);
+                String stopped = scanWorkflow.getCrawlStatus(operationToStop);
                 switch (effectiveStrategy) {
                     case "client" -> assertEquals(100, clientSpiderService.getClientSpiderProgressPercent(scanId));
                     case "browser" -> assertFalse(ajaxSpider.isAjaxSpiderRunning());
@@ -299,7 +299,7 @@ class DirectScanServicesDockerTest {
         } finally {
             try {
                 if (operationId != null) {
-                    guided.stopCrawl(operationId);
+                    scanWorkflow.stopCrawl(operationId);
                 }
             } finally {
                 queue.shutdownExecutor();
@@ -309,7 +309,7 @@ class DirectScanServicesDockerTest {
 
     private static Stream<Arguments> guidedCrawlerModes() {
         return Stream.of("http", "client", "browser", "auto")
-                .map(strategy -> Arguments.of(strategy, GuidedExecutionModeResolver.ExecutionMode.QUEUE));
+                .map(strategy -> Arguments.of(strategy, ScanExecutionMode.QUEUE));
     }
 
     private static void printBrowserVersion(String name, String executable) throws Exception {
@@ -364,22 +364,22 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
+    @EnumSource(value = ScanExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
-            GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
+            ScanExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
         assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, false);
     }
 
     @ParameterizedTest
-    @EnumSource(value = GuidedExecutionModeResolver.ExecutionMode.class, names = "QUEUE")
+    @EnumSource(value = ScanExecutionMode.class, names = "QUEUE")
     void guidedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
-            GuidedExecutionModeResolver.ExecutionMode mode, @TempDir Path temporaryDirectory)
+            ScanExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
         assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, true);
     }
 
-    private void assertPreparedBrowserSessionCrawl(GuidedExecutionModeResolver.ExecutionMode mode,
+    private void assertPreparedBrowserSessionCrawl(ScanExecutionMode mode,
                                                    Path temporaryDirectory, boolean bearerSession) throws Exception {
         // Browser authentication's auto-detected header/cookie replay depends on passive
         // session detection. Do not carry a previous duration test's backlog into login.
@@ -432,7 +432,7 @@ class DirectScanServicesDockerTest {
         FormLoginAuthBootstrapProvider authProvider = new FormLoginAuthBootstrapProvider(
                 new ContextUserService(new ZapEngineContextAccess(browserAuthApi)),
                 new CredentialReferenceResolver(), mock(UrlValidationService.class));
-        GuidedAuthSessionService authSessions = new GuidedAuthSessionService(
+        AuthSessionService authSessions = new AuthSessionService(
                 List.of(authProvider), new InMemoryPreparedAuthSessionRegistry(), new AuthProfileResolver(authProperties));
         String prepared = authSessions.prepareSession(profile.getId(), verificationUrl);
         String sessionId = prepared.lines().filter(line -> line.startsWith("Session ID: "))
@@ -455,19 +455,19 @@ class DirectScanServicesDockerTest {
                 activeScanService, spiderScanService, mock(AjaxSpiderService.class), clientSpiderService,
                 mock(UrlValidationService.class), new ScanLimitProperties(), retryPolicy, retryPolicy,
                 false, store, new SingleNodeQueueLeadershipCoordinator()));
-        GuidedScanWorkflowService guidedScans = new GuidedScanWorkflowService(
+        ScanWorkflowService scanWorkflow = new ScanWorkflowService(
                 mock(SpiderScanService.class), mock(AjaxSpiderService.class), clientSpiderService,
                 mock(ActiveScanService.class), queue, authSessions,
-                new ZapEngineAdapter(), new GatewayRecordFactory(), mock(GuidedToolActions.class));
+                new ZapEngineAdapter(), new GatewayRecordFactory(), mock(ToolActionAvailability.class));
         try {
-            String started = guidedScans.startCrawl(targetUrl, "client", null, sessionId);
+            String started = scanWorkflow.startCrawl(targetUrl, "client", null, sessionId);
             String operationId = started.lines().filter(line -> line.startsWith("Operation ID: "))
                     .map(line -> line.substring("Operation ID: ".length())).findFirst().orElseThrow();
-            String jobId = mode == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+            String jobId = mode == ScanExecutionMode.QUEUE
                     ? store.list().getFirst().getId() : null;
             try {
                 assertTrue(started.contains("Authenticated Session: " + sessionId));
-                String status = guidedScans.getCrawlStatus(operationId);
+                String status = scanWorkflow.getCrawlStatus(operationId);
                 assertTrue(status.contains("Strategy: client"));
                 if (jobId != null) {
                     var job = store.load(jobId).orElseThrow();
@@ -493,9 +493,9 @@ class DirectScanServicesDockerTest {
                 assertTrue(clientSpiderService.getClientSpiderProgressPercent(scanId) < 100,
                         "The crawl must still be running so the stop request exercises active cancellation");
             } finally {
-                guidedScans.stopCrawl(operationId);
+                scanWorkflow.stopCrawl(operationId);
                 await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
-                    String status = guidedScans.getCrawlStatus(operationId);
+                    String status = scanWorkflow.getCrawlStatus(operationId);
                     String scanId = jobId == null ? extractScanId(started) : store.load(jobId).orElseThrow().getZapScanId();
                     assertEquals(100, clientSpiderService.getClientSpiderProgressPercent(scanId));
                     if (jobId != null) {

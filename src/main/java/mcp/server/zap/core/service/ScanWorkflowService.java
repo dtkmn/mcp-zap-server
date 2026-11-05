@@ -12,19 +12,19 @@ import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import mcp.server.zap.core.service.protection.ClientWorkspaceResolver;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Guided scan orchestration for crawl and attack flows without exposing MCP transport details.
+ * Orchestrates crawls and active scans without exposing MCP transport details.
  */
 @Service
-public class GuidedScanWorkflowService {
+public class ScanWorkflowService {
     private static final String PREFIX_OPERATION_ID = "zop_";
     private static final byte[] PROCESS_OPERATION_SIGNING_SECRET =
             UUID.randomUUID().toString().getBytes(StandardCharsets.UTF_8);
@@ -43,33 +43,33 @@ public class GuidedScanWorkflowService {
     private final ClientSpiderService clientSpiderService;
     private final ActiveScanService activeScanService;
     private final ScanJobQueueService scanJobQueueService;
-    private final GuidedAuthSessionService guidedAuthSessionService;
+    private final AuthSessionService authSessionService;
     private final EngineAdapter engineAdapter;
     private final GatewayRecordFactory gatewayRecordFactory;
-    private final GuidedToolActions guidedToolActions;
+    private final ToolActionAvailability toolActionAvailability;
     private ClientWorkspaceResolver clientWorkspaceResolver;
 
     @Value("${mcp.server.guided.operation-signing-secret:${JWT_SECRET:}}")
     private String operationSigningSecret;
 
-    public GuidedScanWorkflowService(SpiderScanService spiderScanService,
-                                     AjaxSpiderService ajaxSpiderService,
-                                     ClientSpiderService clientSpiderService,
-                                     ActiveScanService activeScanService,
-                                     ScanJobQueueService scanJobQueueService,
-                                     GuidedAuthSessionService guidedAuthSessionService,
-                                     EngineAdapter engineAdapter,
-                                     GatewayRecordFactory gatewayRecordFactory,
-                                     GuidedToolActions guidedToolActions) {
+    public ScanWorkflowService(SpiderScanService spiderScanService,
+                               AjaxSpiderService ajaxSpiderService,
+                               ClientSpiderService clientSpiderService,
+                               ActiveScanService activeScanService,
+                               ScanJobQueueService scanJobQueueService,
+                               AuthSessionService authSessionService,
+                               EngineAdapter engineAdapter,
+                               GatewayRecordFactory gatewayRecordFactory,
+                               ToolActionAvailability toolActionAvailability) {
         this.spiderScanService = spiderScanService;
         this.ajaxSpiderService = ajaxSpiderService;
         this.clientSpiderService = clientSpiderService;
         this.activeScanService = activeScanService;
         this.scanJobQueueService = scanJobQueueService;
-        this.guidedAuthSessionService = guidedAuthSessionService;
+        this.authSessionService = authSessionService;
         this.engineAdapter = engineAdapter;
         this.gatewayRecordFactory = gatewayRecordFactory;
-        this.guidedToolActions = guidedToolActions;
+        this.toolActionAvailability = toolActionAvailability;
     }
 
     @Autowired(required = false)
@@ -79,7 +79,7 @@ public class GuidedScanWorkflowService {
 
     public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
-        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "guided crawl");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "crawling");
         String normalizedStrategy = normalizeCrawlStrategy(strategy);
         PreparedAuthSession preparedAuthSession = resolvePreparedSession(authSessionId, normalizedTargetUrl,
                 STRATEGY_CLIENT.equals(normalizedStrategy) ? AuthBootstrapKind.BROWSER : AuthBootstrapKind.FORM);
@@ -104,7 +104,7 @@ public class GuidedScanWorkflowService {
 
     public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
-        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "guided attack");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "active scanning");
         PreparedAuthSession preparedAuthSession = resolvePreparedSession(
                 authSessionId, normalizedTargetUrl, AuthBootstrapKind.FORM);
         return formatStartedOperation(
@@ -158,7 +158,7 @@ public class GuidedScanWorkflowService {
         String note = queuedCrawlNote(requestedStrategy, effectiveStrategy, preparedAuthSession);
         return startedOperation(
                 OperationKind.CRAWL,
-                GuidedExecutionModeResolver.ExecutionMode.QUEUE,
+                ScanExecutionMode.QUEUE,
                 effectiveStrategy,
                 extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
                 delegateResponse,
@@ -174,9 +174,9 @@ public class GuidedScanWorkflowService {
             return STRATEGY_AUTO.equals(requestedStrategy) ? AUTO_QUEUE_HTTP_NOTE : null;
         }
         if (STRATEGY_CLIENT.equals(effectiveStrategy)) {
-            return "Authenticated guided crawl applied the prepared browser session via ZAP context/user routing.";
+            return "Authenticated crawl applied the prepared browser session via ZAP context/user routing.";
         }
-        return "Authenticated guided crawl applied the prepared form-login session via ZAP context/user routing.";
+        return "Authenticated crawl applied the prepared form-login session via ZAP context/user routing.";
     }
 
     private StartedOperation startAttackOperation(String targetUrl,
@@ -196,33 +196,33 @@ public class GuidedScanWorkflowService {
                 : scanJobQueueService.queueActiveScan(targetUrl, recurse, policy, idempotencyKey);
         return startedOperation(
                 OperationKind.ATTACK,
-                GuidedExecutionModeResolver.ExecutionMode.QUEUE,
+                ScanExecutionMode.QUEUE,
                 STRATEGY_ACTIVE,
                 extractValueByPrefix(delegateResponse, JOB_ID_PREFIX),
                 delegateResponse,
                 preparedAuthSession != null
-                        ? "Authenticated guided attack applied the prepared form-login session via ZAP context/user routing."
+                        ? "Authenticated active scan applied the prepared form-login session via ZAP context/user routing."
                         : null,
                 preparedAuthSession
         );
     }
 
     private StartedOperation startedOperation(OperationKind kind,
-                                              GuidedExecutionModeResolver.ExecutionMode executionMode,
+                                              ScanExecutionMode executionMode,
                                               String strategy,
                                               String backendId,
                                               String delegateResponse,
                                               String note,
                                               PreparedAuthSession preparedAuthSession) {
         return new StartedOperation(
-                new GuidedOperation(kind, executionMode, strategy, backendId),
+                new ScanOperation(kind, executionMode, strategy, backendId),
                 delegateResponse,
                 note,
                 preparedAuthSession
         );
     }
 
-    private String getOperationStatus(GuidedOperation operation) {
+    private String getOperationStatus(ScanOperation operation) {
         return switch (operation.kind()) {
             case CRAWL -> switch (operation.executionMode()) {
                 case QUEUE -> scanJobQueueService.getScanJobStatus(operation.backendId());
@@ -232,13 +232,13 @@ public class GuidedScanWorkflowService {
                     default -> spiderScanService.getSpiderScanStatus(operation.backendId());
                 };
             };
-            case ATTACK -> operation.executionMode() == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+            case ATTACK -> operation.executionMode() == ScanExecutionMode.QUEUE
                     ? scanJobQueueService.getScanJobStatus(operation.backendId())
                     : activeScanService.getActiveScanStatus(operation.backendId());
         };
     }
 
-    private String stopOperation(GuidedOperation operation) {
+    private String stopOperation(ScanOperation operation) {
         return switch (operation.kind()) {
             case CRAWL -> switch (operation.executionMode()) {
                 case QUEUE -> scanJobQueueService.cancelScanJob(operation.backendId());
@@ -248,7 +248,7 @@ public class GuidedScanWorkflowService {
                     default -> spiderScanService.stopSpiderScan(operation.backendId());
                 };
             };
-            case ATTACK -> operation.executionMode() == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+            case ATTACK -> operation.executionMode() == ScanExecutionMode.QUEUE
                     ? scanJobQueueService.cancelScanJob(operation.backendId())
                     : activeScanService.stopActiveScan(operation.backendId());
         };
@@ -258,7 +258,7 @@ public class GuidedScanWorkflowService {
         String operationId = encodeOperation(started.operation());
         StringBuilder output = new StringBuilder();
         boolean nativeStartConfirmed = inferOperationState(started.delegateResponse()) == OperationState.RUNNING;
-        output.append("Guided ").append(started.operation().kind().wireValue())
+        output.append(started.operation().kind().displayName)
                 .append(nativeStartConfirmed ? " started.\n" : " accepted.\n")
                 .append("Operation ID: ").append(operationId).append('\n')
                 .append("Execution Mode: ").append(formatExecutionMode(started.operation().executionMode())).append('\n')
@@ -279,21 +279,21 @@ public class GuidedScanWorkflowService {
     }
 
     private String formatStatusMessage(String operationId, OperationKind expectedKind) {
-        GuidedOperation operation = decodeOperation(operationId, expectedKind);
+        ScanOperation operation = decodeOperation(operationId, expectedKind);
         return formatLifecycleMessage("status", operationId, operation, getOperationStatus(operation));
     }
 
     private String formatStopMessage(String operationId, OperationKind expectedKind) {
-        GuidedOperation operation = decodeOperation(operationId, expectedKind);
+        ScanOperation operation = decodeOperation(operationId, expectedKind);
         return formatLifecycleMessage("stop requested", operationId, operation, stopOperation(operation));
     }
 
     private String formatLifecycleMessage(String action,
                                           String operationId,
-                                          GuidedOperation operation,
+                                          ScanOperation operation,
                                           String delegateResponse) {
         return new StringBuilder()
-                .append("Guided ").append(operation.kind().wireValue()).append(' ').append(action).append(".\n")
+                .append(operation.kind().displayName).append(' ').append(action).append(".\n")
                 .append("Operation ID: ").append(operationId).append('\n')
                 .append("Execution Mode: ").append(formatExecutionMode(operation.executionMode())).append('\n')
                 .append("Strategy: ").append(operation.strategy()).append('\n')
@@ -305,7 +305,7 @@ public class GuidedScanWorkflowService {
     }
 
     private String nextActionsForStartedOperation(StartedOperation started, String operationId) {
-        GuidedOperation operation = started.operation();
+        ScanOperation operation = started.operation();
         String heldGuidance = nextActionsForUnsettledQueueOperation(operation, operationId, started.delegateResponse());
         if (heldGuidance != null) return heldGuidance;
         String statusTool = statusToolFor(operation.kind());
@@ -336,13 +336,13 @@ public class GuidedScanWorkflowService {
     }
 
     private String nextActionsForLifecycle(String action,
-                                           GuidedOperation operation,
+                                           ScanOperation operation,
                                            String operationId,
                                            String delegateResponse) {
         String heldGuidance = nextActionsForUnsettledQueueOperation(operation, operationId, delegateResponse);
         if (heldGuidance != null) return heldGuidance;
         if ("stop requested".equals(action)) {
-            if (operation.executionMode() == GuidedExecutionModeResolver.ExecutionMode.QUEUE
+            if (operation.executionMode() == ScanExecutionMode.QUEUE
                     && inferOperationState(delegateResponse) == OperationState.UNKNOWN) {
                 return nextActionsForUnconfirmedQueueStop(operation, operationId);
             }
@@ -359,9 +359,9 @@ public class GuidedScanWorkflowService {
                 || state == OperationState.CANCELLATION_PENDING;
     }
 
-    private String nextActionsForUnsettledQueueOperation(GuidedOperation operation, String operationId,
+    private String nextActionsForUnsettledQueueOperation(ScanOperation operation, String operationId,
                                                         String delegateResponse) {
-        if (operation.executionMode() != GuidedExecutionModeResolver.ExecutionMode.QUEUE) return null;
+        if (operation.executionMode() != ScanExecutionMode.QUEUE) return null;
         OperationState state = inferOperationState(delegateResponse);
         if (!requiresQueueOutcomeGuidance(state)) return null;
         StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
@@ -378,7 +378,7 @@ public class GuidedScanWorkflowService {
         return finishNextActions(output);
     }
 
-    private String nextActionsForUnconfirmedQueueStop(GuidedOperation operation, String operationId) {
+    private String nextActionsForUnconfirmedQueueStop(ScanOperation operation, String operationId) {
         StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
         output.append("- Confirm termination before submitting a replacement; a stop request alone does not confirm native work has ended.\n");
         String statusTool = statusToolFor(operation.kind());
@@ -386,7 +386,7 @@ public class GuidedScanWorkflowService {
         return finishNextActions(output);
     }
 
-    private String nextActionsForStatus(GuidedOperation operation, String operationId, String delegateResponse) {
+    private String nextActionsForStatus(ScanOperation operation, String operationId, String delegateResponse) {
         OperationState state = inferOperationState(delegateResponse);
         if (state == OperationState.SUCCEEDED && operation.kind() == OperationKind.CRAWL
                 && (STRATEGY_BROWSER.equals(operation.strategy()) || STRATEGY_CLIENT.equals(operation.strategy()))) {
@@ -426,12 +426,12 @@ public class GuidedScanWorkflowService {
         };
     }
 
-    private String nextActionsForStoppedOperation(GuidedOperation operation, String operationId) {
+    private String nextActionsForStoppedOperation(ScanOperation operation, String operationId) {
         StringBuilder output = new StringBuilder(NEXT_ACTIONS_HEADER).append('\n');
         String statusTool = statusToolFor(operation.kind());
         appendAction(output, statusTool, "- Confirm if needed: call " + statusTool + " with this operation ID: " + operationId);
         appendAction(output, "zap_" + operation.kind().wireValue() + "_start",
-                "- Start a new guided " + operation.kind().wireValue() + " only after the target and policy are ready.");
+                "- Start a new " + operation.kind().displayName.toLowerCase(Locale.ROOT) + " only after the target and policy are ready.");
         return finishNextActions(output);
     }
 
@@ -445,14 +445,14 @@ public class GuidedScanWorkflowService {
     }
 
     private void appendAction(StringBuilder output, String toolName, String action) {
-        if (guidedToolActions.canCall(toolName)) {
+        if (toolActionAvailability.canCall(toolName)) {
             output.append(action).append('\n');
         }
     }
 
     private String finishNextActions(StringBuilder output) {
         if (output.toString().equals(NEXT_ACTIONS_HEADER + "\n")) {
-            output.append("- No further guided actions are available for this client.");
+            output.append("- No further actions are available for this client.");
         }
         return output.toString().trim();
     }
@@ -557,7 +557,7 @@ public class GuidedScanWorkflowService {
         return hasText(value) ? value.trim() : null;
     }
 
-    private String formatExecutionMode(GuidedExecutionModeResolver.ExecutionMode executionMode) {
+    private String formatExecutionMode(ScanExecutionMode executionMode) {
         return executionMode.name().toLowerCase(Locale.ROOT);
     }
 
@@ -588,7 +588,7 @@ public class GuidedScanWorkflowService {
         throw new IllegalStateException("Unable to extract value with prefix '" + prefix + "' from response: " + response);
     }
 
-    private String encodeOperation(GuidedOperation operation) {
+    private String encodeOperation(ScanOperation operation) {
         String payload = String.join("|",
                 "v2",
                 encodePart(operation.kind().wireValue()),
@@ -604,10 +604,10 @@ public class GuidedScanWorkflowService {
                 .encodeToString(signedPayload.getBytes(StandardCharsets.UTF_8));
     }
 
-    private GuidedOperation decodeOperation(String operationId, OperationKind expectedKind) {
+    private ScanOperation decodeOperation(String operationId, OperationKind expectedKind) {
         String normalizedOperationId = requireText(operationId, "operationId");
         if (!normalizedOperationId.startsWith(PREFIX_OPERATION_ID)) {
-            throw new IllegalArgumentException("operationId is not a guided operation ID");
+            throw new IllegalArgumentException("Use the operationId returned by zap_crawl_start or zap_attack_start");
         }
         String payload;
         try {
@@ -645,14 +645,14 @@ public class GuidedScanWorkflowService {
             throw new IllegalArgumentException("operationId is not visible to the current requester");
         }
 
-        GuidedOperation operation = new GuidedOperation(
+        ScanOperation operation = new ScanOperation(
                 OperationKind.fromWireValue(decodePart(parts[1], "operationKind")),
                 parseExecutionMode(decodePart(parts[2], "executionMode")),
                 decodePart(parts[3], "strategy"),
                 decodePart(parts[4], "backendId")
         );
         if (operation.kind() != expectedKind) {
-            throw new IllegalArgumentException("operationId belongs to a different guided flow");
+            throw new IllegalArgumentException("operationId belongs to a different scan operation");
         }
         return operation;
     }
@@ -679,7 +679,7 @@ public class GuidedScanWorkflowService {
                     .withoutPadding()
                     .encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException e) {
-            throw new IllegalStateException("Unable to sign guided operation ID", e);
+            throw new IllegalStateException("Unable to sign the scan operation ID", e);
         }
     }
 
@@ -706,9 +706,9 @@ public class GuidedScanWorkflowService {
         return hasText(workspaceId) ? workspaceId.trim() : "default-workspace";
     }
 
-    private GuidedExecutionModeResolver.ExecutionMode parseExecutionMode(String executionMode) {
+    private ScanExecutionMode parseExecutionMode(String executionMode) {
         try {
-            return GuidedExecutionModeResolver.ExecutionMode.valueOf(
+            return ScanExecutionMode.valueOf(
                     requireText(executionMode, "executionMode").toUpperCase(Locale.ROOT)
             );
         } catch (IllegalArgumentException e) {
@@ -721,7 +721,7 @@ public class GuidedScanWorkflowService {
         if (!hasText(authSessionId)) {
             return null;
         }
-        PreparedAuthSession session = guidedAuthSessionService.getPreparedSession(authSessionId);
+        PreparedAuthSession session = authSessionService.getPreparedSession(authSessionId);
         if (session.authKind() != requiredKind) {
             if (requiredKind == AuthBootstrapKind.BROWSER) {
                 throw new IllegalArgumentException(
@@ -760,16 +760,16 @@ public class GuidedScanWorkflowService {
         return session;
     }
 
-    private record GuidedOperation(
+    private record ScanOperation(
             OperationKind kind,
-            GuidedExecutionModeResolver.ExecutionMode executionMode,
+            ScanExecutionMode executionMode,
             String strategy,
             String backendId
     ) {
     }
 
     private record StartedOperation(
-            GuidedOperation operation,
+            ScanOperation operation,
             String delegateResponse,
             String note,
             PreparedAuthSession preparedAuthSession
@@ -777,13 +777,15 @@ public class GuidedScanWorkflowService {
     }
 
     private enum OperationKind {
-        CRAWL("crawl"),
-        ATTACK("attack");
+        CRAWL("crawl", "Crawl"),
+        ATTACK("attack", "Active scan");
 
         private final String wireValue;
+        private final String displayName;
 
-        OperationKind(String wireValue) {
+        OperationKind(String wireValue, String displayName) {
             this.wireValue = wireValue;
+            this.displayName = displayName;
         }
 
         private String wireValue() {
@@ -795,7 +797,7 @@ public class GuidedScanWorkflowService {
             return switch (normalized) {
                 case "crawl" -> CRAWL;
                 case "attack" -> ATTACK;
-                default -> throw new IllegalArgumentException("operationId belongs to an unsupported guided flow");
+                default -> throw new IllegalArgumentException("operationId belongs to an unsupported scan operation");
             };
         }
     }

@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 )
 @ActiveProfiles("test")
 @Import(AbstractMcpProtectionIntegrationTest.MockZapConfig.class)
-class McpGuidedWorkspaceQuotaIntegrationTest extends AbstractMcpProtectionIntegrationTest {
+class McpScanWorkspaceQuotaIntegrationTest extends AbstractMcpProtectionIntegrationTest {
     @Autowired
     private ScanJobQueueService queue;
 

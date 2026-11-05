@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 )
 @ActiveProfiles("test")
 @Import(AbstractMcpProtectionIntegrationTest.MockZapConfig.class)
-class McpGuidedBackpressureIntegrationTest extends AbstractMcpProtectionIntegrationTest {
+class McpRunningScanBackpressureIntegrationTest extends AbstractMcpProtectionIntegrationTest {
 
     @Test
     void guidedAdmissionIsRejectedWhenGlobalQueueCapacityIsExhausted() throws Exception {

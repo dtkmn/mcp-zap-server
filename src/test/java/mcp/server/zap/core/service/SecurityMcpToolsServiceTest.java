@@ -14,10 +14,10 @@ import mcp.server.zap.core.gateway.TargetDescriptor;
 import mcp.server.zap.core.gateway.UnsupportedEngineCapabilityException;
 import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.service.auth.bootstrap.AuthBootstrapKind;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
 import mcp.server.zap.core.service.auth.bootstrap.HttpOrigin;
 import mcp.server.zap.core.service.auth.bootstrap.PreparedAuthSession;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import mcp.server.zap.core.service.authz.ToolAuthorizationService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +45,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-class GuidedSecurityToolsServiceTest {
+class SecurityMcpToolsServiceTest {
 
     @Test
     void contentImportDelegatesActualTextWithoutEchoingDefinitionData() {
@@ -72,16 +72,16 @@ class GuidedSecurityToolsServiceTest {
     private ClientSpiderService clientSpiderService;
     private ActiveScanService activeScanService;
     private ScanJobQueueService scanJobQueueService;
-    private GuidedAuthSessionService guidedAuthSessionService;
+    private AuthSessionService authSessionService;
     private ReportService reportService;
     private FindingsService findingsService;
     private OpenApiService openApiService;
     private EngineAdapter engineAdapter;
     private GatewayRecordFactory gatewayRecordFactory;
-    private GuidedToolActions guidedToolActions;
+    private ToolActionAvailability toolActionAvailability;
     private ToolAuthorizationProperties authorizationProperties;
-    private GuidedScanWorkflowService guidedScanWorkflowService;
-    private GuidedSecurityToolsService service;
+    private ScanWorkflowService scanWorkflowService;
+    private SecurityMcpToolsService service;
 
     @BeforeEach
     void setUp() {
@@ -90,42 +90,42 @@ class GuidedSecurityToolsServiceTest {
         clientSpiderService = mock(ClientSpiderService.class);
         activeScanService = mock(ActiveScanService.class);
         scanJobQueueService = mock(ScanJobQueueService.class);
-        guidedAuthSessionService = mock(GuidedAuthSessionService.class);
+        authSessionService = mock(AuthSessionService.class);
         reportService = mock(ReportService.class);
         findingsService = mock(FindingsService.class);
         openApiService = mock(OpenApiService.class);
         engineAdapter = new ZapEngineAdapter();
         gatewayRecordFactory = new GatewayRecordFactory();
         authorizationProperties = new ToolAuthorizationProperties();
-        guidedToolActions = new GuidedToolActions(new ToolAuthorizationService(new ToolScopeRegistry(), authorizationProperties), true, "api-key");
+        toolActionAvailability = new ToolActionAvailability(new ToolAuthorizationService(new ToolScopeRegistry(), authorizationProperties), true, "api-key");
         useScopes("*");
-        guidedScanWorkflowService = new GuidedScanWorkflowService(
+        scanWorkflowService = new ScanWorkflowService(
                 spiderScanService,
                 ajaxSpiderService,
                 clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
-                guidedAuthSessionService,
+                authSessionService,
                 engineAdapter,
                 gatewayRecordFactory,
-                guidedToolActions
+                toolActionAvailability
         );
-        org.springframework.test.util.ReflectionTestUtils.setField(guidedScanWorkflowService,
+        org.springframework.test.util.ReflectionTestUtils.setField(scanWorkflowService,
                 "operationSigningSecret", "legacy-guided-fixture-secret");
         when(scanJobQueueService.queueSpiderScan(anyString(), any())).thenReturn("Job ID: default-http\nStatus: RUNNING");
         when(scanJobQueueService.queueAjaxSpiderScan(anyString(), any())).thenReturn("Job ID: default-browser\nStatus: RUNNING");
         when(scanJobQueueService.queueClientSpiderScan(anyString(), any(), any())).thenReturn("Job ID: default-client\nStatus: RUNNING");
         when(scanJobQueueService.getScanJobStatus(anyString())).thenReturn("Status: RUNNING");
         when(scanJobQueueService.cancelScanJob(anyString())).thenReturn("Status: CANCELLED");
-        service = new GuidedSecurityToolsService(
-                guidedScanWorkflowService,
+        service = new SecurityMcpToolsService(
+                scanWorkflowService,
                 activeScanService,
                 reportService,
                 findingsService,
                 openApiService,
                 engineAdapter,
                 gatewayRecordFactory,
-                guidedToolActions
+                toolActionAvailability
         );
     }
 
@@ -141,7 +141,7 @@ class GuidedSecurityToolsServiceTest {
         when(scanJobQueueService.getScanJobStatus("crawl-job"))
                 .thenReturn("Status: RUNNING\nProgress: 45%");
         String response = service.startCrawl("https://example.com", "auto", null, null);
-        assertThat(response).contains("Guided crawl accepted.", "Execution Mode: queue", "Strategy: http",
+        assertThat(response).contains("Crawl accepted.", "Execution Mode: queue", "Strategy: http",
                 "Poll: call zap_crawl_status").doesNotContain("zap_spider_status", "zap_queue_spider_scan");
         assertThat(service.getCrawlStatus(extractOperationId(response)))
                 .contains("Progress: 45%", "Continue: call zap_crawl_status");
@@ -170,7 +170,7 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(response);
         when(scanJobQueueService.getScanJobStatus("held-http"))
                 .thenReturn("Status: START_OUTCOME_UNKNOWN\nLast Error: " + failure);
-        assertThat(response).contains("Guided crawl accepted.", "capacity remains held", "Do not submit a replacement", failure);
+        assertThat(response).contains("Crawl accepted.", "capacity remains held", "Do not submit a replacement", failure);
         assertThat(service.getCrawlStatus(operationId)).contains("START_OUTCOME_UNKNOWN", "Do not submit a replacement");
         verify(scanJobQueueService).queueSpiderScan("https://spa.example.com", null);
         verify(scanJobQueueService, never()).queueAjaxSpiderScan(any(), any());
@@ -247,14 +247,14 @@ class GuidedSecurityToolsServiceTest {
         String operationId = extractOperationId(startResponse);
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(startResponse).contains("Guided attack accepted.")
+        assertThat(startResponse).contains("Active scan accepted.")
             .contains("Execution Mode: queue")
             .contains("Next Actions:")
             .contains("Poll: call zap_attack_status")
             .contains("When attack is complete: call zap_passive_scan_wait")
             .contains("zap_findings_summary for the same target after the attack is complete and passive analysis has drained")
             .contains("zap_report_generate after the attack is complete and passive analysis has drained");
-        assertThat(statusResponse).contains("Guided attack status.")
+        assertThat(statusResponse).contains("Active scan status.")
             .contains("Job ID: job-7")
             .contains("Continue: call zap_attack_status")
             .doesNotContain("zap_findings_summary", "zap_report_generate");
@@ -274,7 +274,7 @@ class GuidedSecurityToolsServiceTest {
         String operationId = legacyHandle("crawl", "http", "spider-100");
         String statusResponse = service.getCrawlStatus(operationId);
 
-        assertThat(statusResponse).contains("Guided crawl status.")
+        assertThat(statusResponse).contains("Crawl status.")
             .contains("Next Actions:")
             .contains("Continue security testing: call zap_attack_start")
             .contains("Crawl-only path: call zap_passive_scan_wait");
@@ -327,7 +327,7 @@ class GuidedSecurityToolsServiceTest {
         String operationId = legacyHandle("attack", "active", "active-100");
         String statusResponse = service.getAttackStatus(operationId);
 
-        assertThat(statusResponse).contains("Guided attack status.")
+        assertThat(statusResponse).contains("Active scan status.")
             .contains("Next Actions:")
             .contains("Settle passive analysis: call zap_passive_scan_wait")
             .contains("Then review: call zap_findings_summary");
@@ -355,7 +355,7 @@ class GuidedSecurityToolsServiceTest {
         String statusResponse = service.getAttackStatus(operationId);
 
         assertThat(statusResponse)
-            .contains("Guided attack status.")
+            .contains("Active scan status.")
             .contains("Status: FAILED")
             .contains("Progress: 100%")
             .contains("Review the status/error above before trusting this scan as evidence.")
@@ -379,7 +379,7 @@ class GuidedSecurityToolsServiceTest {
         String stopResponse = service.stopCrawl(operationId);
 
         assertThat(stopResponse)
-            .contains("Guided crawl stop requested.")
+            .contains("Crawl stop requested.")
             .contains("Scan job job-11 cancelled");
         verify(scanJobQueueService).cancelScanJob("job-11");
     }
@@ -409,10 +409,10 @@ class GuidedSecurityToolsServiceTest {
         String statusResponse = crawl ? service.getCrawlStatus(operationId) : service.getAttackStatus(operationId);
         String stopResponse = crawl ? service.stopCrawl(operationId) : service.stopAttack(operationId);
 
-        assertThat(started).startsWith("Guided " + kind + " accepted.");
+        assertThat(started).startsWith((crawl ? "Crawl" : "Active scan") + " accepted.");
         for (String response : List.of(started, statusResponse, stopResponse)) {
             assertThat(response).contains(operationId, "zap_" + kind + "_status")
-                    .doesNotContain("Start a new guided", "until the scan is complete", "zap_attack_start",
+                    .doesNotContain("Start a new", "until the scan is complete", "zap_attack_start",
                             "zap_passive_scan_wait", "zap_findings_summary", "zap_report_generate");
             if (status.startsWith("START_OUTCOME_UNKNOWN")) {
                 assertThat(response).contains("An authorized operator must reconcile", "Do not submit a replacement or retry");
@@ -428,7 +428,7 @@ class GuidedSecurityToolsServiceTest {
     void legacyAttackHandleStillStopsItsNativeScan() {
         when(activeScanService.stopActiveScan("active-9")).thenReturn("Active scan stop requested for ID: active-9");
         String response = service.stopAttack(legacyHandle("attack", "active", "active-9"));
-        assertThat(response).contains("Guided attack stop requested.", "Execution Mode: direct", "Active scan stop requested for ID: active-9");
+        assertThat(response).contains("Active scan stop requested.", "Execution Mode: direct", "Active scan stop requested for ID: active-9");
         verify(activeScanService).stopActiveScan("active-9");
         verifyNoInteractions(scanJobQueueService);
     }
@@ -490,7 +490,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void startCrawlUsesAuthenticatedSpiderWhenPreparedFormSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-1", "https://app.example.com", "1", "7");
-        when(guidedAuthSessionService.getPreparedSession("auth-1")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-1")).thenReturn(session);
 
         when(scanJobQueueService.queueSpiderScanAsUser("1", "7", "https://app.example.com", null, "true", "false", null))
                 .thenReturn("""
@@ -501,17 +501,17 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startCrawl("https://app.example.com", "http", null, "auth-1");
 
-        assertThat(response).contains("Guided crawl accepted.")
+        assertThat(response).contains("Crawl accepted.")
             .contains("Authenticated Session: auth-1")
             .contains("Context ID: 1")
             .contains("User ID: 7")
-            .contains("Authenticated guided crawl applied the prepared form-login session");
+            .contains("Authenticated crawl applied the prepared form-login session");
     }
 
     @Test
     void startAttackUsesQueuedAuthenticatedPathWhenPreparedFormSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-2", "https://app.example.com", "11", "17");
-        when(guidedAuthSessionService.getPreparedSession("auth-2")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-2")).thenReturn(session);
 
         when(scanJobQueueService.queueActiveScanAsUser("11", "17", "https://app.example.com", "true", "Baseline", (String) null))
                 .thenReturn("""
@@ -522,18 +522,18 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.startAttack("https://app.example.com", "true", "Baseline", null, "auth-2");
 
-        assertThat(response).contains("Guided attack accepted.")
+        assertThat(response).contains("Active scan accepted.")
             .contains("Authenticated Session: auth-2")
             .contains("Execution Mode: queue")
             .contains("Job ID: auth-job-9")
-            .contains("Authenticated guided attack applied the prepared form-login session");
+            .contains("Authenticated active scan applied the prepared form-login session");
     }
 
     @ParameterizedTest
     @CsvSource({"FORM,http", "BROWSER,client"})
     void preparedProfileCannotBeReusedForCrawlOnAnotherOrigin(AuthBootstrapKind kind, String strategy) {
         PreparedAuthSession session = preparedSession(kind, "auth-crawl", "https://app.example.com", "1", "7");
-        when(guidedAuthSessionService.getPreparedSession("auth-crawl")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-crawl")).thenReturn(session);
 
         assertThatThrownBy(() -> service.startCrawl("https://attacker.example", strategy, null, "auth-crawl"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -545,7 +545,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void preparedProfileCannotBeReusedForAttackOnAnotherOrigin() {
         PreparedAuthSession session = preparedFormSession("auth-attack", "https://app.example.com", "1", "7");
-        when(guidedAuthSessionService.getPreparedSession("auth-attack")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-attack")).thenReturn(session);
 
         assertThatThrownBy(() -> service.startAttack("https://attacker.example", "true", "Baseline", null, "auth-attack"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -557,7 +557,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void startCrawlRejectsBrowserStrategyWhenAuthSessionProvided() {
         PreparedAuthSession session = preparedFormSession("auth-3", "https://app.example.com", "1", "7");
-        when(guidedAuthSessionService.getPreparedSession("auth-3")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-3")).thenReturn(session);
 
         assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "browser", null, "auth-3"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -566,7 +566,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void clientCrawlRejectsPreparedHttpFormAuthenticationBeforeStartingAnyScan() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedFormSession("auth-client", "https://app.example.com", "1", "7"));
 
         assertThatThrownBy(() -> service.startCrawl("https://app.example.com", "client", null, "auth-client"))
@@ -577,7 +577,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void preparedBrowserSessionQueuesAuthenticatedClientCrawlAndLifecycle() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
                 .thenReturn("Job ID: client-auth-job\nStatus: RUNNING");
@@ -596,7 +596,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void preparedBrowserSessionRoutesQueuedClientCrawlWithNamesAndIdempotencyKey() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
 
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", "crawl-key"))
@@ -621,7 +621,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void authenticatedQueuedClientFailureRemainsVisibleWithoutAnonymousFallback() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
 
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
@@ -642,7 +642,7 @@ class GuidedSecurityToolsServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"auto", "http", "browser"})
     void preparedBrowserSessionRejectsOtherCrawlStrategies(String strategy) {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
 
         assertThatThrownBy(() -> service.startCrawl("https://app.example.com", strategy, null, "auth-client"))
@@ -653,7 +653,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void preparedBrowserSessionRejectsActiveScanBeforeLaunch() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
 
         assertThatThrownBy(() -> service.startAttack("https://app.example.com", "true", null, null, "auth-client"))
@@ -666,7 +666,7 @@ class GuidedSecurityToolsServiceTest {
     @ValueSource(booleans = {true, false})
     void preparedBrowserSessionRequiresBothContextAndUserNames(boolean missingContextName) {
         PreparedAuthSession session = preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7");
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(new PreparedAuthSession(session.sessionId(), session.profileId(), session.authKind(),
                         session.providerId(), session.target(), session.authorizedOrigin(), session.credentialReference(),
                         missingContextName ? null : session.contextName(), session.contextId(),
@@ -681,7 +681,7 @@ class GuidedSecurityToolsServiceTest {
 
     @Test
     void authenticatedClientFailureDoesNotFallBackToAnonymousCrawl() {
-        when(guidedAuthSessionService.getPreparedSession("auth-client"))
+        when(authSessionService.getPreparedSession("auth-client"))
                 .thenReturn(preparedSession(AuthBootstrapKind.BROWSER, "auth-client", "https://app.example.com", "1", "7"));
         ZapApiException failure = new ZapApiException("Browser authentication failed", new RuntimeException("login failed"));
         when(scanJobQueueService.queueClientSpiderScan("https://app.example.com", null, "shop-auth", "zap-scan-user", null))
@@ -709,7 +709,7 @@ class GuidedSecurityToolsServiceTest {
                 null,
                 false
         );
-        when(guidedAuthSessionService.getPreparedSession("auth-header")).thenReturn(session);
+        when(authSessionService.getPreparedSession("auth-header")).thenReturn(session);
 
         assertThatThrownBy(() -> service.startAttack("https://api.example.com", "true", "Baseline", null, "auth-header"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -723,7 +723,7 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.generateGuidedReport("https://example.com/admin", "html", "light");
 
-        assertThat(response).contains("Guided report generated.")
+        assertThat(response).contains("Report generated.")
             .contains("Scope: https://example.com/admin")
             .contains("Path: /tmp/report.html")
             .contains("Next Actions:")
@@ -751,7 +751,7 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.readGuidedReport("/tmp/report.html", 1000);
 
-        assertThat(response).contains("Guided report readback.")
+        assertThat(response).contains("Report readback.")
             .contains("Path: /tmp/report.html")
             .contains("review the generated artifact").contains("Next Actions:")
             .contains("Internal evidence: call zap_scan_history_release_evidence")
@@ -867,7 +867,7 @@ class GuidedSecurityToolsServiceTest {
 
         String response = service.getGuidedFindingsSummary("https://example.com/admin");
 
-        assertThat(response).contains("Guided findings summary.")
+        assertThat(response).contains("Findings summary.")
             .contains("Scope: https://example.com/admin")
             .contains("Use: first-pass triage")
             .contains("Next Actions:")
@@ -891,7 +891,7 @@ class GuidedSecurityToolsServiceTest {
                 5
         );
 
-        assertThat(response).contains("Guided findings details.")
+        assertThat(response).contains("Findings details.")
             .contains("Scope: https://example.com/admin")
             .contains("Mode: raw instances")
             .contains("Plugin ID Filter: 40018")
@@ -908,27 +908,27 @@ class GuidedSecurityToolsServiceTest {
     void unsupportedGatewayEngineCapabilityFailsWithControlledMessage() {
         EngineAdapter unsupportedEngineAdapter = mock(EngineAdapter.class);
         when(unsupportedEngineAdapter.displayName()).thenReturn("Metadata Only Engine");
-        GuidedScanWorkflowService localWorkflow = new GuidedScanWorkflowService(
+        ScanWorkflowService localWorkflow = new ScanWorkflowService(
                 spiderScanService,
                 ajaxSpiderService,
                 clientSpiderService,
                 activeScanService,
                 scanJobQueueService,
-                guidedAuthSessionService,
+                authSessionService,
                 unsupportedEngineAdapter,
                 new GatewayRecordFactory(),
-                guidedToolActions
+                toolActionAvailability
         );
 
         assertThatThrownBy(() -> localWorkflow.startAttack("https://example.com", "true", "Baseline", null, null))
                 .isInstanceOf(UnsupportedEngineCapabilityException.class)
-                .hasMessage("Engine 'Metadata Only Engine' does not support guided attack.");
+                .hasMessage("Engine 'Metadata Only Engine' does not support active scanning.");
     }
 
     @Test
     void findingsSummaryRejectsEngineWithoutFindingsCapability() {
         EngineAdapter unsupportedEngineAdapter = unsupportedEngineAdapter();
-        GuidedSecurityToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
+        SecurityMcpToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
 
         assertThatThrownBy(() -> localService.getGuidedFindingsSummary("https://example.com"))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
@@ -941,7 +941,7 @@ class GuidedSecurityToolsServiceTest {
     @Test
     void reportGenerationRejectsEngineWithoutReportCapability() {
         EngineAdapter unsupportedEngineAdapter = unsupportedEngineAdapter();
-        GuidedSecurityToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
+        SecurityMcpToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
 
         assertThatThrownBy(() -> localService.generateGuidedReport("https://example.com", "html", "light"))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
@@ -957,16 +957,16 @@ class GuidedSecurityToolsServiceTest {
         return unsupportedEngineAdapter;
     }
 
-    private GuidedSecurityToolsService serviceWithEngine(EngineAdapter localEngineAdapter) {
-        return new GuidedSecurityToolsService(
-                guidedScanWorkflowService,
+    private SecurityMcpToolsService serviceWithEngine(EngineAdapter localEngineAdapter) {
+        return new SecurityMcpToolsService(
+                scanWorkflowService,
                 activeScanService,
                 reportService,
                 findingsService,
                 openApiService,
                 localEngineAdapter,
                 new GatewayRecordFactory(),
-                guidedToolActions
+                toolActionAvailability
         );
     }
 
@@ -984,7 +984,7 @@ class GuidedSecurityToolsServiceTest {
                 "zap_findings_summary", "zap_report_generate").doesNotContain("zap_attack_start");
         assertThat(service.getCrawlStatus(operationId)).contains("zap_passive_scan_wait",
                 "zap_findings_summary", "zap_report_generate").doesNotContain("zap_attack_start");
-        assertThat(service.stopCrawl(operationId)).contains("zap_crawl_status", "Start a new guided crawl")
+        assertThat(service.stopCrawl(operationId)).contains("zap_crawl_status", "Start a new crawl")
                 .doesNotContain("zap_attack_start");
         useScopes("zap:scan:read", "zap:scan:attack:run");
         assertThat(service.getCrawlStatus(operationId)).contains("zap_attack_start")
@@ -1032,13 +1032,13 @@ class GuidedSecurityToolsServiceTest {
 
         String started = service.startCrawl("https://example.com", "http", null, null);
         String operationId = extractOperationId(started);
-        assertThat(started).contains("No further guided actions are available")
+        assertThat(started).contains("No further actions are available")
                 .doesNotContain("zap_crawl_status", "zap_crawl_stop", "zap_attack_start", "zap_passive_scan_wait",
                         "zap_findings_summary", "zap_report_generate");
-        assertThat(service.getCrawlStatus(operationId)).contains("No further guided actions are available")
+        assertThat(service.getCrawlStatus(operationId)).contains("No further actions are available")
                 .doesNotContain("zap_crawl_status", "zap_crawl_stop");
         useScopes("zap:scan:stop");
-        assertThat(service.stopCrawl(operationId)).doesNotContain("zap_crawl_status", "Start a new guided crawl");
+        assertThat(service.stopCrawl(operationId)).doesNotContain("zap_crawl_status", "Start a new crawl");
     }
 
     @Test

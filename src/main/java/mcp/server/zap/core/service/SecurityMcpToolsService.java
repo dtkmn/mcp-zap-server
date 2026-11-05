@@ -6,47 +6,47 @@ import mcp.server.zap.core.gateway.EngineAdapter;
 import mcp.server.zap.core.gateway.EngineCapability;
 import mcp.server.zap.core.gateway.GatewayRecordFactory;
 import mcp.server.zap.core.gateway.TargetDescriptor;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Service;
 
 /**
- * Intent-first MCP facade that exposes a small guided tool surface.
+ * MCP tools for crawling, active scans, findings, and reports.
  */
 @Service
-public class GuidedSecurityToolsService {
+public class SecurityMcpToolsService {
     private static final String DEFINITION_TYPE_OPENAPI = "openapi";
     private static final String SOURCE_KIND_CONTENT = "content";
     private static final String REPORT_FORMAT_HTML = "html";
     private static final String REPORT_FORMAT_JSON = "json";
     private static final String NEXT_ACTIONS_HEADER = "Next Actions:";
 
-    private final GuidedScanWorkflowService guidedScanWorkflowService;
+    private final ScanWorkflowService scanWorkflowService;
     private final ActiveScanService activeScanService;
     private final ReportService reportService;
     private final FindingsService findingsService;
     private final OpenApiService openApiService;
     private final EngineAdapter engineAdapter;
     private final GatewayRecordFactory gatewayRecordFactory;
-    private final GuidedToolActions guidedToolActions;
+    private final ToolActionAvailability toolActionAvailability;
 
-    public GuidedSecurityToolsService(GuidedScanWorkflowService guidedScanWorkflowService,
-                                      ActiveScanService activeScanService,
-                                      ReportService reportService,
-                                      FindingsService findingsService,
-                                      OpenApiService openApiService,
-                                      EngineAdapter engineAdapter,
-                                      GatewayRecordFactory gatewayRecordFactory,
-                                      GuidedToolActions guidedToolActions) {
-        this.guidedScanWorkflowService = guidedScanWorkflowService;
+    public SecurityMcpToolsService(ScanWorkflowService scanWorkflowService,
+                                   ActiveScanService activeScanService,
+                                   ReportService reportService,
+                                   FindingsService findingsService,
+                                   OpenApiService openApiService,
+                                   EngineAdapter engineAdapter,
+                                   GatewayRecordFactory gatewayRecordFactory,
+                                   ToolActionAvailability toolActionAvailability) {
+        this.scanWorkflowService = scanWorkflowService;
         this.activeScanService = activeScanService;
         this.reportService = reportService;
         this.findingsService = findingsService;
         this.openApiService = openApiService;
         this.engineAdapter = engineAdapter;
         this.gatewayRecordFactory = gatewayRecordFactory;
-        this.guidedToolActions = guidedToolActions;
+        this.toolActionAvailability = toolActionAvailability;
     }
 
     @Tool(
@@ -92,7 +92,7 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_crawl_start",
-            description = "Start a guided crawl for a target host or root URL. The request is submitted to the protected scan queue for every storage backend; keep the returned operation ID for status and cancellation. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, or strategy=browser for the existing AJAX Spider API. strategy=auto selects HTTP Spider without automatic fallback. Auto does not detect JavaScript coverage. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
+            description = "Queue a crawl of a target host or root URL. All storage backends use the protected scan queue. Keep the returned operation ID to check status or stop the crawl. Use strategy=http for traditional server-rendered sites, strategy=client for JavaScript-driven apps using Client Spider, or strategy=browser for the existing AJAX Spider API. strategy=auto selects HTTP Spider without automatic fallback. Auto does not detect JavaScript coverage. Client Spider requires the Client Side Integration add-on and headless Firefox. Prepared browser authentication sessions require strategy=client; prepared HTTP form-login sessions require http or auto."
     )
     public String startCrawl(
             @ToolParam(description = "Target host or root URL to crawl, for example https://app.example.com or https://app.example.com/admin") String targetUrl,
@@ -100,27 +100,27 @@ public class GuidedSecurityToolsService {
             @ToolParam(required = false, description = "Optional idempotency key for reusing the same queued request; different parameters with the same key are rejected.") String idempotencyKey,
             @ToolParam(required = false, description = "Optional session ID from zap_auth_session_prepare. Use a kind=browser profile with strategy=client, or a kind=form profile with http/auto. The browser strategy means AJAX Spider and rejects authSessionId.") String authSessionId
     ) {
-        return guidedScanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
+        return scanWorkflowService.startCrawl(targetUrl, strategy, idempotencyKey, authSessionId);
     }
 
     @Tool(
             name = "zap_crawl_status",
-            description = "Get status for a guided crawl operation."
+            description = "Get the status of a crawl."
     )
     public String getCrawlStatus(
-            @ToolParam(description = "Guided crawl operation ID returned by zap_crawl_start") String operationId
+            @ToolParam(description = "Operation ID returned by zap_crawl_start") String operationId
     ) {
-        return guidedScanWorkflowService.getCrawlStatus(operationId);
+        return scanWorkflowService.getCrawlStatus(operationId);
     }
 
     @Tool(
             name = "zap_crawl_stop",
-            description = "Stop a guided crawl operation."
+            description = "Stop a crawl using its operation ID."
     )
     public String stopCrawl(
-            @ToolParam(description = "Guided crawl operation ID returned by zap_crawl_start") String operationId
+            @ToolParam(description = "Operation ID returned by zap_crawl_start") String operationId
     ) {
-        return guidedScanWorkflowService.stopCrawl(operationId);
+        return scanWorkflowService.stopCrawl(operationId);
     }
 
     @Tool(
@@ -154,36 +154,36 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_attack_start",
-            description = "Start a guided active scan for a specific target host or base URL after crawl/import setup. The request is submitted to the protected scan queue for every storage backend; keep the returned operation ID for status and cancellation. When authSessionId is supplied, guided attack currently accepts prepared form-login sessions only."
+            description = "Queue an active scan of an authorized target host or base URL after crawling or importing the target. All storage backends use the protected scan queue. Keep the returned operation ID to check status or stop the scan. If you supply authSessionId, it must be a prepared form-login session."
     )
     public String startAttack(
             @ToolParam(description = "Target host or base URL to attack, for example https://app.example.com or https://app.example.com/api") String targetUrl,
             @ToolParam(required = false, description = "Optional recurse flag (default: true)") String recurse,
             @ToolParam(required = false, description = "Optional active-scan policy name. Use zap_scan_policies_list and zap_scan_policy_view to inspect configured policies; omit to use ZAP's default policy.") String policy,
             @ToolParam(required = false, description = "Optional idempotency key for reusing the same queued request; different parameters with the same key are rejected.") String idempotencyKey,
-            @ToolParam(required = false, description = "Optional prepared auth session ID from zap_auth_session_prepare. Guided attack currently accepts form-login sessions only.") String authSessionId
+            @ToolParam(required = false, description = "Optional form-login session ID returned by zap_auth_session_prepare.") String authSessionId
     ) {
-        return guidedScanWorkflowService.startAttack(targetUrl, recurse, policy, idempotencyKey, authSessionId);
+        return scanWorkflowService.startAttack(targetUrl, recurse, policy, idempotencyKey, authSessionId);
     }
 
     @Tool(
             name = "zap_attack_status",
-            description = "Get status for a guided active-scan operation."
+            description = "Get the status of an active scan."
     )
     public String getAttackStatus(
-            @ToolParam(description = "Guided attack operation ID returned by zap_attack_start") String operationId
+            @ToolParam(description = "Operation ID returned by zap_attack_start") String operationId
     ) {
-        return guidedScanWorkflowService.getAttackStatus(operationId);
+        return scanWorkflowService.getAttackStatus(operationId);
     }
 
     @Tool(
             name = "zap_attack_stop",
-            description = "Stop a guided active-scan operation."
+            description = "Stop an active scan using its operation ID."
     )
     public String stopAttack(
-            @ToolParam(description = "Guided attack operation ID returned by zap_attack_start") String operationId
+            @ToolParam(description = "Operation ID returned by zap_attack_start") String operationId
     ) {
-        return guidedScanWorkflowService.stopAttack(operationId);
+        return scanWorkflowService.stopAttack(operationId);
     }
 
     @Tool(
@@ -253,7 +253,7 @@ public class GuidedSecurityToolsService {
 
     @Tool(
             name = "zap_report_generate",
-            description = "Generate a human-shareable report artifact using guided defaults. Use this after passive scan backlog drains when you want an export or handoff artifact; use findings summary/details for interactive triage."
+            description = "Generate an HTML (default) or JSON report once the passive scan queue is empty. To explore findings interactively, use zap_findings_summary or zap_findings_details."
     )
     public String generateGuidedReport(
             @ToolParam(required = false, description = "Optional absolute HTTP(S) origin or path prefix. Supplying it publishes a target-scoped report; omission explicitly includes the full ZAP session.") String baseUrl,
@@ -274,7 +274,7 @@ public class GuidedSecurityToolsService {
         );
         ArtifactRecord artifact = gatewayRecordFactory.reportArtifact(engineAdapter, target, reportPath, normalizedFormat);
         return new StringBuilder()
-                .append("Guided report generated.\n")
+                .append("Report generated.\n")
                 .append("Format: ").append(normalizedFormat).append('\n')
                 .append("Theme: ").append(displayedTheme).append('\n')
                 .append("Scope: ").append(targetScope(artifact.target())).append('\n')
@@ -294,7 +294,7 @@ public class GuidedSecurityToolsService {
         String normalizedReportPath = requireText(reportPath, "reportPath");
         String report = reportService.readReport(normalizedReportPath, maxChars);
         StringBuilder output = new StringBuilder()
-                .append("Guided report readback.\n")
+                .append("Report readback.\n")
                 .append("Path: ").append(normalizedReportPath).append('\n')
                 .append("Use: review the generated artifact before attaching it to internal or customer-facing evidence.\n")
                 .append(NEXT_ACTIONS_HEADER).append('\n');
@@ -351,7 +351,7 @@ public class GuidedSecurityToolsService {
                                        String source,
                                        String delegateResponse) {
         return new StringBuilder()
-                .append(SOURCE_KIND_CONTENT.equals(sourceKind) ? "Guided target import result.\n" : "Guided target import completed.\n")
+                .append(SOURCE_KIND_CONTENT.equals(sourceKind) ? "Target import result.\n" : "Target import completed.\n")
                 .append("Definition Type: ").append(definitionType).append('\n')
                 .append("Source Kind: ").append(sourceKind).append('\n')
                 .append("Source: ").append(SOURCE_KIND_CONTENT.equals(sourceKind) ? "client-supplied definition (contents withheld)" : source).append('\n')
@@ -362,7 +362,7 @@ public class GuidedSecurityToolsService {
 
     private String formatGuidedFindingsSummary(String baseUrl, String delegateResponse) {
         StringBuilder output = new StringBuilder()
-                .append("Guided findings summary.\n")
+                .append("Findings summary.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')
                 .append("Use: first-pass triage before drilldown or report generation.\n")
                 .append(NEXT_ACTIONS_HEADER).append('\n');
@@ -378,7 +378,7 @@ public class GuidedSecurityToolsService {
                                                Integer limit,
                                                String delegateResponse) {
         StringBuilder output = new StringBuilder()
-                .append("Guided findings details.\n")
+                .append("Findings details.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')
                 .append("Mode: ").append(Boolean.TRUE.equals(includeInstances) ? "raw instances" : "grouped details").append('\n');
         if (hasText(pluginId)) {
@@ -417,7 +417,7 @@ public class GuidedSecurityToolsService {
     }
 
     private void appendAction(StringBuilder output, String toolName, String action) {
-        if (guidedToolActions.canCall(toolName)) {
+        if (toolActionAvailability.canCall(toolName)) {
             output.append(action).append('\n');
         }
     }

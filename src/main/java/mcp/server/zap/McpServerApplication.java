@@ -2,8 +2,8 @@ package mcp.server.zap;
 
 import java.util.ArrayList;
 import java.util.List;
-import mcp.server.zap.core.service.GuidedSecurityToolsService;
-import mcp.server.zap.core.service.GuidedAuthSessionMcpToolsService;
+import mcp.server.zap.core.service.SecurityMcpToolsService;
+import mcp.server.zap.core.service.AuthSessionMcpToolsService;
 import mcp.server.zap.core.service.PassiveScanMcpToolsService;
 import mcp.server.zap.core.service.ScanHistoryMcpToolsService;
 import mcp.server.zap.core.service.AddonMaintenanceMcpToolsService;
@@ -22,12 +22,12 @@ public class McpServerApplication {
     }
 
     @Bean
-    public ToolCallbackProvider toolCallbackProvider(GuidedSecurityToolsService guidedSecurityToolsService,
-                                                     GuidedAuthSessionMcpToolsService guidedAuthSessionMcpToolsService,
+    public ToolCallbackProvider toolCallbackProvider(SecurityMcpToolsService securityMcpToolsService,
+                                                     AuthSessionMcpToolsService authSessionMcpToolsService,
                                                      PassiveScanMcpToolsService passiveScanMcpToolsService,
                                                      ScanHistoryMcpToolsService scanHistoryMcpToolsService,
                                                      AddonMaintenanceMcpToolsService addonMaintenanceMcpToolsService) {
-        List<Object> tools = new ArrayList<>(List.of(guidedSecurityToolsService, guidedAuthSessionMcpToolsService,
+        List<Object> tools = new ArrayList<>(List.of(securityMcpToolsService, authSessionMcpToolsService,
                 passiveScanMcpToolsService, scanHistoryMcpToolsService, addonMaintenanceMcpToolsService));
         return MethodToolCallbackProvider.builder()
                 .toolObjects(tools.toArray())

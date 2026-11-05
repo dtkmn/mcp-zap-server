@@ -74,7 +74,7 @@ class McpRuntimePolicyEnforceIntegrationTest extends AbstractMcpRuntimePolicyInt
                 .contains(APPROVAL_REQUIRED_REASON)
                 .doesNotContain(SECRET_TOKEN)
                 .doesNotContain("orders?token");
-        assertThat(responseBody).doesNotContain("Guided attack started");
+        assertThat(responseBody).doesNotContain("Active scan started");
 
         JsonNode event = findAuditEvent(
                 actuator(POLICY_API_KEY, "/actuator/auditevents").getResponseBody(),

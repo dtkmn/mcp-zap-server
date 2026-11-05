@@ -58,7 +58,7 @@ zap:
   persistence:
     enabled: true
     existingClaim: ""  # Reuse an operator-provisioned PVC; no chart PVC is created.
-    shareWithMcp: true  # Required for guided report readback.
+    shareWithMcp: true  # Required for reading reports through MCP.
     retainOnDelete: true  # Retain the chart PVC on Helm uninstall; namespace deletion still removes it.
     storageClass: ""  # Use default storage class
     accessMode: ReadWriteOnce

@@ -17,7 +17,7 @@ remove only the restrictions you deliberately intend to lift.
 
 For the behavior and requirements of `v0.16.0`, consult the
 [0.16.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.16.0.md). Follow
-[Upgrading to Guided Tools](../../docs/src/content/docs/getting-started/tool-migration.md)
+[Migrating older clients](../../docs/src/content/docs/getting-started/tool-migration.md)
 when adapting an older MCP integration.
 
 Version `0.15.0` adds OpenAPI content import and complete report retrieval through
@@ -42,6 +42,9 @@ Upgrading from `v0.11.1` requires V7/V8
 migrations for PostgreSQL scan-job storage. Migration execution is disabled by
 default. See the [0.12.0 upgrade notes](../../docs/releases/RELEASE_NOTES_0.12.0.md)
 for migration, findings snapshot, and timeout changes.
+Current receipt-aware workers also require V9; follow the
+[launch-ownership upgrade procedure](#preserve-launch-ownership-before-replacing-controllers)
+before replacing older controllers.
 
 Set `zap.image.digest` to `sha256:` followed by 64 lowercase hexadecimal
 characters to use `repository@digest` instead of `zap.image.tag`. Leave it empty
@@ -58,9 +61,9 @@ This chart deploys two main components in **separate pods**:
    - Persistent storage for scan data
    - Resource-intensive (2-4GB RAM)
 
-2. **MCP Server Pod(s)** (1 replica by default; 2+ only with session affinity)
+2. **MCP Server Pod(s)** (1 replica by default; 2+ require Postgres job state and session affinity)
    - REST API gateway to ZAP
-   - Horizontally scalable only when streamable HTTP affinity is configured
+   - Multiple replicas require shared durable state and streamable HTTP affinity
    - Lightweight (512MB-1GB RAM)
    - Auto-scaling is opt-in
 
@@ -73,7 +76,7 @@ do not execute commands inside the container.
 
 - Kubernetes 1.23+
 - Helm 3.8+
-- PV provisioner support in the underlying infrastructure (for ZAP persistence)
+- PV provisioner support for the workspace and, with in-memory jobs, the separate MCP launch journal
 
 ## Installation
 
@@ -247,6 +250,12 @@ helm install mcp-zap ./helm/mcp-zap-server \
 | `zap.persistence.enabled` | Enable persistent storage for ZAP | `true` |
 | `zap.persistence.size` | Size of chart-managed persistent volume | `10Gi` |
 | `zap.persistence.existingClaim` | Reuse an existing workspace PVC | `""` |
+| `zap.persistence.storageClass` | Workspace StorageClass; empty uses the cluster default | `""` |
+| `mcp.scan.jobs.store.backend` | Explicit job backend; required when using `mcp.envFrom` | `""` (in-memory) |
+| `mcp.launchSafety.persistence.existingClaim` | Reuse a separate MCP-only launch-journal PVC for in-memory jobs | `""` |
+| `mcp.launchSafety.persistence.storageClass` | Launch-journal StorageClass; empty uses the cluster default | `""` |
+| `mcp.launchSafety.persistence.size` | Size of the chart-managed launch-journal PVC | `64Mi` |
+| `mcp.launchSafety.persistence.retainOnDelete` | Retain the chart-managed launch-journal PVC on Helm uninstall | `true` |
 | `zap.persistence.shareWithMcp` | Share reports and retained operator-managed automation files with MCP | `true` |
 | `zap.persistence.retainOnDelete` | Retain chart-managed PVC on Helm uninstall | `true` |
 | `zap.persistence.workspaceSubPath` | Optional PVC directory for reports and automation; migrate existing root-layout files before changing it | `""` |
@@ -280,7 +289,7 @@ Keep this read boundary in place rather than broadening access to the whole
 shared mount. See [Findings and Reports](../../docs/src/content/docs/scanning/findings-and-reports.md).
 
 The automation storage settings configure operator-managed native ZAP files
-separately from the guided MCP workflow. See the [native plan boundary](../../docs/src/content/docs/getting-started/tool-migration.md#automation-framework).
+separately from the MCP scan workflow. See the [native plan boundary](../../docs/src/content/docs/getting-started/tool-migration.md#automation-framework).
 The default automation directory remains `<shared-mount>/automation`.
 `zap.persistence.automationSubdirectory` must be a nonempty relative directory
 using letters, digits, dots, underscores, hyphens and `/` separators; absolute
@@ -314,6 +323,38 @@ ZAP startup add-on downloads also require approved network egress. Verify the
 selected image already contains the required add-ons, or configure their download
 access. For a prebuilt image containing them, set `zap.config.addons=[]` to avoid
 runtime installation. DNS-only egress does not permit downloads or scanning.
+
+### Scan Launch Safety Storage
+
+Job storage determines how outstanding scan starts survive controller replacement:
+
+| Job backend | Launch safety state | Controller requirements |
+| --- | --- | --- |
+| `in-memory` (default) | Separate persistent MCP-only journal PVC | One MCP controller; the chart uses `Recreate`, briefly interrupting service during replacement |
+| `postgres` | Launch receipts in the job database, requiring migration V9 | Shared database for multiple controllers; no memory-journal PVC is created or mounted |
+
+Choose the backend with `mcp.scan.jobs.store.backend`. Declare it explicitly
+when using `mcp.envFrom` so the chart can select the correct storage and rollout
+behavior. Preserve an existing deployment's backend and data when adding other
+configuration; changing this setting does not migrate outstanding launches.
+
+For in-memory jobs, configure `mcp.launchSafety.persistence.storageClass` or
+verify that the cluster default can provision the journal. This is independent
+of `zap.persistence.storageClass`: the workspace and journal can use the same
+StorageClass, but must use **different PVCs**. To reuse a journal, set
+`mcp.launchSafety.persistence.existingClaim` to its actual claim in the release
+namespace and verify the configured MCP UID/GID (`1000:1000` by default) can
+read and write it. Do not point this setting at `zap.persistence.existingClaim`
+or share the journal with ZAP.
+The chart mounts it privately at `/var/lib/mcp-zap/scan-launch-safety`; the
+journal directory is `receipts` beneath that mount. It is not report storage or
+a backup of the process-local queue history.
+
+Preserve the journal or Postgres receipts across replacement and reinstallation.
+Outstanding work may remain held, reserving capacity; neither a saved native ID
+nor a restart permits automatic adoption. Current MCP tools cannot manually
+clear those holds. Do not delete recovery state or select an empty replacement
+to bypass them. See [Restart and Ownership](../../docs/src/content/docs/operations/scan-queue-retry-policy.md#restart-and-ownership).
 
 ### OpenAPI Content Import Storage
 
@@ -501,8 +542,11 @@ This guidance assumes an existing EKS cluster. Start from
 explicit MCP image containing the features you need. For a standard EKS cluster
 using EC2 Linux workers, provision the
 [EBS CSI driver and its IAM permissions](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html),
-and select a working RWO StorageClass with `WaitForFirstConsumer` binding. MCP and
-ZAP must fit on the same worker for the shared RWO claim; leave capacity for
+and select a working RWO StorageClass with `WaitForFirstConsumer` binding for both
+`zap.persistence.storageClass` and `mcp.launchSafety.persistence.storageClass`
+when using in-memory jobs. They provision separate workspace and MCP-only journal
+claims; see [Scan Launch Safety Storage](#scan-launch-safety-storage). MCP and
+ZAP must fit on the same worker for the shared RWO workspace; leave capacity for
 cluster system pods. EKS Auto Mode has a different EBS provisioner; use the
 storage configuration appropriate to your cluster.
 
@@ -527,7 +571,7 @@ Before expanding the deployment, verify allowed MCP access and blocked ZAP API
 access from a separate workload, then crawl a controlled target, wait for passive
 completion, generate and fully read a report, and run the optional import flow
 you enabled. Verify any separately managed native automation workflow outside
-MCP; the guided catalog does not execute its plans. Replace MCP and repeat
+MCP; the MCP server does not execute its plans. Replace MCP and repeat
 report readback and a fresh scan. A passing render or health check does not establish these end-to-end flows,
 HA, workload capacity or persistence of an in-flight ZAP scan.
 
@@ -634,6 +678,38 @@ Review the new storage/exposure defaults before an upgrade: AWS and secure-Secre
 examples are single-replica/private, HA uses TLS ingress and existing RWX storage,
 and raw JWT revocation environment entries move to typed chart fields.
 
+### Preserve launch ownership before replacing controllers
+
+Before upgrading from a controller without launch receipts, pause new scan
+submissions and drain outstanding work where possible. Stop **all** old MCP
+controllers before starting receipt-aware workers, including controllers outside
+this Helm release that share the engine or queue. Prevent an HPA, GitOps operator
+or other supervisor from restarting them during the cutover. Do not use an
+overlapping rolling upgrade for this transition, even when the Postgres backend
+normally permits `RollingUpdate`.
+
+Back up and verify restoration of the job database and any launch journal
+separately from the report workspace. Keep the existing backend and recovery
+state. For Postgres, apply all pending migrations through V9 before new workers
+start; for in-memory jobs, retain the separate journal claim and use one MCP
+controller with `Recreate`. Existing claims must still be writable by MCP.
+If changing a chart-managed journal to `existingClaim`, preserve its retention
+and Helm ownership before removing it from the release, as with the workspace
+procedure below; keep the journal and workspace claims separate.
+
+A legacy in-memory installation without a launch journal has no durable launch
+records for new storage to recover. Finish or stop its existing ZAP work and
+establish that no old scan start remains in flight before resuming submissions.
+If that cannot be established, keep submissions paused; a new empty journal
+does not prove that ZAP is idle.
+
+Surviving scans with preserved launch state can remain held after replacement.
+A healthy deployment does not prove that tracking resumed, and current MCP tools cannot manually adopt
+those scans or clear their holds. Do not downgrade to a controller without
+receipt support while outstanding receipt-bearing work remains. Review
+[Restart and Ownership](../../docs/src/content/docs/operations/scan-queue-retry-policy.md#restart-and-ownership)
+before resuming submissions.
+
 ### Preserve the workspace before changing claims
 
 For a `0.13.0` to `0.14.0` upgrade, keeping the same chart-managed PVC does not
@@ -715,7 +791,7 @@ changing the claim or its ownership**.
 
 6. Before resuming normal traffic, confirm both workloads mount the intended claim,
    can access the same files, and become ready. Verify existing report readback,
-   then generate and read a new report through the guided tools.
+   then generate and read a new report with the report tools.
    For HA, verify access from each MCP replica and test session routing. Keep the
    old volume until these checks and the recovery procedure have passed.
 
@@ -728,13 +804,20 @@ changing the claim or its ownership**.
 
 ### Database migrations and upgrade commands
 
+Postgres scan jobs require migration V9 (`launch_attempt_json`) in addition to
+all earlier migrations. Migration execution is disabled by default: configure
+and enable `migrations.enabled` or apply the bundled SQL through your existing
+migration process before starting receipt-aware workers. Preserve the database
+and stop pre-receipt controllers as described above; a Helm hook does not stop
+old application pods by itself.
+
 When migrations are enabled, Helm creates the SQL ConfigMap as a weight -10
 pre-install/pre-upgrade hook, then runs Flyway at weight 0. The SQL remains mounted
 until the Job finishes and is refreshed before the next migration. Provision the
 database credential Secret before installation; hook pods do not use the chart's
 ordinary ServiceAccount. Test a clean install and an upgrade adding SQL against
-a disposable database before production. The 0.14.0 application migrations remain
-unchanged from 0.13.0.
+a disposable database before production. Render/lint checks alone do not verify
+hook execution or database compatibility.
 
 When upgrading from a chart that managed the SQL ConfigMap as an ordinary resource,
 the migration hook can complete successfully before Helm deletes that former
@@ -756,15 +839,12 @@ helm upgrade mcp-zap ./helm/mcp-zap-server \
 
 ## Uninstalling
 
-```bash
-# Uninstall the release
-helm uninstall mcp-zap --namespace mcp-zap
-
-```
-
-The chart retains its PVC by default (`zap.persistence.retainOnDelete=true`).
-For a claim still managed by an older chart, check `helm get manifest` for its
-stored `helm.sh/resource-policy: keep` annotation before uninstalling. Helm's
+Before uninstalling, pause submissions, stop controllers and preserve required
+workspace, journal and database state. The chart retains its workspace PVC by
+default (`zap.persistence.retainOnDelete=true`) and, for in-memory jobs, its
+separate journal PVC (`mcp.launchSafety.persistence.retainOnDelete=true`). Check
+`helm get manifest` for each chart-managed claim's stored
+`helm.sh/resource-policy: keep` annotation before uninstalling. Helm's
 uninstall filtering uses the stored release manifest; an annotation added only
 to the live PVC does not guarantee retention during uninstall. Complete the
 preservation migration above before removing an older release whose manifest
@@ -774,14 +854,30 @@ a formerly chart-managed claim requires the preservation steps above. Hook SQL
 ConfigMaps can remain
 until the next migration hook replaces them and are not normally removed by Helm
 uninstall. The first upgrade from an ordinary SQL ConfigMap has the deletion caveat
-described above. List the release's remaining PVC and migration ConfigMap,
+described above. List the release's remaining PVCs and migration ConfigMap,
 back up required data, and delete them explicitly only when no longer needed.
 Deleting the namespace removes its PVCs even when Helm retention is enabled;
 backing-volume deletion then depends on the PV reclaim policy.
 
-For reinstallation with retained data, set `zap.persistence.existingClaim` to
-the retained claim. Retaining files does not make every in-memory ZAP scan durable;
-verify backup/restore and engine recovery separately.
+After completing those preservation checks:
+
+```bash
+helm uninstall mcp-zap --namespace mcp-zap
+```
+
+For reinstallation, identify the actual retained claims rather than relying on
+names derived from a new release. Set `zap.persistence.existingClaim` to the
+workspace and, for in-memory jobs, set
+`mcp.launchSafety.persistence.existingClaim` to the **separate** journal claim.
+Keep both in the release namespace with the verified permissions and access
+modes. With Postgres jobs, reconnect to the preserved job database, apply pending
+migrations through V9, and keep the Postgres backend selected; no memory-journal
+claim is needed. Preserve required scan-history and JWT-revocation databases too.
+
+Retaining the workspace does not restore in-memory job history or prove ZAP scan
+recovery. Retaining launch state prevents unsafe duplicate starts; it does not
+automatically resume held scans. Do not reinstall with empty recovery state to
+escape a hold. Verify backup/restore and engine recovery separately.
 
 ## Monitoring
 

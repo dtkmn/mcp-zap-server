@@ -6,17 +6,17 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * Guided auth bootstrap orchestrator for prepare and validate flows.
+ * Prepares and validates authentication sessions.
  */
 @Service
-public class GuidedAuthSessionService {
+public class AuthSessionService {
     private final List<AuthBootstrapProvider> providers;
     private final PreparedAuthSessionRegistry preparedAuthSessionRegistry;
     private final AuthProfileResolver authProfileResolver;
 
-    public GuidedAuthSessionService(List<AuthBootstrapProvider> providers,
-                                    PreparedAuthSessionRegistry preparedAuthSessionRegistry,
-                                    AuthProfileResolver authProfileResolver) {
+    public AuthSessionService(List<AuthBootstrapProvider> providers,
+                              PreparedAuthSessionRegistry preparedAuthSessionRegistry,
+                              AuthProfileResolver authProfileResolver) {
         this.providers = providers;
         this.preparedAuthSessionRegistry = preparedAuthSessionRegistry;
         this.authProfileResolver = authProfileResolver;
@@ -29,7 +29,7 @@ public class GuidedAuthSessionService {
         PreparedAuthSession session = preparedAuthSessionRegistry.save(result.session());
 
         StringBuilder output = new StringBuilder()
-                .append("Guided auth session prepared.\n")
+                .append("Auth session prepared.\n")
                 .append("Session ID: ").append(session.sessionId()).append('\n')
                 .append("Auth Profile: ").append(session.profileId()).append('\n')
                 .append("Auth Kind: ").append(session.authKind().wireValue()).append('\n')
@@ -69,7 +69,7 @@ public class GuidedAuthSessionService {
         AuthSessionValidationResult result = provider.validate(session);
 
         StringBuilder output = new StringBuilder()
-                .append("Guided auth session validation complete.\n")
+                .append("Auth session validation complete.\n")
                 .append("Session ID: ").append(session.sessionId()).append('\n')
                 .append("Auth Kind: ").append(session.authKind().wireValue()).append('\n')
                 .append("Provider: ").append(session.providerId()).append('\n')

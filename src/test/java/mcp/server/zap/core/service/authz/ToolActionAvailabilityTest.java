@@ -16,16 +16,16 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class GuidedToolActionsTest {
+class ToolActionAvailabilityTest {
     private ToolAuthorizationProperties properties;
     private ToolAuthorizationService authorizationService;
-    private GuidedToolActions actions;
+    private ToolActionAvailability actions;
 
     @BeforeEach
     void setUp() {
         properties = new ToolAuthorizationProperties();
         authorizationService = new ToolAuthorizationService(new ToolScopeRegistry(), properties);
-        actions = new GuidedToolActions(authorizationService, true, "api-key");
+        actions = new ToolActionAvailability(authorizationService, true, "api-key");
     }
 
     @AfterEach
@@ -90,9 +90,9 @@ class GuidedToolActionsTest {
 
     @Test
     void disabledSecurityPreservesFollowups() {
-        assertThat(new GuidedToolActions(authorizationService, false, "api-key")
+        assertThat(new ToolActionAvailability(authorizationService, false, "api-key")
                 .canCall("zap_attack_start")).isTrue();
-        assertThat(new GuidedToolActions(authorizationService, true, " NONE ")
+        assertThat(new ToolActionAvailability(authorizationService, true, " NONE ")
                 .canCall("zap_report_read")).isTrue();
     }
 

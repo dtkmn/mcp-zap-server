@@ -8,20 +8,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
- * Keeps guided follow-up suggestions consistent with the caller's effective tool permissions.
+ * Keeps follow-up suggestions consistent with the caller's effective tool permissions.
  * This is presentation guidance; the request filter remains the enforcement boundary.
  */
 @Component
-public class GuidedToolActions {
+public class ToolActionAvailability {
     private static final String SCOPE_PREFIX = "SCOPE_";
 
     private final ToolAuthorizationService authorizationService;
     private final boolean securityEnabled;
     private final String securityMode;
 
-    public GuidedToolActions(ToolAuthorizationService authorizationService,
-                             @Value("${mcp.server.security.enabled:true}") boolean securityEnabled,
-                             @Value("${mcp.server.security.mode:api-key}") String securityMode) {
+    public ToolActionAvailability(ToolAuthorizationService authorizationService,
+                                  @Value("${mcp.server.security.enabled:true}") boolean securityEnabled,
+                                  @Value("${mcp.server.security.mode:api-key}") String securityMode) {
         this.authorizationService = authorizationService;
         this.securityEnabled = securityEnabled;
         this.securityMode = securityMode;

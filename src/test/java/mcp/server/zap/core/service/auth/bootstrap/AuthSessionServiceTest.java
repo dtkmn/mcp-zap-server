@@ -34,14 +34,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
-class GuidedAuthSessionServiceTest {
+class AuthSessionServiceTest {
 
     @TempDir
     Path tempDir;
 
     private ContextUserService contextUserService;
     private UrlValidationService urlValidationService;
-    private GuidedAuthSessionService service;
+    private AuthSessionService service;
 
     @BeforeEach
     void setUp() {
@@ -64,7 +64,7 @@ class GuidedAuthSessionServiceTest {
         String prepareResponse = service.prepareSession("shop-form", "https://shop.example.com");
 
         assertThat(prepareResponse).contains(
-                "Guided auth session prepared.",
+                "Auth session prepared.",
                 "Auth Profile: shop-form",
                 "Auth Kind: form",
                 "Authorized Origin: https://shop.example.com",
@@ -78,7 +78,7 @@ class GuidedAuthSessionServiceTest {
         String validateResponse = service.validateSession(extractSessionId(prepareResponse));
 
         assertThat(validateResponse).contains(
-                "Guided auth session validation complete.",
+                "Auth session validation complete.",
                 "Valid: true",
                 "Outcome: authenticated"
         ).doesNotContain("example-password-value", "scan-password.txt");
@@ -129,7 +129,7 @@ class GuidedAuthSessionServiceTest {
         AuthBootstrapProperties.Profile profile = browserProfile(
                 "shop-browser", "https://shop.example.com", "file:" + formPasswordFile());
         PreparedAuthSessionRegistry registry = mock(PreparedAuthSessionRegistry.class);
-        service = new GuidedAuthSessionService(
+        service = new AuthSessionService(
                 List.of(new FormLoginAuthBootstrapProvider(
                         contextUserService, new CredentialReferenceResolver(), urlValidationService)),
                 registry, new AuthProfileResolver(propertiesWith(profile)));
@@ -163,7 +163,7 @@ class GuidedAuthSessionServiceTest {
         assertThat(validateResponse).contains(
                 "Valid: true",
                 "Outcome: reference_valid",
-                "Current guided ZAP flows do not automatically inject header-based auth yet."
+                "Crawls and active scans do not send credentials from header-based sessions."
         );
     }
 
@@ -415,7 +415,7 @@ class GuidedAuthSessionServiceTest {
                 true
         ));
         CredentialReferenceResolver credentialResolver = new CredentialReferenceResolver();
-        service = new GuidedAuthSessionService(
+        service = new AuthSessionService(
                 List.of(new FormLoginAuthBootstrapProvider(contextUserService, credentialResolver, urlValidationService)),
                 registry,
                 new AuthProfileResolver(propertiesWith(formProfile(
@@ -432,9 +432,9 @@ class GuidedAuthSessionServiceTest {
         verifyNoInteractions(contextUserService);
     }
 
-    private GuidedAuthSessionService serviceWith(AuthBootstrapProperties.Profile... profiles) {
+    private AuthSessionService serviceWith(AuthBootstrapProperties.Profile... profiles) {
         CredentialReferenceResolver credentialResolver = new CredentialReferenceResolver();
-        return new GuidedAuthSessionService(
+        return new AuthSessionService(
                 List.of(
                         new FormLoginAuthBootstrapProvider(contextUserService, credentialResolver, urlValidationService),
                         new HeaderCredentialAuthBootstrapProvider(credentialResolver, urlValidationService)

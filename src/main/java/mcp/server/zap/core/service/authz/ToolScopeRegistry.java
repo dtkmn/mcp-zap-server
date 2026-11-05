@@ -35,7 +35,7 @@ public class ToolScopeRegistry {
         register(rules, "zap_findings_summary", McpToolSurface.GUIDED, "zap:report:read");
         register(rules, "zap_findings_details", McpToolSurface.GUIDED, "zap:alerts:read");
 
-        // Guided execution
+        // Target import, crawling, active scans, and reports
         register(rules, "zap_target_import", McpToolSurface.GUIDED, "zap:api:import");
         register(rules, "zap_crawl_start", McpToolSurface.GUIDED, List.of(GUIDED_SCAN_CAPABILITY), "zap:scan:crawl:run");
         register(rules, "zap_crawl_status", McpToolSurface.GUIDED, "zap:scan:read");

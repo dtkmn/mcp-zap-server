@@ -8,7 +8,7 @@ import mcp.server.zap.core.service.UrlValidationService;
 import org.springframework.stereotype.Component;
 
 /**
- * Guided provider for bearer or API-key credential references at the gateway layer.
+ * Provider for bearer or API-key credential references at the gateway layer.
  */
 @Component
 public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvider {
@@ -60,7 +60,7 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
         );
 
         List<String> warnings = new ArrayList<>();
-        warnings.add("Current guided ZAP flows do not automatically inject header-based auth yet. This session is stored as a gateway contract and validation scaffold.");
+        warnings.add("Crawls and active scans do not send credentials from header-based sessions. You can validate the credential reference with zap_auth_session_validate.");
 
         return new AuthSessionPrepareResult(session, warnings);
     }
@@ -75,7 +75,7 @@ public class HeaderCredentialAuthBootstrapProvider implements AuthBootstrapProvi
         List<String> diagnostics = new ArrayList<>();
         diagnostics.add("credentialReference resolved successfully");
         diagnostics.add("headerName=" + session.headerName());
-        diagnostics.add("Current guided ZAP flows do not automatically inject header-based auth yet.");
+        diagnostics.add("Crawls and active scans do not send credentials from header-based sessions.");
         return new AuthSessionValidationResult(
                 session,
                 true,

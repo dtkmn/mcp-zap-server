@@ -98,9 +98,8 @@ connections working without reconfiguration.
 The extension bundles a snapshot of the scanner setup files and defaults.
 The released connector `0.1.0` defaults a new installation to scanner `v0.17.1`,
 whose Linux AMD64 and ARM64 images are published on Docker Hub and GHCR.
-That scanner release defaults to guided tools with direct execution for a
-standard local installation; it also supports optional queued execution and expert tools.
-Current-source guided-only and always-queued scan starts require a source build;
+That scanner release starts scans directly in a standard local installation. Queued execution and expert tools are optional.
+The change to queue every new scan requires a current source build;
 they are not added to the released scanner by installing an updated guide.
 Downloading a bundle from a scanner release does not itself change its embedded default.
 An existing scanner keeps its selected version and settings.
@@ -122,7 +121,7 @@ local demo. Send a separate message:
 Check scanner_check_readiness first, then verify this connection with one
 zap_passive_scan_status call. If recovery is needed, explain it and wait for
 my approval before starting Docker or containers. Preserve all client settings.
-Run only a guided HTTP crawl against http://juice-shop:3000.
+Run only an HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish and summarize findings for this target.
 Generate an HTML report scoped to this target and read the complete report

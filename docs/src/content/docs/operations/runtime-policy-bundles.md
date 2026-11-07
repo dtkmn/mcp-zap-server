@@ -56,12 +56,12 @@ A bundle is a JSON document with this shape:
   "apiVersion": "mcp.zap.policy/v1",
   "kind": "PolicyBundle",
   "metadata": {
-    "name": "ci-guided-guardrails",
+    "name": "ci-guardrails",
     "description": "Allow CI scans on sandbox hosts during staffed hours.",
     "owner": "security-platform",
     "labels": {
       "channel": "ci",
-      "surface": "guided"
+      "surface": "mcp"
     }
   },
   "spec": {
@@ -70,7 +70,7 @@ A bundle is a JSON document with this shape:
     "timezone": "Australia/Sydney",
     "rules": [
       {
-        "id": "allow-guided-ci-sandbox-hours",
+        "id": "allow-ci-sandbox-hours",
         "description": "Permit CI calls with a target for sandbox hosts during staffed hours.",
         "decision": "allow",
         "reason": "Sandbox CI is approved during staffed rollout hours.",
@@ -94,7 +94,7 @@ A bundle is a JSON document with this shape:
         }
       },
       {
-        "id": "allow-guided-ci-followups-staffed-hours",
+        "id": "allow-ci-followups-staffed-hours",
         "description": "Permit scan status checks and workspace-confined report readback that do not carry a target parameter.",
         "decision": "allow",
         "reason": "Follow-up calls are approved during staffed hours. Report reads are restricted to the workspace artifact path.",
@@ -137,10 +137,12 @@ check the running server's tool catalog before calling it.
 
 The repository ships example bundles at:
 
-- `examples/policy-bundles/ci-guided-guardrails.json`
-- `examples/policy-bundles/guided-readonly-triage.json`
+- `examples/policy-bundles/ci-guardrails.json`
+- `examples/policy-bundles/readonly-triage.json`
 
-Use those as starting points, not as production policy. Your actual bundle must name your approved hosts, tools, owners, and rollout windows.
+Copy the example you need to a path you control, set `MCP_POLICY_BUNDLE_FILE` to that path, and adapt the approved hosts, tools, owners, and time windows.
+
+If your deployment loads an example directly from the checkout, update its configured path or bind mount when upgrading to 0.18.0. Existing copies can keep their filenames. If you adopt the updated examples, adjust any custom audit filters keyed to their previous bundle names or CI rule IDs. Extensions that select bundles by the `surface` label should match `mcp` for these examples.
 
 ## Previewing Decisions
 

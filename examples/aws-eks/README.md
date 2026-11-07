@@ -12,7 +12,7 @@ The single-worker configuration does not provide HA or define production scan
 capacity. NetworkPolicy enforcement has startup and hosting-node limitations
 described below. Complete the infrastructure, network, scan, report and recovery
 checks for your selected image in your own environment, including any optional
-guided API imports or authenticated scans you configure.
+API imports or authenticated scans you configure.
 
 | File | Purpose |
 | --- | --- |
@@ -275,10 +275,37 @@ checkout:
 cp helm/mcp-zap-server/values-aws.yaml "$MCP_EKS_OPERATOR_DIR/values.yaml"
 ```
 
-Edit that file before installing. Set `zap.persistence.storageClass` to
-`mcp-zap-gp3-retain`; keep one MCP replica, one ZAP engine and both services on
-`ClusterIP`. Preserve the chart's shared RWO storage placement, and leave worker
-capacity for system pods. Infrastructure creation does not prove scan capacity.
+Edit that file before installing. This single-controller example uses in-memory
+jobs, so select `mcp-zap-gp3-retain` for **both** the workspace and the separate
+MCP-only launch journal:
+
+```yaml
+zap:
+  persistence:
+    storageClass: mcp-zap-gp3-retain
+mcp:
+  scan:
+    jobs:
+      store:
+        backend: in-memory
+  launchSafety:
+    persistence:
+      storageClass: mcp-zap-gp3-retain
+```
+
+Merge these fields into the copied values file; preserve its other settings.
+The StorageClass created above is not marked as the cluster default. Setting
+only the workspace class leaves the journal dependent on a separate default,
+which may be absent or use different retention settings. The two claims may
+use this same class but must remain separate; do not share the journal with ZAP.
+For an existing installation, preserve its backend and actual claims instead of
+creating empty replacements. Follow the [storage and upgrade instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#scan-launch-safety-storage)
+for `existingClaim` reuse or Postgres/V9 requirements.
+
+Keep one MCP replica, one ZAP engine and both services on `ClusterIP`. In-memory
+jobs use `Recreate` rollouts with a brief MCP interruption. Preserve the chart's
+shared RWO workspace placement, verify both claims bind and mount, and leave
+worker capacity for system pods. Infrastructure creation does not prove scan capacity.
 
 Provision the existing Secret required by the chart, replace the private client
 CIDR placeholder, and configure the exact authorized target CIDRs/ports and
@@ -313,7 +340,7 @@ Before real target scans, complete the Helm guide and
 verify allowed MCP access and blocked ZAP API access from a separate workload,
 verify approved target traffic and denied destinations, crawl an owned target,
 wait for passive completion, generate and fully read a report, and exercise any
-guided API imports or authenticated scans you configured. Replace MCP and repeat
+API imports or authenticated scans you configured. Replace MCP and repeat
 report readback and a fresh scan. Health, add-on status and successful storage
 binding alone do not prove these application flows or HA.
 
@@ -325,9 +352,13 @@ load balancers you created. Uninstall the application and remove its ingress or
 LoadBalancer services before deleting the cluster; allow their controllers to
 finish cleanup. AWS documents the [cluster deletion order](https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html).
 
-The chart can retain its PVC on uninstall, and this StorageClass retains the
-underlying PV/EBS volume even after a PVC is deleted. These dynamically created
-application volumes are **not CloudFormation-owned**. After exporting data and
+The chart retains the workspace and in-memory launch-journal PVCs by default;
+verify both claims' retention before uninstalling. Preserve any job database and
+launch journal needed for reinstallation or unresolved scans, separately from
+exported reports. Follow the [uninstall and reinstall guidance](https://github.com/dtkmn/mcp-zap-server/blob/main/helm/mcp-zap-server/README.md#uninstalling);
+do not replace a journal or database with empty state to bypass a hold.
+This StorageClass retains the underlying PV/EBS volume even after a PVC is
+deleted. These dynamically created application volumes are **not CloudFormation-owned**. After exporting data and
 confirming each intended volume is detached and unused, explicitly decide
 whether to retain it or manually delete that exact volume. Do not delete volumes
 by a broad name/tag filter or assume stack deletion removes them. Retained

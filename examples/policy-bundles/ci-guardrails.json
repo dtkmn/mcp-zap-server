@@ -2,13 +2,13 @@
   "apiVersion": "mcp.zap.policy/v1",
   "kind": "PolicyBundle",
   "metadata": {
-    "name": "ci-guided-guardrails",
-    "displayName": "CI Guided Guardrails",
-    "description": "Allow the guided CI path on sandbox hosts during staffed hours and make production attack attempts an explicit deny.",
+    "name": "ci-guardrails",
+    "displayName": "CI Scan Guardrails",
+    "description": "Allow CI scans on sandbox hosts during staffed hours and make production attack attempts an explicit deny.",
     "owner": "security-platform",
     "labels": {
       "channel": "ci",
-      "surface": "guided"
+      "surface": "mcp"
     }
   },
   "spec": {
@@ -33,8 +33,8 @@
         }
       },
       {
-        "id": "allow-guided-ci-sandbox-hours",
-        "description": "Permit target-bearing guided import, crawl, attack, findings, and report generation for sandbox hosts during staffed hours.",
+        "id": "allow-ci-sandbox-hours",
+        "description": "Permit target-bearing import, crawl, attack, findings, and report generation for sandbox hosts during staffed hours.",
         "decision": "allow",
         "reason": "Sandbox CI is approved during staffed rollout hours.",
         "match": {
@@ -63,10 +63,10 @@
         }
       },
       {
-        "id": "allow-guided-ci-followups-staffed-hours",
-        "description": "Permit guided lifecycle checks and workspace-confined report readback that do not carry a target parameter.",
+        "id": "allow-ci-followups-staffed-hours",
+        "description": "Permit scan status checks and workspace-confined report readback that do not carry a target parameter.",
         "decision": "allow",
-        "reason": "Guided follow-up calls are approved during staffed rollout hours; report readback is bounded by report/workspace artifact confinement, not host matching.",
+        "reason": "Follow-up calls are approved during staffed rollout hours. Report reads are limited to workspace artifacts.",
         "match": {
           "tools": [
             "zap_crawl_status",
@@ -89,7 +89,7 @@
         "id": "allow-tool-discovery",
         "description": "Allow CI clients to discover the approved tool surface before execution.",
         "decision": "allow",
-        "reason": "MCP clients need tool discovery before selecting the approved guided path.",
+        "reason": "MCP clients need tool discovery before selecting an approved tool.",
         "match": {
           "tools": ["mcp:tools:list"]
         }

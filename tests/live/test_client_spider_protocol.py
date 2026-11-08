@@ -1,4 +1,4 @@
-"""Offline protocol and behavioral fixtures for the guided live harness."""
+"""Offline protocol and behavioral fixtures for the Client Spider live harness."""
 
 import contextlib
 import io
@@ -76,7 +76,7 @@ class ProtocolTests(unittest.TestCase):
                          requested_resources(messages, "http://juice-shop:3000"))
 
 
-class GuidedHarnessTests(unittest.TestCase):
+class ClientSpiderHarnessTests(unittest.TestCase):
     def setUp(self):
         self.output = contextlib.redirect_stdout(io.StringIO())
         self.output.__enter__()
@@ -129,7 +129,7 @@ class GuidedHarnessTests(unittest.TestCase):
     def test_full_lifecycle_preserves_pending_and_running_isolation_with_replay_alias(self):
         suite = self.lifecycle_suite()
         suite.lifecycle()
-        self.assertEqual({}, suite.guided_ids)
+        self.assertEqual({}, suite.job_by_operation_id)
         names = [item.args[0] for item in suite.mcp.call.call_args_list]
         self.assertEqual({"zap_crawl_start", "zap_crawl_status", "zap_crawl_stop"}, set(names))
         starts = [item.args[1] for item in suite.mcp.call.call_args_list if item.args[0] == "zap_crawl_start"]
@@ -203,33 +203,33 @@ class GuidedHarnessTests(unittest.TestCase):
         for state in ["START_OUTCOME_UNKNOWN", "FAILED", "CANCELLED", "QUEUED"]:
             with self.subTest(state=state):
                 suite = self.suite()
-                suite.guided_ids["op1"] = "job1"
+                suite.job_by_operation_id["op1"] = "job1"
                 suite.mcp.call.return_value = self.status(state=state, percent=100)
                 with patch("client_spider_juice_shop.time.monotonic", side_effect=[0, 1]):
                     with self.assertRaisesRegex(AssertionError, "Timed out" if state == "QUEUED" else "Expected SUCCEEDED"):
                         suite.wait_for_state("op1", "SUCCEEDED")
-                self.assertIn("op1", suite.guided_ids)
+                self.assertIn("op1", suite.job_by_operation_id)
 
     def test_stop_requires_cancelled_not_merely_succeeded_and_checks_coverage_caveat(self):
         for response, reason in [(self.status(state="SUCCEEDED", percent=100), "Expected CANCELLED"),
                                  (self.status(state="CANCELLED").replace("before trusting this scan as evidence", ""),
                                   "does not establish successful coverage")]:
             suite = self.suite()
-            suite.guided_ids["op1"] = "job1"
+            suite.job_by_operation_id["op1"] = "job1"
             suite.mcp.call.side_effect = ["stop requested", response]
             with self.assertRaisesRegex(AssertionError, reason):
-                suite.stop_guided("op1", "11")
-            self.assertIn("op1", suite.guided_ids)
+                suite.stop_crawl("op1", "11")
+            self.assertIn("op1", suite.job_by_operation_id)
 
     def test_failed_or_missing_handle_start_never_retries_and_cleans_only_known_handles(self):
         for outcome in [RuntimeError("connection lost"), "Job ID: unknown\nStatus: STARTING"]:
             with self.subTest(outcome=str(outcome)):
                 suite = self.suite()
-                suite.guided_ids["owned"] = "owned-job"
+                suite.job_by_operation_id["owned"] = "owned-job"
                 suite.mcp.call.side_effect = [outcome, "stop requested",
                                              self.status("owned", "owned-job", "CANCELLED", None)]
                 with self.assertRaises((RuntimeError, AssertionError)):
-                    suite.guided_start()
+                    suite.start_crawl()
                 suite.cleanup()
                 starts = [item for item in suite.mcp.call.call_args_list if item.args[0] == "zap_crawl_start"]
                 stops = [item.args[1]["operationId"] for item in suite.mcp.call.call_args_list
@@ -243,23 +243,23 @@ class GuidedHarnessTests(unittest.TestCase):
         unknown = self.status(state="START_OUTCOME_UNKNOWN", native=None, percent=100)
         suite.mcp.call.side_effect = [unknown, "cancellation pending", unknown]
         with self.assertRaises(AssertionError):
-            suite.guided_start()
+            suite.start_crawl()
         suite.cleanup()
         self.assertEqual(1, sum(item.args[0] == "zap_crawl_start" for item in suite.mcp.call.call_args_list))
-        self.assertIn("op1", suite.guided_ids)
+        self.assertIn("op1", suite.job_by_operation_id)
         self.assertEqual(1, len(suite.evidence["cleanupErrors"]))
 
-    def test_unexpected_accepted_conflict_is_tracked_and_cleaned_by_guided_handle(self):
+    def test_unexpected_accepted_conflict_is_tracked_and_cleaned_by_operation_id(self):
         suite = self.suite()
         suite.mcp.call.side_effect = [self.status("new-op", "new-job", native="22", strategy="http"),
                                      "stop requested", self.status("new-op", "new-job", "CANCELLED", "22", "http")]
         suite.zap.view.return_value = {"status": "100"}
         with self.assertRaises(AssertionError):
             suite.rejected("conflict", "zap_crawl_start", {}, "idempotency")
-        self.assertIn("new-op", suite.guided_ids)
+        self.assertIn("new-op", suite.job_by_operation_id)
         suite.cleanup()
         suite.zap.view.assert_called_once_with("spider", "status", scanId="22")
-        self.assertEqual({}, suite.guided_ids)
+        self.assertEqual({}, suite.job_by_operation_id)
 
     def test_transport_error_is_not_accepted_as_input_validation(self):
         suite = self.suite()
@@ -288,7 +288,7 @@ class GuidedHarnessTests(unittest.TestCase):
     def test_completion_uses_fresh_successful_api_and_resource_evidence(self):
         suite, _ = self.completion_suite()
         suite.completion()
-        self.assertEqual({}, suite.guided_ids)
+        self.assertEqual({}, suite.job_by_operation_id)
         self.assertEqual(5, len(suite.evidence["coverage"]["freshResourceUrls"]))
         self.assertNotIn("zap_crawl_stop", [item.args[0] for item in suite.mcp.call.call_args_list])
 
@@ -351,7 +351,7 @@ class GuidedHarnessTests(unittest.TestCase):
             suite.setup = Mock()
             suite.args.phases = "lifecycle"
             suite.lifecycle = Mock(side_effect=AssertionError("phase failure"))
-            suite.guided_ids = {"owned": "owned-job"}
+            suite.job_by_operation_id = {"owned": "owned-job"}
             suite.mcp.call.side_effect = ["stop requested", self.status("owned", "owned-job", "CANCELLED", None)]
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(1, suite.run())
@@ -384,7 +384,7 @@ class ClientAndCliTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Tool zap_crawl_start: invalid input"):
             client.call("zap_crawl_start")
 
-    def test_cli_defaults_to_guided_full_phases(self):
+    def test_cli_defaults_to_all_phases(self):
         with patch("client_spider_juice_shop.Suite") as suite:
             suite.return_value.run.return_value = 0
             self.assertEqual(0, main(["--mcp-url", "http://127.0.0.1:1/mcp", "--zap-url", "http://127.0.0.1:2"]))

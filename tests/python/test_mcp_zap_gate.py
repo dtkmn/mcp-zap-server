@@ -83,15 +83,15 @@ class McpZapGateHelpersTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "after 11 seconds"):
                 client._post_json({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
 
-    def test_parse_operation_id_reads_guided_operation_id(self):
-        text = "Guided crawl started.\nOperation ID: zop_123\nExecution Mode: direct\n"
+    def test_parse_operation_id_uses_the_field_with_released_and_current_headings(self):
+        for heading in ("Guided crawl started.", "Crawl started.", "Guided attack accepted.", "Active scan accepted."):
+            with self.subTest(heading=heading):
+                self.assertEqual(MODULE.parse_operation_id(f"{heading}\nOperation ID: zop_123\n"), "zop_123")
 
-        self.assertEqual(MODULE.parse_operation_id(text), "zop_123")
-
-    def test_parse_report_path_reads_guided_report_output(self):
-        text = "Guided report generated.\nFormat: html\nPath: /tmp/report.html\n"
-
-        self.assertEqual(MODULE.parse_report_path(text), "/tmp/report.html")
+    def test_parse_report_path_uses_the_field_with_released_and_current_headings(self):
+        for heading in ("Guided report generated.", "Report generated."):
+            with self.subTest(heading=heading):
+                self.assertEqual(MODULE.parse_report_path(f"{heading}\nPath: /tmp/report.html\n"), "/tmp/report.html")
 
     def test_map_report_path_translates_container_root(self):
         mapped = MODULE.map_report_path(
@@ -786,13 +786,13 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
             def call_tool(self, name, _arguments):
                 if name == "zap_crawl_start":
-                    return "Guided crawl scan started.\nOperation ID: spider-1"
+                    return "Crawl started.\nOperation ID: spider-1"
                 if name == "zap_crawl_status":
-                    return "Guided crawl scan status:\nOperation ID: spider-1\nCompleted: yes\n"
+                    return "Crawl status.\nOperation ID: spider-1\nCompleted: yes\n"
                 if name == "zap_attack_start":
-                    return "Guided attack scan started.\nOperation ID: active-1"
+                    return "Active scan started.\nOperation ID: active-1"
                 if name == "zap_attack_status":
-                    return "Guided attack scan status:\nOperation ID: active-1\nCompleted: yes\n"
+                    return "Active scan status.\nOperation ID: active-1\nCompleted: yes\n"
                 if name == "zap_passive_scan_wait":
                     return "Passive scan queue drained."
                 if name == "zap_findings_summary":
@@ -1020,7 +1020,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
                     if mode == "seed" and status != "matching":
                         self.assertIn("Seed mode allows baseline review", summary)
 
-    def test_main_uses_guided_tools_when_legacy_expert_tools_are_also_available(self):
+    def test_main_uses_current_tools_when_legacy_expert_tools_are_also_available(self):
         calls = []
 
         class FakeMcpHttpClient:
@@ -1048,11 +1048,11 @@ class McpZapGateHelpersTest(unittest.TestCase):
             def call_tool(self, name, _arguments):
                 calls.append((name, _arguments))
                 if name == "zap_crawl_start":
-                    return "Guided crawl scan started.\nOperation ID: spider-1"
+                    return "Crawl started.\nOperation ID: spider-1"
                 if name == "zap_crawl_status":
-                    return "Guided crawl scan status:\nOperation ID: spider-1\nCompleted: yes\n"
+                    return "Crawl status.\nOperation ID: spider-1\nCompleted: yes\n"
                 if name == "zap_attack_start":
-                    return "Guided attack accepted.\nOperation ID: attack-1"
+                    return "Active scan accepted.\nOperation ID: attack-1"
                 if name == "zap_attack_status":
                     return "Status: SUCCEEDED\nProgress: 100%\n"
                 if name == "zap_passive_scan_wait":
@@ -1134,7 +1134,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
         self.assertEqual(client.call_tool.call_count, 2)
         sleep.assert_called_once_with(1)
 
-    def test_main_never_resubmits_or_falls_back_after_uncertain_or_failed_guided_start(self):
+    def test_main_never_resubmits_or_falls_back_after_uncertain_or_failed_scan_start(self):
         for phase in ("crawl", "attack"):
             for outcome in ("lost_reply", "START_OUTCOME_UNKNOWN", "FAILED", "CANCELLED"):
                 with self.subTest(phase=phase, outcome=outcome), tempfile.TemporaryDirectory() as directory:
@@ -1154,7 +1154,8 @@ class McpZapGateHelpersTest(unittest.TestCase):
                             if name == f"zap_{phase}_start":
                                 if outcome == "lost_reply":
                                     raise RuntimeError("START response timed out")
-                                return f"Guided {phase} accepted.\nOperation ID: operation-1\nStatus: {outcome}"
+                                heading = "Crawl" if phase == "crawl" else "Active scan"
+                                return f"{heading} accepted.\nOperation ID: operation-1\nStatus: {outcome}"
                             if name == f"zap_{phase}_status":
                                 return f"Status: {outcome}\nProgress: 100%\nCompleted: yes"
                             if name == "zap_crawl_start":
@@ -1179,7 +1180,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
                                          "zap_active_scan_status", "zap_passive_scan_wait", "zap_findings_snapshot",
                                          "zap_get_findings_summary", "zap_generate_report"]
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(MODULE, "McpHttpClient", return_value=client):
-            with self.assertRaisesRegex(RuntimeError, "requires guided MCP"):
+            with self.assertRaisesRegex(RuntimeError, "requires MCP"):
                 MODULE.main(["--server-url", "http://example.invalid/mcp", "--api-key", "test-key",
                              "--target-url", "https://example.invalid", "--output-dir", directory])
         client.call_tool.assert_not_called()
@@ -1197,7 +1198,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
             self.assertIn("traditional-json-plus", stderr.getvalue())
             client_factory.assert_not_called()
 
-    def test_main_preserves_supported_guided_report_format_and_artifact_extension(self):
+    def test_main_preserves_supported_report_format_and_artifact_extension(self):
         for format in ("html", "json"):
             with self.subTest(format=format), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
@@ -1253,9 +1254,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
             def call_tool(self, name, _arguments):
                 if name == "zap_crawl_start":
-                    return "Guided crawl scan started.\nOperation ID: spider-1"
+                    return "Crawl started.\nOperation ID: spider-1"
                 if name == "zap_crawl_status":
-                    return "Guided crawl scan status:\nOperation ID: spider-1\nCompleted: yes\n"
+                    return "Crawl status.\nOperation ID: spider-1\nCompleted: yes\n"
                 if name == "zap_passive_scan_wait":
                     return "Passive scan queue drained."
                 if name == "zap_findings_snapshot":
@@ -1351,9 +1352,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
             def call_tool(self, name, _arguments):
                 if name == "zap_crawl_start":
-                    return "Guided crawl scan started.\nOperation ID: spider-1"
+                    return "Crawl started.\nOperation ID: spider-1"
                 if name == "zap_crawl_status":
-                    return "Guided crawl scan status:\nOperation ID: spider-1\nCompleted: yes\n"
+                    return "Crawl status.\nOperation ID: spider-1\nCompleted: yes\n"
                 if name == "zap_passive_scan_wait":
                     return "Passive scan queue drained."
                 if name == "zap_findings_snapshot":
@@ -1418,9 +1419,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
             def call_tool(self, name, _arguments):
                 if name == "zap_crawl_start":
-                    return "Guided crawl scan started.\nOperation ID: spider-1"
+                    return "Crawl started.\nOperation ID: spider-1"
                 if name == "zap_crawl_status":
-                    return "Guided crawl scan status:\nOperation ID: spider-1\nCompleted: yes\n"
+                    return "Crawl status.\nOperation ID: spider-1\nCompleted: yes\n"
                 if name == "zap_passive_scan_wait":
                     return "Passive scan queue drained."
                 if name == "zap_findings_snapshot":
@@ -1467,7 +1468,7 @@ class McpZapGateHelpersTest(unittest.TestCase):
             self.assertEqual(metadata["baseline"]["diff_unavailable_reason"], "baseline_file_missing")
             self.assertIsNone(metadata["enforcement"]["failure_reason"])
 
-    def test_main_fails_when_guided_surface_cannot_diff_in_enforce_mode(self):
+    def test_main_fails_when_snapshot_tool_is_unavailable_in_enforce_mode(self):
         class FakeMcpHttpClient:
             def __init__(self, _server_url: str, _api_key: str, timeout_seconds: int = 60) -> None:
                 self.timeout_seconds = timeout_seconds
@@ -1532,6 +1533,9 @@ class McpZapGateHelpersTest(unittest.TestCase):
 
             metadata = json.loads((output_dir / "gate-metadata.json").read_text(encoding="utf-8"))
             self.assertEqual(result, 1)
+            summary = (output_dir / "gate-summary.md").read_text(encoding="utf-8")
+            self.assertIn("zap_findings_snapshot is unavailable", summary)
+            self.assertNotIn("guided", summary.lower())
             self.assertFalse(metadata["gate_passed"])
             self.assertEqual(metadata["tool_surface"], "guided")
             self.assertEqual(

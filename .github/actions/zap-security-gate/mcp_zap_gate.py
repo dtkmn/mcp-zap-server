@@ -1253,7 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     available_tools = set(client.list_tools())
 
-    guided_surface = {
+    has_required_tools = {
         "zap_crawl_start",
         "zap_crawl_status",
         "zap_attack_start",
@@ -1264,7 +1264,7 @@ def main(argv: list[str] | None = None) -> int:
     }.issubset(available_tools)
     snapshot_supported = "zap_findings_snapshot" in available_tools
 
-    if not guided_surface:
+    if not has_required_tools:
         raise RuntimeError(
             "The security gate requires MCP scan and report tools. "
             f"Available tools were: {sorted(available_tools)}"

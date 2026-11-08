@@ -34,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class McpRunningScanBackpressureIntegrationTest extends AbstractMcpProtectionIntegrationTest {
 
     @Test
-    void guidedAdmissionIsRejectedWhenGlobalQueueCapacityIsExhausted() throws Exception {
+    void scanAdmissionIsRejectedWhenGlobalQueueCapacityIsExhausted() throws Exception {
         String sessionA = initializeSession("client-a-key");
         String sessionB = initializeSession("client-b-key");
 

@@ -233,7 +233,7 @@ class AuthSessionServiceTest {
     }
 
     @Test
-    void eachProfileOwnsADistinctGuidedZapContext() throws Exception {
+    void eachProfileOwnsADistinctZapContext() throws Exception {
         Files.writeString(formPasswordFile(), "example-password-value", StandardCharsets.UTF_8);
         service = serviceWith(
                 formProfile("shop-a", "https://shop.example.com", "file:" + formPasswordFile()),

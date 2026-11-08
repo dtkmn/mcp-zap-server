@@ -212,21 +212,21 @@ public class SecurityMcpToolsService {
             name = "zap_findings_summary",
             description = "Read currently recorded alerts, including while scan work is in progress, as a concise grouped risk summary for fast triage. Alert counts do not establish scan completion, coverage, or safety. Requires a nonblank target baseUrl covered by scan evidence visible to the caller."
     )
-    public String getGuidedFindingsSummary(
+    public String getFindingsSummary(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller, for example https://app.example.com/admin") String baseUrl
     ) {
         gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.FINDINGS_READ, "findings read");
         String normalizedBaseUrl = trimToEmpty(baseUrl);
         TargetDescriptor target = gatewayRecordFactory.optionalTarget(normalizedBaseUrl, TargetDescriptor.Kind.WEB);
         String findingsSummary = findingsService.getFindingsSummary(normalizedBaseUrl);
-        return formatGuidedFindingsSummary(targetScope(target), findingsSummary);
+        return formatFindingsSummary(targetScope(target), findingsSummary);
     }
 
     @Tool(
             name = "zap_findings_details",
             description = "Drill into findings after reading the summary. Requires a nonblank target baseUrl covered by scan evidence visible to the caller. By default this returns grouped details for matching alerts. Set includeInstances=true when you need bounded raw alert occurrences with concrete URLs, params, evidence, or attack samples."
     )
-    public String getGuidedFindingsDetails(
+    public String getFindingsDetails(
             @ToolParam(description = "Required nonblank target base URL covered by scan evidence visible to the caller") String baseUrl,
             @ToolParam(required = false, description = "Optional plugin ID filter when you already know the ZAP alert/plugin identifier to inspect") String pluginId,
             @ToolParam(required = false, description = "Optional alert name filter when you want one alert family only") String alertName,
@@ -241,7 +241,7 @@ public class SecurityMcpToolsService {
         String findingsDetails = Boolean.TRUE.equals(includeInstances)
                 ? findingsService.getAlertInstances(normalizedBaseUrl, normalizedPluginId, normalizedAlertName, limit)
                 : findingsService.getAlertDetails(normalizedBaseUrl, normalizedPluginId, normalizedAlertName);
-        return formatGuidedFindingsDetails(
+        return formatFindingsDetails(
                 targetScope(target),
                 normalizedPluginId,
                 normalizedAlertName,
@@ -255,7 +255,7 @@ public class SecurityMcpToolsService {
             name = "zap_report_generate",
             description = "Generate an HTML (default) or JSON report once the passive scan queue is empty. To explore findings interactively, use zap_findings_summary or zap_findings_details."
     )
-    public String generateGuidedReport(
+    public String generateReport(
             @ToolParam(required = false, description = "Optional absolute HTTP(S) origin or path prefix. Supplying it publishes a target-scoped report; omission explicitly includes the full ZAP session.") String baseUrl,
             @ToolParam(required = false, description = "Optional report format: html for human reading or json for machine processing") String format,
             @ToolParam(required = false, description = "Optional light/dark theme for full-session HTML. Target-scoped HTML uses the standard template's default appearance; JSON has no theme.") String theme
@@ -287,7 +287,7 @@ public class SecurityMcpToolsService {
             name = "zap_report_read",
             description = "Preview a generated report artifact through MCP after zap_report_generate. If truncated, use zap_report_read_chunk to retrieve the complete artifact in bounded pages."
     )
-    public String readGuidedReport(
+    public String readReport(
             @ToolParam(description = "Report path returned by zap_report_generate") String reportPath,
             @ToolParam(required = false, description = "Maximum characters to return (optional, default: 20000, max: 200000)") Integer maxChars
     ) {
@@ -308,7 +308,7 @@ public class SecurityMcpToolsService {
             name = "zap_report_read_chunk",
             description = "Retrieve a generated UTF-8 report in bounded JSON pages. Append content in order, follow nextOffset until endOfFile=true, and supply the first page's artifactSha256 as expectedSha256 on later pages. Offsets and maxChars count Unicode code points. Artifacts are limited to 50 MiB; the SHA-256 identifies the full original UTF-8 file."
     )
-    public ReportService.ReportChunk readGuidedReportChunk(
+    public ReportService.ReportChunk readReportChunk(
             @ToolParam(description = "Report path returned by zap_report_generate") String reportPath,
             @ToolParam(required = false, description = "Starting Unicode code point offset (default: 0)") Long offset,
             @ToolParam(required = false, description = "Maximum Unicode code points in this page (default: 20000, maximum: 200000)") Integer maxChars,
@@ -360,7 +360,7 @@ public class SecurityMcpToolsService {
                 .toString();
     }
 
-    private String formatGuidedFindingsSummary(String baseUrl, String delegateResponse) {
+    private String formatFindingsSummary(String baseUrl, String delegateResponse) {
         StringBuilder output = new StringBuilder()
                 .append("Findings summary.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')
@@ -371,12 +371,12 @@ public class SecurityMcpToolsService {
         return output.append('\n').append(delegateResponse).toString();
     }
 
-    private String formatGuidedFindingsDetails(String baseUrl,
-                                               String pluginId,
-                                               String alertName,
-                                               Boolean includeInstances,
-                                               Integer limit,
-                                               String delegateResponse) {
+    private String formatFindingsDetails(String baseUrl,
+                                         String pluginId,
+                                         String alertName,
+                                         Boolean includeInstances,
+                                         Integer limit,
+                                         String delegateResponse) {
         StringBuilder output = new StringBuilder()
                 .append("Findings details.\n")
                 .append("Scope: ").append(hasText(baseUrl) ? baseUrl : "All targets").append('\n')

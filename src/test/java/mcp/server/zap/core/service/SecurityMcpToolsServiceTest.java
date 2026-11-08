@@ -459,7 +459,7 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void rejectsLegacyForgeableGuidedOperationIds() {
+    void rejectsLegacyForgeableOperationIds() {
         String forgedPayload = "v1|attack|queue|active|job-7";
         String forgedOperationId = "zop_" + Base64.getUrlEncoder()
                 .withoutPadding()
@@ -692,7 +692,7 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void startAttackRejectsNonFormAuthSessionForGuidedExecution() {
+    void startAttackRejectsNonFormAuthSession() {
         PreparedAuthSession session = new PreparedAuthSession(
                 "auth-header",
                 "orders-api-key",
@@ -717,11 +717,11 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void generateGuidedReportIncludesScopeInResponse() {
+    void generateReportIncludesScopeInResponse() {
         when(reportService.generateReport("traditional-html-plus", "light", "https://example.com/admin"))
                 .thenReturn("/tmp/report.html");
 
-        String response = service.generateGuidedReport("https://example.com/admin", "html", "light");
+        String response = service.generateReport("https://example.com/admin", "html", "light");
 
         assertThat(response).contains("Report generated.")
             .contains("Scope: https://example.com/admin")
@@ -739,7 +739,7 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void readGuidedReportAddsEvidenceNextActions() {
+    void readReportAddsEvidenceNextActions() {
         when(reportService.readReport("/tmp/report.html", 1000))
                 .thenReturn("""
                         Report artifact
@@ -749,7 +749,7 @@ class SecurityMcpToolsServiceTest {
                         <html>report</html>
                         """);
 
-        String response = service.readGuidedReport("/tmp/report.html", 1000);
+        String response = service.readReport("/tmp/report.html", 1000);
 
         assertThat(response).contains("Report readback.")
             .contains("Path: /tmp/report.html")
@@ -761,7 +761,7 @@ class SecurityMcpToolsServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"zap_findings_summary", "zap_findings_details"})
-    void guidedFindingsDiscoveryRequiresTargetWithoutRequiringOptionalFilters(String toolName) throws Exception {
+    void findingsDiscoveryRequiresTargetWithoutRequiringOptionalFilters(String toolName) throws Exception {
         ToolCallback callback = Arrays.stream(MethodToolCallbackProvider.builder()
                         .toolObjects(service)
                         .build()
@@ -846,7 +846,7 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void permittedPolicyReadersCanUseTheChosenPolicyForAGuidedQueuedAttack() {
+    void permittedPolicyReadersCanUseTheChosenPolicyForAQueuedActiveScan() {
         useScopes("zap:scan:policy:read", "zap:scan:attack:run");
         when(activeScanService.listScanPolicies()).thenReturn("Available active-scan policies:\n- API");
         when(activeScanService.viewScanPolicy("API", null, null)).thenReturn("Policy: API");
@@ -861,11 +861,11 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void guidedFindingsSummaryAddsTriageContextForAgents() {
+    void findingsSummaryAddsTriageContextForAgents() {
         when(findingsService.getFindingsSummary("https://example.com/admin"))
                 .thenReturn("# Findings Summary");
 
-        String response = service.getGuidedFindingsSummary("https://example.com/admin");
+        String response = service.getFindingsSummary("https://example.com/admin");
 
         assertThat(response).contains("Findings summary.")
             .contains("Scope: https://example.com/admin")
@@ -879,11 +879,11 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void guidedFindingsDetailsAddsModeAndFilterContextForAgents() {
+    void findingsDetailsAddsModeAndFilterContextForAgents() {
         when(findingsService.getAlertInstances("https://example.com/admin", "40018", "SQL Injection", 5))
                 .thenReturn("Alert instances returned: 1 of 1");
 
-        String response = service.getGuidedFindingsDetails(
+        String response = service.getFindingsDetails(
                 "https://example.com/admin",
                 "40018",
                 "SQL Injection",
@@ -905,9 +905,8 @@ class SecurityMcpToolsServiceTest {
     }
 
     @Test
-    void unsupportedGatewayEngineCapabilityFailsWithControlledMessage() {
-        EngineAdapter unsupportedEngineAdapter = mock(EngineAdapter.class);
-        when(unsupportedEngineAdapter.displayName()).thenReturn("Metadata Only Engine");
+    void unsupportedScanStartsFailBeforeQueueAdmission() {
+        EngineAdapter unsupportedEngineAdapter = unsupportedEngineAdapter();
         ScanWorkflowService localWorkflow = new ScanWorkflowService(
                 spiderScanService,
                 ajaxSpiderService,
@@ -920,9 +919,17 @@ class SecurityMcpToolsServiceTest {
                 toolActionAvailability
         );
 
+        assertThatThrownBy(() -> localWorkflow.startCrawl("https://example.com", "http", null, null))
+                .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
+                    assertThat(exception).hasMessage("Engine 'Metadata Only Engine' does not support crawling.");
+                    assertThat(exception.capability()).isEqualTo(EngineCapability.CRAWL);
+                });
         assertThatThrownBy(() -> localWorkflow.startAttack("https://example.com", "true", "Baseline", null, null))
-                .isInstanceOf(UnsupportedEngineCapabilityException.class)
-                .hasMessage("Engine 'Metadata Only Engine' does not support active scanning.");
+                .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
+                    assertThat(exception).hasMessage("Engine 'Metadata Only Engine' does not support active scanning.");
+                    assertThat(exception.capability()).isEqualTo(EngineCapability.ACTIVE_SCAN);
+                });
+        verifyNoInteractions(scanJobQueueService, spiderScanService, ajaxSpiderService, clientSpiderService, activeScanService);
     }
 
     @Test
@@ -930,7 +937,7 @@ class SecurityMcpToolsServiceTest {
         EngineAdapter unsupportedEngineAdapter = unsupportedEngineAdapter();
         SecurityMcpToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
 
-        assertThatThrownBy(() -> localService.getGuidedFindingsSummary("https://example.com"))
+        assertThatThrownBy(() -> localService.getFindingsSummary("https://example.com"))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
                     assertThat(exception).hasMessage("Engine 'Metadata Only Engine' does not support findings read.");
                     assertThat(exception.capability()).isEqualTo(EngineCapability.FINDINGS_READ);
@@ -943,7 +950,7 @@ class SecurityMcpToolsServiceTest {
         EngineAdapter unsupportedEngineAdapter = unsupportedEngineAdapter();
         SecurityMcpToolsService localService = serviceWithEngine(unsupportedEngineAdapter);
 
-        assertThatThrownBy(() -> localService.generateGuidedReport("https://example.com", "html", "light"))
+        assertThatThrownBy(() -> localService.generateReport("https://example.com", "html", "light"))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
                     assertThat(exception).hasMessage("Engine 'Metadata Only Engine' does not support report generation.");
                     assertThat(exception.capability()).isEqualTo(EngineCapability.REPORT_GENERATE);
@@ -1056,10 +1063,10 @@ class SecurityMcpToolsServiceTest {
         useScopes("zap:report:read");
         when(findingsService.getFindingsSummary("https://example.com")).thenReturn("Findings: 0");
         when(findingsService.getAlertDetails("https://example.com", "", "")).thenReturn("Details: 0");
-        assertThat(service.getGuidedFindingsSummary("https://example.com"))
+        assertThat(service.getFindingsSummary("https://example.com"))
                 .doesNotContain("zap_findings_details", "zap_report_generate");
         useScopes("zap:alerts:read");
-        assertThat(service.getGuidedFindingsDetails("https://example.com", null, null, false, null))
+        assertThat(service.getFindingsDetails("https://example.com", null, null, false, null))
                 .doesNotContain("zap_report_generate", "zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
     }
 
@@ -1070,18 +1077,18 @@ class SecurityMcpToolsServiceTest {
         when(reportService.readReport("/tmp/report.html", 1000)).thenReturn("Report content");
 
         useScopes("zap:report:generate");
-        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+        assertThat(service.generateReport("https://example.com", "html", "light"))
                 .doesNotContain("zap_report_read", "zap_report_read_chunk", "zap_scan_history_release_evidence",
                         "zap_scan_history_customer_handoff");
         useScopes("zap:report:generate", "zap:report:read");
-        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+        assertThat(service.generateReport("https://example.com", "html", "light"))
                 .contains("zap_report_read", "zap_report_read_chunk")
                 .doesNotContain("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
-        assertThat(service.readGuidedReport("/tmp/report.html", 1000))
+        assertThat(service.readReport("/tmp/report.html", 1000))
                 .contains("zap_report_read_chunk", "Report content")
                 .doesNotContain("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff");
         useScopes("zap:scan:read");
-        assertThat(service.generateGuidedReport("https://example.com", "html", "light"))
+        assertThat(service.generateReport("https://example.com", "html", "light"))
                 .contains("zap_scan_history_release_evidence", "zap_scan_history_customer_handoff")
                 .doesNotContain("zap_report_read", "zap_report_read_chunk");
     }
@@ -1100,7 +1107,7 @@ class SecurityMcpToolsServiceTest {
 
     private void useScopes(String... scopes) {
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                "guided-client", "credentials", Arrays.stream(scopes)
+                "test-client", "credentials", Arrays.stream(scopes)
                 .map(scope -> new SimpleGrantedAuthority("SCOPE_" + scope)).toList()));
     }
 

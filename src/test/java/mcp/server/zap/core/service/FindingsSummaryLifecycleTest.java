@@ -220,7 +220,7 @@ class FindingsSummaryLifecycleTest {
     private String read(EntryPoint entryPoint, String target) {
         return switch (entryPoint) {
             case SERVICE -> findings.getFindingsSummary(target);
-            case GUIDED -> securityTools.getGuidedFindingsSummary(target);
+            case SECURITY_TOOLS -> securityTools.getFindingsSummary(target);
         };
     }
 
@@ -239,6 +239,6 @@ class FindingsSummaryLifecycleTest {
     }
 
     private enum EntryPoint {
-        SERVICE, GUIDED
+        SERVICE, SECURITY_TOOLS
     }
 }

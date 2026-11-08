@@ -26,8 +26,8 @@ class PolicyDryRunServiceTest {
     }
 
     @Test
-    void dryRunMatchesAllowRuleForSandboxGuidedRequest() throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"));
+    void dryRunMatchesAllowRuleForSandboxScanRequest() throws Exception {
+        String bundle = Files.readString(Path.of("examples/policy-bundles/ci-guardrails.json"));
 
         Map<String, Object> response = service.preview(
                 bundle,
@@ -40,23 +40,23 @@ class PolicyDryRunServiceTest {
         assertThat(validation(response)).containsEntry("valid", true);
         assertThat(decision(response)).containsEntry("result", "allow");
         assertThat(decision(response)).containsEntry("source", "rule");
-        assertThat(decision(response)).containsEntry("matchedRuleId", "allow-guided-ci-sandbox-hours");
+        assertThat(decision(response)).containsEntry("matchedRuleId", "allow-ci-sandbox-hours");
         assertThat(request(response)).containsEntry("normalizedHost", "api.sandbox.example.com");
         assertThat(request(response)).containsEntry("bundleLocalDay", "tue");
         assertThat(objectMap(response, "bundle"))
-                .containsEntry("name", "ci-guided-guardrails")
+                .containsEntry("name", "ci-guardrails")
                 .containsEntry("owner", "security-platform");
         assertThat(request(response)).containsEntry("tool", "zap_attack_start");
         assertThat(decision(response))
                 .containsEntry("reason", "Sandbox CI is approved during staffed rollout hours.");
         assertThat(mapList(response, "trace"))
                 .extracting(entry -> entry.get("ruleId"))
-                .contains("allow-guided-ci-sandbox-hours");
+                .contains("allow-ci-sandbox-hours");
     }
 
     @Test
     void dryRunFallsBackToDefaultDecisionWhenNoRuleMatches() throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
+        String bundle = Files.readString(Path.of("examples/policy-bundles/readonly-triage.json"));
 
         Map<String, Object> response = service.preview(
                 bundle,
@@ -72,7 +72,7 @@ class PolicyDryRunServiceTest {
                 .extracting(entry -> entry.get("ruleId"))
                 .contains("allow-readonly-review-surface", "deny-mutation-tools");
 
-        assertThat(objectMap(response, "bundle")).containsEntry("name", "guided-readonly-triage");
+        assertThat(objectMap(response, "bundle")).containsEntry("name", "readonly-triage");
         assertThat(request(response))
                 .containsEntry("tool", "zap_findings_summary")
                 .containsEntry("normalizedHost", "prod.example.com");
@@ -84,7 +84,7 @@ class PolicyDryRunServiceTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.ValueSource(strings = {"zap_report_read", "zap_report_read_chunk"})
     void readonlyReportRulesAllowWorkspaceReadsWithoutHostMatching(String toolName) throws Exception {
-        String bundle = Files.readString(Path.of("examples/policy-bundles/guided-readonly-triage.json"));
+        String bundle = Files.readString(Path.of("examples/policy-bundles/readonly-triage.json"));
         Map<String, Object> response = service.preview(bundle, toolName, null, "2026-04-06T09:00:00Z");
         assertThat(validation(response)).containsEntry("valid", true);
         assertThat(decision(response)).containsEntry("result", "allow")
@@ -146,7 +146,7 @@ class PolicyDryRunServiceTest {
     void dryRunRejectsRuleWithoutDescription() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode bundle = objectMapper.readTree(
-                Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"))
+                Files.readString(Path.of("examples/policy-bundles/ci-guardrails.json"))
         );
         ((ObjectNode) bundle.at("/spec/rules/0")).remove("description");
 
@@ -170,7 +170,7 @@ class PolicyDryRunServiceTest {
         String host = "a.".repeat(10_000) + "a" + suffix;
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode bundle = objectMapper.readTree(
-                Files.readString(Path.of("examples/policy-bundles/ci-guided-guardrails.json"))
+                Files.readString(Path.of("examples/policy-bundles/ci-guardrails.json"))
         );
         ((ObjectNode) bundle.at("/spec/rules/0/match")).putArray("hosts").add(host);
 

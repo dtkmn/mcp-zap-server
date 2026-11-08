@@ -130,7 +130,7 @@ class McpAbuseProtectionServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"zap_crawl_start", "zap_attack_start"})
-    void guidedStartsUseQueueWorkspaceQuota(String tool) {
+    void scanStartsUseQueueWorkspaceQuota(String tool) {
         ScanJobQueueService queue = useQueueAdmissionProtection();
         properties.getWorkspaceQuota().setMaxQueuedOrRunningScanJobs(1);
         ScanJob existing = new ScanJob("queued", ScanJobType.SPIDER_SCAN, Map.of(), Instant.now(), 2, CLIENT, null);
@@ -143,7 +143,7 @@ class McpAbuseProtectionServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"zap_crawl_start", "zap_attack_start"})
-    void guidedStartsUseQueueBacklogBackpressure(String tool) {
+    void scanStartsUseQueueBacklogBackpressure(String tool) {
         ScanJobQueueService queue = useQueueAdmissionProtection();
         properties.getWorkspaceQuota().setEnabled(false);
         properties.getBackpressure().setEnabled(true);
@@ -165,7 +165,7 @@ class McpAbuseProtectionServiceTest {
     }
 
     private GatewayToolExecutionContext context(String tool) {
-        return GatewayToolExecutionContext.of(CLIENT, WORKSPACE, "guided-quota-test",
+        return GatewayToolExecutionContext.of(CLIENT, WORKSPACE, "scan-quota-test",
                 McpToolInvocation.fromJsonRpc("tools/call", tool), null);
     }
 

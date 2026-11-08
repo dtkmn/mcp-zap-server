@@ -281,7 +281,7 @@ class McpToolAuthorizationJwtIntegrationTest {
     }
 
     @Test
-    void oldExpertScanScopeDoesNotBecomeGuidedAttackPermission() throws Exception {
+    void legacyExpertScanScopeDoesNotGrantAttackStartPermission() throws Exception {
         String token = issueAccessToken("legacy-expert-api-key");
         String session = initializeSession(token);
         clearInvocations(scanExecution, ajaxExecution);
@@ -344,7 +344,7 @@ class McpToolAuthorizationJwtIntegrationTest {
     }
 
     @Test
-    void staleExpertSettingStillDiscoversOnlyTheCuratedGuidedInventory() throws Exception {
+    void staleExpertSettingStillDiscoversOnlyTheCurrentTools() throws Exception {
         String token = issueAccessToken("lister-api-key");
         String sessionId = initializeSession(token);
         EntityExchangeResult<String> result = client().post()

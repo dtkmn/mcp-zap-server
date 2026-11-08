@@ -57,7 +57,7 @@ class ToolExecutionPolicyAspectTest {
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "hostless-followup-policy",
-                    "description": "Allow guided hostless follow-up calls.",
+                    "description": "Allow follow-up calls without a target.",
                     "owner": "security-platform"
                   },
                   "spec": {
@@ -69,7 +69,7 @@ class ToolExecutionPolicyAspectTest {
                         "id": "allow-hostless-report-read",
                         "description": "Allow report readback without a target parameter.",
                         "decision": "allow",
-                        "reason": "Report readback is approved as a guided follow-up.",
+                        "reason": "Report readback is approved without a target.",
                         "match": {
                           "tools": ["zap_report_read"]
                         }
@@ -125,7 +125,7 @@ class ToolExecutionPolicyAspectTest {
                   "kind": "PolicyBundle",
                   "metadata": {
                     "name": "hostless-followup-policy",
-                    "description": "Allow guided hostless follow-up calls.",
+                    "description": "Allow follow-up calls without a target.",
                     "owner": "security-platform"
                   },
                   "spec": {
@@ -137,7 +137,7 @@ class ToolExecutionPolicyAspectTest {
                         "id": "allow-hostless-passive-status",
                         "description": "Allow passive status without a target parameter.",
                         "decision": "allow",
-                        "reason": "Passive status is approved as a guided follow-up.",
+                        "reason": "Passive status is approved without a target.",
                         "match": {
                           "tools": ["zap_passive_scan_status"]
                         }

@@ -5,8 +5,8 @@ package mcp.server.zap.core.gateway;
  */
 public enum EngineCapability {
     TARGET_IMPORT,
-    GUIDED_CRAWL,
-    GUIDED_ATTACK,
+    CRAWL,
+    ACTIVE_SCAN,
     FINDINGS_READ,
     REPORT_GENERATE,
     FORM_AUTH_BOOTSTRAP,

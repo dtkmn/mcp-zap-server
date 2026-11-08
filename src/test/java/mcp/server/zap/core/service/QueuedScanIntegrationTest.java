@@ -27,7 +27,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Answers;
 import org.mockito.stubbing.Answer;
 
-/** Guided requests through real admission, launch ownership and storage, with a fake native engine. */
+/** Scan requests through real queue admission, launch ownership and storage, with a fake native engine. */
 class QueuedScanIntegrationTest {
     private static final String TARGET = "https://example.invalid";
 
@@ -47,7 +47,7 @@ class QueuedScanIntegrationTest {
     }
 
     @BeforeEach
-    void setUpGuidedQueue() throws Exception {
+    void setUpScanQueue() throws Exception {
         store = newStore();
         Answer<Object> engine = invocation -> {
             Object[] arguments = invocation.getArguments();
@@ -64,7 +64,7 @@ class QueuedScanIntegrationTest {
                 return id;
             }
             String method = invocation.getMethod().getName();
-            if (method.startsWith("start")) throw new AssertionError("Guided request bypassed guarded queue: " + method);
+            if (method.startsWith("start")) throw new AssertionError("Scan request bypassed guarded queue: " + method);
             if (method.startsWith("stop")) {
                 nativeStops.incrementAndGet();
                 terminated.set(true);
@@ -94,7 +94,7 @@ class QueuedScanIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(Kind.class)
-    void guidedHandleTracksAndStopsTheSameGuardedScan(Kind kind) {
+    void operationIdTracksAndStopsTheSameGuardedScan(Kind kind) {
         String response = start(kind, "one");
         assertThat(response).contains("Execution Mode: queue");
         ScanJob job = onlyJob();
@@ -113,7 +113,7 @@ class QueuedScanIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(Kind.class)
-    void lostReplyKeepsCapacityAndCannotLaunchAgainThroughGuidedStatusCancelOrAdmission(Kind kind) {
+    void lostReplyKeepsCapacityAndCannotLaunchAgainThroughStatusCancelOrAdmission(Kind kind) {
         lostReply.set(true);
         String response = start(kind, "uncertain");
         ScanJob job = onlyJob();
@@ -140,7 +140,7 @@ class QueuedScanIntegrationTest {
     }
 
     @Test
-    void idempotentGuidedAdmissionReusesJobAndRejectsChangedParameters() {
+    void idempotentScanAdmissionReusesJobAndRejectsChangedParameters() {
         String first = scanWorkflow.startAttack(TARGET, "false", "policy-a", "same", null);
         String second = scanWorkflow.startAttack(TARGET, "false", "policy-a", "same", null);
         ScanJob job = onlyJob();

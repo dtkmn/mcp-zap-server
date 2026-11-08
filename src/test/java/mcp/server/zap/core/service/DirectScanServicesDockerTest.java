@@ -191,8 +191,8 @@ class DirectScanServicesDockerTest {
     }
 
     @ParameterizedTest
-    @MethodSource("guidedCrawlerModes")
-    void guidedCrawlerSelectionKeepsNativeLifecycleAndMeasuredJavaScriptCoverage(
+    @MethodSource("queuedCrawlerStrategies")
+    void queuedCrawlerSelectionKeepsNativeLifecycleAndMeasuredJavaScriptCoverage(
             String strategy, ScanExecutionMode mode) throws Exception {
         if ("browser".equals(strategy)) {
             // AJAX stop status does not prove that its global engine is idle. Give these
@@ -307,7 +307,7 @@ class DirectScanServicesDockerTest {
         }
     }
 
-    private static Stream<Arguments> guidedCrawlerModes() {
+    private static Stream<Arguments> queuedCrawlerStrategies() {
         return Stream.of("http", "client", "browser", "auto")
                 .map(strategy -> Arguments.of(strategy, ScanExecutionMode.QUEUE));
     }
@@ -365,7 +365,7 @@ class DirectScanServicesDockerTest {
 
     @ParameterizedTest
     @EnumSource(value = ScanExecutionMode.class, names = "QUEUE")
-    void guidedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
+    void queuedClientSpiderUsesPreparedBrowserSessionForProtectedJavaScriptTraffic(
             ScanExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
         assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, false);
@@ -373,7 +373,7 @@ class DirectScanServicesDockerTest {
 
     @ParameterizedTest
     @EnumSource(value = ScanExecutionMode.class, names = "QUEUE")
-    void guidedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
+    void queuedClientSpiderValidatesAndCrawlsWithBearerTokenStoredInLocalStorage(
             ScanExecutionMode mode, @TempDir Path temporaryDirectory)
             throws Exception {
         assertPreparedBrowserSessionCrawl(mode, temporaryDirectory, true);

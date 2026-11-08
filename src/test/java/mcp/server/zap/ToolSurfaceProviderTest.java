@@ -51,7 +51,7 @@ class ToolSurfaceProviderTest {
             "zap_scan_job_reconcile", "zap_scan_job_reconciliation_status");
 
     @Test
-    void guidedSurfaceOmitsReconciliationCallbacks() {
+    void toolSurfaceOmitsReconciliationCallbacks() {
         Set<String> callbacks = names(provider());
         ToolScopeRegistry registry = new ToolScopeRegistry();
         assertThat(callbacks).hasSize(28).containsExactlyInAnyOrderElementsOf(EXPECTED);

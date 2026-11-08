@@ -39,7 +39,7 @@ class McpScanWorkspaceQuotaIntegrationTest extends AbstractMcpProtectionIntegrat
     private ScanJobQueueService queue;
 
     @Test
-    void guidedAdmissionIsRejectedWhenWorkspaceAlreadyHasItsQuotaOfScanJobs() throws Exception {
+    void scanAdmissionIsRejectedWhenWorkspaceAlreadyHasItsQuotaOfScanJobs() throws Exception {
         String sessionA = initializeSession("client-a-key");
         String sessionB = initializeSession("client-b-key");
 

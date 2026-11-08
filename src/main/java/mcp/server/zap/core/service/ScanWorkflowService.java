@@ -79,7 +79,7 @@ public class ScanWorkflowService {
 
     public String startCrawl(String targetUrl, String strategy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
-        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_CRAWL, "crawling");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.CRAWL, "crawling");
         String normalizedStrategy = normalizeCrawlStrategy(strategy);
         PreparedAuthSession preparedAuthSession = resolvePreparedSession(authSessionId, normalizedTargetUrl,
                 STRATEGY_CLIENT.equals(normalizedStrategy) ? AuthBootstrapKind.BROWSER : AuthBootstrapKind.FORM);
@@ -104,7 +104,7 @@ public class ScanWorkflowService {
 
     public String startAttack(String targetUrl, String recurse, String policy, String idempotencyKey, String authSessionId) {
         String normalizedTargetUrl = requireText(targetUrl, "targetUrl");
-        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.GUIDED_ATTACK, "active scanning");
+        gatewayRecordFactory.requireCapability(engineAdapter, EngineCapability.ACTIVE_SCAN, "active scanning");
         PreparedAuthSession preparedAuthSession = resolvePreparedSession(
                 authSessionId, normalizedTargetUrl, AuthBootstrapKind.FORM);
         return formatStartedOperation(

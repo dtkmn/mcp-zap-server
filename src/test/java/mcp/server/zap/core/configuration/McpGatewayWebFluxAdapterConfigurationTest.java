@@ -41,9 +41,9 @@ class McpGatewayWebFluxAdapterConfigurationTest {
         McpToolRegistry registry = configuration.mcpActiveToolRegistry(
                 provider("zap_crawl_start", "zap_attack_start"), scopeRegistry);
 
-        assertThat(registry.hasCapability("zap_crawl_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
+        assertThat(registry.hasCapability("zap_crawl_start", ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY))
                 .isTrue();
-        assertThat(registry.hasCapability("zap_attack_start", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
+        assertThat(registry.hasCapability("zap_attack_start", ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY))
                 .isTrue();
     }
 

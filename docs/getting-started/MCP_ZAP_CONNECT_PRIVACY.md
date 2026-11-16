@@ -16,7 +16,10 @@ in your installation. Setup uses a harmless status call; scanning requires a
 separate request. Scan data can contain URLs, HTTP traffic, application content
 and findings from your chosen targets.
 
-**Recipients and network access.** Setup downloads project files, container images
+**Recipients and network access.** Before setup, recovery or a new scan workflow, the
+plugin looks up its release tag at `api.github.com`. This request contains the
+public repository name and release tag. The checkout path, scanner credentials
+and scan target stay out of that request. Setup downloads project files, container images
 and any required ZAP add-ons from their publishers and hosting services. Those
 services receive ordinary network request information, such as your IP address
 and requested resource, under their own policies. An authorized scan sends

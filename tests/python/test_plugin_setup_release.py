@@ -3,7 +3,6 @@
 import hashlib
 import json
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
@@ -13,6 +12,19 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CHECKER = ROOT / "plugins/mcp-zap-connect/scripts/check-scanner-release.sh"
 SECRET = "fixture-private-secret"
+FAKE_CURL = '''#!PYTHON
+import os, sys
+args = sys.argv[1:]
+assert args[0] == "--disable"
+assert args[-1] == "https://api.github.com/repos/dtkmn/mcp-zap-server/commits/refs%2Ftags%2Fv0.18.0"
+assert args[args.index("--header") + 1] == "Accept: application/vnd.github.sha"
+assert args[args.index("--proto") + 1] == "=https"
+assert "--max-time" in args and "--fail" in args and "--location" not in args
+if os.environ.get("CHECK_FIXTURE_OFFLINE"):
+    print("fixture-private-secret", file=sys.stderr)
+    sys.exit(22)
+print(os.environ["CHECK_FIXTURE_COMMIT"])
+'''
 FAKE_DOCKER = '''#!PYTHON
 import json, os, sys
 from pathlib import Path
@@ -20,13 +32,31 @@ args = sys.argv[1:]
 root = Path(os.environ["CHECK_FIXTURE_ROOT"])
 with Path(os.environ["CHECK_FIXTURE_CALLS"]).open("a") as output:
     output.write(json.dumps(args) + "\\n")
+if args == ["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]:
+    print(os.environ.get("CHECK_FIXTURE_ENDPOINT", "unix:///fixture/docker.sock"))
+    sys.exit(0)
+if args[:2] == ["ps", "-a"]:
+    assert args == ["ps", "-a", "--no-trunc", "--filter", "label=com.docker.compose.project.working_dir=" + str(root),
+                    "--filter", "label=com.docker.compose.service=mcp-server", "--format", "{{.ID}}"]
+    if os.environ.get("CHECK_FIXTURE_INVENTORY_FAIL"):
+        sys.exit(1)
+    print(os.environ.get("CHECK_FIXTURE_IDS", ""))
+    sys.exit(0)
+if args[:2] == ["inspect", "--type"]:
+    assert args == ["inspect", "--type", "container", "--format", "{{.Config.Image}}", "a" * 64]
+    print(os.environ["CHECK_FIXTURE_RUNNING_IMAGE"])
+    sys.exit(0)
 assert args[:3] == ["compose", "--project-directory", str(root)]
-assert args[3] == "--env-file" and args[5:] == ["-f", str(root / "docker-compose.yml"), "config", "--images", "mcp-server"]
+assert args[3] == "--env-file" and args[5:7] == ["-f", str(root / "docker-compose.yml")]
+if args[7:] == ["ps", "--all", "--quiet", "mcp-server"]:
+    print(os.environ.get("CHECK_FIXTURE_PROJECT_IDS", os.environ.get("CHECK_FIXTURE_IDS", "")))
+    sys.exit(0)
+assert args[7:] == ["config", "--images", "mcp-server"]
 if os.environ.get("CHECK_FIXTURE_FAIL"):
     print("fixture-private-secret", file=sys.stderr)
     raise SystemExit(1)
 settings = dict(line.split("=", 1) for line in Path(args[4]).read_text().splitlines() if "=" in line)
-tag = os.environ.get("IMAGE_TAG", settings.get("IMAGE_TAG", "v0.17.1")) or "v0.17.1"
+tag = os.environ.get("IMAGE_TAG", settings.get("IMAGE_TAG", "v0.18.0")) or "v0.18.0"
 # Compose includes dependencies even when a service name was supplied.
 print(os.environ.get("CHECK_FIXTURE_IMAGE", "zaproxy/zap-stable:2.17.0\\ndtkmn/mcp-zap-server:" + tag))
 '''
@@ -52,10 +82,10 @@ class PluginSetupReleaseTest(unittest.TestCase):
         }
         self.git("init", "-q", "--object-format=sha1")
         contents = {
-            ".env.example": "IMAGE_TAG=v0.17.1\nMCP_API_KEY=placeholder\n",
-            "docker-compose.yml": "services:\n  mcp-server:\n    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.17.1}\n",
-            "build.gradle": "version = '0.17.1'\n",
-            ".mcp/server.json": '{"version":"0.17.1"}\n',
+            ".env.example": "IMAGE_TAG=v0.18.0\nMCP_API_KEY=placeholder\n",
+            "docker-compose.yml": "services:\n  mcp-server:\n    image: dtkmn/mcp-zap-server:${IMAGE_TAG:-v0.18.0}\n",
+            "build.gradle": "version = '0.18.0'\n",
+            ".mcp/server.json": '{"version":"0.18.0"}\n',
             "docs/getting-started/SELF_SERVE_FIRST_RUN.md": "# Released setup\n",
             "README.md": "Unrelated documentation\n",
         }
@@ -70,23 +100,18 @@ class PluginSetupReleaseTest(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", "Fixture release")
         self.commit = self.git("rev-parse", "HEAD").stdout.strip()
-        self.git("tag", "v0.17.1")
-        # Only the private test copy trusts the generated fixture commit.
-        # The production script has no pin override; real-release verification
-        # can invoke it unchanged against the published tagged checkout.
-        script = CHECKER.read_text()
-        self.assertEqual(len(re.findall(r"^SCANNER_RELEASE_COMMIT='[0-9a-f]{40}'$", script, re.M)), 1)
-        self.checker = self.directory / "check-scanner-release.sh"
-        self.checker.write_text(re.sub(r"^SCANNER_RELEASE_COMMIT='[0-9a-f]{40}'$",
-                                      "SCANNER_RELEASE_COMMIT='" + self.commit + "'", script, flags=re.M))
+        self.git("tag", "v0.18.0")
+        self.checker = CHECKER
         fake_bin = self.directory / "fake-bin"
         fake_bin.mkdir()
-        docker = fake_bin / "docker"
-        docker.write_text(FAKE_DOCKER.replace("#!PYTHON", "#!" + sys.executable, 1))
-        docker.chmod(0o700)
+        for name, program in (("docker", FAKE_DOCKER), ("curl", FAKE_CURL)):
+            executable = fake_bin / name
+            executable.write_text(program.replace("#!PYTHON", "#!" + sys.executable, 1))
+            executable.chmod(0o700)
         self.calls = self.directory / "docker-calls.jsonl"
         self.environment.update({
             "PATH": str(fake_bin) + ":/usr/bin:/bin",
+            "CHECK_FIXTURE_COMMIT": self.commit,
             "CHECK_FIXTURE_ROOT": str(self.checkout), "CHECK_FIXTURE_CALLS": str(self.calls),
         })
 
@@ -123,7 +148,7 @@ class PluginSetupReleaseTest(unittest.TestCase):
         self.assertEqual(self.calls.exists(), docker)
         if docker:
             calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
-            self.assertEqual(len(calls), 1)
+            self.assertEqual(sum(call[-3:] == ["config", "--images", "mcp-server"] for call in calls), 1)
             return calls[0]
 
     def test_fresh_checkout_uses_verified_template_without_creating_settings(self):
@@ -132,7 +157,7 @@ class PluginSetupReleaseTest(unittest.TestCase):
         self.assertFalse((self.checkout / ".env").exists())
 
     def test_existing_settings_reports_clients_and_unrelated_edits_are_preserved(self):
-        (self.checkout / ".env").write_text("IMAGE_TAG=v0.17.1\nMCP_API_KEY=" + SECRET + "\n")
+        (self.checkout / ".env").write_text("IMAGE_TAG=v0.18.0\nMCP_API_KEY=" + SECRET + "\n")
         (self.checkout / "reports").mkdir()
         (self.checkout / "reports/existing.html").write_text("existing evidence")
         (self.checkout / "README.md").write_text("unrelated local edit")
@@ -143,9 +168,9 @@ class PluginSetupReleaseTest(unittest.TestCase):
         env_file = self.checkout / ".env"
         env_file.write_text("IMAGE_TAG=v0.16.0\nMCP_API_KEY=" + SECRET + "\n")
         self.check("IMAGE_MISMATCH")
-        self.environment["IMAGE_TAG"] = "v0.17.1"
+        self.environment["IMAGE_TAG"] = "v0.18.0"
         self.check()
-        env_file.write_text("IMAGE_TAG=v0.17.1\n")
+        env_file.write_text("IMAGE_TAG=v0.18.0\n")
         self.environment["IMAGE_TAG"] = "latest"
         self.check("IMAGE_MISMATCH")
         env_file.unlink()
@@ -154,10 +179,49 @@ class PluginSetupReleaseTest(unittest.TestCase):
     def test_wrong_head_and_same_named_fake_tag_are_rejected(self):
         self.git("commit", "--allow-empty", "-qm", "Different source")
         self.check("RELEASE_MISMATCH", docker=False)
-        self.git("tag", "-f", "v0.17.1")
+        self.git("tag", "-f", "v0.18.0")
         self.check("RELEASE_MISMATCH", docker=False)
         self.git("checkout", "--detach", self.commit)
         self.check("RELEASE_MISMATCH", docker=False)
+
+    def test_older_installation_is_preserved(self):
+        self.git("tag", "-d", "v0.18.0")
+        self.git("tag", "v0.17.1")
+        (self.checkout / ".env").write_text("IMAGE_TAG=v0.17.1\nMCP_API_KEY=" + SECRET + "\n")
+        self.check("RELEASE_MISMATCH", docker=False)
+
+    def test_unavailable_or_invalid_upstream_reference_blocks_setup(self):
+        self.environment["CHECK_FIXTURE_OFFLINE"] = "1"
+        self.check("RELEASE_UNAVAILABLE", docker=False)
+        del self.environment["CHECK_FIXTURE_OFFLINE"]
+        for value in ("", SECRET, self.commit + "\n" + self.commit):
+            with self.subTest(value=value):
+                self.environment["CHECK_FIXTURE_COMMIT"] = value
+                self.check("RELEASE_UNAVAILABLE", docker=False)
+
+    def test_existing_container_must_run_the_selected_image(self):
+        self.environment["CHECK_FIXTURE_IDS"] = "a" * 64
+        self.environment["CHECK_FIXTURE_RUNNING_IMAGE"] = "dtkmn/mcp-zap-server:v0.18.0"
+        self.check()
+        self.environment["CHECK_FIXTURE_RUNNING_IMAGE"] = "dtkmn/mcp-zap-server:v0.17.1"
+        self.check("IMAGE_MISMATCH")
+
+    def test_existing_project_and_selected_directory_must_identify_the_same_container(self):
+        for directory_id, project_id in (("", "a" * 64), ("a" * 64, ""), ("a" * 64, "b" * 64)):
+            with self.subTest(directory_id=directory_id, project_id=project_id):
+                self.environment["CHECK_FIXTURE_IDS"] = directory_id
+                self.environment["CHECK_FIXTURE_PROJECT_IDS"] = project_id
+                self.check("OWNERSHIP_CONFLICT")
+
+    def test_unavailable_ambiguous_or_remote_inventory_blocks_setup(self):
+        self.environment["CHECK_FIXTURE_INVENTORY_FAIL"] = "1"
+        self.check("CHECK_FAILED")
+        del self.environment["CHECK_FIXTURE_INVENTORY_FAIL"]
+        self.environment["CHECK_FIXTURE_IDS"] = "a" * 64 + "\n" + "b" * 64
+        self.check("OWNERSHIP_CONFLICT")
+        self.environment["DOCKER_HOST"] = "tcp://remote.invalid"
+        self.check("REMOTE_DOCKER_UNSUPPORTED")
+        self.assertNotIn('"ps"', self.calls.read_text())
 
     def test_modified_helper_cannot_hide_behind_assume_unchanged(self):
         self.git("update-index", "--assume-unchanged", "bin/bootstrap-local.sh")
@@ -218,8 +282,8 @@ class PluginSetupReleaseTest(unittest.TestCase):
         self.check("CONFIGURATION_INVALID")
         del self.environment["CHECK_FIXTURE_FAIL"]
         for image in ("", SECRET,
-                      "dtkmn/mcp-zap-server:v0.17.1\ndtkmn/mcp-zap-server:v0.17.1",
-                      "dtkmn/mcp-zap-server:v0.17.1\ndtkmn/mcp-zap-server:v0.16.0"):
+                      "dtkmn/mcp-zap-server:v0.18.0\ndtkmn/mcp-zap-server:v0.18.0",
+                      "dtkmn/mcp-zap-server:v0.18.0\ndtkmn/mcp-zap-server:v0.16.0"):
             with self.subTest(image=image):
                 self.environment["CHECK_FIXTURE_IMAGE"] = image
                 self.check("IMAGE_MISMATCH")

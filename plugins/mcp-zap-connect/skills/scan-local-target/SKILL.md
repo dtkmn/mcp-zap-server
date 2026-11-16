@@ -42,9 +42,9 @@ preflight commands, recovery or another client's status call to that request.
    `scripts/check-scanner-release.sh --directory <absolute-scanner-directory>`
    with Bash and a bounded command deadline. Resolve the script relative to this
    skill's installed plugin directory, not inside the scanner checkout. It
-   checks the supported `v0.17.1` checkout/commit and effective scanner image
-   without updating anything; see the setup skill for the exact compatibility
-   target. Require exit 0 and `COMPATIBLE`. If it blocks or times out, preserve
+   uses the public GitHub API to verify the `v0.18.0` tag and checkout commit,
+   and checks the effective Compose image and any existing scanner container
+   for this directory against `dtkmn/mcp-zap-server:v0.18.0`. Require exit 0 and `COMPATIBLE`. If it blocks or times out, preserve
    the selected installation and use its own deployment procedure; do not fetch,
    switch versions, replace files or change client settings to make it pass.
 
@@ -143,8 +143,7 @@ request into crawl calls. Keep the exact authorized target URL for every pass.
 Poll `zap_crawl_status` with the Operation ID returned by each start. A queued
 HTTP pass succeeds only when its status reply contains an unqualified
 `Status: SUCCEEDED`. While it is `QUEUED` (including waiting for capacity),
-`STARTING` or `RUNNING`, poll the same ID. For a direct HTTP crawl on v0.17.1,
-`Completed: no` means keep polling and `Completed: yes` confirms completion.
+`STARTING` or `RUNNING`, poll the same ID.
 A start acknowledgement or progress percentage alone does not establish success.
 
 Stop the sequence on failure, denial, timeout, missing status, or cancellation

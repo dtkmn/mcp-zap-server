@@ -18,7 +18,7 @@ build produces Actions artifacts; it does not attach public release downloads.
   server installation defaults match the intended scanner release version.
   The source version in `build.gradle` is the shared repository/plugin version;
   the release tag adds the leading `v`. Desktop retains its separate version.
-  The plugin's supported-scanner pin may target an earlier published release.
+  Fresh plugin setup selects that same tag and scanner image.
   Development source may advance before image, chart and Registry preparation;
   complete that preparation before creating the release tag.
 - GitHub immutable releases are enabled. GitHub CLI is already authenticated
@@ -58,12 +58,10 @@ Record the shared repository/plugin version and supported scanner release in
 the release notes. Keep published releases unchanged; a plugin-only fix needs
 a new repository release, and a server-only release advances the plugin too.
 
-The plugin's scanner compatibility pin targets an already-published scanner
-release, including its reviewed commit and image; it need not match the tag
-containing the plugin. Update that pin only after the scanner release is
-available and the setup path has been checked. Never move a published tag to
-include a plugin fix. Verify fresh plugin installation and deliberate updates
-preserve existing client/scanner settings before advertising the new plugin.
+Set the plugin's scanner checkout and image to the intended release before
+tagging the reviewed commit. Test fresh setup and existing-installation
+preservation locally. After publication, verify that fresh Codex and Claude
+Code setups can obtain the official tag and image.
 Update normal installation instructions to the new tag only after publication;
 keep `main` instructions limited to explicit development use.
 

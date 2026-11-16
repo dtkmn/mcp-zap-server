@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCANNER_RELEASE_TAG='v0.17.1'
-SCANNER_RELEASE_COMMIT='02161be8f30cd3d3b18e7eb0a4d3dcd77c0bec7a'
-SCANNER_RELEASE_IMAGE='dtkmn/mcp-zap-server:v0.17.1'
+SCANNER_RELEASE_TAG='v0.18.0'
+SCANNER_RELEASE_IMAGE="dtkmn/mcp-zap-server:${SCANNER_RELEASE_TAG}"
 
 block() { printf '%s: %s\n' "$1" "$2"; exit 2; }
 usage() {
   printf '%s\n' 'Usage: bash check-scanner-release.sh --directory /absolute/scanner-checkout' \
-    'Read-only release compatibility check. Does not fetch, update, start or repair anything.' \
+    'Check the official GitHub release tag, local checkout and selected Docker image without changing them.' \
     'Exit 0: COMPATIBLE. Exit 2: blocked; preserve the installation and report the reason.'
 }
 
@@ -37,7 +36,15 @@ root="$("${git_read[@]}" rev-parse --show-toplevel 2>/dev/null)" || block RELEAS
 head="$("${git_read[@]}" rev-parse --verify HEAD 2>/dev/null)" || block RELEASE_MISMATCH 'The checkout has no verifiable commit.'
 tag="$("${git_read[@]}" rev-parse --verify "refs/tags/${SCANNER_RELEASE_TAG}^{commit}" 2>/dev/null)" ||
   block RELEASE_MISMATCH 'The supported release tag is unavailable locally. No fetch or checkout was attempted.'
-[[ "$head" == "$SCANNER_RELEASE_COMMIT" && "$tag" == "$SCANNER_RELEASE_COMMIT" ]] ||
+[[ "$head" == "$tag" ]] || block RELEASE_MISMATCH 'Select the checkout at the supported release tag.'
+# A release cannot contain its own commit hash. Resolve the exact tag from the
+# official repository independently of the checkout and its Git configuration.
+release_url="https://api.github.com/repos/dtkmn/mcp-zap-server/commits/refs%2Ftags%2F${SCANNER_RELEASE_TAG}"
+release_commit="$(curl --disable --fail --silent --proto '=https' --connect-timeout 4 --max-time 10 \
+  --max-filesize 80 --header 'Accept: application/vnd.github.sha' -- "$release_url" 2>/dev/null)" &&
+  [[ "$release_commit" =~ ^[0-9a-f]{40}$ ]] ||
+  block RELEASE_UNAVAILABLE 'The official release commit could not be verified. Check curl, GitHub API availability and network access before continuing.'
+[[ "$head" == "$release_commit" ]] ||
   block RELEASE_MISMATCH 'The checkout or release tag differs from the supported scanner release. Preserve it and use its own deployment instructions.'
 
 required_files=(
@@ -52,12 +59,12 @@ done
 for relative in "${required_files[@]}"; do
   file="$DIRECTORY/$relative"
   [[ -f "$file" && ! -L "$file" ]] || block MODIFIED_SETUP 'A required release file is missing, linked or not a regular file.'
-  expected="$("${git_read[@]}" rev-parse "${SCANNER_RELEASE_COMMIT}:${relative}" 2>/dev/null)" || block MODIFIED_SETUP 'A required file is absent from the supported release.'
+  expected="$("${git_read[@]}" rev-parse "${release_commit}:${relative}" 2>/dev/null)" || block MODIFIED_SETUP 'A required file is absent from the supported release.'
   actual="$("${git_read[@]}" hash-object --no-filters -- "$file" 2>/dev/null)" || block MODIFIED_SETUP 'A required setup file could not be read.'
   [[ "$actual" == "$expected" ]] || block MODIFIED_SETUP 'Setup files or version metadata differ from the supported release. No files were replaced.'
   [[ "$relative" != bin/*.sh || -x "$file" ]] || block MODIFIED_SETUP 'A required setup helper is not executable.'
 done
-"${git_read[@]}" diff --cached --no-ext-diff --quiet "$SCANNER_RELEASE_COMMIT" -- "${required_files[@]}" ||
+"${git_read[@]}" diff --cached --no-ext-diff --quiet "$release_commit" -- "${required_files[@]}" ||
   block MODIFIED_SETUP 'Staged setup changes require manual review; the index was not changed.'
 
 for variable in COMPOSE_FILE COMPOSE_ENV_FILES COMPOSE_PROFILES; do
@@ -78,8 +85,8 @@ if grep -Eq '^[[:space:]]*(export[[:space:]]+)?(COMPOSE_FILE|COMPOSE_ENV_FILES|C
   block CUSTOM_DEPLOYMENT 'Private settings select a custom Compose configuration. No settings were changed.'
 fi
 command -v docker >/dev/null 2>&1 || block DOCKER_MISSING 'Docker Compose is required to resolve the selected image.'
-images="$(docker compose --project-directory "$DIRECTORY" --env-file "$env_file" \
-  -f "$DIRECTORY/docker-compose.yml" config --images mcp-server 2>/dev/null)" ||
+compose=(docker compose --project-directory "$DIRECTORY" --env-file "$env_file" -f "$DIRECTORY/docker-compose.yml")
+images="$("${compose[@]}" config --images mcp-server 2>/dev/null)" ||
   block CONFIGURATION_INVALID 'Compose could not resolve the scanner image. Inspect its diagnostics privately; no startup was attempted.'
 image=''; scanner_images=0
 while IFS= read -r candidate; do
@@ -90,4 +97,28 @@ while IFS= read -r candidate; do
 done <<< "$images"
 [[ "$scanner_images" == 1 && "$image" == "$SCANNER_RELEASE_IMAGE" ]] ||
   block IMAGE_MISMATCH 'The effective scanner image differs from the supported release. Preserve the selected version and review the mismatch.'
+# A user can change IMAGE_TAG while a container from an older release still
+# exists. Include stopped containers, which bootstrap could otherwise recreate.
+endpoint="$(docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)" ||
+  block CHECK_FAILED 'Docker context inspection failed. Check the selected local engine.'
+if [[ -n "${DOCKER_HOST:-}" && -z "${DOCKER_CONTEXT:-}" ]]; then endpoint="$DOCKER_HOST"; fi
+[[ "$endpoint" == unix://* && "$endpoint" != *$'\n'* ]] ||
+  block REMOTE_DOCKER_UNSUPPORTED 'Select the intended local Unix-socket Docker engine before checking this installation.'
+scanner_id="$(docker ps -a --no-trunc --filter "label=com.docker.compose.project.working_dir=$DIRECTORY" \
+  --filter 'label=com.docker.compose.service=mcp-server' --format '{{.ID}}' 2>/dev/null)" ||
+  block CHECK_FAILED 'Could not inspect existing scanner containers. Check the selected local engine.'
+# Compose identifies installations by project name. A different directory can
+# select that same name even when its existing scanner has been stopped.
+project_id="$("${compose[@]}" ps --all --quiet mcp-server 2>/dev/null)" ||
+  block CHECK_FAILED 'Could not inspect the scanner in the selected Compose project.'
+[[ "$project_id" == "$scanner_id" ]] ||
+  block OWNERSHIP_CONFLICT 'The Compose project and selected directory identify different scanner containers. Review their ownership before setup.'
+if [[ -n "$scanner_id" ]]; then
+  [[ "$scanner_id" =~ ^[a-f0-9]{64}$ ]] ||
+    block OWNERSHIP_CONFLICT 'The selected directory has multiple or unidentifiable scanner containers. Review their ownership.'
+  installed_image="$(docker inspect --type container --format '{{.Config.Image}}' "$scanner_id" 2>/dev/null)" ||
+    block CHECK_FAILED 'The selected scanner container could not be inspected.'
+  [[ "$installed_image" == "$SCANNER_RELEASE_IMAGE" ]] ||
+    block IMAGE_MISMATCH 'The existing scanner container uses another image. Preserve it and follow the scanner upgrade guide.'
+fi
 printf 'COMPATIBLE: scanner checkout and image match %s. No installation state was changed.\n' "$SCANNER_RELEASE_TAG"

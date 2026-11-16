@@ -143,10 +143,9 @@ plugin numbers; they must not be rewritten to adopt this scheme. If a local
 tag already exists for the current version, the plugin files must match it;
 selecting an older baseline does not bypass that check.
 
-The shared source version is not the scanner installation pin. Keep published
-image defaults, Registry packages and Helm image selection on available releases
-until their separate release preparation. Changing the plugin version must not
-silently switch the supported scanner checkout, commit or image.
+When preparing a release, align the plugin's fresh setup with the same versioned
+scanner checkout and image. Verify both on a fresh installation. Users on an
+older scanner follow its upgrade procedure separately from a plugin update.
 
 For setup changes, run the Python helper tests and verify the pinned scanner
 checkout/image contract. Existing `.env`, client settings and selected images

@@ -169,6 +169,15 @@ def check(repo, base_ref=None):
         raise VersionCheckError(
             f"Plugin version {current_version} must match project version {current_project}."
         )
+    release_tag = f"v{current_version}"
+    guard_path = f"{PLUGIN_ROOT}/scripts/check-scanner-release.sh"
+    guard = current.get(guard_path)
+    if guard is None or re.findall(rb"^SCANNER_RELEASE_TAG='([^']+)'$", guard[1], re.MULTILINE) != [release_tag.encode()]:
+        raise VersionCheckError(f"The scanner compatibility check must select {release_tag}.")
+    setup_path = f"{PLUGIN_ROOT}/skills/setup-local-scanner/SKILL.md"
+    setup = current.get(setup_path)
+    if setup is None or re.findall(rb"^ *git clone --branch (\S+)", setup[1], re.MULTILINE) != [release_tag.encode()]:
+        raise VersionCheckError(f"Fresh plugin setup must clone the matching scanner tag {release_tag}.")
     changed = previous != current
     if changed and not version_is_greater(current_version, previous_version):
         raise VersionCheckError(
@@ -180,12 +189,11 @@ def check(repo, base_ref=None):
             f"Plugin payload changed since {baseline}, but shared version {current_project} "
             f"does not advance repository version {previous_project}. Choose a new release version."
         )
-    current_tag = f"v{current_version}"
-    if current_tag in git(repo, "tag", "--list", current_tag).decode().splitlines():
-        tagged = baseline_payload(repo, resolve_commit(repo, f"refs/tags/{current_tag}"))
+    if release_tag in git(repo, "tag", "--list", release_tag).decode().splitlines():
+        tagged = baseline_payload(repo, resolve_commit(repo, f"refs/tags/{release_tag}"))
         if current != tagged:
             raise VersionCheckError(
-                f"Plugin payload differs from existing local tag {current_tag}. "
+                f"Plugin payload differs from existing local tag {release_tag}. "
                 "Choose a new project/plugin version; do not reuse the tag."
             )
     return current_version, baseline, changed

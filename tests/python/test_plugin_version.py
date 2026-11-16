@@ -47,6 +47,8 @@ class PluginVersionTest(unittest.TestCase):
 
     def write_versions(self, version, project=None):
         self.write("build.gradle", f"version = '{version if project is None else project}'\n")
+        self.write(PLUGIN / "scripts/check-scanner-release.sh", f"SCANNER_RELEASE_TAG='v{version}'\n")
+        self.write(PLUGIN / "skills/setup-local-scanner/SKILL.md", f"  git clone --branch v{version} --single-branch example\n")
         for manifest in MANIFESTS:
             self.write(PLUGIN / manifest, json.dumps({"name": "mcp-zap-connect", "version": version}) + "\n")
 
@@ -112,6 +114,14 @@ class PluginVersionTest(unittest.TestCase):
     def test_plugin_version_must_match_project_version(self):
         self.write_versions("0.18.0", project="0.19.0")
         self.assert_rejected("must match project version 0.19.0")
+
+    def test_old_scanner_pin_or_setup_checkout_rejected_with_new_plugin(self):
+        self.write_versions("0.18.0")
+        self.write(PLUGIN / "scripts/check-scanner-release.sh", "SCANNER_RELEASE_TAG='v0.17.1'\n")
+        self.assert_rejected("compatibility check must select v0.18.0")
+        self.write_versions("0.18.0")
+        self.write(PLUGIN / "skills/setup-local-scanner/SKILL.md", "  git clone --branch v0.17.1 --single-branch example\n")
+        self.assert_rejected("setup must clone the matching scanner tag v0.18.0")
 
     def test_missing_ambiguous_and_invalid_project_versions_rejected(self):
         for source in ("", "version = project.findProperty('releaseVersion')\n",

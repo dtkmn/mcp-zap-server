@@ -23,7 +23,7 @@ that client's passive-status call; setup prerequisites must not block it.
   establish access to the user's local scanner.
 - For setup or restart, identify the host OS and architecture. Check Bash,
   Docker with a reachable engine, and Compose supporting `--wait` and
-  `--wait-timeout`. Check Git for release-checkout verification, OpenSSL when
+  `--wait-timeout`. Check Git and curl for release verification, HTTPS access to the public GitHub API, OpenSSL when
   creating new settings, and the bootstrap/doctor utilities documented in the project.
   Java and ZAP run inside containers; no host Java installation is required.
 - If a prerequisite check fails, follow the recovery steps below before
@@ -82,18 +82,18 @@ that client's passive-status call; setup prerequisites must not block it.
   into a new user-owned directory:
 
   ```bash
-  git clone --branch v0.17.1 --single-branch https://github.com/dtkmn/mcp-zap-server.git "<new-scanner-directory>"
+  git clone --branch v0.18.0 --single-branch https://github.com/dtkmn/mcp-zap-server.git "<new-scanner-directory>"
   ```
 
   Never overwrite a directory, clone floating `main`, pull, reset or switch an
-  existing checkout. This plugin supports scanner release `v0.17.1`, commit
-  `02161be8f30cd3d3b18e7eb0a4d3dcd77c0bec7a`, and image
-  `dtkmn/mcp-zap-server:v0.17.1`. The plugin's own version and containing release
-  are independent of this scanner compatibility target.
+  existing checkout. This release uses the `v0.18.0` scanner checkout and
+  `dtkmn/mcp-zap-server:v0.18.0` image. The checker looks up the official tag's
+  commit through the public GitHub API before trusting local setup files. It
+  checks the effective Compose image and any scanner container owned by the
+  selected directory, including a stopped container.
 - Before executing checkout setup/readiness/recovery helpers or changing client
   settings, run the bundled read-only compatibility check with a bounded command
-  deadline. Resolve its path from this installed skill's plugin directory,
-  not the scanner checkout (the released checkout does not include this checker):
+  deadline. Resolve the checker from this installed skill's plugin directory:
 
   ```bash
   bash "<installed-plugin-directory>/scripts/check-scanner-release.sh" --directory "<absolute-scanner-directory>"

@@ -3,7 +3,7 @@
   "name": "io.github.dtkmn/mcp-zap-server",
   "title": "MCP ZAP Server",
   "description": "Crawl, scan and report on authorized web targets with a self-hosted ZAP server.",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "websiteUrl": "https://danieltse.org/mcp-zap-server/",
   "repository": {
     "url": "https://github.com/dtkmn/mcp-zap-server",
@@ -22,7 +22,7 @@
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/dtkmn/mcp-zap-server:v0.17.1",
+      "identifier": "ghcr.io/dtkmn/mcp-zap-server:v0.18.0",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {
@@ -111,7 +111,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/dtkmn/mcp-zap-server:v0.17.1",
+      "identifier": "docker.io/dtkmn/mcp-zap-server:v0.18.0",
       "runtimeHint": "docker",
       "runtimeArguments": [
         {

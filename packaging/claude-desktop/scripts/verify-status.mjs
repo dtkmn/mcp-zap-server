@@ -2,10 +2,11 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import desktopPackage from '../package.json' with { type: 'json' };
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const bundle = resolve(process.argv[2] || resolve(root, '../../build/claude-desktop/unpacked'));
-const client = new Client({ name: 'mcp-zap-connect-status-verifier', version: '0.1.0' });
+const client = new Client({ name: 'mcp-zap-connect-status-verifier', version: desktopPackage.version });
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [resolve(bundle, 'server/index.js')],

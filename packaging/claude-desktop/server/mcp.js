@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import desktopPackage from '../package.json' with { type: 'json' };
 import {
   CallToolRequestSchema, ListToolsRequestSchema,
   ListPromptsRequestSchema, GetPromptRequestSchema,
@@ -77,7 +78,7 @@ function requireEmpty(args) {
 }
 
 export async function connectScanner({ url, apiKey }) {
-  const client = new Client({ name: 'mcp-zap-connect-desktop', version: '0.1.0' });
+  const client = new Client({ name: 'mcp-zap-connect-desktop', version: desktopPackage.version });
   // Credentials remain inside this process, never in argv or diagnostic output.
   const transport = new StreamableHTTPClientTransport(new URL(url), {
     requestInit: { headers: { 'X-API-Key': apiKey } },
@@ -94,7 +95,7 @@ export async function connectScanner({ url, apiKey }) {
 }
 
 export function createDesktopServer({ controller, connect = connectScanner }) {
-  const server = new Server({ name: 'mcp-zap-connect', version: '0.1.0' }, {
+  const server = new Server({ name: 'mcp-zap-connect', version: desktopPackage.version }, {
     capabilities: { tools: { listChanged: true }, prompts: {} }, instructions: PROTOCOL_INSTRUCTIONS,
   });
   let upstream;

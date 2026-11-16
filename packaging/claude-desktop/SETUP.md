@@ -6,19 +6,18 @@ Claude Code, Node.js, npm, Git, or a repository checkout.
 
 ## 1. Get the extension
 
-Open the [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1),
-which includes the Claude Desktop `0.1.0` downloads under **Assets**.
-The extension and this guide ship with the scanner
-release in the same repository; there is no separate Desktop release.
+For connector `0.18.0`, check [scanner releases](https://github.com/dtkmn/mcp-zap-server/releases)
+for `v0.18.0` and confirm its four matching downloads are present. If that
+release or its scanner image is unavailable, use the `0.1.0` connector and
+matching guide from the [v0.17.1 scanner release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1).
 
 Under **Assets**, download:
 
-- `mcp-zap-connect-claude-desktop-0.1.0.mcpb` — the extension to install.
-- `mcp-zap-connect-claude-desktop-0.1.0-setup.md` — this matching guide.
+- `mcp-zap-connect-claude-desktop-0.18.0.mcpb` — the extension to install.
+- `mcp-zap-connect-claude-desktop-0.18.0-setup.md` — this matching guide.
 
-Use the connector version listed in that release if it differs from `0.1.0`;
-it can differ from the scanner release version. Download the matching guide
-and `.mcpb` together. Download the adjacent `.sha256` files and check the bundle
+From `v0.18.0` onward, the bundle and guide use the scanner release number.
+Download both from the same release. Download the adjacent `.sha256` files and check the bundle
 and guide against their matching checksums before installation. When choosing
 another scanner release, verify that all four matching files are present.
 Choose the `.mcpb`, rather than GitHub's automatic **Source code**
@@ -96,13 +95,13 @@ with a different key. Reuse the existing scanner when you want to keep those
 connections working without reconfiguration.
 
 The extension bundles a snapshot of the scanner setup files and defaults.
-The released connector `0.1.0` defaults a new installation to scanner `v0.17.1`,
-whose Linux AMD64 and ARM64 images are published on Docker Hub and GHCR.
-That scanner release starts scans directly in a standard local installation. Queued execution and expert tools are optional.
-The change to queue every new scan requires a current source build;
-they are not added to the released scanner by installing an updated guide.
-Downloading a bundle from a scanner release does not itself change its embedded default.
-An existing scanner keeps its selected version and settings.
+Connector `0.18.0` selects `dtkmn/mcp-zap-server:v0.18.0` for new installs.
+Verify the image is available for your platform on Docker Hub before setup.
+That scanner queues every new crawl and active scan. Connector `0.1.0` from
+`v0.17.1` continues to select its original scanner. Reusing an existing
+installation preserves its version, credentials and settings. Read the
+[0.18.0 upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.18.0/)
+before changing that installation.
 
 If a prerequisite is missing, resolve it and ask Claude to check again. If it
 reports conflicting ports, credentials, ownership, or customized startup files,

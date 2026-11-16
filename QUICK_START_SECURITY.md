@@ -30,8 +30,7 @@ are for an isolated lab and need review before shared deployment.
 
 ## Quick-Start Permissions
 
-The packaged local client uses the `*` grant for the curated `guided` tool
-surface. This includes crawling, active attacks, target authentication, API
+The packaged local client uses the `*` grant for the scan tools. This includes crawling, active attacks, target authentication, API
 imports, findings, history and reports. Run only the target and operations the
 user requests; the grant does not authorize a scan by itself. Target URL and
 network restrictions remain separate controls.

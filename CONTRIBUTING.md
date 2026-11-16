@@ -43,8 +43,11 @@ Weak contributions usually look like:
 
 The bootstrap creates or preserves private local settings. `dev.sh` builds the
 checkout with `docker-compose.dev.yml`, waits for health, and runs the existing
-authenticated doctor before reporting ready. For the published-image install
-and client connection workflow, use [Self-Serve First Run](./docs/getting-started/SELF_SERVE_FIRST_RUN.md).
+authenticated doctor before reporting ready. Continue with the
+[source-build verification and client handoff](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#source-development)
+before requesting a scan. That procedure also covers checking and restarting
+this development stack; keep the development override when doing so.
+For a published-image installation, use [Self-Serve First Run](./docs/getting-started/SELF_SERVE_FIRST_RUN.md).
 
 For the shared governance wiring, use the
 [Core integration reference](https://danieltse.org/mcp-gateway-core/reference/zap-integration/).
@@ -64,7 +67,7 @@ npm run build
 
 - `src/main/java/` - Spring Boot runtime and MCP/ZAP integration
 - `src/test/java/` - unit, integration, and architecture tests
-- `src/main/resources/migration/` - Flyway migrations
+- `src/main/resources/db/migration/` - Flyway migrations
 - `docs/` - public documentation site
 - `helm/` - Helm chart and deployment values
 - `.github/` - CI, release, docs, and repository automation
@@ -112,6 +115,43 @@ branches, which do not trigger CI, Snyk, or Pages on push. Updates to an open
 qualifying pull request still run its pull-request checks.
 
 The normal build excludes Docker-tagged tests. CI runs them for pull requests targeting `main`, pushes to `main` before image publication, manual workflow runs, and releases. Development and feature pushes skip them.
+
+### Skills plugin versions
+
+MCP ZAP Connect shares the repository release number, starting with unreleased
+`0.18.0`. Use the top-level `version` in `build.gradle` for all three portable,
+Claude Code and Cursor manifests; the release tag adds only the leading `v`.
+Keep the advertised MCP server version fallback aligned and retain its operator
+override. Every repository release advances the plugin version, including
+server-only releases; plugin-only fixes require a new repository release.
+Run the same local check as CI:
+
+```bash
+python3 scripts/check-plugin-version.py
+```
+
+The check compares against the highest stable `vX.Y.Z` tag available locally,
+excluding tags at `HEAD`. The tag need not be an ancestor of the current branch:
+a release merge on `main` can follow development work on another branch. The
+check does not fetch tags or establish publication. Use `--base-ref v0.17.1` to
+select an explicit baseline when appropriate; a shallow checkout needs the
+required tags and objects first. Changed files, additions, deletions and
+executable-mode changes are included. The check requires the current manifests
+to match the source version and changed plugin files to advance both the prior
+plugin version and repository version. Historical releases may have separate
+plugin numbers; they must not be rewritten to adopt this scheme. If a local
+tag already exists for the current version, the plugin files must match it;
+selecting an older baseline does not bypass that check.
+
+The shared source version is not the scanner installation pin. Keep published
+image defaults, Registry packages and Helm image selection on available releases
+until their separate release preparation. Changing the plugin version must not
+silently switch the supported scanner checkout, commit or image.
+
+For setup changes, run the Python helper tests and verify the pinned scanner
+checkout/image contract. Existing `.env`, client settings and selected images
+must survive mismatch handling without automatic repair. Plugin validation
+does not prove an authenticated native client connection or a successful scan.
 
 ### Java test coverage
 

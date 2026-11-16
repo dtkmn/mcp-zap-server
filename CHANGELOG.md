@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+These changes describe unreleased `0.18.0` source, not published `v0.17.1`. Read the
+[0.18.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md) before
+updating clients, CI consumers or deployments.
+
+### Added
+
+- Prepare MCP ZAP Connect `0.18.0` with a pinned `v0.17.1` scanner checkout/image contract and a bundled read-only compatibility check before setup helpers. Pin normal Codex and Claude Code installation guidance to a published release; preserve existing installations on mismatch and require deliberate updates. Use one repository/plugin release number, enforced in CI and before image publication, with checks against reusing published versions for changed plugin files. The published `v0.17.1` plugin remains `0.5.0` and does not contain this new check.
+- Add add-on inspection, update and update-status tools. Updates use an exclusive maintenance gate, are disabled by default and require explicit operator authority, approved versions and dependencies, durable private maintenance state, an idle exclusive engine, and one controller using in-memory jobs with single-node coordination. Uncertain updates quarantine engine mutations; the tools do not restart ZAP or automatically retry installation.
+- Persist scan launch attempts and accepted native receipts through a private journal for in-memory jobs or Postgres migration V9. Uncertain starts retain capacity and are not automatically submitted again. Controller replacement can leave outstanding work held; in-memory job history is still volatile and no manual reconciliation tool is exposed through MCP.
+
+### Changed
+
+- In MCP ZAP Connect, “crawl this site” requests one HTTP Spider crawl. “Crawl thoroughly” starts Client Spider on the same target after the HTTP crawl succeeds.
+- Rename the runtime policy examples to `ci-guardrails.json` and `readonly-triage.json`. The bundle names now match the filenames without `.json`, two CI allow rules have shorter IDs, and both examples use `surface: mcp`. When adopting these examples, update any direct file references or custom filters that use the previous values.
+- Use action names in tool replies and documentation. Scripts can continue to read labeled values such as `Operation ID:` when tracking scans.
+
+- Route every new crawl and attack through the existing queue with either in-memory or Postgres storage. Queue admission, workspace quotas, concurrency limits and request idempotency keys now apply to both backends. Previously issued signed Operation IDs for direct scans retain status and stop support when their signing key remains valid.
+- Expose the existing `zap_scan_policies_list` and `zap_scan_policy_view` names through the scan tool catalog with `zap:scan:policy:read`. Inspection remains read-only and does not authorize attacks, edit rules or freeze a policy for later execution.
+- Make the existing `zap_findings_snapshot` and `zap_findings_diff` tools available in the scan tool catalog with their existing `zap:alerts:read` permission and evidence-visibility checks.
+- Require scan/report tools and passive-wait support in the CI gate. Use discovered snapshot support for baseline comparison and suppressions, stop on failed, cancelled or uncertain starts without submitting a replacement, and accept only `traditional-html-plus` or `traditional-json-plus` report templates. Existing result v2, snapshot/diff v3 and manifest v1 contracts remain unchanged.
+- Update Gradle and its container builder to `9.8.2`, refresh the Go `1.27.3` healthcheck-builder digest and pinned Java/CodeQL CI actions, and resolve the latest matching Node 22 release in the documentation workflow.
+- Refresh documentation dependencies, including Astro `7.4.4`, Starlight `0.42.8` and Astro Check `0.9.12`, plus the Desktop connector lockfile's `body-parser` `2.4.0`, `fast-uri` `3.1.9` and `node-forge` `1.4.2`. Scanner and connector version metadata are unchanged.
+
+### Fixed
+
+- Disable automatic HTTP retries and redirects for native scan START requests, and remove automatic HTTP-to-AJAX fallback. A lost, malformed or uncertain start reply must not cause another automatic start. Known pre-dispatch failures and explicit engine-busy rejections retain their separate bounded handling.
+- Fail startup when an explicitly selected Postgres job store has no URL or cannot initialize, instead of falling back to empty in-memory state. The old `fail-fast=false` setting no longer permits that fallback.
+- Preserve the selected active-scan policy and the configured default policy when preparing authenticated or unauthenticated scans; starting a scan no longer enables every rule in the default policy.
+- Accept complete lowercase alphanumeric tunnel IDs, including four-character namespace aliases, in the native macOS ChatGPT tunnel helper. Preserve the complete ID and reject malformed or non-ASCII values before changing private state.
+- Exclude decorative duplicate page titles from documentation search results and preserve section fragments when redirecting legacy documentation URLs.
+
+### Removed
+
+- Retire the expert/raw MCP catalog, including direct scan starts, raw queue administration, policy editing and Automation Framework plan execution/status/artifact tools. Use the scan tools and their Operation IDs; these do not replace every former raw capability. Historical records and permitted status and stop calls for legacy Operation IDs remain available.
+- Remove the obsolete tool-surface selector, direct-scan/Automation Framework quota and backpressure settings, stale-operation timeout and `mcp.zap.operations.active` metric. Update affected configuration and dashboards; queue limits, claims and history retention continue to use their own settings.
+
+### Documentation
+
+- Separate released-image installation from current-source development and queue behavior; correct Desktop download availability, client navigation and adapter guidance, and version-qualify native-preview limitations. Consolidate first-report instructions around installation-specific readiness, completed crawling/passive analysis and complete report readback.
+- Correct recovery and deployment guidance: do not promise automatic takeover of held scans; preserve journal/database state; configure separate journal storage and in-memory single-controller `Recreate` rollouts; stop old controllers before the V9 cutover. Correct the authenticated Helm example and EKS storage/reinstall instructions.
+- Update tool migration, permission, policy, scan-history and CI examples for the scan tool catalog; correct the contributor migration path, optional webhook action installation and queued Client Spider authentication guidance. Preserve historical release descriptions and existing documentation routes.
+
 ## [0.17.1]
 
 ### Changed

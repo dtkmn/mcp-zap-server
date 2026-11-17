@@ -21,6 +21,7 @@ any required client downloads are available before installing this version.
 
 ### Changed
 
+- Update the server's MCP Gateway Core and Spring WebFlux adapter dependencies from `0.11.0` to `0.11.1`.
 - In MCP ZAP Connect, “crawl this site” requests one HTTP Spider crawl. “Crawl thoroughly” starts Client Spider on the same target after the HTTP crawl succeeds.
 - Rename the runtime policy examples to `ci-guardrails.json` and `readonly-triage.json`. The bundle names now match the filenames without `.json`, two CI allow rules have shorter IDs, and both examples use `surface: mcp`. When adopting these examples, update any direct file references or custom filters that use the previous values.
 - Use action names in tool replies and documentation. Scripts can continue to read labeled values such as `Operation ID:` when tracking scans.

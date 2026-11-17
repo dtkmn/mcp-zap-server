@@ -363,20 +363,33 @@ Streamable HTTP endpoint. It does not require a Claude Code subscription.
 Anthropic documents local Desktop extensions for all users, including Free
 accounts. Claude's account usage limits still apply when calling tools.
 
-For a downloaded or locally built bundle:
+If your Team or Enterprise organization uses a desktop extension allowlist, ask an
+organization owner to add MCP ZAP Connect to the approved directory. Install it
+there and continue at step 2. The allowlist blocks manual installation of downloaded
+`.mcpb` files. [Claude's extension allowlist guide](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist)
+
+For a downloaded or locally built bundle, follow these steps.
 
 1. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
    **Extensions** (or open **Settings → Extensions** in older layouts). Under
    **Advanced settings**, find **Extension Developer**, select **Install Extension**
-   and choose the `.mcpb` file.
+   and choose the `.mcpb` file. Review the trust prompt before installing.
+   This unsigned extension runs with your local user permissions.
 2. Leave the optional scanner directory and key override blank. The extension
    reuses an existing scanner and reads its credential privately, or uses
-   `~/.mcp-zap-server` for a new installation.
-3. Ask Claude to set up the local scanner. It checks prerequisites and requests
-   approval before setup changes. Missing Docker and OS prompts need your
-   interaction. Installing the extension alone does not start the scanner.
+   `~/.mcp-zap-server` for a new installation. Installing the extension starts
+   only the connector. Before scanner setup, make sure Docker is installed and
+   running. Complete any macOS permission prompts yourself.
+3. Ask Claude to set up the local scanner. When Claude asks to run **Scanner
+   check prerequisites**, choose **Allow once**. This checks Docker and looks
+   for an existing installation.
+4. Review the changes Claude proposes in chat. If you approve them, tell Claude
+   to proceed, then choose **Allow once** when it asks to run **Scanner setup**.
+   Fresh setup checks the connection as it starts the scanner. When it returns
+   `SCANNER_STARTED`, setup is complete. If it returns `SCANNER_REUSED`, use
+   the status request below once to verify the existing connection.
 
-For an already-running scanner, request only:
+To check an already-running scanner, send this request.
 
 ```text
 Call zap_passive_scan_status through MCP ZAP Connect once with empty arguments.

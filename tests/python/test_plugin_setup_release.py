@@ -150,6 +150,7 @@ class PluginSetupReleaseTest(unittest.TestCase):
             calls = [json.loads(line) for line in self.calls.read_text().splitlines()]
             self.assertEqual(sum(call[-3:] == ["config", "--images", "mcp-server"] for call in calls), 1)
             return calls[0]
+        return None
 
     def test_fresh_checkout_uses_verified_template_without_creating_settings(self):
         call = self.check()

@@ -247,7 +247,14 @@ export function createDesktopServer({ controller, connect = connectScanner }) {
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [{ name: 'setup-local-scanner', description: 'Guide local scanner setup while preserving existing installations and other clients.' }] }));
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     if (request.params.name !== 'setup-local-scanner') throw new Error('Unknown prompt.');
-    return { description: 'Local scanner setup', messages: [{ role: 'user', content: { type: 'text', text: 'Set up or reconnect my local MCP ZAP scanner. Check prerequisites first, reuse an existing healthy installation and preserve all other client settings. Explain any required changes before requesting approval. Verify with zap_passive_scan_status once only; do not run a scan.' } }] };
+    const text = [
+      'Set up or reconnect my local MCP ZAP scanner. Check prerequisites first, reuse an existing healthy installation and preserve all other client settings.',
+      'Explain any required changes and wait for my approval before setup.',
+      'If setup returns SCANNER_STARTED, report success and stop. Setup has already checked the connection.',
+      'If setup returns SCANNER_REUSED, call zap_passive_scan_status once and stop. If setup fails, report the error and stop.',
+      'Do not run a scan.',
+    ].join(' ');
+    return { description: 'Local scanner setup', messages: [{ role: 'user', content: { type: 'text', text } }] };
   });
   server.onerror = () => { /* Do not log transport exceptions containing private headers. */ };
   return { server, close: async () => { await disconnect(); await server.close(); } };

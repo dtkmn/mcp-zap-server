@@ -1,6 +1,6 @@
 # MCP ZAP Connect: Claude Desktop setup and first scan
 
-Use Claude Desktop Chat on a Mac with a Free account. This preview connects
+Use Claude Desktop Chat on a Mac, including on the Free plan. This preview connects
 Claude to a local Docker scanner and can guide its setup. You do not need
 Claude Code, Node.js, npm, Git, or a repository checkout.
 
@@ -31,7 +31,7 @@ listing or endorsement.
 ## 2. Install the required apps
 
 1. Install [Claude Desktop](https://claude.com/download) and sign in to your
-   Free account. Use **Chat** for this guide.
+   account. Use **Chat** for this guide.
 2. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/),
    choosing Apple Silicon or Intel to match your Mac. Open Docker Desktop and
    wait until its engine is running. Reuse an existing working installation.
@@ -41,6 +41,11 @@ Check Docker's terms for your organization. Leave Docker running while using
 the scanner.
 
 ## 3. Install MCP ZAP Connect
+
+If your Team or Enterprise workspace enforces a desktop extension allowlist,
+Claude blocks manual `.mcpb` installs. Ask a workspace owner to add MCP ZAP
+Connect to your organization's extension directory. Install it there, then
+continue with step 3 below. [Anthropic's extension allowlist guide](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist)
 
 1. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
    **Extensions** (or **Settings → Extensions** in older layouts). Under
@@ -66,7 +71,7 @@ installation. Keep the existing tool-approval settings.
 
 ## 4. Ask Claude to set up and verify the scanner
 
-Paste this message:
+Send this message in a new chat.
 
 ```text
 Help me set up MCP ZAP Connect.
@@ -79,12 +84,17 @@ recreating its containers. Preserve its credentials, reports, target
 restrictions, and all Codex and Cursor settings.
 
 After I approve setup, use scanner_setup with confirm=true as needed.
-Verify the connection with zap_passive_scan_status once, then stop.
+If setup returns SCANNER_STARTED, report success and stop. Setup already checked
+the scanner's passive status.
+If setup returns SCANNER_REUSED, call zap_passive_scan_status once, then stop.
 Do not crawl, scan, wait for passive analysis, or generate reports yet.
 ```
 
-Review Claude's proposed changes and approve setup when ready. A fresh setup
-uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
+1. When Claude asks to run **Scanner check prerequisites**, choose **Allow once**.
+2. Review the proposed changes. If you want to proceed, approve setup in chat.
+3. When Claude asks to run **Scanner setup**, choose **Allow once** again.
+
+A fresh setup uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
 starts the scanner and bundled demo applications. Initial image downloads may
 take a while. A healthy existing scanner is reused without replacing its keys
 or client settings.

@@ -16,6 +16,11 @@ Starting with `0.18.0`, the Desktop bundle, Codex and Claude Code plugins, and s
 
 ## Install the local preview
 
+If your Team or Enterprise workspace enforces a desktop extension allowlist,
+Claude blocks manual `.mcpb` installs. Ask a workspace owner to add MCP ZAP
+Connect to your organization's extension directory. Install it there, then
+continue with step 3 below. [Anthropic's extension allowlist guide](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist)
+
 1. For connector `0.18.0`, check [scanner releases](https://github.com/dtkmn/mcp-zap-server/releases)
    for `v0.18.0` and its four matching assets: the
    `mcp-zap-connect-claude-desktop-0.18.0.mcpb` bundle,
@@ -61,11 +66,17 @@ Check prerequisites first and explain any required changes before asking for app
 Reuse any healthy existing scanner without starting, restarting or recreating its containers.
 Preserve its keys, reports, target restrictions, and all Codex and Cursor settings.
 Only call scanner_setup with confirm=true after I have requested and approved setup.
-Verify this Claude Desktop connection with zap_passive_scan_status once only, then stop.
+If setup returns SCANNER_STARTED, report success and stop. Setup already checked
+the scanner's passive status.
+If setup returns SCANNER_REUSED, call zap_passive_scan_status once, then stop.
 Do not crawl, scan, wait for passive analysis, or generate reports.
 ```
 
-Claude should use these local tools:
+When Claude asks to run **Scanner check prerequisites**, choose **Allow once**.
+Review the proposed changes and approve setup in chat if you want to proceed.
+When Claude asks to run **Scanner setup**, choose **Allow once** again.
+
+Claude uses these local tools during setup and verification.
 
 | Tool | Purpose |
 | --- | --- |

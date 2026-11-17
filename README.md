@@ -19,19 +19,16 @@
 
 `mcp-zap-server` exposes ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 
-This checkout describes **current source**, while the Docker quickstart below
-runs the published `v0.17.1` image without building the checkout. Choose the
-matching documentation:
+This checkout targets scanner `0.18.0`. New crawls and active scans always use the job
+queue, with either in-memory or PostgreSQL storage. A standalone installation
+from this checkout selects `v0.18.0`. Verify that the image is published for
+your platform before starting. Read the [0.18.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md)
+before changing an existing installation.
 
-| Runtime | Tool interface and new scan starts | Documentation |
-| --- | --- | --- |
-| Published `v0.17.1` | Local installs start scans directly by default. Queued execution and expert tools are optional. | [Tagged README](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md) and [release guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md) |
-| Current source | One set of scan tools. New crawls and active scans always use the queue. | Feature and operations guides in this checkout; [source setup](./CONTRIBUTING.md#local-stack) |
-
-Current-source launch-safety guidance includes migration V9; published
-`v0.17.1` uses V1–V8. Use the [tagged Helm guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/helm/mcp-zap-server/README.md)
-for a released deployment. Source capabilities do not become part of an existing
-release image when its documentation changes.
+| Installation | Scanner selected for fresh setup |
+| --- | --- |
+| Standalone Compose, Helm chart and Claude Desktop connector `0.18.0` | `v0.18.0` |
+| MCP ZAP Connect plugin `0.18.0` for Codex and Claude Code | `v0.18.0` checkout and image |
 
 The current-source feature set includes:
 
@@ -62,13 +59,11 @@ Prerequisites:
 - Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
-The default image `v0.17.1` is published on Docker Hub and GHCR for Linux AMD64
-and ARM64. The [GitHub release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1)
-includes the Claude Desktop `0.1.0` bundle, setup guide and checksum files.
-Read the [tagged 0.17.1 upgrade guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md)
-before changing an existing installation. Settings and selected versions are
-preserved; set `IMAGE_TAG` in `.env` deliberately when upgrading and verify the
-chosen version's published artifacts.
+For scanner `0.18.0`, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+for the tag and verify the Docker Hub image `dtkmn/mcp-zap-server:v0.18.0` for your platform.
+If the tag or image is unavailable, use the [source build instructions](./CONTRIBUTING.md#local-stack)
+or the [published v0.17.1 instructions](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md).
+Keep existing settings and image selections until a deliberate upgrade.
 
 Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
@@ -84,19 +79,19 @@ check status, then request a demo crawl and report separately.
 [Claude Code local preview](./plugins/mcp-zap-connect/README.md#claude-code-local-preview)
 uses the same scanner and setup skill in a local Claude Code session.
 
-For Claude Desktop Free, use the [Desktop 0.1.0 setup guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/packaging/claude-desktop/SETUP.md)
-and its four matching files from the [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1).
+For Claude Desktop Free, the [Desktop 0.18.0 setup guide](./packaging/claude-desktop/SETUP.md)
+lists the four matching downloads to check for in the `v0.18.0` release.
 Check the bundle and guide against their companion SHA256 files before installing.
 The macOS MCPB preview adds agent-callable setup tools around the Docker scripts
 and reuses existing installations. It is separate from the Claude Code plugin.
 For a contributor build, use the [local bundle instructions](./packaging/claude-desktop/README.md#build-and-check-the-bundle).
 
-For a fresh installation, use the released setup checkout below. If you already
-have an installation, retain its checkout and settings; follow its upgrade
-instructions before changing versions.
+For a fresh standalone installation, use the checkout below after verifying the tag
+and image. If you already have an installation, keep its checkout and settings
+until you are ready to follow its upgrade guide.
 
 ```bash
-git clone --branch v0.17.1 --single-branch https://github.com/dtkmn/mcp-zap-server.git
+git clone --branch v0.18.0 --single-branch https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 
 ./bin/bootstrap-local.sh --start
@@ -143,7 +138,7 @@ permissions and standalone OCI use.
 
 ## Discovery Metadata
 
-This source includes `0.17.1` MCP Registry metadata in
+This source includes `0.18.0` MCP Registry metadata in
 [`.mcp/server.json`](./.mcp/server.json). Metadata in source does not publish a
 registry version or image. Check the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
@@ -156,7 +151,7 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 ## What You Get
 
-These capabilities describe current source. For the published image, use the
+These capabilities describe scanner `0.18.0`. For the older scanner, use the
 [tagged v0.17.1 feature guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md#what-you-get).
 
 - **Scan tools** for crawling, active and passive scanning, API imports, findings, reports and scan history.
@@ -169,6 +164,11 @@ These capabilities describe current source. For the published image, use the
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
 See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for browser setup, authenticated crawling and reports.
+
+## Version 0.18.0
+
+Read the [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md) for client
+compatibility, storage migration, and the limits of scan recovery.
 
 ## Version 0.17.1
 
@@ -266,8 +266,8 @@ require their own adapters and explicit capability boundaries.
 
 ## Documentation Map
 
-The links below track current-source guidance and versioned release notes. For
-released behavior, start with the [v0.17.1 documentation tree](https://github.com/dtkmn/mcp-zap-server/tree/v0.17.1/docs).
+The links below track current-source guidance and versioned release notes. If you run
+`v0.17.1`, use the [v0.17.1 documentation tree](https://github.com/dtkmn/mcp-zap-server/tree/v0.17.1/docs).
 
 Start here:
 

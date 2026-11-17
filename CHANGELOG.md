@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-These changes describe unreleased `0.18.0` source, not published `v0.17.1`. Read the
-[0.18.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md) before
-updating clients, CI consumers or deployments.
+## [0.18.0]
+
+Read the [0.18.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md)
+before updating clients or deployments. Check that the tag, scanner image and
+any required client downloads are available before installing this version.
 
 ### Added
 
@@ -28,7 +30,8 @@ updating clients, CI consumers or deployments.
 - Make the existing `zap_findings_snapshot` and `zap_findings_diff` tools available in the scan tool catalog with their existing `zap:alerts:read` permission and evidence-visibility checks.
 - Require scan/report tools and passive-wait support in the CI gate. Use discovered snapshot support for baseline comparison and suppressions, stop on failed, cancelled or uncertain starts without submitting a replacement, and accept only `traditional-html-plus` or `traditional-json-plus` report templates. Existing result v2, snapshot/diff v3 and manifest v1 contracts remain unchanged.
 - Update Gradle and its container builder to `9.8.2`, refresh the Go `1.27.3` healthcheck-builder digest and pinned Java/CodeQL CI actions, and resolve the latest matching Node 22 release in the documentation workflow.
-- Refresh documentation dependencies, including Astro `7.4.4`, Starlight `0.42.8` and Astro Check `0.9.12`, plus the Desktop connector lockfile's `body-parser` `2.4.0`, `fast-uri` `3.1.9` and `node-forge` `1.4.2`. Scanner and connector version metadata are unchanged.
+- Refresh documentation dependencies, including Astro `7.4.12`, Starlight `0.42.11` and Astro Check `0.9.12`, plus the Desktop connector lockfile's `body-parser` `2.4.0`, `fast-uri` `3.1.9` and `node-forge` `1.4.2`.
+- Align the scanner, Helm chart and MCP Registry metadata at `0.18.0`. The Claude Desktop bundle and the Codex and Claude Code plugins now share that release number and select scanner `v0.18.0` for fresh installs.
 
 ### Fixed
 

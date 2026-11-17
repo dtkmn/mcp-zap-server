@@ -2,15 +2,18 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example selects the published `v0.17.1` release, available
+The standalone OCI example below selects the published `v0.17.1` release, available
 from GHCR and Docker Hub for Linux AMD64 and ARM64. Use the
 [v0.17.1 release and upgrade guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md)
 for that release's requirements.
 
-In `v0.17.1`, local in-memory setups start scans directly by default. Queued execution and expert tools are optional. See its
-[versioned execution guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/scan-execution-modes.md).
-Current source queues every new crawl and active scan and records each start attempt.
-For Postgres, current source requires migration V9; the release includes V1–V8.
+For the execution options available in `v0.17.1`, use its
+[tagged guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/scan-execution-modes.md).
+Scanner `0.18.0` queues every new crawl and active scan and records each start attempt.
+For Postgres, `0.18.0` requires V9 and `0.17.1` uses V1–V8. To set up
+`0.18.0`, use [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md)
+after verifying its tag and image. See the [0.18.0 upgrade guide](docs/releases/RELEASE_NOTES_0.18.0.md)
+before changing an existing installation.
 
 ## What This Server Does
 

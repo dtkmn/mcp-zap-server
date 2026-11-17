@@ -116,11 +116,13 @@ qualifying pull request still run its pull-request checks.
 
 The normal build excludes Docker-tagged tests. CI runs them for pull requests targeting `main`, pushes to `main` before image publication, manual workflow runs, and releases. Development and feature pushes skip them.
 
-### Skills plugin versions
+<a id="skills-plugin-versions"></a>
 
-MCP ZAP Connect shares the repository release number, starting with unreleased
-`0.18.0`. Use the top-level `version` in `build.gradle` for all three portable,
-Claude Code and Cursor manifests; the release tag adds only the leading `v`.
+### Client package versions
+
+Starting with `0.18.0`, use the top-level `version` in `build.gradle` for the
+three client plugin manifests and the Claude Desktop manifest, package and
+lockfile. The release tag adds a leading `v`.
 Keep the advertised MCP server version fallback aligned and retain its operator
 override. Every repository release advances the plugin version, including
 server-only releases; plugin-only fixes require a new repository release.
@@ -136,12 +138,12 @@ a release merge on `main` can follow development work on another branch. The
 check does not fetch tags or establish publication. Use `--base-ref v0.17.1` to
 select an explicit baseline when appropriate; a shallow checkout needs the
 required tags and objects first. Changed files, additions, deletions and
-executable-mode changes are included. The check requires the current manifests
-to match the source version and changed plugin files to advance both the prior
-plugin version and repository version. Historical releases may have separate
-plugin numbers; they must not be rewritten to adopt this scheme. If a local
-tag already exists for the current version, the plugin files must match it;
-selecting an older baseline does not bypass that check.
+executable-mode changes are included. A change to the plugin or the files
+used to build the Desktop bundle requires a new release number. This includes
+the Compose file, environment template, setup scripts, and guide bundled for
+Desktop. If the current release already has a local tag, its packaged inputs
+must match that tag. The checker accepts the original versions in historical
+baselines, including the `v0.17.1` plugin `0.5.0` and Desktop bundle `0.1.0`.
 
 When preparing a release, align the plugin's fresh setup with the same versioned
 scanner checkout and image. Verify both on a fresh installation. Users on an

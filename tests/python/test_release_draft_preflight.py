@@ -154,6 +154,19 @@ class ReleaseDraftPreflightTest(unittest.TestCase):
         self.github.desktop_versions["manifest.json"] = "0.2.0"
         self.rejects("versions must match")
 
+    def test_current_draft_uses_scanner_version_for_desktop_assets(self):
+        for version in ("0.18.0", "0.18.0-rc.1", "1.0.0"):
+            with self.subTest(version=version):
+                self.github = FixtureGitHub()
+                self.github.scanner_version = version
+                tag = f"v{version}"
+                with self.assertRaisesRegex(PREFLIGHT.PreflightError, "must match the scanner release"):
+                    PREFLIGHT.verify_draft(self.github, tag, COMMIT)
+                self.assertFalse(self.github.downloads)
+                self.github.desktop_versions = dict.fromkeys(self.github.desktop_versions, version)
+                self.assertEqual(PREFLIGHT.desktop_base(self.github, tag, COMMIT),
+                                 f"mcp-zap-connect-claude-desktop-{version}")
+
     def test_downloaded_size_mismatch_rejected_and_cleaned(self):
         self.github.assets[0]["size"] += 1
         self.rejects("Downloaded size differs")

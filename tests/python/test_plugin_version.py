@@ -12,6 +12,7 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts/check-plugin-version.py"
 PLUGIN = Path("plugins/mcp-zap-connect")
+DESKTOP = Path("packaging/claude-desktop")
 MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json")
 
 
@@ -45,12 +46,18 @@ class PluginVersionTest(unittest.TestCase):
         path.write_text(text)
         return path
 
-    def write_versions(self, version, project=None):
+    def write_versions(self, version, project=None, desktop=None):
         self.write("build.gradle", f"version = '{version if project is None else project}'\n")
         self.write(PLUGIN / "scripts/check-scanner-release.sh", f"SCANNER_RELEASE_TAG='v{version}'\n")
         self.write(PLUGIN / "skills/setup-local-scanner/SKILL.md", f"  git clone --branch v{version} --single-branch example\n")
         for manifest in MANIFESTS:
             self.write(PLUGIN / manifest, json.dumps({"name": "mcp-zap-connect", "version": version}) + "\n")
+        desktop_version = version if desktop is None else desktop
+        for name in ("manifest.json", "package.json"):
+            self.write(DESKTOP / name, json.dumps({"version": desktop_version}))
+        self.write(DESKTOP / "package-lock.json", json.dumps({
+            "version": desktop_version, "packages": {"": {"version": desktop_version}},
+        }))
 
     def commit(self, message):
         self.git("add", ".")
@@ -115,6 +122,45 @@ class PluginVersionTest(unittest.TestCase):
         self.write_versions("0.18.0", project="0.19.0")
         self.assert_rejected("must match project version 0.19.0")
 
+    def test_desktop_metadata_must_agree_with_shared_version(self):
+        for name, data in (
+            ("manifest.json", {"version": "0.1.1"}),
+            ("package.json", {"version": "0.1.1"}),
+            ("package-lock.json", {"version": "0.1.1", "packages": {"": {"version": "0.18.0"}}}),
+            ("package-lock.json", {"version": "0.18.0", "packages": {"": {"version": "0.1.1"}}}),
+        ):
+            with self.subTest(name=name, data=data):
+                self.write_versions("0.18.0")
+                self.write(DESKTOP / name, json.dumps(data))
+                self.assert_rejected(f"Desktop version in {DESKTOP / name} must match project version 0.18.0")
+
+    def test_missing_and_unreadable_desktop_metadata_rejected(self):
+        path = self.repo / DESKTOP / "package-lock.json"
+        path.unlink()
+        self.assert_rejected(f"Missing or invalid Desktop version metadata in {DESKTOP / path.name}")
+        for invalid in ("{broken", "[]", '{"version":"0.17.1","packages":{}}'):
+            with self.subTest(content=invalid):
+                path.write_text(invalid)
+                self.assert_rejected(f"Missing or invalid Desktop version metadata in {DESKTOP / path.name}")
+
+    def test_desktop_only_changes_require_a_new_release(self):
+        self.write_versions("0.18.0")
+        self.commit("Shared desktop release")
+        self.git("tag", "v0.18.0")
+        self.write("server.txt", "After the release.\n")
+        self.commit("Unrelated change")
+        self.write(DESKTOP / "test/unit.js", "// Only used by the Desktop test suite.\n")
+        self.assertIn("payload unchanged", self.assert_passes())
+        for path in (DESKTOP / "server/mcp.js", "docker-compose.yml"):
+            with self.subTest(path=path):
+                added = self.write(path, "Changed packaged content.\n")
+                self.assert_rejected("does not advance 0.18.0")
+                self.assert_rejected("differs from existing local tag v0.18.0", "--base-ref", "v0.17.1")
+                added.unlink()
+        self.write(DESKTOP / "SETUP.md", "Updated Desktop setup guide.\n")
+        self.write_versions("0.18.1")
+        self.assert_passes()
+
     def test_old_scanner_pin_or_setup_checkout_rejected_with_new_plugin(self):
         self.write_versions("0.18.0")
         self.write(PLUGIN / "scripts/check-scanner-release.sh", "SCANNER_RELEASE_TAG='v0.17.1'\n")
@@ -135,7 +181,7 @@ class PluginVersionTest(unittest.TestCase):
         self.assert_rejected("build.gradle")
 
     def test_legacy_plugin_transition_must_advance_repository_version(self):
-        self.write_versions("0.5.0", project="0.17.1")
+        self.write_versions("0.5.0", project="0.17.1", desktop="0.1.0")
         self.commit("Legacy independent plugin version")
         self.git("tag", "legacy-baseline")
         self.write_versions("0.17.1")

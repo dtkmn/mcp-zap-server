@@ -1,20 +1,22 @@
 # v0.18.0 Release and Upgrade Guide
 
-This guide covers the 0.18.0 release candidate and upgrades from `v0.17.1`. Version `0.18.0` provides one set of scan tools and queues every new crawl and active scan. Back up persistent data
+This guide covers upgrades from `v0.17.1`. Version `0.18.0` provides one set of scan tools and queues every new crawl and active scan. Back up persistent data
 and apply V9 before starting new PostgreSQL workers.
 
 | Installation | Version selected for new installs |
 | --- | --- |
 | Standalone Compose, Helm chart and MCP Registry source | Scanner `v0.18.0` |
-| Claude Desktop MCPB `0.1.1` | Scanner `v0.18.0` |
+| Claude Desktop MCPB `0.18.0` | Scanner `v0.18.0` |
 | MCP ZAP Connect for Codex and Claude Code `0.18.0` | Verified scanner checkout and image `v0.18.0` |
 
 Check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
-for the tag and expected Desktop downloads. Verify the scanner image for your
-platform on GHCR or Docker Hub before deployment. Until those artifacts are
-available, use a [source build](../../CONTRIBUTING.md#local-stack) to try
+for the tag and any Desktop downloads you need. Verify the image for your platform
+in the registry your installation uses. Compose, MCP ZAP Connect and Claude
+Desktop pull `dtkmn/mcp-zap-server:v0.18.0` from Docker Hub by default. Helm
+defaults to `ghcr.io/dtkmn/mcp-zap-server:v0.18.0`. Until the required tag and
+artifacts are available, use a [source build](../../CONTRIBUTING.md#local-stack) to try
 0.18.0, or follow the [v0.17.1 guide](RELEASE_NOTES_0.17.1.md) for the
-published predecessor. See the [Unreleased changelog](../../CHANGELOG.md#unreleased).
+published predecessor. See the [0.18.0 changelog](../../CHANGELOG.md#0180).
 
 ## Main Compatibility Changes
 
@@ -33,8 +35,10 @@ to verify the release. Existing MCP connections can still make status calls loca
 
 Updating the plugin preserves your scanner checkout, settings, credentials and storage.
 If the scanner still uses `v0.17.1`, follow the upgrade steps below before requesting a
-new scan through the `0.18.0` skill. All three plugin manifests now share the repository
-release version. A plugin-only fix ships in a new repository release.
+new scan through the `0.18.0` skill. The client plugins and Claude Desktop bundle now share the repository
+release number. For Desktop, choose `mcp-zap-connect-claude-desktop-0.18.0.mcpb`
+and its matching guide and checksums. Scanner `v0.17.1` shipped Desktop bundle
+`0.1.0`. Future client-only fixes ship in a new repository release.
 
 ### Scanner Server
 

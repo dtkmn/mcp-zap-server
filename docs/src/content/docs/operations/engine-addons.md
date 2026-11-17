@@ -152,10 +152,11 @@ Pass these arguments to `zap_addon_inspect`. Use the installed and candidate
 version strings returned by the engine verbatim in a subsequent update request.
 A version such as `77.0.0` is not the ZAP core version.
 
-The Marketplace candidate is the version reported by ZAP's current Marketplace
-metadata. It is not a promise that every mirror or cached image already contains
-that version. Missing or malformed engine information must be treated as
-unknown, not as a clean security result.
+ZAP obtains candidate versions from its cached Marketplace metadata. The first
+lookup may require outbound access to the ZAP Marketplace. An empty candidate
+can mean that metadata is unavailable or that no update is offered. If the
+candidate cannot be verified, the server skips installation. The update-status
+tool can still report the installed version and rule state from the engine.
 
 `configured` means the add-on is loaded and any requested passive rules are
 present and enabled. `passiveExecutionState` remains `unknown`: ZAP does not

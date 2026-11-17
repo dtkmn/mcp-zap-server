@@ -13,7 +13,7 @@ const pages = [
     description: 'Upgrade from v0.17.1 to queued scan starts and plan for tool changes, storage migration and recovery limits.',
     links: {
       'RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
-      '../../CHANGELOG.md#unreleased': 'https://github.com/dtkmn/mcp-zap-server/blob/main/CHANGELOG.md#unreleased',
+      '../../CHANGELOG.md#0180': 'https://github.com/dtkmn/mcp-zap-server/blob/main/CHANGELOG.md#0180',
       '../../CONTRIBUTING.md#local-stack': 'https://github.com/dtkmn/mcp-zap-server/blob/main/CONTRIBUTING.md#local-stack',
       '../src/content/docs/getting-started/tool-surfaces.md': '/mcp-zap-server/getting-started/tool-surfaces/',
       '../src/content/docs/getting-started/tool-migration.md': '/mcp-zap-server/getting-started/tool-migration/',
@@ -152,7 +152,7 @@ const pages = [
       '../../docs/src/content/docs/operations/production-checklist.md': '/mcp-zap-server/operations/production-checklist/',
       '../../docs/releases/RELEASE_NOTES_0.16.0.md': '/mcp-zap-server/releases/0.16.0/',
       '../../docs/releases/RELEASE_NOTES_0.17.0.md': '/mcp-zap-server/releases/0.17.0/',
-      '../../docs/releases/RELEASE_NOTES_0.17.1.md': '/mcp-zap-server/releases/0.17.1/',
+      '../../docs/releases/RELEASE_NOTES_0.18.0.md': '/mcp-zap-server/releases/0.18.0/',
     },
   },
   {

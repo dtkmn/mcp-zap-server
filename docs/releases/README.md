@@ -10,11 +10,9 @@ These notes describe each version. Check GitHub Releases above for publication
 status and dates, and verify that its release workflow has published the image
 before deploying it.
 
-The [0.18.0 release and upgrade guide](RELEASE_NOTES_0.18.0.md) covers
-current source after v0.17.1, including tool compatibility, launch-safety storage,
-the V9 migration and recovery limits. It does not assign or announce a release.
-The root [changelog](../../CHANGELOG.md#unreleased) records notable changes as
-they accumulate.
+The [0.18.0 upgrade guide](RELEASE_NOTES_0.18.0.md) covers tool compatibility,
+the launch journal, V9 migration, and recovery limits. Check publication before
+installing matching artifacts. The [0.18.0 changelog](../../CHANGELOG.md#0180) lists the changes in this version.
 
 <a id="claude-desktop-downloads-in-the-next-normal-release"></a>
 
@@ -22,7 +20,9 @@ they accumulate.
 
 The published [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1)
 contains the Claude Desktop MCPB, its setup guide and both `.sha256` files for
-connector `0.1.0`. That connector version is independent of the scanner tag.
+connector `0.1.0`. From `v0.18.0` onward, the four Desktop filenames use the
+scanner release number. Look for connector `0.18.0` on the `v0.18.0` release
+after publication.
 There is no separate Desktop release or repository. Download the matching set
 from the scanner release and verify its checksums. Those immutable assets
 describe the released build, not subsequent source changes.
@@ -46,7 +46,7 @@ to a release.
 
 ## Version Archive
 
-- [0.18.0 release and upgrade guide](./RELEASE_NOTES_0.18.0.md) — migration and recovery for the release candidate
+- [0.18.0 release and upgrade guide](./RELEASE_NOTES_0.18.0.md) — queued scans, launch-safety storage and V9
 - [0.17.1 release and upgrade guide](./RELEASE_NOTES_0.17.1.md) — distribution requirements, release preflight and inherited upgrade requirements
 - [0.17.0 release and upgrade guide](./RELEASE_NOTES_0.17.0.md) — explicit-deny migration, client defaults and publication checks
 - [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — includes immutable image references and upgrade requirements

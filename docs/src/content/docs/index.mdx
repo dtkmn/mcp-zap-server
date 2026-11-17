@@ -50,11 +50,9 @@ editUrl: false
     </div>
   </div>
 
-  <p><strong>Available release: v0.17.1.</strong> Linux AMD64 and ARM64 images are published on Docker Hub and GHCR. The <a href="https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1">GitHub release</a> includes the Claude Desktop 0.1.0 bundle, setup guide and checksum files. Read the <a href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md">tagged release and upgrade guide</a> before changing an existing installation.</p>
+  <p><strong>Scanner 0.18.0.</strong> Crawls and active scans use the job queue. PostgreSQL deployments require migration V9. Check <a href="https://github.com/dtkmn/mcp-zap-server/releases">GitHub Releases</a> for the tag and Desktop downloads, and check the registry your installation pulls from. The default Compose setup uses Docker Hub. Read the <a href="./releases/0.18.0/">0.18.0 upgrade guide</a> before replacing an existing scanner.</p>
 
-  <p><strong>Release and source behavior differ.</strong> The first-run Docker commands use v0.17.1: scans start directly with the default local settings. Optional queue controls and the former expert tools remain available. In current source, every new crawl and active scan runs through the job queue. The feature and operations pages below describe current source unless labeled for a release; use the <a href="https://github.com/dtkmn/mcp-zap-server/tree/v0.17.1/docs">tagged v0.17.1 documentation</a> for the released runtime. Its migrations are V1–V8; current-source launch-safety guidance includes V9.</p>
-
-  <p>The earlier v0.17.0 GitHub release remains incomplete: its Desktop downloads are absent and its image-release workflow did not complete. Registry discovery is separate from image and download availability.</p>
+  <p>Standalone Compose, Helm, and MCP ZAP Connect for Codex, Claude Code and Claude Desktop all select scanner v0.18.0 for fresh installs. Until the v0.18.0 tag and image are available, use the <a href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md">published v0.17.1 installation guide</a>.</p>
 
   <p>Ask Codex to handle your local scanner setup. <a href="./getting-started/agent-guided-setup/#codex-local-installation">Install MCP ZAP Connect locally</a>, then ask it to check prerequisites, start the Docker stack, configure your private MCP connection and verify status. The skill can help install missing prerequisites with your approval, then recheck and continue setup. Scans are a separate request.</p>
 
@@ -89,9 +87,9 @@ editUrl: false
       <h3>&gt; [07] EXTENSION_POLICY</h3>
       <p>See what must be true before the extension API becomes a public compatibility promise.</p>
     </a>
-    <a class="mission-card" href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md">
-      <h3>&gt; [v0.17.1] RELEASE_AND_UPGRADE</h3>
-      <p>Review the published release's explicit target denies, findings semantics, client defaults and upgrade requirements.</p>
+    <a class="mission-card" href="./releases/0.18.0/">
+      <h3>&gt; [v0.18.0] RELEASE_AND_UPGRADE</h3>
+      <p>Review the scan tools, storage migration, supported client versions and scan recovery limits.</p>
     </a>
     <a class="mission-card" href="./security-modes/#registered-api-keys-in-v0140">
       <h3>&gt; [v0.14.0] SECURITY_UPGRADE</h3>

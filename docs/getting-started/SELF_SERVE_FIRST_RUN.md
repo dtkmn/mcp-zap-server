@@ -6,38 +6,30 @@ Docker setup.
 
 You need Docker 20.10 or newer with its engine running, Docker Compose with
 `--wait` and `--wait-timeout` support, Git, and an MCP client supporting
-Streamable HTTP with custom headers. The default `v0.17.1` image is published
-on Docker Hub and GHCR for Linux AMD64 and ARM64. Its
-[GitHub release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1)
-also includes the Claude Desktop `0.1.0` bundle, setup guide and checksum files.
-Read the [tagged upgrade guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md)
-before changing an existing installation.
+Streamable HTTP with custom headers. This standalone guide targets scanner
+`v0.18.0`. Confirm the tag appears in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+and that the Docker Hub image is available for your platform before
+running the commands. If either is unavailable, follow [Source Development](#source-development)
+or the [tagged v0.17.1 instructions](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md).
+Read the [0.18.0 upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.18.0/) before changing an existing installation.
 
-**Version scope:** the commands below run the released `v0.17.1` image. Scans
-start directly by default. That release also offers queue controls and optional
-expert tools. [Current source builds](#source-development) offer one set of scan tools
-and queue every new crawl and active scan. Linked feature and operations pages track
-current source unless labeled for a release. For `v0.17.1`, use its
-[tagged execution guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/scan-execution-modes.md)
-and [Helm guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/helm/mcp-zap-server/README.md):
-its database migrations are V1–V8, while current-source Postgres launch safety
-requires V9.
-
-**To set up the scanner with your AI client**, use [MCP ZAP Connect in Codex, Cursor or Claude Code](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/),
-or the [released Claude Desktop setup guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/packaging/claude-desktop/SETUP.md).
-Return to step 3 after your client connects.
+Scanner `0.18.0` queues new crawls and active scans with either
+storage backend. PostgreSQL needs migrations through V9. For agent-assisted
+setup, [MCP ZAP Connect](https://danieltse.org/mcp-zap-server/getting-started/agent-guided-setup/)
+`0.18.0` sets up the matching `v0.18.0` checkout and scanner image. The [Claude Desktop connector](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md)
+uses the same release number and scanner image. Return to step 3 after the chosen client connects.
 
 <a id="1-bootstrap-local-settings"></a>
 <a id="2-start-the-stack"></a>
 
 ## 1. Start The Local Stack
 
-For a fresh installation, use the released setup checkout below. If you already
-have an installation, retain its checkout and settings; follow its upgrade
-instructions before changing versions.
+After confirming publication, use the checkout below for a fresh installation.
+For an existing installation, keep its checkout and settings until you are
+ready to follow its upgrade guide.
 
 ```bash
-git clone --branch v0.17.1 --single-branch https://github.com/dtkmn/mcp-zap-server.git
+git clone --branch v0.18.0 --single-branch https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 ./bin/bootstrap-local.sh --start
 ```
@@ -56,8 +48,8 @@ Existing `.env` files and custom client grants are preserved. See
 for the default and optional per-client restrictions. Tool access does not
 replace authorization to scan a target; crawling also sends traffic.
 
-The default MCP image is the published `dtkmn/mcp-zap-server:v0.17.1` for Linux
-AMD64 and ARM64. Select a different verified published version deliberately with
+The default MCP image in this checkout is `dtkmn/mcp-zap-server:v0.18.0`.
+To select a different published version, set
 `IMAGE_TAG` in `.env`. An existing
 `latest` or development tag must be changed deliberately to a released version;
 startup will not overwrite that choice. Keep `.env` out of version control.
@@ -128,10 +120,9 @@ Use container URLs for scans: `http://juice-shop:3000` or
 `http://localhost:3002` are browser previews; ZAP cannot use them to reach these
 demo containers.
 
-For optional active scanning, release evidence and customer handoff, use the
-[v0.17.1 Scan-To-Evidence Guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/mcp-client-scan-to-evidence.md)
-with the released image, or the [current-source guide](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/)
-with a source build.
+For optional active scanning and report handoff, follow the [Scan-To-Evidence
+Guide](https://danieltse.org/mcp-zap-server/scanning/mcp-client-scan-to-evidence/).
+If you still run scanner `v0.17.1`, use its [tagged guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/mcp-client-scan-to-evidence.md).
 
 ## Stop And Restart
 

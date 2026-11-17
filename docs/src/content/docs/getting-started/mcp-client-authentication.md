@@ -350,12 +350,10 @@ network. Validate with tool discovery and the first-scan procedure above.
 Follow the [Claude Desktop download, setup and first-scan guide](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/SETUP.md)
 for the macOS MCPB preview. Choose a
 [scanner release](https://github.com/dtkmn/mcp-zap-server/releases) whose assets
-include the `.mcpb`, matching guide and both checksums. MCPB assets belong to
-scanner releases; the connector's filename version is independent of the scanner
-tag. If a release has no MCPB assets, use the package README's local build
-instructions.
-The bundle uses a pinned scanner image for fresh installations; check the setup
-guide for its default rather than assuming it follows the containing release.
+include the `.mcpb`, matching guide and both checksums. From `v0.18.0` onward, the bundle filename and its default scanner image
+use the scanner release number. For `v0.17.1`, use Desktop connector `0.1.0`
+and the guide included with that release. If a release has no MCPB assets,
+use the local build instructions below.
 The [package README](https://github.com/dtkmn/mcp-zap-server/tree/main/packaging/claude-desktop)
 contains the local developer build and normal-release draft procedure.
 It packages a local MCP server with agent-callable prerequisite, setup and

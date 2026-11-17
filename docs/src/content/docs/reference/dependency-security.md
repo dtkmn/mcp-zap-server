@@ -21,7 +21,7 @@ has been upgraded.
 | Component | Advisory and scope | Source update |
 | --- | --- | --- |
 | Go healthcheck standard library | [GO-2026-6809 / CVE-2026-111943](https://pkg.go.dev/vuln/GO-2026-6809) affects `crypto/x509.Certificate.Verify` before Go `1.27.3` on the 1.27 branch. The configured probe uses fixed loopback HTTP, disables proxies and rejects redirects; that operation does not perform TLS certificate verification. | Build the static helper with Go `1.27.3`. Keep the Docker builder and the source module's preferred toolchain aligned. A compiler declaration alone does not update an already built binary. |
-| Debian 13 `libexpat1` | [DSA-6566-1](https://security-tracker.debian.org/tracker/DSA-6566-1) provides a fixed Trixie security package, `2.9.0-1~deb13u1`. Java XML parsing alone does not establish a path to native Expat. | The selected Java 25 / Debian 13 nonroot base contains `2.9.0-1~deb13u1` for Linux AMD64 and ARM64. This does not fix the separate zlib finding below. |
+| Debian 13 `libexpat1` | [DSA-6566-1](https://security-tracker.debian.org/tracker/DSA-6566-1) provides a fixed Trixie security package, `2.9.0-1~deb13u1`. Java XML parsing alone does not establish a path to native Expat. | The selected Java 25 / Debian 13 nonroot base contains `2.9.0-1~deb13u1` for Linux AMD64 and ARM64. |
 | Standalone extension sample Spring dependencies | [Spring data-binding advisory](https://spring.io/security/cve-2026-59282/) affects Framework `7.0.0`–`7.0.8` under its stated data-binding conditions. | Align the example's `compileOnly` Boot dependency to `4.1.1`, matching the application's Framework `7.0.9` baseline. The metadata example does not bundle Spring implementation libraries or provide an untrusted data-binding or expression-evaluation service. |
 
 <a id="dependency-patches-in-the-v0160-candidate"></a>
@@ -35,25 +35,26 @@ has been upgraded.
 
 ## Remaining upstream findings
 
-The advisories below affect native runtime packages or documentation-build
-dependencies. Match each record to the actual package and architecture in your
-deployment; an assessment of one image does not cover another architecture or a
-later image build.
+The following advisories apply to dependencies used to build the documentation.
 
 | Component and reported version | Public advisory | Deployment scope and next action |
 | --- | --- | --- |
-| Debian 13 `zlib1g`, `1:1.3.dfsg+really1.3.1-1+b1` | [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091) | Debian and [Snyk](https://security.snyk.io/vuln/SNYK-DEBIAN13-ZLIB-19520500) list no fixed Debian 13 package. An [upstream source fix](https://github.com/madler/zlib/commit/df84af25dc1942490e1d1c899a07619152a46148) exists, but the [current release, `1.3.2`](https://zlib.net/), does not contain it. The [affected-version range remains disputed](https://github.com/madler/zlib/issues/1310); do not classify the installed `1.3.1` code as unaffected solely from the newer function named in the CVE summary. No application call path to the affected gzip writer is demonstrated here. Retain the finding and select a compatible patched base when available; source-patch availability alone does not establish a fixed runtime image. |
 | Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93748 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964068) | Snyk lists the cache-reuse advisory without a fixed version. The [npm/GitHub advisory](https://github.com/advisories/GHSA-ch52-4w7c-c8xp) limits its affected range to `<= 4.2.0`; the maintainer disputes the report in [upstream #56](https://github.com/kornelski/http-cache-semantics/issues/56), now closed. Those sources disagree; a clean npm audit or the closed issue does not clear the Snyk record. |
 | Docs `http-cache-semantics`, `4.3.0` | [CVE-2026-93750 / Snyk](https://security.snyk.io/vuln/SNYK-JS-HTTPCACHESEMANTICS-19964064) | Separate `Vary` cache-matching advisory. Snyk lists all versions as affected without a fixed version. Keep it recorded and reassess before adding a publicly reachable cache or remote asset processing service. |
 
 ## Deployment boundaries
 
-The Dockerfile selects the signed, multi-architecture
-`gcr.io/distroless/java25-debian13:nonroot` index pin:
-`sha256:69514ce1edfe8759f5169870e8f9d4c9f2b831fb0b305a6809a269a25c515a2f`.
-This is the base-image index, not the published MCP application image digest.
-Inspect the packages in the actual application image before a deployment; a newer
-digest alone does not establish that every native finding is fixed. Nonroot execution
+The Dockerfile pins the signed, multi-architecture
+`gcr.io/distroless/java25-debian13:nonroot` base to
+`sha256:1c4ced761d17961c900cba60c33c8c3c46edbdadaa9d5ef9806eb5a6824fd406`.
+Images built from this pin include both Debian 13 security updates on Linux
+AMD64 and ARM64.
+
+- Brotli `libbrotli1` ships at `1.1.0-2+deb13u1`. [CVE-2026-111497](https://security-tracker.debian.org/tracker/CVE-2026-111497)
+- `zlib1g` ships at `1:1.3.dfsg+really1.3.1-1+deb13u1`. [CVE-2026-85091](https://security-tracker.debian.org/tracker/CVE-2026-85091)
+
+For an existing deployment or a published scanner image, check the installed
+package versions for the architecture you deploy. Nonroot execution
 and restricted container privileges reduce exposure and consequences; they do
 not patch libraries.
 Do not mix Debian generations or remove native runtime libraries without

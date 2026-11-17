@@ -137,10 +137,11 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
         state.update(overrides)
         self.state_path.write_text(json.dumps(state))
 
-    def write_versions(self, manifest_version="0.1.0", lock_version="0.1.0", scanner_version="0.17.0"):
+    def write_versions(self, manifest_version="0.1.0", lock_version="0.1.0", scanner_version="0.17.0",
+                       package_version="0.1.0"):
         package = self.directory / "packaging/claude-desktop"
         package.mkdir(parents=True, exist_ok=True)
-        (package / "package.json").write_text(json.dumps({"version": "0.1.0"}))
+        (package / "package.json").write_text(json.dumps({"version": package_version}))
         (package / "manifest.json").write_text(json.dumps({"version": manifest_version}))
         (package / "package-lock.json").write_text(json.dumps({
             "version": lock_version, "packages": {"": {"version": lock_version}},
@@ -241,11 +242,25 @@ class ClaudeDesktopWorkflowTest(unittest.TestCase):
                 self.run_step("build", "release-mode", success=False, environment=env)
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
-    def test_source_guard_accepts_scanner_tag_independent_of_bundle_version(self):
+    def test_source_guard_accepts_historical_independently_versioned_bundle(self):
         self.run_step("build", "package")
         self.assertIn(f"base={BASE}\ncommit={SOURCE}\n",
                       (self.directory / "output").read_text())
         self.run_step("build", "package", environment={"DRAFT_RELEASE_TAG": ""})
+
+    @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
+    def test_preview_and_draft_require_matching_desktop_and_scanner_versions(self):
+        for version in ("0.18.0", "0.18.0-rc.1", "1.0.0"):
+            for requested_tag in ("", f"v{version}"):
+                with self.subTest(scanner=version, tag=requested_tag):
+                    env = {"DRAFT_RELEASE_TAG": requested_tag}
+                    self.write_versions(scanner_version=version)
+                    rejected = self.run_step("build", "package", success=False, environment=env)
+                    self.assertIn("must match scanner version", rejected.stderr)
+                    self.write_versions(version, version, version, version)
+                    self.run_step("build", "package", environment=env)
+                    self.assertIn(f"base=mcp-zap-connect-claude-desktop-{version}\n",
+                                  (self.directory / "output").read_text())
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for package version guards")
     def test_source_guard_rejects_mismatched_version_tag_source_or_main(self):

@@ -1,18 +1,18 @@
 # Private EC2 example
 
-This source example targets MCP ZAP Server v0.17.1 after publication and ZAP 2.17.0.
+This source example targets MCP ZAP Server v0.18.0 after publication and ZAP 2.17.0.
 Verify the matching image before deployment; until then use the published
-`v0.16.0` source release and its image.
+`v0.17.1` source release and its image.
 It uses a dedicated Amazon Linux 2023 x86_64 instance
 and serves one trusted MCP client through AWS Session Manager. It publishes no
 container ports. The included `smoke-target`
-is an owned API for checking guided crawling, OpenAPI import and reports
+is an owned API for checking crawling, OpenAPI import and reports
 without granting scanning containers Internet access.
 
 The [AWS deployment walkthrough](../../docs/operator/runbooks/AWS_EC2_COMPOSE_GUIDE.md)
 is the canonical guide for IAM, EC2, image selection, secrets, private client
-access, verification and cleanup. Set `MCP_ZAP_IMAGE` to the verified v0.17.1
-digest reference in `.env`; the [release guide](../../docs/releases/RELEASE_NOTES_0.17.1.md)
+access, verification and cleanup. Set `MCP_ZAP_IMAGE` to the verified v0.18.0
+digest reference in `.env`; the [release guide](../../docs/releases/RELEASE_NOTES_0.18.0.md)
 explains publication checks and immutable image selection. Do not substitute an
 older release digest for an unpublished tag.
 
@@ -37,7 +37,7 @@ backend; do not use it to reconfigure a shared Docker host.
 Host setup also copies `automation-plan.yaml` to
 `workspace/workspaces/ec2-operator/automation/example-plan.yaml`, owned by
 UID/GID 1000 with mode 0640. Both containers see this plan at
-`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. Treat this as an optional reference for a separately managed native ZAP workflow. Use guided crawl/attack tools for the MCP fixture and retrieve reports through the guided report tools. Re-running
+`/zap/wrk/workspaces/ec2-operator/automation/example-plan.yaml`. Treat this as an optional reference for a separately managed native ZAP workflow. Use the crawl and active scan tools against the MCP fixture, then retrieve the results with the report tools. Re-running
 host setup restores the example plan from this source file.
 
 ## Workspace and Identity

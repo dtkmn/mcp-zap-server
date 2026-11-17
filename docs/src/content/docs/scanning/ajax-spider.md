@@ -1,26 +1,28 @@
 ---
 title: "AJAX Spider"
 editUrl: false
-description: "Use the existing AJAX Spider API route for browser crawling, with queue-managed guided lifecycle control."
+description: "Start, track, and stop a browser crawl with AJAX Spider."
 ---
 AJAX Spider uses a real browser to explore rendered pages and JavaScript navigation. For new JavaScript application workflows, prefer explicit [Client Spider](../client-spider/) with `strategy=client`, following [ZAP's recommendation](https://www.zaproxy.org/blog/2026-09-08-zap-updates-august-2026/). Existing AJAX workflows remain available with `strategy=browser`. Browser crawling does not guarantee that every route is discovered or that WAF and bot protections are bypassed.
 
-## Guided Lifecycle
+<a id="guided-lifecycle"></a>
+
+## Start, Track, or Stop an AJAX Crawl
 
 Use `zap_crawl_start` with `strategy=browser`, then pass its Operation ID to `zap_crawl_status` and `zap_crawl_stop`.
 
-Client Spider supports guided browser authentication profiles. The AJAX API route selected by `strategy=browser` rejects guided `authSessionId`.
+Client Spider supports browser authentication profiles. The AJAX API route selected by `strategy=browser` rejects `authSessionId`.
 
 ## When To Use It
 
-Keep AJAX Spider for existing workflows that need its API or crawl behavior. Guided selection remains:
+Keep AJAX Spider for existing workflows that need its API or crawl behavior. Choose the crawler with the `strategy` argument.
 
 - `http`: queued traditional HTTP link discovery.
 - `client`: queued Client Spider.
 - `browser`: queue-managed AJAX Spider.
 - `auto` or omitted: queued HTTP Spider, with no automatic browser fallback after a failure.
 
-These guided mappings apply with both in-memory and PostgreSQL storage.
+These strategies work with both in-memory and PostgreSQL storage.
 
 `auto` does not inspect JavaScript coverage. HTTP start success alone is not a reason to assume a modern application's routes were explored.
 
@@ -28,7 +30,7 @@ The supplied Compose and Helm configurations explicitly install both `spiderAjax
 
 ## Queue Tracking
 
-AJAX queue jobs retain a server-generated backend tracking ID. It is not an independent native ZAP scan ID; the underlying AJAX status and stop APIs remain global. Do not treat an old guided AJAX Operation ID as an independent crawler instance. Use Client Spider when native scan-specific status and stopping are required.
+AJAX queue jobs retain a server-generated backend tracking ID. It is not an independent native ZAP scan ID; the underlying AJAX status and stop APIs remain global. Do not treat an old AJAX Operation ID as an independent crawler instance. Use Client Spider when native scan-specific status and stopping are required.
 
 Use an optional `idempotencyKey` for equivalent admission requests. Queue tracking does not prove crawl coverage.
 

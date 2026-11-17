@@ -13,7 +13,7 @@ import mcp.server.zap.core.service.UrlValidationService;
 import org.springframework.stereotype.Component;
 
 /**
- * Guided provider for HTTP and browser form-login bootstrapping using ZAP context/user APIs.
+ * Provider for HTTP and browser form-login bootstrapping using ZAP context/user APIs.
  * Keeps the stable provider ID for existing prepared sessions.
  */
 @Component
@@ -117,7 +117,7 @@ public class FormLoginAuthBootstrapProvider implements AuthBootstrapProvider {
 
         List<String> warnings = new ArrayList<>();
         warnings.add(browserAuthentication
-                ? "Run zap_auth_session_validate, then use zap_crawl_start with strategy=client. Browser sessions are not supported by guided active scans."
+                ? "Run zap_auth_session_validate, then use zap_crawl_start with strategy=client. Browser sessions are not supported by active scans."
                 : "Run zap_auth_session_validate before authenticated crawl or attack flows.");
 
         return new AuthSessionPrepareResult(session, warnings);

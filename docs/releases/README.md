@@ -10,14 +10,22 @@ These notes describe each version. Check GitHub Releases above for publication
 status and dates, and verify that its release workflow has published the image
 before deploying it.
 
-## Claude Desktop downloads in the next normal release
+The [0.18.0 upgrade guide](RELEASE_NOTES_0.18.0.md) covers tool compatibility,
+the launch journal, V9 migration, and recovery limits. Check publication before
+installing matching artifacts. The [0.18.0 changelog](../../CHANGELOG.md#0180) lists the changes in this version.
 
-The next normal scanner release in this repository is intended to include the
-Claude Desktop MCPB, its setup guide and both `.sha256` files. Connector version
-`0.1.0` is independent of the scanner tag: for example, a future `v0.17.1`
-scanner release can carry the `0.1.0` connector assets. There is no separate
-Desktop release or repository. The existing immutable `v0.16.0` release is not
-being changed. Check the scanner release's assets for available Desktop downloads.
+<a id="claude-desktop-downloads-in-the-next-normal-release"></a>
+
+## Claude Desktop Downloads
+
+The published [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1)
+contains the Claude Desktop MCPB, its setup guide and both `.sha256` files for
+connector `0.1.0`. From `v0.18.0` onward, the four Desktop filenames use the
+scanner release number. Look for connector `0.18.0` on the `v0.18.0` release
+after publication.
+There is no separate Desktop release or repository. Download the matching set
+from the scanner release and verify its checksums. Those immutable assets
+describe the released build, not subsequent source changes.
 
 The maintainer creates the normal scanner tag and its draft release, dispatches
 **Claude Desktop MCPB** from `main` with that tag in `draft_release_tag`, reviews
@@ -38,6 +46,7 @@ to a release.
 
 ## Version Archive
 
+- [0.18.0 release and upgrade guide](./RELEASE_NOTES_0.18.0.md) — queued scans, launch-safety storage and V9
 - [0.17.1 release and upgrade guide](./RELEASE_NOTES_0.17.1.md) — distribution requirements, release preflight and inherited upgrade requirements
 - [0.17.0 release and upgrade guide](./RELEASE_NOTES_0.17.0.md) — explicit-deny migration, client defaults and publication checks
 - [0.16.0 release and upgrade guide](./RELEASE_NOTES_0.16.0.md) — includes immutable image references and upgrade requirements

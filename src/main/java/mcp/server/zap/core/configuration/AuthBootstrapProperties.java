@@ -8,7 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Controls how guided auth bootstrap accepts secrets.
+ * Controls how auth bootstrap accepts secrets.
  */
 @Configuration
 @ConfigurationProperties(prefix = "mcp.server.auth.bootstrap")

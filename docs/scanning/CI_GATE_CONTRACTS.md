@@ -55,7 +55,7 @@ Important behavior:
 
 - artifact paths inside the contract are relative to the output directory
 - the contract avoids embedding runner-local absolute paths
-- guided runs with snapshot support emit a normalized `current-findings.json`, even when no baseline is supplied
+- runs against servers with snapshot support emit a normalized `current-findings.json`, even when no baseline is supplied
 - `baseline-mode: enforce` fails the gate when `fail-on-new-findings=true`
   but the helper cannot produce a comparable diff. This includes a missing
   baseline, an older MCP endpoint without snapshot support, a changed scanner, or unknown scanner

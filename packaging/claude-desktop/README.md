@@ -1,6 +1,6 @@
 # MCP ZAP Connect for Claude Desktop
 
-This is the **macOS local preview, version 0.1.0**, of a Claude Desktop MCP
+This is the **macOS local preview, version 0.18.0**, of a Claude Desktop MCP
 Bundle (`.mcpb`). It gives Claude local prerequisite, setup and readiness tools,
 then connects to the existing MCP ZAP Server tools over authenticated local HTTP.
 The setup tools remain available when the scanner is offline.
@@ -10,25 +10,29 @@ It covers Claude Desktop Free, Docker Desktop, extension installation, two chat
 prompts, and the first demo report. No repository checkout or host Node/npm is
 required to use a published bundle.
 
-This bundle is separate from the [Claude Code skills-only plugin](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#claude-code-local-preview),
-version `0.5.0`. Install the `.mcpb` in Claude Desktop; Claude Code plugin commands
-do not install this extension. This preview does not establish an Anthropic
-directory listing or approval.
+Install the `.mcpb` in Claude Desktop. For Claude Code, use the
+[Claude Code skills plugin](https://github.com/dtkmn/mcp-zap-server/blob/main/plugins/mcp-zap-connect/README.md#claude-code-local-preview).
+Starting with `0.18.0`, the Desktop bundle, Codex and Claude Code plugins, and scanner use the same release number.
 
 ## Install the local preview
 
-1. Open [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and
-   choose a published normal scanner release (`vX.Y.Z`) whose **Assets** include
-   the Claude Desktop downloads. Download
-   `mcp-zap-connect-claude-desktop-0.1.0.mcpb` and the matching
-   `mcp-zap-connect-claude-desktop-0.1.0-setup.md` guide, or the connector version
-   listed by that release. Both have adjacent `.sha256` files. These assets are
-   distributed with normal scanner releases in this repository; there is no
-   separate Desktop release or repository. If no published release has them,
-   developers can build the local preview below.
-2. In Claude Desktop, open **Settings → Extensions → Advanced settings**, choose
-   **Install Extension**, and select the `.mcpb` file. Review the extension and
-   complete the installation prompts.
+If your Team or Enterprise workspace enforces a desktop extension allowlist,
+Claude blocks manual `.mcpb` installs. Ask a workspace owner to add MCP ZAP
+Connect to your organization's extension directory. Install it there, then
+continue with step 3 below. [Anthropic's extension allowlist guide](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist)
+
+1. For connector `0.18.0`, check [scanner releases](https://github.com/dtkmn/mcp-zap-server/releases)
+   for `v0.18.0` and its four matching assets: the
+   `mcp-zap-connect-claude-desktop-0.18.0.mcpb` bundle,
+   `mcp-zap-connect-claude-desktop-0.18.0-setup.md` guide and their
+   `.sha256` files. Verify both checksums before installation. If the release
+   or scanner image is unavailable, the [v0.17.1 release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1)
+   provides connector `0.1.0` and its matching guide. Developers can also
+   build the local preview below.
+2. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
+   **Extensions** (or **Settings → Extensions** in older layouts). Under
+   **Advanced settings**, find **Extension Developer**, select **Install Extension**
+   and choose the `.mcpb` file. Review the extension and complete the installation prompts.
 3. Leave **Scanner directory** and **Scanner API key override** blank for the
    normal setup. The connector detects an existing Docker installation and reads
    its effective credential privately. You do not need to copy an API key into a
@@ -62,11 +66,17 @@ Check prerequisites first and explain any required changes before asking for app
 Reuse any healthy existing scanner without starting, restarting or recreating its containers.
 Preserve its keys, reports, target restrictions, and all Codex and Cursor settings.
 Only call scanner_setup with confirm=true after I have requested and approved setup.
-Verify this Claude Desktop connection with zap_passive_scan_status once only, then stop.
+If setup returns SCANNER_STARTED, report success and stop. Setup already checked
+the scanner's passive status.
+If setup returns SCANNER_REUSED, call zap_passive_scan_status once, then stop.
 Do not crawl, scan, wait for passive analysis, or generate reports.
 ```
 
-Claude should use these local tools:
+When Claude asks to run **Scanner check prerequisites**, choose **Allow once**.
+Review the proposed changes and approve setup in chat if you want to proceed.
+When Claude asks to run **Scanner setup**, choose **Allow once** again.
+
+Claude uses these local tools during setup and verification.
 
 | Tool | Purpose |
 | --- | --- |
@@ -175,26 +185,23 @@ scanner resources. It includes the public `.env.example` template, not a real
 from this checkout; source hashes are included in the bundle. Building this
 preview does not publish a release or rebuild the scanner images.
 
-Connector and scanner versions are independent. For example, a future scanner
-release `v0.17.1` can include connector `0.1.0`; the asset filenames use the
-connector version. After publication, bump the connector version when its packaged
-code, dependencies, scanner resources or setup guide change. Ordinary scanner
-changes outside the bundle do not require a connector version bump.
+The four asset filenames use the repository release number from `build.gradle`.
+Use that number in the Desktop manifest, package and lockfile. A change to the
+bundle ships in a new repository release. For the older scanner `v0.17.1`, use
+its original connector `0.1.0`.
 
-Bundled Compose files, scripts and defaults are snapshots of the selected
-source, not a promise to install that release's newest scanner. The current
-packaged `.env.example` selects scanner `v0.17.1`; verify image publication
-before distributing or starting a fresh installation. Update and validate those
-resources deliberately when changing the fresh-install scanner version; preserve
-the selected settings when reusing an existing scanner.
+Fresh installs use the bundled `.env.example` and Compose configuration.
+Before starting setup, verify that Docker Hub offers
+`dtkmn/mcp-zap-server:v0.18.0` for your platform. Existing installations
+retain their own settings and selected image.
 
 The output is:
 
 ```text
-../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.1.0.mcpb
-../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.1.0.mcpb.sha256
-../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.1.0-setup.md
-../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.1.0-setup.md.sha256
+../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.18.0.mcpb
+../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.18.0.mcpb.sha256
+../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.18.0-setup.md
+../../build/claude-desktop/mcp-zap-connect-claude-desktop-0.18.0-setup.md.sha256
 ```
 
 The setup guide is also inside the MCPB. The build checks package, manifest and
@@ -238,27 +245,27 @@ downloaded-file preflight immediately before publication.
 Maintainers prepare the assets before publishing the normal scanner release:
 
 1. Include the reviewed connector source and guide in the next normal scanner
-   release commit on `main`. Set the scanner `build.gradle` version for that
-   release. The existing immutable `v0.16.0` release stays untouched.
-2. Create the normal scanner tag, such as `v0.17.1`, and a **draft** GitHub
+   release commit on `main`. Set the Desktop package and plugin versions to the scanner version in
+   `build.gradle`. Run `python3 scripts/check-plugin-version.py` from the repository root.
+2. Create the normal scanner tag, such as `v0.18.0`, and a **draft** GitHub
    release for that existing tag in this repository. The usual scanner
    prerelease tags are also supported; a stable release does not need to be
    marked as a prerelease merely because its connector is a macOS preview.
 3. Dispatch **Claude Desktop MCPB** from `main`, setting `draft_release_tag` to
    that scanner tag. The workflow checks out the tag's source, requires the
    commit to be reachable from `main`, and validates that the scanner
-   `build.gradle` version matches the tag. It tests and builds the MCPB from
-   that source; it does not require the connector version to match the tag.
+   `build.gradle` version matches the tag. For releases starting with `v0.18.0`, it also checks the connector
+   version against the scanner before building the MCPB.
 4. Verify that the existing draft contains all four matching assets:
 
    ```text
-   mcp-zap-connect-claude-desktop-0.1.0.mcpb
-   mcp-zap-connect-claude-desktop-0.1.0.mcpb.sha256
-   mcp-zap-connect-claude-desktop-0.1.0-setup.md
-   mcp-zap-connect-claude-desktop-0.1.0-setup.md.sha256
+   mcp-zap-connect-claude-desktop-0.18.0.mcpb
+   mcp-zap-connect-claude-desktop-0.18.0.mcpb.sha256
+   mcp-zap-connect-claude-desktop-0.18.0-setup.md
+   mcp-zap-connect-claude-desktop-0.18.0-setup.md.sha256
    ```
 
-   Substitute the connector version if it changes. Review the guide, check
+   For later releases, substitute the repository version in all four filenames. Review the guide, check
    both downloaded checksums, and document user-relevant compatibility
    requirements and limitations in the normal scanner release notes. Keep
    internal validation records private. The workflow requires an existing mutable
@@ -272,7 +279,7 @@ Maintainers prepare the assets before publishing the normal scanner release:
    commit SHA; it must report `PASS`:
 
    ```bash
-   python3 scripts/verify-release-draft.py --tag v0.17.1 --commit APPROVED_FULL_COMMIT_SHA
+   python3 scripts/verify-release-draft.py --tag v0.18.0 --commit APPROVED_FULL_COMMIT_SHA
    ```
 
    It checks the existing mutable draft, tag/source/version and all four

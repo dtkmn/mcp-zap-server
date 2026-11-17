@@ -100,7 +100,7 @@ class ToolAuthorizationServiceTest {
     }
 
     @Test
-    void guidedAuthSessionToolsRequireDedicatedScopes() {
+    void authSessionToolsRequireDedicatedScopes() {
         ToolAuthorizationService service = createService(ToolAuthorizationProperties.Mode.ENFORCE, true);
 
         ToolAuthorizationDecision deniedPrepare = service.authorizeToolCall(List.of("zap:scan:read"), "zap_auth_session_prepare");

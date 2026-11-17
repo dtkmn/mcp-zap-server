@@ -1,7 +1,9 @@
 # AWS/EKS private single-replica baseline. Use an encrypted tunnel or TLS ingress.
 # For multiple MCP replicas, start from values-ha.yaml instead.
 # Copy this file and replace placeholders before production use.
-# Set a working EBS CSI RWO StorageClass below, and verify CNI NetworkPolicy
+# Set a working EBS CSI RWO StorageClass for zap.persistence.storageClass and
+# mcp.launchSafety.persistence.storageClass (in-memory jobs); these use separate
+# claims. Preserve existing claims/backend on upgrade. Verify CNI NetworkPolicy
 # enforcement. Target/add-on/background HTTP egress remains opt-in; see README.
 # Review the VPC CNI's standard/strict startup behavior and system-pod policies.
 # Kubernetes NetworkPolicy does not isolate pods from their hosting node;

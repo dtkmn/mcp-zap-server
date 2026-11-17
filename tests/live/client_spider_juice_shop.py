@@ -177,7 +177,7 @@ class Suite:
                          "checks": [], "rpc": [], "coverage": {}}
         self.mcp = McpClient(args.mcp_url, args.mcp_api_key, record=self.evidence["rpc"].append)
         self.zap = ZapClient(args.zap_url, args.zap_api_key, args.zap_host_header)
-        self.guided_ids, self.native_ids = {}, {}
+        self.job_by_operation_id, self.native_ids = {}, {}
         self.auth_session_id = None
 
     def save(self):
@@ -227,10 +227,10 @@ class Suite:
         self.check("required tools published", all(name in self.tools for name in expected), expected)
         retired = {"zap_client_spider_start", "zap_client_spider_status", "zap_client_spider_stop",
                    "zap_queue_client_spider_scan", "zap_scan_job_status", "zap_scan_job_cancel"}
-        self.check("guided catalog omits raw Client Spider and job tools", not retired.intersection(self.tools))
+        self.check("catalog omits raw Client Spider and job tools", not retired.intersection(self.tools))
         schema = self.tools["zap_crawl_start"]["inputSchema"]
         properties = schema.get("properties", {})
-        self.check("guided crawl schema", set(schema.get("required", [])) == {"targetUrl"}
+        self.check("crawl schema", set(schema.get("required", [])) == {"targetUrl"}
                    and {"targetUrl", "strategy", "idempotencyKey", "authSessionId"} <= properties.keys()
                    and not {"maxDepth", "contextName", "userName"}.intersection(properties), schema)
         for tool in ["zap_crawl_status", "zap_crawl_stop"]:
@@ -258,11 +258,11 @@ class Suite:
             for invalid in [" ", "2147483647"]:
                 self.rejected(f"{name} rejects invalid operation {invalid!r}", name,
                               {"operationId": invalid}, "operationId")
-        self.rejected("guided start rejects blank target", "zap_crawl_start",
+        self.rejected("crawl start rejects blank target", "zap_crawl_start",
                       {"targetUrl": " ", "strategy": "client"}, "targetUrl")
-        self.rejected("guided start rejects unsupported strategy", "zap_crawl_start",
+        self.rejected("crawl start rejects unsupported strategy", "zap_crawl_start",
                       {"targetUrl": self.args.target, "strategy": "not-a-crawler"}, "strategy")
-        self.rejected("guided start rejects unknown auth session", "zap_crawl_start",
+        self.rejected("crawl start rejects unknown auth session", "zap_crawl_start",
                       {"targetUrl": self.args.target, "strategy": "client",
                        "authSessionId": "unknown-client-live-" + uuid.uuid4().hex}, "Unknown auth session ID")
 
@@ -282,10 +282,10 @@ class Suite:
             job = field(response, "Job ID")
         except AssertionError:
             job = None
-        self.guided_ids[operation] = job
+        self.job_by_operation_id[operation] = job
         return operation
 
-    def guided_start(self, arguments=None):
+    def start_crawl(self, arguments=None):
         arguments = arguments if arguments is not None else self.start_arguments()
         try:
             response = self.mcp.call("zap_crawl_start", arguments)
@@ -295,25 +295,25 @@ class Suite:
         operation = self.remember_start(response)
         if not operation:
             self.evidence.setdefault("unconfirmedStartRequests", []).append({"reason": "No Operation ID returned"})
-            raise AssertionError(f"Start returned no usable guided operation: {response}")
+            raise AssertionError(f"Start returned no usable operation handle: {response}")
         job = field(response, "Job ID")
         self.check("operation and job IDs remain distinct", operation != job)
-        self.check("guided crawl selects Client Spider", field(response, "Strategy") == "client", response)
-        self.check("guided execution mode is queue", field(response, "Execution Mode").lower() == "queue", response)
+        self.check("crawl selects Client Spider", field(response, "Strategy") == "client", response)
+        self.check("crawl uses the queue", field(response, "Execution Mode").lower() == "queue", response)
         if self.auth_session_id:
-            self.check("guided crawl binds prepared authentication",
+            self.check("crawl binds prepared authentication",
                        field(response, "Authenticated Session") == self.auth_session_id)
         if self.queue_state(response) in {"START_OUTCOME_UNKNOWN", "FAILED", "CANCELLED", "SUCCEEDED"}:
             raise AssertionError(f"Start did not leave an active queued operation: {response}")
         return operation, response
 
-    def guided_status(self, operation):
+    def crawl_status(self, operation):
         response = self.mcp.call("zap_crawl_status", {"operationId": operation})
         job = field(response, "Job ID")
-        if self.guided_ids.get(operation) not in {None, job}:
+        if self.job_by_operation_id.get(operation) not in {None, job}:
             raise AssertionError(f"Operation changed its job ID: {response}")
-        if operation in self.guided_ids:
-            self.guided_ids[operation] = job
+        if operation in self.job_by_operation_id:
+            self.job_by_operation_id[operation] = job
         native = self.optional_field(response, "ZAP Scan ID")
         if native:
             if self.native_ids.get(job) not in {None, native}:
@@ -344,12 +344,12 @@ class Suite:
             if expected == "RUNNING" and "cancellation" in field(response, "Status").lower():
                 raise AssertionError(f"Running operation has unresolved cancellation: {response}")
             return state == expected
-        return self.wait(lambda: self.guided_status(operation), reached)
+        return self.wait(lambda: self.crawl_status(operation), reached)
 
     def forget_job(self, job):
-        self.guided_ids = {operation: owner for operation, owner in self.guided_ids.items() if owner != job}
+        self.job_by_operation_id = {operation: owner for operation, owner in self.job_by_operation_id.items() if owner != job}
 
-    def stop_guided(self, operation, native_id=None):
+    def stop_crawl(self, operation, native_id=None):
         self.mcp.call("zap_crawl_stop", {"operationId": operation})
         stopped = self.wait_for_state(operation, "CANCELLED")
         self.check("cancelled crawl does not establish successful coverage",
@@ -363,12 +363,12 @@ class Suite:
                 raise AssertionError(f"Cannot independently verify this native crawler: {stopped}")
             native = self.wait(lambda: self.zap.view(component, "status", scanId=reported_native),
                                lambda value: str(value.get("status")) == "100")
-            self.check("guided cancellation stops its native crawl", True, native)
+            self.check("cancelling the operation stops its native crawl", True, native)
         self.forget_job(field(stopped, "Job ID"))
         return stopped
 
     def assert_running(self, operation, native_id):
-        status = self.guided_status(operation)
+        status = self.crawl_status(operation)
         self.check("other crawl remains independently running",
                    self.queue_state(status) == "RUNNING"
                    and "cancellation" not in field(status, "Status").lower(), status)
@@ -377,46 +377,46 @@ class Suite:
 
     def lifecycle(self):
         arguments = self.start_arguments()
-        first, _ = self.guided_start(arguments)
+        first, _ = self.start_crawl(arguments)
         first_running = self.wait_for_state(first, "RUNNING")
         first_job, first_native = field(first_running, "Job ID"), field(first_running, "ZAP Scan ID")
-        replay, replay_response = self.guided_start(arguments)
+        replay, replay_response = self.start_crawl(arguments)
         self.check("idempotency returns the same job", field(replay_response, "Job ID") == first_job
                    and "existing job returned" in replay_response, replay_response)
         self.check("both replay handles resolve the same native crawl",
-                   field(self.guided_status(replay), "ZAP Scan ID") == first_native)
+                   field(self.crawl_status(replay), "ZAP Scan ID") == first_native)
         changed = dict(arguments, strategy="http")
         changed.pop("authSessionId", None)
         self.rejected("idempotency rejects a changed request", "zap_crawl_start", changed, "idempotency")
 
-        second, _ = self.guided_start()
+        second, _ = self.start_crawl()
         second_running = self.wait_for_state(second, "RUNNING")
         second_job, second_native = field(second_running, "Job ID"), field(second_running, "ZAP Scan ID")
-        self.check("two guided crawls have distinct jobs and native IDs",
+        self.check("two crawls have distinct jobs and native IDs",
                    first_job != second_job and first_native != second_native,
                    {"jobs": [first_job, second_job], "nativeIds": [first_native, second_native]})
         self.assert_running(first, first_native)
         self.assert_running(second, second_native)
 
-        pending, _ = self.guided_start()
-        queued = self.guided_status(pending)
+        pending, _ = self.start_crawl()
+        queued = self.crawl_status(pending)
         self.check("third job waits behind spider concurrency limit two",
                    self.queue_state(queued) == "QUEUED"
                    and not self.optional_field(queued, "ZAP Scan ID")
                    and not self.optional_field(queued, "Claim Owner"), queued)
-        cancelled = self.stop_guided(pending)
+        cancelled = self.stop_crawl(pending)
         self.check("pending cancellation never starts a native crawl",
                    not self.optional_field(cancelled, "ZAP Scan ID"), cancelled)
         self.assert_running(first, first_native)
         self.assert_running(second, second_native)
-        self.stop_guided(first, first_native)
+        self.stop_crawl(first, first_native)
         self.assert_running(second, second_native)
-        self.stop_guided(second, second_native)
+        self.stop_crawl(second, second_native)
 
     def completion(self):
         previous = {str(message["id"]) for message in self.zap.messages(self.args.target)}
         started = time.monotonic()
-        operation, _ = self.guided_start()
+        operation, _ = self.start_crawl()
         result = self.wait_for_state(operation, "SUCCEEDED")
         elapsed = round(time.monotonic() - started, 2)
         self.check("crawl ends without test issuing stop", self.queue_state(result) == "SUCCEEDED",
@@ -485,13 +485,13 @@ class Suite:
     def cleanup(self):
         errors = []
         attempted = set()
-        for operation, job in list(self.guided_ids.items()):
+        for operation, job in list(self.job_by_operation_id.items()):
             owner = job or operation
             if owner in attempted:
                 continue
             attempted.add(owner)
             try:
-                self.stop_guided(operation, self.native_ids.get(job))
+                self.stop_crawl(operation, self.native_ids.get(job))
             except Exception as error:
                 errors.append({"tool": "zap_crawl_stop", "operationId": operation, "jobId": job,
                                "error": str(error)})
@@ -537,7 +537,7 @@ def main(argv=None):
     parser.add_argument("--evidence", default="/tmp/client-spider-live-evidence.json")
     args = parser.parse_args(argv)
     if not set(args.phases.split(",")) <= {"validation", "lifecycle", "completion"}:
-        parser.error(f"Invalid guided phases: {args.phases}")
+        parser.error(f"Invalid test phases: {args.phases}")
     authentication = [args.auth_profile, args.auth_verification_url, args.auth_expected_user]
     if any(authentication) and not all(authentication):
         parser.error("Authentication requires all of --auth-profile, --auth-verification-url, --auth-expected-user")

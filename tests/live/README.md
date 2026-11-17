@@ -1,9 +1,8 @@
 # Client Spider live regression checks
 
 `client_spider_juice_shop.py` uses only Python 3's standard library. It drives the
-real guided MCP Streamable HTTP tools, ZAP Client Spider, and the supplied OWASP
-Juice Shop target. It does not start an active attack scan. Retired raw tools and
-expert/direct execution options are not supported.
+MCP tools over Streamable HTTP, ZAP Client Spider, and the supplied OWASP
+Juice Shop target. It does not start an active scan.
 
 Run against a dedicated local test stack. Existing ZAP traffic makes coverage
 attribution ambiguous, and browser crawls can interact with the target. The
@@ -12,7 +11,7 @@ be reachable from **ZAP's container/browser**, usually `http://juice-shop:3000`.
 
 ## Lab prerequisites
 
-- A server build with guided `zap_crawl_start`, `zap_crawl_status` and
+- A server build with `zap_crawl_start`, `zap_crawl_status` and
   `zap_crawl_stop` supporting `strategy=client` through the protected queue.
 - ZAP with Client Side Integration 0.27.0+, Selenium, Firefox and its driver.
 - A dedicated ZAP session and local Juice Shop on the same Docker network.
@@ -45,14 +44,14 @@ export ZAP_URL=http://127.0.0.1:18090
 export ZAP_HOST_HEADER=zap
 # Set ZAP_API_KEY too if the local ZAP API requires authentication.
 python3 tests/live/client_spider_juice_shop.py \
-  --evidence /tmp/client-spider-guided.json
+  --evidence /tmp/client-spider.json
 ```
 
 The default phases run sequentially:
 
-1. MCP initialize/session negotiation and discovery: guided schemas, required
+1. MCP initialize/session negotiation and discovery: tool schemas, required
    operation handles, and absence of retired raw Client Spider/job tools.
-2. Supported guided validation: blank targets, invalid strategies, unknown auth
+2. Input validation: blank targets, invalid strategies, unknown auth
    sessions, and blank or malformed operation handles.
 3. Two running queue jobs with distinct native IDs; idempotent replay returns the
    same job even when its newly signed Operation ID differs; a changed request
@@ -69,10 +68,10 @@ Job IDs, Operation IDs and native ZAP scan IDs are checked separately. An unexpe
 failure or uncertain start stops the run without resubmission. A missing operation handle is
 recorded for investigation; the harness does not guess a native ID to clean up.
 
-Guided tools do not expose per-call `maxDepth`, `contextName`, `userName` or raw
+The crawl tools do not expose per-call `maxDepth`, `contextName`, `userName` or raw
 `scanId` arguments. Their former raw-tool validation calls are not live checks
 in this harness. Native depth and context/user pairing guards remain covered by
-service/queue unit tests; the live harness checks the supported guided schema,
+service/queue unit tests; the live harness checks the crawl tool schema,
 prepared authentication sessions and signed-operation boundary instead. Crawl
 depth uses the server's `ZAP_SPIDER_MAX_DEPTH` setting.
 
@@ -136,7 +135,7 @@ authentication. Authenticated runs prove the stated identity and credential-bear
 verification request during the crawl, rather than coverage of every protected
 route or successful reauthentication on expiry.
 
-The harness attempts guided cancellation only for its own returned operation
+The harness requests cancellation only for its own returned operation
 handles and records cleanup errors. Replay handles for the same backend job are
 cleaned up together. Inspect the dedicated ZAP instance before reusing it after
 unconfirmed cleanup. The harness does not reset sessions, stop arbitrary native

@@ -6,19 +6,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-class GuidedAuthSessionMcpToolsServiceTest {
+class AuthSessionMcpToolsServiceTest {
 
     @Test
     void prepareToolExposesOnlyProfileAndTargetAndDelegatesSuppliedArguments() {
-        GuidedAuthSessionService authSessionService = mock(GuidedAuthSessionService.class);
-        GuidedAuthSessionMcpToolsService tools = new GuidedAuthSessionMcpToolsService(authSessionService);
+        AuthSessionService authSessionService = mock(AuthSessionService.class);
+        AuthSessionMcpToolsService tools = new AuthSessionMcpToolsService(authSessionService);
         ToolCallback prepareTool = Arrays.stream(MethodToolCallbackProvider.builder()
                         .toolObjects(tools)
                         .build()

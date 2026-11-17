@@ -14,8 +14,8 @@ import mcp.server.zap.core.gateway.ZapEngineAdapter;
 import mcp.server.zap.core.model.ScanJob;
 import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.model.ScanJobType;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
-import mcp.server.zap.core.service.authz.GuidedToolActions;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
+import mcp.server.zap.core.service.authz.ToolActionAvailability;
 import mcp.server.zap.core.service.jobstore.InMemoryScanJobStore;
 import mcp.server.zap.core.service.jobstore.ScanJobStore;
 import mcp.server.zap.core.service.queue.leadership.SingleNodeQueueLeadershipCoordinator;
@@ -27,8 +27,8 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Answers;
 import org.mockito.stubbing.Answer;
 
-/** Guided requests through real admission, launch ownership and storage, with a fake native engine. */
-class GuidedQueuedScanIntegrationTest {
+/** Scan requests through real queue admission, launch ownership and storage, with a fake native engine. */
+class QueuedScanIntegrationTest {
     private static final String TARGET = "https://example.invalid";
 
     @RegisterExtension
@@ -36,7 +36,7 @@ class GuidedQueuedScanIntegrationTest {
 
     private ScanJobStore store;
     private ScanJobQueueService queue;
-    private GuidedScanWorkflowService guided;
+    private ScanWorkflowService scanWorkflow;
     private final AtomicInteger nativeStarts = new AtomicInteger();
     private final AtomicInteger nativeStops = new AtomicInteger();
     private final AtomicBoolean lostReply = new AtomicBoolean();
@@ -47,7 +47,7 @@ class GuidedQueuedScanIntegrationTest {
     }
 
     @BeforeEach
-    void setUpGuidedQueue() throws Exception {
+    void setUpScanQueue() throws Exception {
         store = newStore();
         Answer<Object> engine = invocation -> {
             Object[] arguments = invocation.getArguments();
@@ -64,7 +64,7 @@ class GuidedQueuedScanIntegrationTest {
                 return id;
             }
             String method = invocation.getMethod().getName();
-            if (method.startsWith("start")) throw new AssertionError("Guided request bypassed guarded queue: " + method);
+            if (method.startsWith("start")) throw new AssertionError("Scan request bypassed guarded queue: " + method);
             if (method.startsWith("stop")) {
                 nativeStops.incrementAndGet();
                 terminated.set(true);
@@ -86,15 +86,15 @@ class GuidedQueuedScanIntegrationTest {
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1),
                 new ScanJobQueueService.RetryPolicy(3, 0, 0, 1), false, store,
                 new SingleNodeQueueLeadershipCoordinator()));
-        GuidedToolActions actions = mock(GuidedToolActions.class);
+        ToolActionAvailability actions = mock(ToolActionAvailability.class);
         when(actions.canCall(org.mockito.ArgumentMatchers.anyString())).thenReturn(true);
-        guided = new GuidedScanWorkflowService(spider, ajax, client, active, queue,
-                mock(GuidedAuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(), actions);
+        scanWorkflow = new ScanWorkflowService(spider, ajax, client, active, queue,
+                mock(AuthSessionService.class), new ZapEngineAdapter(), new GatewayRecordFactory(), actions);
     }
 
     @ParameterizedTest
     @EnumSource(Kind.class)
-    void guidedHandleTracksAndStopsTheSameGuardedScan(Kind kind) {
+    void operationIdTracksAndStopsTheSameGuardedScan(Kind kind) {
         String response = start(kind, "one");
         assertThat(response).contains("Execution Mode: queue");
         ScanJob job = onlyJob();
@@ -113,7 +113,7 @@ class GuidedQueuedScanIntegrationTest {
 
     @ParameterizedTest
     @EnumSource(Kind.class)
-    void lostReplyKeepsCapacityAndCannotLaunchAgainThroughGuidedStatusCancelOrAdmission(Kind kind) {
+    void lostReplyKeepsCapacityAndCannotLaunchAgainThroughStatusCancelOrAdmission(Kind kind) {
         lostReply.set(true);
         String response = start(kind, "uncertain");
         ScanJob job = onlyJob();
@@ -140,14 +140,14 @@ class GuidedQueuedScanIntegrationTest {
     }
 
     @Test
-    void idempotentGuidedAdmissionReusesJobAndRejectsChangedParameters() {
-        String first = guided.startAttack(TARGET, "false", "policy-a", "same", null);
-        String second = guided.startAttack(TARGET, "false", "policy-a", "same", null);
+    void idempotentScanAdmissionReusesJobAndRejectsChangedParameters() {
+        String first = scanWorkflow.startAttack(TARGET, "false", "policy-a", "same", null);
+        String second = scanWorkflow.startAttack(TARGET, "false", "policy-a", "same", null);
         ScanJob job = onlyJob();
         assertThat(job.getParameters()).containsEntry("recurse", "false").containsEntry("policy", "policy-a");
         assertThat(status(Kind.ATTACK, operationId(first))).contains("RUNNING");
         assertThat(status(Kind.ATTACK, operationId(second))).contains("RUNNING");
-        assertThatThrownBy(() -> guided.startAttack(TARGET, "false", "policy-b", "same", null))
+        assertThatThrownBy(() -> scanWorkflow.startAttack(TARGET, "false", "policy-b", "same", null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("different queued scan request");
         assertThat(store.list()).hasSize(1);
@@ -155,17 +155,17 @@ class GuidedQueuedScanIntegrationTest {
     }
 
     private String start(Kind kind, String key) {
-        return kind == Kind.ATTACK ? guided.startAttack(TARGET, "true", null, key, null)
-                : guided.startCrawl(TARGET, kind.name().toLowerCase(java.util.Locale.ROOT), key, null);
+        return kind == Kind.ATTACK ? scanWorkflow.startAttack(TARGET, "true", null, key, null)
+                : scanWorkflow.startCrawl(TARGET, kind.name().toLowerCase(java.util.Locale.ROOT), key, null);
     }
 
     private String status(Kind kind, String handle) {
-        return kind == Kind.ATTACK ? guided.getAttackStatus(handle) : guided.getCrawlStatus(handle);
+        return kind == Kind.ATTACK ? scanWorkflow.getAttackStatus(handle) : scanWorkflow.getCrawlStatus(handle);
     }
 
     private void stop(Kind kind, String handle) {
-        if (kind == Kind.ATTACK) guided.stopAttack(handle);
-        else guided.stopCrawl(handle);
+        if (kind == Kind.ATTACK) scanWorkflow.stopAttack(handle);
+        else scanWorkflow.stopCrawl(handle);
     }
 
     private ScanJob onlyJob() {

@@ -11,6 +11,24 @@ Claude Desktop Chat uses the separate [MCPB preview](../../packaging/claude-desk
 with local agent-callable setup tools. It reuses the same Docker scripts and
 scanner. Install the `.mcpb` in Desktop Chat; use the plugin below for Claude Code.
 
+## Versions and Release Pins
+
+Normal GitHub installations select a published repository tag, not `main`.
+Starting with `0.18.0`, fresh scanner setup uses the same release as the plugin.
+
+| Release tag | Plugin version | Scanner checkout and image for fresh setup |
+| --- | --- | --- |
+| `v0.18.0` | `0.18.0` | `v0.18.0` |
+| `v0.17.1` | `0.5.0` | `v0.17.1` |
+
+Use the `0.18.0` installation commands below once its tag is available in
+[GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and the
+`dtkmn/mcp-zap-server:v0.18.0` image is available for your platform on Docker Hub.
+Until then, use `v0.17.1` in the marketplace and checkout commands to install
+plugin `0.5.0`. For that version, give the setup skill the prepared `v0.17.1`
+checkout at commit `02161be8f30cd3d3b18e7eb0a4d3dcd77c0bec7a` and select
+the `v0.17.1` image. See the [tagged scanner guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md).
+
 ## Requirements
 
 - A local Codex, Cursor or Claude Code session with permission to execute
@@ -20,7 +38,7 @@ scanner. Install the `.mcpb` in Desktop Chat; use the plugin below for Claude Co
   Claude Code commands require `claude`.
 - Docker with its engine running and Compose supporting `--wait` and
   `--wait-timeout`.
-- Bash for the Docker setup scripts and Git for the GitHub installation.
+- Bash, Git, curl and HTTPS access to `api.github.com` for release verification before setup, recovery or the start of a new scan workflow.
 
 Java and ZAP run in containers, so a separate Java installation is unnecessary.
 Web-only chats cannot reach the local scanner.
@@ -90,12 +108,12 @@ help with this prerequisite before the plugin is installed. Keep the same
 terminal open if you use the temporary PATH adjustment. If your CLI does not
 recognize the plugin commands below, update the app or CLI as described there.
 
-Install directly from GitHub using your normal Codex installation. Run these
-commands from your home directory:
+Once the [matching release and image are available](#versions-and-release-pins),
+run these commands from your home directory using your normal Codex installation:
 
 ```bash
 cd "$HOME"
-codex plugin marketplace add dtkmn/mcp-zap-server --ref main
+codex plugin marketplace add dtkmn/mcp-zap-server --ref v0.18.0
 codex plugin add mcp-zap-connect@mcp-zap-local-preview
 ```
 
@@ -104,10 +122,32 @@ you do not need to clone the repository manually. `mcp-zap-local-preview` is the
 existing marketplace identifier; the installed plugin is **MCP ZAP Connect**.
 See OpenAI's [Git-backed marketplace instructions](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
 
-When you request scanner setup, the skill reuses an existing project checkout
-or obtains one for the Docker configuration and bootstrap scripts. The server
-runs from published Docker images. Installing the plugin alone does not start
-the scanner. This GitHub installation does not require a public-directory listing.
+This pins the marketplace and its relative plugin files to the release.
+Existing marketplace users should follow [Updates](#updates) instead of
+removing a marketplace or overwriting client settings. Installing the plugin
+alone does not start the scanner. This GitHub installation does not require a
+public-directory listing.
+
+### Prepare a Pinned Scanner Checkout
+
+The `0.18.0` setup skill clones the `v0.18.0` release into a new directory.
+If you prepare the checkout yourself, use the same tag and give the skill that directory:
+
+```bash
+git clone --branch v0.18.0 --single-branch \
+  https://github.com/dtkmn/mcp-zap-server.git \
+  "$HOME/mcp-zap-server-v0.18.0"
+```
+
+Before running setup helpers, the installed plugin verifies the checkout against the official
+GitHub tag, checks the setup files and confirms Docker Compose selects
+`dtkmn/mcp-zap-server:v0.18.0`. If GitHub cannot verify the tag, restore access and retry.
+Setup finishes by checking readiness and making an authenticated status call through the selected client.
+
+For an existing scanner, use its checkout and keep its settings, credentials, workspace and reports.
+If the version differs, the plugin reports the mismatch. To move to `v0.18.0`, follow the
+[scanner upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.18.0/).
+You can still request status through an existing MCP connection.
 
 ## Use In Codex
 
@@ -127,15 +167,17 @@ Ask:
 
 ```text
 Set up MCP ZAP Server in Codex using Docker Compose.
-Reuse any existing installation and preserve my other MCP connections.
+Reuse my existing scanner installation if it matches the release.
+For a fresh setup, use the v0.18.0 checkout and scanner image.
+Preserve my settings and other MCP connections.
 Verify with a status call only; do not run a scan.
 ```
 
 The skill preserves unrelated settings and keeps keys in private local
 configuration. Codex may need reconnection before its tools load. Scanning
 requires a separate request identifying your authorized target and intended
-workflow. The packaged local client uses `*` for the curated guided tools,
-including active attacks, authentication setup and imports. Run only the
+workflow. The packaged local client uses the `*` grant, which covers active scans,
+authentication setup and API imports. Run only the
 requested workflow. Existing settings and scopes are preserved; installing or
 reconnecting this plugin does not change permissions.
 See [Quick-Start Permissions](https://danieltse.org/mcp-zap-server/getting-started/tool-scope-authorization/#quick-start-permissions)
@@ -153,10 +195,22 @@ and intended workflow. For example:
 ```text
 Check my existing local scanner and this client's connection before starting.
 If recovery is needed, explain the required action and wait for my approval.
-Run only a guided HTTP crawl against http://juice-shop:3000, wait for passive
+Run only an HTTP crawl against http://juice-shop:3000, wait for passive
 analysis, summarize this target's findings, and return its complete HTML report.
 Do not start an active attack or change client settings or target restrictions.
 ```
+
+With version 0.18.0 of the plugin, you can request a crawl in plain language:
+
+| Ask the agent | What it runs |
+| --- | --- |
+| “Crawl this site.” | One HTTP Spider crawl of the authorized URL. |
+| “Crawl this site thoroughly.” | An HTTP Spider crawl, then a Client Spider crawl of the same URL to explore pages rendered by JavaScript. The browser pass starts only after the HTTP pass confirms success. |
+
+You can also request just HTTP, Client Spider or AJAX Spider. A thorough crawl
+uses two operations. If you stop the first one or its outcome is uncertain,
+the agent does not start the second one. For an authenticated site, each pass
+needs a compatible authorized session. Neither example starts an active scan.
 
 The skill runs `./bin/scanner-readiness.sh` from the selected scanner checkout,
 then verifies the selected connection with one native passive-status call. If
@@ -167,7 +221,7 @@ credentials and client settings are preserved. Recovery does not change Docker's
 startup-at-login settings. After a successful approved recovery, the skill
 rechecks readiness and resumes only your original request.
 
-These checks are an agent-guided workflow. The skills-only plugin cannot
+The agent runs these checks when you invoke the skill. The plugin cannot
 intercept calls sent directly to a separately configured MCP server. Invoke
 the scan skill to use this flow. A pure status-only request goes directly to
 the selected client's status tool without setup or recovery.
@@ -226,26 +280,122 @@ See [Claude Code MCP scopes and configuration](https://code.claude.com/docs/en/m
 
 ### Install From A Marketplace
 
-To install from this checkout instead of loading it for one session, register
-the repository root and install the plugin:
+Once the [matching release and image are available](#versions-and-release-pins),
+install from the tagged GitHub marketplace:
+
+```bash
+claude plugin marketplace add 'dtkmn/mcp-zap-server#v0.18.0'
+claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
+```
+
+This selects plugin `0.18.0`. Its setup skill verifies the `v0.18.0` checkout
+and scanner image. See the
+[Claude Code ref syntax](https://code.claude.com/docs/en/plugins/cli-reference#plugin-marketplace-add).
+
+For deliberate development from a local checkout instead, register that
+checkout's root and install its plugin:
 
 ```bash
 claude plugin marketplace add /absolute/path/to/mcp-zap-server
 claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
 ```
 
-Replace the example path with your checkout. Once these files are published on
-the repository's default branch, the GitHub alternative is:
-
-```bash
-claude plugin marketplace add dtkmn/mcp-zap-server
-claude plugin install mcp-zap-connect@mcp-zap-connect --scope user
-```
+The local path selects that checkout, including its unreleased changes. It is
+not a release-pinned GitHub installation.
 
 The marketplace index at repository-root `.claude-plugin/marketplace.json`
 points to this existing plugin folder. These commands describe distribution
 through the project's own marketplace; they do not imply an Anthropic directory
 listing.
+
+## Updates
+
+Plugin updates and scanner upgrades are separate decisions. Keep the existing
+marketplace identity, selected scanner version, credentials, reports and client
+settings. Do not uninstall a marketplace as an update shortcut: clients can
+remove its installed plugins and saved plugin data.
+
+1. Choose a published release and read its plugin/scanner compatibility notes.
+   A pinned tag does not automatically advance to the next release when refreshed.
+2. Follow [Select a Different Release for an Existing Marketplace](#select-a-different-release-for-an-existing-marketplace)
+   to change the release ref and update MCP ZAP Connect in your client.
+3. Reload the client when required and verify the selected marketplace ref and
+   installed plugin version. A successful catalog refresh alone does not prove
+   the installed files changed.
+4. Reconnect to the existing scanner and check status. If setup compatibility
+   differs, report it and plan the scanner upgrade separately; do not change
+   its image, checkout or credentials automatically.
+
+All three client manifests use the repository release version from
+`build.gradle`, without the tag's leading `v`. Each repository release advances
+the plugin version too, including server-only releases. A plugin-only fix ships
+in a new repository release. Claude Code uses the manifest version for updates,
+so changed files must not reuse a published version. See [Claude Code version management](https://code.claude.com/docs/en/plugins/host-marketplace#release-a-new-version).
+
+Updating the plugin leaves your existing scanner in place. To upgrade the scanner as well,
+follow the [0.18.0 upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.18.0/).
+
+### Select a Different Release for an Existing Marketplace
+
+Back up the client's private configuration first. Use a verified published tag;
+use the `v0.18.0` examples below once its tag is published. Keep `v0.17.1`
+if you want the older `0.5.0` plugin. Preserve unrelated entries, permissions and plugin
+enabled states. Managed or project settings can override user configuration;
+resolve those through the deployment's existing administration process.
+
+For **Codex**, update only `ref` in the existing marketplace table in its
+effective user `config.toml` (normally `~/.codex/config.toml`, or the configured
+Codex home). Retain its existing `source`, `source_type` and any other fields:
+
+```toml
+[marketplaces.mcp-zap-local-preview]
+source_type = "git"
+source = "https://github.com/dtkmn/mcp-zap-server.git"
+ref = "v0.18.0"
+```
+
+Merge this into the existing table, then refresh that marketplace:
+
+```bash
+codex plugin marketplace upgrade mcp-zap-local-preview
+```
+
+See the [Codex marketplace configuration fields](https://learn.chatgpt.com/docs/config-file/config-reference).
+
+For **Claude Code**, declare the selected ref in its private user settings
+(normally `~/.claude/settings.json`, respecting any `CLAUDE_CONFIG_DIR`). This
+is plugin configuration, not the scanner's MCP credential entry. Merge only
+the named marketplace into `extraKnownMarketplaces`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "mcp-zap-connect": {
+      "source": {
+        "source": "github",
+        "repo": "dtkmn/mcp-zap-server",
+        "ref": "v0.18.0"
+      }
+    }
+  }
+}
+```
+
+If it already has an equivalent `git` source, preserve that source object and
+change only its `ref`. Keep other marketplace fields and all unrelated
+settings. See [Claude Code marketplace source settings](https://code.claude.com/docs/en/plugins/marketplace-reference#source-objects-in-settings).
+After selecting the ref, register the same marketplace at its new tag, refresh it,
+and update the installed plugin. For an existing user-scoped installation, run:
+
+```bash
+claude plugin marketplace add 'dtkmn/mcp-zap-server#v0.18.0' --scope user
+claude plugin marketplace update mcp-zap-connect
+claude plugin update mcp-zap-connect@mcp-zap-connect --scope user
+```
+
+The first command refreshes the cached source for the existing marketplace.
+Editing the ref alone can leave Claude Code unable to find the marketplace during
+the update. Reload if prompted and verify the installed plugin version before setup.
 
 <a id="cursor-preview-reference"></a>
 

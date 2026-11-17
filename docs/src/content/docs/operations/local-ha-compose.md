@@ -16,7 +16,7 @@ For Kubernetes deployment, use the [Helm guide](https://github.com/dtkmn/mcp-zap
 Multiple MCP replicas require deployment-specific configuration and validation:
 
 - Use shared Postgres-backed scan-job state and apply its migrations before
-  starting workers. Worker claims govern dispatch and recovery; coordinator
+  starting workers. Worker claims govern dispatch ownership; coordinator
   leadership alone does not provide shared queue state.
 - Keep worker node identities unique and choose a claim lease suitable for the
   deployment. See [Queue Coordinator and Worker Claims](../queue-coordinator-leader-election/).
@@ -32,10 +32,16 @@ Multiple MCP replicas require deployment-specific configuration and validation:
 
 ## Recovery Validation
 
-Before accepting a multi-replica deployment, verify that a worker can recover
-an existing scan after another worker loses its claim, without starting a
-second scan. Also test session affinity, authentication, evidence retention,
-and the deployment's database and ZAP recovery procedures.
+Before accepting a multi-replica deployment, terminate a worker with a running
+scan and a recorded launch receipt. After its claim expires, verify the job is
+held as `START_OUTCOME_UNKNOWN`, retains its capacity reservation, and is not
+started again or automatically adopted by another worker. ZAP may still be
+running the original scan; a hold does not stop it.
+
+The current MCP tools cannot manually adopt the scan or clear the hold. Review
+[Restart and Ownership](../scan-queue-retry-policy/#restart-and-ownership) before
+relying on worker replacement. Also test session affinity, authentication,
+evidence retention, and the deployment's database and ZAP recovery procedures.
 
 Use the [Production Readiness Checklist](../production-checklist/) and
 [Production Simulation Runbook](../production-simulation-runbook/) to record

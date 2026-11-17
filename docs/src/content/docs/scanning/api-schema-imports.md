@@ -1,7 +1,7 @@
 ---
 title: "API Schema Imports"
 editUrl: false
-description: "Import OpenAPI, GraphQL, and SOAP definitions through the guided target import tool."
+description: "Import OpenAPI, GraphQL, and SOAP definitions with zap_target_import."
 ---
 MCP ZAP Server supports schema-driven API imports across three common families:
 
@@ -9,7 +9,9 @@ MCP ZAP Server supports schema-driven API imports across three common families:
 - GraphQL
 - SOAP / WSDL
 
-## Guided Import
+<a id="guided-import"></a>
+
+## Import an API Definition
 
 Use `zap_target_import` for all supported definition families. Set `definitionType` to `openapi`, `graphql`, or `soap`, `sourceKind` to `url` or `file`, and `source` to the definition URL or ZAP-visible path. OpenAPI also supports `sourceKind=content` as described below.
 
@@ -65,7 +67,7 @@ Use this when:
 
 ### Client-Supplied OpenAPI Content
 
-Guided `zap_target_import` supports `sourceKind=content` for
+`zap_target_import` supports `sourceKind=content` for
 `definitionType=openapi`, introduced in `v0.15.0` and disabled by default. Use
 the matching server image and deployment files; check
 [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) and verify
@@ -158,9 +160,9 @@ contract, and configure both absolute paths explicitly. They can
 differ, for example MCP `/srv/mcp-imports` and ZAP `/zap/imports`, but must map the
 same files. A local write is not an upload to an unrelated remote ZAP filesystem.
 
-For **Helm**, chart `0.17.1` retains the sibling-directory storage option
+For **Helm**, chart `0.18.0` retains the sibling-directory storage option
 introduced in `0.15.0`, mounting staging read-only in ZAP with the matching
-`v0.17.1` image after publication:
+`v0.18.0` image after publication:
 
 ```yaml
 zap:
@@ -185,7 +187,7 @@ creates staging with mode `0750` and rejects symlinks or incompatible ownership.
 The chart configures content enablement and both directory paths automatically.
 Keep one MCP writer; `Recreate` avoids overlapping writers during upgrades and
 briefly interrupts MCP service. This preset does not establish EFS/NFS or
-multi-writer support. Use server image `v0.17.1` with chart `0.17.1` after
+multi-writer support. Use server image `v0.18.0` with chart `0.18.0` after
 publication; the `v0.14.0` image does not include content import.
 
 **Existing PVC users must migrate first:** setting `workspaceSubPath` changes the
@@ -253,7 +255,9 @@ Important:
 
 Use `definitionType=soap`, `sourceKind=url` or `file`, and `source` for the WSDL URL or ZAP-visible path.
 
-## Guided Import Example
+<a id="guided-import-example"></a>
+
+## Import an OpenAPI Definition from a URL
 
 ```json
 {

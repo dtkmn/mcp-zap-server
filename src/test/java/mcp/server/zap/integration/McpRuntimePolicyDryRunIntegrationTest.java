@@ -65,7 +65,7 @@ class McpRuntimePolicyDryRunIntegrationTest extends AbstractMcpRuntimePolicyInte
 
         assertThat(result.getStatus().value()).isEqualTo(200);
         assertThat(normalizeResponseBody(result.getResponseBody()))
-                .contains("Guided attack started")
+                .contains("Active scan started")
                 .contains("Scan ID: scan-");
 
         JsonNode event = findAuditEvent(

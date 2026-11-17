@@ -1,7 +1,7 @@
 package mcp.server.zap.core.service.auth.bootstrap;
 
 /**
- * Gateway request model for guided auth bootstrap preparation.
+ * Gateway request model to prepare an authentication session.
  */
 public record AuthBootstrapRequest(
         String profileId,

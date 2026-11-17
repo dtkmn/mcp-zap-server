@@ -5,7 +5,7 @@
 <h1 align="center">MCP ZAP Server</h1>
 
 <p align="center">
-  Give AI agents a safe, self-hosted ZAP operator for guided web security scans, findings, reports, and production guardrails.
+  Use your AI client to crawl a site, scan it with ZAP and read the findings and reports on your own infrastructure.
 </p>
 
 <p align="center">
@@ -19,12 +19,23 @@
 
 `mcp-zap-server` exposes ZAP through MCP over streamable HTTP so agentic tools can run operator-controlled security workflows without brittle glue scripts or unsafe scanner access.
 
-Use it when you want:
+This checkout targets scanner `0.18.0`. New crawls and active scans always use the job
+queue, with either in-memory or PostgreSQL storage. A standalone installation
+from this checkout selects `v0.18.0`. Verify that the image is published for
+your platform before starting. Read the [0.18.0 upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md)
+before changing an existing installation.
 
-- **safe agentic scanning** with guided defaults for spider, active scan, passive scan, API imports, findings, and reports
+| Installation | Scanner selected for fresh setup |
+| --- | --- |
+| Standalone Compose, Helm chart and Claude Desktop connector `0.18.0` | `v0.18.0` |
+| MCP ZAP Connect plugin `0.18.0` for Codex and Claude Code | `v0.18.0` checkout and image |
+
+The current-source feature set includes:
+
+- **scan tools** for crawling, active and passive scanning, API imports, findings and reports
 - **operator control** through API-key or JWT auth, tool scopes, runtime policy bundles, rate limits, and audit events
 - **self-hosted deployment** with Docker Compose for local adoption and Helm for Kubernetes
-- **one guided tool catalog** with queue-managed scan starts, findings baselines, reports and explicit operator recovery
+- **scan tracking** with queued starts, status and stop controls, and findings baselines
 
 Full documentation: [danieltse.org/mcp-zap-server](https://danieltse.org/mcp-zap-server/)
 
@@ -48,13 +59,11 @@ Prerequisites:
 - Docker Compose v2 or newer (`docker compose`) with `--wait` and `--wait-timeout` support
 - your own MCP client with Streamable HTTP and custom-header support
 
-This source selects image `v0.17.1`. Verify that the matching
-[GitHub release](https://github.com/dtkmn/mcp-zap-server/releases) and Linux AMD64/ARM64
-images are published before starting it. Until then, use the published `v0.16.0`
-release or build local source through the contributor setup. Read the
-[0.17.1 upgrade guide](./docs/releases/RELEASE_NOTES_0.17.1.md) before changing
-an existing installation. Settings and selected versions are preserved; set
-`IMAGE_TAG` in `.env` deliberately when upgrading.
+For scanner `0.18.0`, check [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases)
+for the tag and verify the Docker Hub image `dtkmn/mcp-zap-server:v0.18.0` for your platform.
+If the tag or image is unavailable, use the [source build instructions](./CONTRIBUTING.md#local-stack)
+or the [published v0.17.1 instructions](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md).
+Keep existing settings and image selections until a deliberate upgrade.
 
 Prefer to ask Codex to handle setup? Manually install the optional
 [MCP ZAP Connect plugin](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-codex),
@@ -63,23 +72,26 @@ MCP connection and verify status. The skill can help install missing prerequisit
 with your approval, then recheck and continue setup. Scanning is a separate
 request. The commands below remain available without the plugin.
 
-For Cursor Desktop Free, follow the [guided Cursor setup](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
+For Cursor Desktop Free, follow the [Cursor setup instructions](./docs/getting-started/SELF_SERVE_FIRST_RUN.md#guided-setup-in-cursor).
 Use a local Agent chat with available Cursor allowance to set up the scanner,
 check status, then request a demo crawl and report separately.
 
 [Claude Code local preview](./plugins/mcp-zap-connect/README.md#claude-code-local-preview)
 uses the same scanner and setup skill in a local Claude Code session.
 
-For Claude Desktop Free, follow the [download, setup and first-scan guide](./packaging/claude-desktop/SETUP.md).
-The macOS MCPB preview adds agent-callable setup tools around the same Docker
-scripts and reuses existing installations. Choose a
-[scanner release](https://github.com/dtkmn/mcp-zap-server/releases) that includes
-the Desktop `.mcpb`, matching guide and checksum files. If those assets are not
-listed, use the [local build instructions](./packaging/claude-desktop/README.md#build-and-check-the-bundle).
-This extension is separate from the Claude Code plugin.
+For Claude Desktop Free, the [Desktop 0.18.0 setup guide](./packaging/claude-desktop/SETUP.md)
+lists the four matching downloads to check for in the `v0.18.0` release.
+Check the bundle and guide against their companion SHA256 files before installing.
+The macOS MCPB preview adds agent-callable setup tools around the Docker scripts
+and reuses existing installations. It is separate from the Claude Code plugin.
+For a contributor build, use the [local bundle instructions](./packaging/claude-desktop/README.md#build-and-check-the-bundle).
+
+For a fresh standalone installation, use the checkout below after verifying the tag
+and image. If you already have an installation, keep its checkout and settings
+until you are ready to follow its upgrade guide.
 
 ```bash
-git clone https://github.com/dtkmn/mcp-zap-server.git
+git clone --branch v0.18.0 --single-branch https://github.com/dtkmn/mcp-zap-server.git
 cd mcp-zap-server
 
 ./bin/bootstrap-local.sh --start
@@ -87,8 +99,7 @@ cd mcp-zap-server
 
 This creates missing settings, preserves existing keys and workspace data,
 and starts a versioned release image. It reports ready after container health
-and authenticated MCP checks pass. The packaged client uses `*` for the curated
-guided tools; run scans only when requested. Existing settings retain their
+and authenticated MCP checks pass. The packaged client uses the `*` grant for scan tools. Run scans only when requested. Existing settings retain their
 permissions. See
 [quick-start permissions](./docs/src/content/docs/getting-started/tool-scope-authorization.md#quick-start-permissions)
 for the default and optional per-client restrictions.
@@ -110,7 +121,7 @@ your preferred MCP client separately.
 After connecting, try this first prompt:
 
 ```text
-Use the guided ZAP tools to crawl http://juice-shop:3000. Wait for the crawl
+Crawl http://juice-shop:3000 with ZAP. Wait for the crawl
 and passive analysis to finish, show a findings summary, generate an HTML
 report, and read it back through MCP. Do not run an active scan.
 ```
@@ -127,7 +138,7 @@ permissions and standalone OCI use.
 
 ## Discovery Metadata
 
-This source includes `0.17.1` MCP Registry metadata in
+This source includes `0.18.0` MCP Registry metadata in
 [`.mcp/server.json`](./.mcp/server.json). Metadata in source does not publish a
 registry version or image. Check the
 [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.dtkmn%2Fmcp-zap-server/versions/latest)
@@ -140,25 +151,34 @@ Docker Compose remains the easiest installation path because the MCP server is d
 
 ## What You Get
 
-- **Guided scans**: intent-first tools for spider, active scan, passive scan, API imports, findings, reports, and scan history.
-- **Guided tool catalog**: policy inspection, authentication setup and queued scan operations with status and stop controls.
+These capabilities describe scanner `0.18.0`. For the older scanner, use the
+[tagged v0.17.1 feature guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md#what-you-get).
+
+- **Scan tools** for crawling, active and passive scanning, API imports, findings, reports and scan history.
+- **Scan controls** for inspecting policies, setting up authentication and tracking or stopping queued scans.
 - **Authentication**: API key mode by default, optional JWT mode with refresh and revocation support.
-- **Runtime policy bundles**: configured dry-run and enforcement modes for guided tool calls.
-- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider jobs with claim-based recovery, durable Postgres state, and evidence export.
+- **Runtime policy bundles**: configured dry-run and enforcement modes for MCP tool calls.
+- **Scan queue and history**: queued active, traditional spider, AJAX Spider, and Client Spider jobs with launch-ownership holds, durable Postgres state, and evidence export.
 - **Extension contracts**: experimental policy, protection, evidence metadata, and extension metadata APIs with sample extension packaging.
 - **Operational guardrails**: request body limits, rate limits, workspace quotas, tool-scope authorization, structured logs, metrics, and audit events.
 - **Deployment paths**: local Docker Compose, published JVM container images, and Helm charts for Kubernetes.
 
-See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for browser setup, authenticated guided crawling and reports.
+See the [Client Spider guide](./docs/src/content/docs/scanning/client-spider.md) for browser setup, authenticated crawling and reports.
+
+## Version 0.18.0
+
+Read the [release and upgrade guide](./docs/releases/RELEASE_NOTES_0.18.0.md) for client
+compatibility, storage migration, and the limits of scan recovery.
 
 ## Version 0.17.1
 
-The [0.17.1 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.17.1.md)
+The [tagged 0.17.1 release and upgrade guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md)
 describes neutral recorded-findings responses, authoritative explicit target
 denies, permission-aware next actions, and the local client setup options.
-Publication of the tag, images, registry version and Desktop downloads must be
-verified separately in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases).
-Use a version with verified published images until the matching distribution is available.
+The release, Docker Hub/GHCR images and Desktop `0.1.0` downloads are available.
+MCP Registry publication is separate; use the registry check above when relying
+on registry discovery. The queued scan starts and V9 changes in current source
+are not part of the published `v0.17.1` runtime.
 The `v0.17.0` GitHub release is incomplete: its Desktop assets are absent and
 its image-release workflow did not complete. See the upgrade guide for availability checks.
 
@@ -174,7 +194,7 @@ See the [0.15.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.15.0.
 
 See the [0.14.0 release and upgrade guide](./docs/releases/RELEASE_NOTES_0.14.0.md) for that release's behavior and requirements.
 
-The [release notes archive](./docs/releases/README.md) and [changelog](./CHANGELOG.md) cover earlier versions. For changes to older MCP integrations, use [Upgrading to Guided Tools](./docs/src/content/docs/getting-started/tool-migration.md). Verify the matching image and distribution in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before deployment.
+The [release notes archive](./docs/releases/README.md) and [changelog](./CHANGELOG.md) cover earlier versions. For changes to older MCP integrations, use [Migrating older clients](./docs/src/content/docs/getting-started/tool-migration.md). Verify the matching image and distribution in [GitHub Releases](https://github.com/dtkmn/mcp-zap-server/releases) before deployment.
 
 ## Security Defaults
 
@@ -187,7 +207,7 @@ The default posture is intentionally conservative:
   package manager; debug it through logs, metrics, and external diagnostic
   containers rather than installing tools into the application container.
 - URL validation blocks localhost, private networks, and link-local targets by default.
-- Target authentication is optional and profiles default to an empty list. When enabled, guided auth binds an exact server-side credential reference and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
+- Target authentication is optional and profiles default to an empty list. When enabled, the server binds an exact server-side credential reference and login settings to one approved origin; callers provide only `profileId` and `targetUrl`.
 - Public auth exchange endpoints are rate-limited.
 - MCP request bodies have a hard early size cap.
 
@@ -218,7 +238,7 @@ flowchart LR
   MCP -->|"reports / findings / history"| Evidence["Evidence + reports"]
 ```
 
-For multi-replica queueing, durable Postgres state, claim recovery, and ingress affinity, use the operations docs instead of this README:
+For current-source multi-replica queueing, durable Postgres state, launch holds and ingress affinity, use these operations guides. Released `v0.17.1` deployments should use the [tagged Helm guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/helm/mcp-zap-server/README.md):
 
 - [Queue Coordinator and Worker Claims](https://danieltse.org/mcp-zap-server/operations/queue-coordinator-leader-election/)
 - [Multi-Replica Deployment Requirements](https://danieltse.org/mcp-zap-server/operations/local-ha-compose/)
@@ -246,6 +266,9 @@ require their own adapters and explicit capability boundaries.
 
 ## Documentation Map
 
+The links below track current-source guidance and versioned release notes. If you run
+`v0.17.1`, use the [v0.17.1 documentation tree](https://github.com/dtkmn/mcp-zap-server/tree/v0.17.1/docs).
+
 Start here:
 
 - [Full documentation](https://danieltse.org/mcp-zap-server/)
@@ -254,8 +277,8 @@ Start here:
 - [MCP Access Authentication](https://danieltse.org/mcp-zap-server/getting-started/authentication-quick-start/)
 - [MCP Client Authentication](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/)
 - [Optional Target Form-Login](https://danieltse.org/mcp-zap-server/getting-started/form-login-target-authentication/)
-- [Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
-- [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/)
+- [Scan tools](https://danieltse.org/mcp-zap-server/getting-started/tool-surfaces/)
+- [Migrating older clients](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/)
 
 Scanning:
 

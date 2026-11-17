@@ -12,20 +12,22 @@ class ToolScopeRegistryTest {
     private final ToolScopeRegistry registry = new ToolScopeRegistry();
 
     @Test
-    void describesOnlyTheGuidedRuntimeSurface() {
+    void registersAllToolsOnTheDefaultSurface() {
         assertThat(registry.getToolRegistry().names()).hasSize(28)
                 .containsExactlyInAnyOrderElementsOf(registry.getRequiredScopesByTool().keySet());
-        assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.GUIDED))
-                .map(McpToolDescriptor::name).contains("zap_crawl_start", "zap_attack_start", "zap_report_read",
+        assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.of("default")))
+                .map(McpToolDescriptor::name)
+                .containsExactlyInAnyOrderElementsOf(registry.getToolRegistry().names())
+                .contains("zap_crawl_start", "zap_attack_start", "zap_report_read",
                         "zap_findings_snapshot", "zap_findings_diff");
         assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.EXPERT)).isEmpty();
     }
 
     @Test
-    void onlyGuidedStartsCarryScanAdmissionCapability() {
-        assertThat(registry.getToolNamesByCapability(ToolScopeRegistry.GUIDED_SCAN_CAPABILITY))
+    void onlyCrawlAndAttackStartsCarryScanAdmissionCapability() {
+        assertThat(registry.getToolNamesByCapability(ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY))
                 .containsExactlyInAnyOrder("zap_crawl_start", "zap_attack_start");
-        assertThat(registry.hasCapability("zap_report_read", ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)).isFalse();
+        assertThat(registry.hasCapability("zap_report_read", ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY)).isFalse();
         for (String retired : RetiredExpertTools.NAMES) assertThat(registry.getRequiredScopes(retired)).isNull();
     }
 
@@ -40,12 +42,12 @@ class ToolScopeRegistryTest {
     }
 
     @Test
-    void policyInspectionHasGuidedReadScopeWithoutScanAdmissionCapability() {
-        assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.GUIDED))
+    void policyInspectionHasPolicyReadScopeWithoutScanAdmissionCapability() {
+        assertThat(registry.getToolRegistry().descriptorsForSurface(McpToolSurface.of("default")))
                 .map(McpToolDescriptor::name).contains("zap_scan_policies_list", "zap_scan_policy_view");
         for (String tool : List.of("zap_scan_policies_list", "zap_scan_policy_view")) {
             assertThat(registry.getRequiredScopes(tool)).containsExactly("zap:scan:policy:read");
-            assertThat(registry.hasCapability(tool, ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)).isFalse();
+            assertThat(registry.hasCapability(tool, ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY)).isFalse();
         }
         assertThat(registry.getRequiredScopes("zap_scan_policy_rule_set")).isNull();
     }

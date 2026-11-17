@@ -124,6 +124,9 @@ def desktop_base(github, tag, commit):
             raise PreflightError(f"Invalid tagged Desktop version metadata: {filename}") from exc
     require(all(isinstance(version, str) and re.fullmatch(VERSION, version) for version in versions)
             and len(set(versions)) == 1, "Tagged Desktop package, manifest and lockfile versions must match")
+    major, minor = map(int, tag[1:].split(".")[:2])
+    if (major, minor) >= (0, 18):
+        require(versions[0] == tag[1:], "Tagged Desktop package version must match the scanner release")
     return f"mcp-zap-connect-claude-desktop-{versions[0]}"
 
 

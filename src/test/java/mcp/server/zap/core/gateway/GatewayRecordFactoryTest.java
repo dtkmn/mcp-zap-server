@@ -1,6 +1,8 @@
 package mcp.server.zap.core.gateway;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,8 +22,15 @@ class GatewayRecordFactoryTest {
         assertThat(target.displayName()).isEqualTo("example.com");
     }
 
-    @Test
-    void unsupportedCapabilityFailureCarriesControlledMessageAndBoundedOperatorDetails() {
+    @ParameterizedTest
+    @CsvSource({
+            "ACTIVE_SCAN, active scanning, active scanning",
+            "CRAWL, , crawl",
+            "ACTIVE_SCAN, '   ', active scan",
+            "REPORT_GENERATE, , report generate"
+    })
+    void unsupportedCapabilityFailureCarriesControlledMessageAndBoundedOperatorDetails(
+            EngineCapability capability, String operationLabel, String expectedLabel) {
         EngineAdapter engineAdapter = new EngineAdapter() {
             @Override
             public String engineId() {
@@ -39,17 +48,13 @@ class GatewayRecordFactoryTest {
             }
         };
 
-        assertThatThrownBy(() -> factory.requireCapability(
-                engineAdapter,
-                EngineCapability.GUIDED_ATTACK,
-                "guided attack"
-        ))
+        assertThatThrownBy(() -> factory.requireCapability(engineAdapter, capability, operationLabel))
                 .isInstanceOfSatisfying(UnsupportedEngineCapabilityException.class, exception -> {
-                    assertThat(exception).hasMessage("Engine 'Metadata Only' does not support guided attack.");
+                    assertThat(exception).hasMessage("Engine 'Metadata Only' does not support " + expectedLabel + ".");
                     assertThat(exception.engineId()).isEqualTo("metadata");
                     assertThat(exception.engineDisplayName()).isEqualTo("Metadata Only");
-                    assertThat(exception.capability()).isEqualTo(EngineCapability.GUIDED_ATTACK);
-                    assertThat(exception.operationLabel()).isEqualTo("guided attack");
+                    assertThat(exception.capability()).isEqualTo(capability);
+                    assertThat(exception.operationLabel()).isEqualTo(expectedLabel);
                     assertThat(exception.getMessage()).doesNotContain("https://", "token=", "secret");
                 });
     }

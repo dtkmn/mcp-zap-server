@@ -3,7 +3,7 @@ package mcp.server.zap.core.service.auth.bootstrap;
 import java.util.Locale;
 
 /**
- * Guided auth bootstrap kinds supported in the current gateway window.
+ * Authentication methods supported by the gateway.
  */
 public enum AuthBootstrapKind {
     FORM("form"),

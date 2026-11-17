@@ -14,8 +14,8 @@ class ZapEngineAdapterTest {
         assertThat(adapter.displayName()).isEqualTo("ZAP");
         assertThat(adapter.supportedCapabilities()).containsExactlyInAnyOrder(
                 EngineCapability.TARGET_IMPORT,
-                EngineCapability.GUIDED_CRAWL,
-                EngineCapability.GUIDED_ATTACK,
+                EngineCapability.CRAWL,
+                EngineCapability.ACTIVE_SCAN,
                 EngineCapability.FINDINGS_READ,
                 EngineCapability.REPORT_GENERATE,
                 EngineCapability.FORM_AUTH_BOOTSTRAP,
@@ -42,8 +42,8 @@ class ZapEngineAdapterTest {
             }
         };
 
-        assertThat(adapter.supports(EngineCapability.GUIDED_ATTACK)).isTrue();
+        assertThat(adapter.supports(EngineCapability.ACTIVE_SCAN)).isTrue();
         assertThat(adapter.supports(null)).isFalse();
-        assertThat(adapterWithNoCapabilities.supports(EngineCapability.GUIDED_ATTACK)).isFalse();
+        assertThat(adapterWithNoCapabilities.supports(EngineCapability.ACTIVE_SCAN)).isFalse();
     }
 }

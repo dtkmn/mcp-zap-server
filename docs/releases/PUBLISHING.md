@@ -14,8 +14,14 @@ build produces Actions artifacts; it does not attach public release downloads.
 
 - The final release commit is on `main`, reviewed, and has passed its required
   checks. Use its approved full commit SHA throughout these steps.
-- Scanner/application, chart, Registry-source and fresh-install defaults match
-  the scanner release version. Desktop and plugin versions are independent.
+- Scanner/application, all three plugin manifests, chart, Registry-source and
+  server installation defaults match the intended scanner release version.
+  The source version in `build.gradle` is the shared repository/plugin version;
+  the release tag adds the leading `v`. From `0.18.0` onward, use the same
+  version in the Desktop package, MCPB manifest, and lockfile.
+  Fresh plugin setup selects that same tag and scanner image.
+  Development source may advance before image, chart and Registry preparation;
+  complete that preparation before creating the release tag.
 - GitHub immutable releases are enabled. GitHub CLI is already authenticated
   with access to the repository and its draft releases; Python 3 is available.
 - The release notes explain supported behavior, compatibility, upgrade steps and
@@ -29,11 +35,36 @@ that step.
 
 ```bash
 REPOSITORY=dtkmn/mcp-zap-server
-RELEASE_TAG=v0.17.1
+RELEASE_TAG=REPLACE_WITH_INTENDED_RELEASE_TAG
 RELEASE_COMMIT=REPLACE_WITH_APPROVED_FULL_COMMIT_SHA
 ```
 
 ## 1. Create the tag and save a draft
+
+Before tagging a release that contains MCP ZAP Connect, run its version check
+against the preceding published release, for example:
+
+```bash
+python3 scripts/check-plugin-version.py --base-ref v0.17.1
+```
+
+Use the actual preceding release as the baseline, not the candidate's own tag.
+The check requires the client plugin manifests and Desktop package metadata
+to match `build.gradle`. Changes to either shipped package require a new
+release number. The `v0.17.1` baseline used plugin `0.5.0` and Desktop `0.1.0`. CI runs this check, and the Release workflow runs it
+after verifying that the tag matches the source version, before publishing
+images. It does not verify remote publication or perform an installation.
+Record the shared repository/plugin version and supported scanner release in
+the release notes. Keep published releases unchanged; a plugin-only fix needs
+a new repository release, and a server-only release advances the plugin too.
+
+Set the plugin's scanner checkout and image to the intended release before
+tagging the reviewed commit. Test fresh setup and existing-installation
+preservation locally. After publication, verify that fresh Codex and Claude
+Code setups can obtain the official tag and image.
+Candidate guides can include the new tag with an explicit publication check
+and a link to the previous published release. Recommend the new tag for
+installation once its tag and image are available. Use `main` only for development.
 
 Verify the selected commit and required checks before creating a new tag. Check
 the Git remote points to the intended repository. Do not move or reuse an
@@ -54,9 +85,7 @@ gh release create "$RELEASE_TAG" --repo "$REPOSITORY" --verify-tag --draft \
 ```
 
 In the GitHub web interface, the equivalent is **Save draft**, not **Publish
-release**. Use the prerelease setting for a scanner prerelease; the independently
-versioned Desktop connector being a preview does not require a stable scanner
-release to be marked as a prerelease.
+release**. Use the prerelease setting for a scanner prerelease; a stable scanner release may include a preview Desktop connector.
 
 ## 2. Attach the tagged Desktop package
 
@@ -75,13 +104,13 @@ from `main` and packages the tagged source; the tag's scanner version must match
 `build.gradle` and its source must be reachable from `main`.
 
 The draft must contain all four files, using the Desktop version from the tagged
-package metadata. For connector `0.1.0`, they are:
+package metadata. For scanner release `v0.18.0`, the expected filenames are
 
 ```text
-mcp-zap-connect-claude-desktop-0.1.0.mcpb
-mcp-zap-connect-claude-desktop-0.1.0.mcpb.sha256
-mcp-zap-connect-claude-desktop-0.1.0-setup.md
-mcp-zap-connect-claude-desktop-0.1.0-setup.md.sha256
+mcp-zap-connect-claude-desktop-0.18.0.mcpb
+mcp-zap-connect-claude-desktop-0.18.0.mcpb.sha256
+mcp-zap-connect-claude-desktop-0.18.0-setup.md
+mcp-zap-connect-claude-desktop-0.18.0-setup.md.sha256
 ```
 
 **Stop if any file is missing, empty or incomplete.** A preview artifact in

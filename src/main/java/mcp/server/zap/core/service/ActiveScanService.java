@@ -460,7 +460,7 @@ public String startActiveScanAsUserJob(String contextId,
             response.append('\n');
         }
 
-        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting a guided active scan.");
+        response.append("Use 'zap_scan_policy_view' to inspect the rest of the policy before starting an active scan.");
         return response.toString();
     }
 

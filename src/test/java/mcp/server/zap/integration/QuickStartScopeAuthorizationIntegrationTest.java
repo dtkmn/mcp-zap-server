@@ -11,7 +11,7 @@ import mcp.server.zap.core.service.FindingsService;
 import mcp.server.zap.core.service.OpenApiService;
 import mcp.server.zap.core.service.ReportService;
 import mcp.server.zap.core.service.SpiderScanService;
-import mcp.server.zap.core.service.auth.bootstrap.GuidedAuthSessionService;
+import mcp.server.zap.core.service.auth.bootstrap.AuthSessionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -61,7 +61,7 @@ class QuickStartScopeAuthorizationIntegrationTest extends AbstractMcpProtectionI
     @MockitoBean
     private OpenApiService openApiService;
     @MockitoBean
-    private GuidedAuthSessionService authSessionService;
+    private AuthSessionService authSessionService;
     @MockitoBean
     private FindingsService findingsService;
     @MockitoBean

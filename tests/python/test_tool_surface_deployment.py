@@ -12,7 +12,7 @@ DOCKER = shutil.which("docker")
 
 
 @unittest.skipUnless(DOCKER, "Docker Compose is required for configuration rendering")
-class GuidedSurfaceDeploymentTest(unittest.TestCase):
+class ToolSurfaceDeploymentTest(unittest.TestCase):
     def test_bundled_composes_preserve_private_launch_storage_without_surface_selector(self):
         # Configuration rendering only: no containers, images or target traffic.
         for name in (

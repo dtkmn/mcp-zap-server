@@ -1,6 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import desktopPackage from '../package.json' with { type: 'json' };
 import {
   CallToolRequestSchema, ListToolsRequestSchema,
   ListPromptsRequestSchema, GetPromptRequestSchema,
@@ -77,7 +78,7 @@ function requireEmpty(args) {
 }
 
 export async function connectScanner({ url, apiKey }) {
-  const client = new Client({ name: 'mcp-zap-connect-desktop', version: '0.1.0' });
+  const client = new Client({ name: 'mcp-zap-connect-desktop', version: desktopPackage.version });
   // Credentials remain inside this process, never in argv or diagnostic output.
   const transport = new StreamableHTTPClientTransport(new URL(url), {
     requestInit: { headers: { 'X-API-Key': apiKey } },
@@ -94,7 +95,7 @@ export async function connectScanner({ url, apiKey }) {
 }
 
 export function createDesktopServer({ controller, connect = connectScanner }) {
-  const server = new Server({ name: 'mcp-zap-connect', version: '0.1.0' }, {
+  const server = new Server({ name: 'mcp-zap-connect', version: desktopPackage.version }, {
     capabilities: { tools: { listChanged: true }, prompts: {} }, instructions: PROTOCOL_INSTRUCTIONS,
   });
   let upstream;
@@ -246,7 +247,14 @@ export function createDesktopServer({ controller, connect = connectScanner }) {
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [{ name: 'setup-local-scanner', description: 'Guide local scanner setup while preserving existing installations and other clients.' }] }));
   server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     if (request.params.name !== 'setup-local-scanner') throw new Error('Unknown prompt.');
-    return { description: 'Local scanner setup', messages: [{ role: 'user', content: { type: 'text', text: 'Set up or reconnect my local MCP ZAP scanner. Check prerequisites first, reuse an existing healthy installation and preserve all other client settings. Explain any required changes before requesting approval. Verify with zap_passive_scan_status once only; do not run a scan.' } }] };
+    const text = [
+      'Set up or reconnect my local MCP ZAP scanner. Check prerequisites first, reuse an existing healthy installation and preserve all other client settings.',
+      'Explain any required changes and wait for my approval before setup.',
+      'If setup returns SCANNER_STARTED, report success and stop. Setup has already checked the connection.',
+      'If setup returns SCANNER_REUSED, call zap_passive_scan_status once and stop. If setup fails, report the error and stop.',
+      'Do not run a scan.',
+    ].join(' ');
+    return { description: 'Local scanner setup', messages: [{ role: 'user', content: { type: 'text', text } }] };
   });
   server.onerror = () => { /* Do not log transport exceptions containing private headers. */ };
   return { server, close: async () => { await disconnect(); await server.close(); } };

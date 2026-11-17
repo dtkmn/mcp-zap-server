@@ -126,12 +126,12 @@ cannot automatically detect every engine-only restart.
 
 Manual resolution of launch holds is unavailable through MCP. For older
 reconciliation tools and configuration, see
-[Upgrading to Guided Tools](../../getting-started/tool-migration/#unresolved-launches-and-reconciliation).
+[Migrating Older Clients](../../getting-started/tool-migration/#unresolved-launches-and-reconciliation).
 
 Internal launch protection remains active. Uncertain jobs retain their holds and
 capacity reservations, and unresolved launches are not automatically started
 again. A late trusted receipt can still resolve its exact outstanding attempt.
-Use an existing valid guided Operation ID to check its status when available.
+If you have the Operation ID, use it to check the scan status.
 Checking status does not provide manual hold resolution.
 
 There is no supported MCP command to attach a native scan ID, retire an unresolved
@@ -143,7 +143,7 @@ prove that a delayed start will never execute.
 
 ## Waiting for a Busy Engine
 
-An explicit engine-busy rejection keeps the job `QUEUED (waiting for engine)` without consuming a startup attempt. The queue reuses the scan family's backoff settings, counting busy responses separately. Guided status shows the waiting reason and next retry time. Waiting jobs can be cancelled normally.
+An explicit engine-busy rejection keeps the job `QUEUED (waiting for engine)` without consuming a startup attempt. The queue reuses the scan family's backoff settings, counting busy responses separately. The status tool shows the waiting reason and next retry time. Waiting jobs can be cancelled normally.
 
 `ZAP_SCAN_QUEUE_ENGINE_BUSY_MAX_WAIT_MS` sets the maximum wait from the first busy response. The default is `180000` (three minutes); `0` disables waiting and fails immediately. Negative values are rejected. This limit applies to engine-busy waiting, not time spent queued before the first launch attempt. It is separate from the startup retry budget.
 
@@ -173,7 +173,7 @@ Cancelling an AJAX queue job records a durable cancellation request. If ZAP reje
 
 The job retains its AJAX slot until native status confirms the crawler is stopped. Cancelling a job whose start is already in flight also retains ownership. If startup never returns a scan ID, or persisted jobs disagree about who owns the crawler, the queue does not issue a global stop and cancellation remains unconfirmed. Ordinary queued jobs that have not started are cancelled immediately without calling ZAP.
 
-Guided AJAX starts and cancellation attempts share a lifecycle lock, including across PostgreSQL workers, because ZAP's stop API is global. Use the same job store for all replicas controlling one ZAP instance, and do not start unrelated AJAX crawls through ZAP's API/UI while this server owns it: synthetic AJAX IDs cannot fence those external callers.
+AJAX crawl starts and cancellations share a lifecycle lock, including across PostgreSQL workers, because ZAP's stop API is global. Use the same job store for all replicas controlling one ZAP instance, and do not start unrelated AJAX crawls through ZAP's API/UI while this server owns it: synthetic AJAX IDs cannot fence those external callers.
 
 If an AJAX start returns its ID after dispatch times out, the queue adopts it on the same launch attempt. Timeout alone does not request cancellation. An existing cancellation request remains pending and uses the same stop retry window. Delayed responses must still match the job's launch attempt and resolution version; they cannot take ownership of a resolved attempt.
 
@@ -185,7 +185,7 @@ When an active scan, traditional Spider, or Client Spider returns its native ID 
 
 Cleanup jobs retained from earlier versions remain visible with `Cleanup for Job ID` / `cleanupForJob`. They retain their scan family's capacity and use the shared cancellation retry window. They cannot be retried or replayed as new scans. PostgreSQL retains these records; ordinary in-memory history remains process-local.
 
-After the retry deadline, an unresolved cleanup remains visible as cancellation unconfirmed and continues to reserve capacity. Background status polling can confirm the scan has finished. The current MCP catalog has no generic cleanup-job control. Historical cleanup-job IDs cannot be substituted for guided operation handles. Controller or engine replacement does not establish ownership of a saved native ID, and the current MCP catalog cannot manually clear a resulting hold.
+After the retry deadline, an unresolved cleanup remains visible as cancellation unconfirmed and continues to reserve capacity. Background status polling can confirm the scan has finished. The current MCP catalog has no generic cleanup-job control. Historical cleanup-job IDs cannot be used as Operation IDs. Controller or engine replacement does not establish ownership of a saved native ID, and the current MCP catalog cannot manually clear a resulting hold.
 
 ## Retryable Errors
 

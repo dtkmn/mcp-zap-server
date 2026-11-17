@@ -71,7 +71,7 @@ jobs:
 
       - name: Upload Snyk Open Source SARIF
         if: always() && hashFiles('build/snyk-reports/source/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4
         with:
           sarif_file: build/snyk-reports/source/report.sarif
           category: snyk-open-source
@@ -95,7 +95,8 @@ jobs:
 
   container:
     name: Container image
-    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    needs: open-source
+    if: ${{ !cancelled() && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     env:
       IMAGE_REF: mcp-zap-server:snyk-scan
@@ -120,9 +121,19 @@ jobs:
           fi
 
       - name: Build image for container scan
+        id: image-build
         run: docker build --pull -t "${IMAGE_REF}" .
 
+      - name: Download source scan evidence from this workflow run
+        if: needs.open-source.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: snyk-source-diagnostics
+          path: build/snyk-reports/source
+
       - name: Run Snyk Container test and verify runtime coverage
+        # Still collect native findings when source evidence is unavailable.
+        if: ${{ !cancelled() && steps.image-build.outcome == 'success' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
@@ -130,7 +141,7 @@ jobs:
 
       - name: Upload Snyk Container SARIF
         if: always() && hashFiles('build/snyk-reports/container/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4
         with:
           sarif_file: build/snyk-reports/container/report.sarif
           category: snyk-container
@@ -196,7 +207,7 @@ jobs:
 
       - name: Upload Snyk IaC SARIF
         if: always() && hashFiles('build/snyk-reports/iac/report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        uses: github/codeql-action/upload-sarif@1fc58d04a4d4374f921bdac573c3811c240f9c26 # v4
         with:
           sarif_file: build/snyk-reports/iac/report.sarif
           category: snyk-iac

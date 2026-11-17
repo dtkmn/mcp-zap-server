@@ -2,15 +2,22 @@
 
 Use Docker Compose for normal installs. This project is a streamable HTTP MCP server that runs with a ZAP sidecar; do not install it as a stdio-only MCP package.
 
-The versioned image example selects `v0.17.1` for GHCR and Docker Hub after
-publication. Verify the release and its Linux AMD64/ARM64 images before running
-these commands. Until then, use the published `v0.16.0` source release. The
-[release and upgrade guide](docs/releases/RELEASE_NOTES_0.17.1.md) explains version
-selection, availability and upgrade requirements.
+The standalone OCI example below selects the published `v0.17.1` release, available
+from GHCR and Docker Hub for Linux AMD64 and ARM64. Use the
+[v0.17.1 release and upgrade guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/releases/RELEASE_NOTES_0.17.1.md)
+for that release's requirements.
+
+For the execution options available in `v0.17.1`, use its
+[tagged guide](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/docs/src/content/docs/scanning/scan-execution-modes.md).
+Scanner `0.18.0` queues every new crawl and active scan and records each start attempt.
+For Postgres, `0.18.0` requires V9 and `0.17.1` uses V1–V8. To set up
+`0.18.0`, use [Self-Serve First Run](docs/getting-started/SELF_SERVE_FIRST_RUN.md)
+after verifying its tag and image. See the [0.18.0 upgrade guide](docs/releases/RELEASE_NOTES_0.18.0.md)
+before changing an existing installation.
 
 ## What This Server Does
 
-MCP ZAP Server lets MCP clients drive ZAP through guided, operator-controlled security workflows:
+MCP ZAP Server lets authorized clients use ZAP for:
 
 - traditional Spider, AJAX Spider, Client Spider, active scan, passive scan, API import, findings, reports, and scan history tools
 - API-key or JWT authentication for the MCP endpoint
@@ -53,12 +60,12 @@ the same host as Compose; web-only clients cannot reach that loopback address.
 
 Use this path only when you already run, or are willing to run, ZAP separately. Marketplace and registry clients do not automatically start the ZAP sidecar for this package.
 
-Create a shared network, a report workspace volume and a private MCP launch-safety volume. Initialize the report workspace for the standard ZAP container UID/GID:
+This recipe runs released `v0.17.1`. Create a shared network and report workspace
+volume, then initialize the workspace for the standard ZAP container UID/GID:
 
 ```bash
 docker network create mcp-zap-network
 docker volume create mcp-zap-wrk
-docker volume create mcp-launch-safety
 export ZAP_API_KEY="$(openssl rand -hex 32)"
 export MCP_API_KEY="$(openssl rand -hex 32)"
 
@@ -93,8 +100,6 @@ docker run -d \
   --user 1000:1000 \
   -p 127.0.0.1:7456:7456 \
   -v mcp-zap-wrk:/zap/wrk \
-  -v mcp-launch-safety:/var/lib/mcp-zap/scan-launch-safety \
-  -e ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY=/var/lib/mcp-zap/scan-launch-safety/receipts \
   -e ZAP_API_URL=mcp-zap-zap \
   -e ZAP_API_PORT=8090 \
   -e ZAP_API_KEY="$ZAP_API_KEY" \
@@ -125,9 +130,22 @@ X-API-Key: $MCP_API_KEY
 
 The `mcp-zap-wrk:/zap/wrk` volume must be mounted into both containers. ZAP writes report artifacts there, and the MCP server reads those same paths back for report and evidence-handoff tools. The MCP container is run as UID/GID `1000:1000` to match the standard `zaproxy/zap-stable` container user, so report directories remain writable by both containers.
 
-The `mcp-launch-safety` volume is private to MCP and must stay outside the shared ZAP workspace and report artifacts. Preserve it across MCP container replacement. Do not delete unresolved launch receipts to unblock scans; follow [launch recovery](docs/src/content/docs/operations/scan-queue-retry-policy.md). The journal protects uncertain starts without making in-memory job history durable.
+Released `v0.17.1` does not implement the current-source launch journal; adding
+a journal volume or environment variable cannot enable that safeguard.
 
-The server exposes one guided catalog for crawl, status, findings, snapshots and reports, including complete report readback. For older client and deployment configurations, follow [Upgrading to Guided Tools](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/).
+For a **current-source deployment**, follow [contributor setup](CONTRIBUTING.md#local-stack)
+and [launch recovery](docs/src/content/docs/operations/scan-queue-retry-policy.md#restart-and-ownership)
+before starting it. In-memory deployments need a persistent, MCP-only journal
+outside report and automation directories, writable by the configured MCP user.
+The source Compose configuration supplies this storage. Custom containers must
+mount it and set `ZAP_SCAN_LAUNCH_JOURNAL_DIRECTORY` to a directory within that
+mount. Preserve it across container replacement; do not delete unresolved
+receipts to unblock scans. It does not make in-memory job history durable.
+Postgres deployments use database receipts and require migration V9 instead.
+
+The tools support crawling, status checks, findings, snapshots and reports,
+including complete report readback. For migration from older tool settings, use
+[Migrating older clients](https://danieltse.org/mcp-zap-server/getting-started/tool-migration/).
 
 ## Safe First Test
 
@@ -142,7 +160,10 @@ scan or report retrieval is not a clean security result.
 - Only scan systems you own or are explicitly authorized to test.
 - Keep the default loopback binding unless you are deliberately deploying behind trusted network controls.
 - Keep `MCP_SECURITY_MODE=api-key` or `jwt`; use `none` only for isolated local development.
-- This repository does not currently ship a first-party Claude Desktop OAuth connector or stdio proxy helper.
+- The optional [Claude Desktop MCPB](https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/packaging/claude-desktop/SETUP.md)
+  adapts that client's local stdio connection to the scanner's authenticated
+  Streamable HTTP endpoint. It is not an OAuth connector; the scanner itself
+  remains an HTTP server.
 
 More documentation:
 

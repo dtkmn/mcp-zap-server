@@ -23,8 +23,8 @@ public class ZapEngineAdapter implements EngineAdapter {
     public Set<EngineCapability> supportedCapabilities() {
         return Set.of(
                 EngineCapability.TARGET_IMPORT,
-                EngineCapability.GUIDED_CRAWL,
-                EngineCapability.GUIDED_ATTACK,
+                EngineCapability.CRAWL,
+                EngineCapability.ACTIVE_SCAN,
                 EngineCapability.FINDINGS_READ,
                 EngineCapability.REPORT_GENERATE,
                 EngineCapability.FORM_AUTH_BOOTSTRAP,

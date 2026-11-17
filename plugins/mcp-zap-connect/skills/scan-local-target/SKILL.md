@@ -1,6 +1,6 @@
 ---
 name: scan-local-target
-description: Check local MCP ZAP scanner readiness before a requested crawl or scan in Codex, Cursor or Claude Code. Use for scanning a local Docker scanner target, including guided crawl-to-report requests and recovery after Docker or scanner changes. Preserve the selected client settings and require approval for recovery actions.
+description: Check local MCP ZAP scanner readiness before a requested crawl or scan in Codex, Cursor or Claude Code. Use for scanning a local Docker scanner target, including requests to crawl a site and generate a report and recovery after Docker or scanner changes. Preserve the selected client settings and require approval for recovery actions.
 ---
 
 # Check readiness and run the requested local workflow
@@ -24,8 +24,9 @@ preflight commands, recovery or another client's status call to that request.
   client's scanner alias and endpoint. Reuse the selected installation; do not
   search for another working scanner as a fallback. If several installations
   or aliases conflict, stop and ask which one to use.
-- Read `docs/getting-started/SELF_SERVE_FIRST_RUN.md` in that checkout. This
-  skill supports its standard local Docker Compose installation. For a native
+- This skill supports the standard local Docker Compose installation described
+  in the verified release's `docs/getting-started/SELF_SERVE_FIRST_RUN.md`; read
+  it only after the compatibility check below succeeds. For a native
   package, remote engine or customized deployment, explain the difference and
   follow that deployment's documented readiness procedure. Do not apply Docker
   recovery to a different installation type.
@@ -37,7 +38,17 @@ preflight commands, recovery or another client's status call to that request.
 
 ## Read-only preflight
 
-1. From the selected scanner checkout, run `./bin/scanner-readiness.sh` with a
+1. First run the installed plugin's bundled
+   `scripts/check-scanner-release.sh --directory <absolute-scanner-directory>`
+   with Bash and a bounded command deadline. Resolve the script relative to this
+   skill's installed plugin directory, not inside the scanner checkout. It
+   uses the public GitHub API to verify the `v0.18.0` tag and checkout commit,
+   and checks the effective Compose image and any existing scanner container
+   for this directory against `dtkmn/mcp-zap-server:v0.18.0`. Require exit 0 and `COMPATIBLE`. If it blocks or times out, preserve
+   the selected installation and use its own deployment procedure; do not fetch,
+   switch versions, replace files or change client settings to make it pass.
+
+   From that compatible scanner checkout, run `./bin/scanner-readiness.sh` with a
    bounded command deadline. Docker requests have a 15-second timeout each;
    an overall command timeout also blocks the workflow.
    This check must precede any new crawl or scan tool call. It checks the
@@ -79,10 +90,10 @@ preflight commands, recovery or another client's status call to that request.
   environment, context or configuration conflict. Use the existing `.env` and
   Compose file. A stopped/missing diagnosis does not replace startup checks:
   follow the setup skill's current port, project ownership and inherited-setting
-  checks before bootstrap. Review Compose and startup scripts against the
-  trusted tracked version; if they were customized or cannot be established as
-  the intended standard installation, explain the manual recovery path instead
-  of executing them. Never use `--force`, delete settings, remove volumes or prune
+  checks before bootstrap. Run the bundled release compatibility check again
+  immediately before bootstrap. If it does not report `COMPATIBLE`, explain the
+  manual recovery path instead of executing checkout helpers. Never use
+  `--force`, delete settings, remove volumes or prune
   resources. Explain that the existing bootstrap may obtain missing published
   images and start bundled demo services. Recheck preflight after recovery and
   verify the selected client's status before proceeding.
@@ -112,13 +123,42 @@ after the status response.
 
 ## Run only the requested workflow
 
-Once preflight and the client's native status succeed, use the server's guided
-tools and Next Actions for the requested target and operations. Poll an already
-started crawl or scan as directed; do not start a duplicate workflow. Generate
-or retrieve reports only when requested. Preserve target restrictions and
-client settings throughout. The packaged local client uses `*` for the curated
-guided tools; an available tool does not authorize work outside the requested
-target and workflow. Preserve any explicit per-client restrictions.
+After preflight and the client's status check succeed, translate the user's
+request into crawl calls. Keep the exact authorized target URL for every pass.
+
+- **“Crawl this site”**: call `zap_crawl_start` once with `strategy="http"`.
+- **“Crawl this site thoroughly”**: call `zap_crawl_start` with `strategy="http"`. Only
+  after its status confirms success, call `zap_crawl_start` once on the same target with
+  `strategy="client"` so Client Spider can explore pages rendered by JavaScript.
+  Keep each pass's Operation ID separate. If using idempotency keys, use a
+  different key for each pass.
+- Explicit limits take precedence. “HTTP only” means one HTTP pass. A request
+  for Client Spider alone uses `strategy="client"`; AJAX Spider uses
+  `strategy="browser"`. Neither crawl request authorizes active scanning.
+  For authenticated crawling, use an authorized form-login session for HTTP
+  and an authorized browser session for Client Spider. If the needed session,
+  browser or add-on is unavailable, report which pass could not run. Never
+  switch to anonymous crawling or a different spider to finish it.
+
+Poll `zap_crawl_status` with the Operation ID returned by each start. A queued
+HTTP pass succeeds only when its status reply contains an unqualified
+`Status: SUCCEEDED`. While it is `QUEUED` (including waiting for capacity),
+`STARTING` or `RUNNING`, poll the same ID.
+A start acknowledgement or progress percentage alone does not establish success.
+
+Stop the sequence on failure, denial, timeout, missing status, or cancellation
+(including pending or unconfirmed cancellation). If a start returns no ID or
+a job is held with `START_OUTCOME_UNKNOWN`, report the uncertainty. Do not
+submit a replacement or start the second pass. If the user asks to stop, end the sequence and call
+`zap_crawl_stop` with the current pass’s Operation ID if it is still outstanding,
+even if the next pass would otherwise be eligible. Report a Client Spider result marked
+stopped or outcome unknown as such, even when progress reaches 100%.
+
+Follow the server's Next Actions within the user's request. For a crawl or active
+scan already in progress, poll its existing Operation ID. Generate or retrieve
+reports only when requested. Preserve target restrictions and
+client settings throughout. The packaged local client uses the `*` grant for the standard
+scanner tools. Use them only for the requested target and workflow. Preserve any explicit per-client restrictions.
 If a required tool returns `insufficient_scope`, stop that operation and explain
 its missing permission using the checkout's scope guide. A scan request, a tool
 appearing in discovery or a Next Action does not authorize widening scopes,

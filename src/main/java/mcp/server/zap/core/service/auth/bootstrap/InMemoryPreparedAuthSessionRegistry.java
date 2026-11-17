@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.springframework.stereotype.Component;
 
 /**
- * Default session registry for the guided auth bootstrap flow.
+ * Default session registry for prepared authentication sessions.
  */
 @Component
 public class InMemoryPreparedAuthSessionRegistry implements PreparedAuthSessionRegistry {

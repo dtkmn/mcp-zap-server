@@ -25,7 +25,7 @@ Checks the local self-serve API-key path end-to-end:
 - Docker and Compose availability
 - MCP and ZAP reachability
 - MCP authentication rejection, initialize + tools/list
-- guided scan, report, and evidence tool visibility
+- scan, report, and evidence tool visibility
 - one harmless tool call (zap_passive_scan_status)
 
 Options:
@@ -68,9 +68,9 @@ require_tool_in_list() {
   local body_file="$2"
 
   if grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"${tool}\"" "${body_file}"; then
-    pass "Guided tool available: ${tool}"
+    pass "Tool available: ${tool}"
   else
-    fail "Guided tool missing from tools/list: ${tool}"
+    fail "Tool missing from tools/list: ${tool}"
   fi
 }
 
@@ -344,7 +344,7 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
     elif [[ "${http_code}" == "200" ]] && grep -Eq '"result"[[:space:]]*:[[:space:]]*\{' "${body_file}" \
       && ! grep -q '"error"' "${body_file}" && ! grep -q 'NullPointerException' "${body_file}"; then
       pass "tools/list succeeded through the real MCP endpoint"
-      required_guided_tools=(
+      required_tools=(
         zap_crawl_start
         zap_crawl_status
         zap_passive_scan_wait
@@ -355,7 +355,7 @@ if [[ "${mcp_reachable}" -eq 1 && -n "${MCP_API_KEY}" ]]; then
         zap_scan_history_release_evidence
         zap_scan_history_customer_handoff
       )
-      for tool in "${required_guided_tools[@]}"; do
+      for tool in "${required_tools[@]}"; do
         require_tool_in_list "${tool}" "${body_file}"
       done
     else

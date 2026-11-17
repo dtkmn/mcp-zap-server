@@ -17,11 +17,11 @@ The shared core records three evidence shapes:
 | Evidence type | Source | Notes |
 | --- | --- | --- |
 | `scan_job` | Durable queue state from `scan_jobs` | Includes queued, running, succeeded, failed, and cancelled queue jobs. |
-| `scan_run` | Retained direct-start history | Historical active scan, traditional Spider, AJAX Spider, and Client Spider start records remain readable. New guided starts use the queue. |
+| `scan_run` | Retained direct-start history | Historical active scan, traditional Spider, AJAX Spider, and Client Spider start records remain readable. New scan requests use the queue. |
 | `report_artifact` | Generated report artifacts | Captures report path, media type, target scope, client, and workspace. |
 
 This does not change the normal MCP client setup. Clients call `/mcp` and
-the guided scan/report tools. These query tools expose the ledger:
+the scan and report tools. These query tools expose the ledger:
 
 - `zap_scan_history_list`
 - `zap_scan_history_get`
@@ -131,7 +131,7 @@ forking the shared ledger implementation.
 Before relying on the ledger for release evidence:
 
 1. Run Flyway migrations so `scan_history_entries` exists.
-2. Confirm `zap_scan_history_list` returns queue jobs after a guided scan.
+2. Confirm `zap_scan_history_list` returns queue jobs after a scan.
 3. When upgrading, confirm retained `scan_run` history remains readable without treating it as completion evidence.
 4. Generate a report and confirm a `report_artifact` entry appears.
 5. Export `zap_scan_history_release_evidence` and attach it to the release or

@@ -1,15 +1,14 @@
 ---
 title: "Findings and Reports"
 editUrl: false
-description: "Use guided findings and report tools for triage, evidence, baselines, and artifacts."
+description: "Use findings and report tools for triage, evidence, baselines, and artifacts."
 ---
 MCP ZAP Server supports multiple findings and report layers. The right tool depends on whether you want a fast summary, grouped detail, raw evidence, or a stable artifact.
 
 ## Required Findings Scope
 
 Findings reads require a nonblank `baseUrl` for the scanned target and visible
-scan-history evidence for that target. This applies to guided summary/details
-as well as snapshots and diffs. Supply the target
+scan-history evidence for that target. This applies to summaries, details, snapshots, and diffs. Supply the target
 you scanned, such as `http://juice-shop:3000`; other supported filters narrow
 that target's findings. Missing `baseUrl` or visible evidence is rejected.
 
@@ -17,9 +16,9 @@ These tools do not provide a global read of the shared ZAP session. A target
 scope also does not isolate results to one scan ID; see
 [Client Spider findings](#client-spider-findings) below.
 
-## Guided Tools
+<a id="guided-tools"></a>
 
-Guided findings and report tools:
+## Findings and Report Tools
 
 - `zap_findings_summary`
 - `zap_findings_details`
@@ -74,8 +73,6 @@ describe recorded examples, not the total number of affected endpoints. ZAP
 may limit additional examples; the tag alone does not prove a limit was reached.
 
 ## Snapshot And Diff
-
-Guided snapshot tools:
 
 - `zap_findings_snapshot`
 - `zap_findings_diff`
@@ -137,7 +134,7 @@ Available tools:
 - `zap_report_read`
 - `zap_report_read_chunk` (introduced in `v0.15.0`)
 
-Guided report generation accepts `baseUrl`, `format` (`html` or `json`), and
+`zap_report_generate` accepts `baseUrl`, `format` (`html` or `json`), and
 `theme`, and returns the artifact path. Supply `baseUrl` for an absolute HTTP(S)
 origin or path prefix. A scoped report includes that target's alert evidence and
 omits shared-session insights, statistics, sequences and automation diagnostics.
@@ -155,7 +152,7 @@ necessarily interchangeable with individual alert records returned by the
 findings API. Compare the concrete URLs and evidence when investigating a
 difference; a count difference alone does not establish missing findings.
 
-Omitting `baseUrl` explicitly requests the full ZAP session. The guided interface supports HTML and JSON output; raw template selection is not exposed. Reports generated outside this MCP path use their own isolation and sanitization rules. Use separate ZAP sessions or engines when workloads require client isolation.
+Omitting `baseUrl` explicitly requests the full ZAP session. `zap_report_generate` supports HTML and JSON output with a server-selected template. Reports generated outside this MCP path use their own isolation and sanitization rules. Use separate ZAP sessions or engines when workloads require client isolation.
 
 ### Preview Or Complete Retrieval
 
@@ -200,7 +197,7 @@ In `v0.13.0`, [Client Spider](../client-spider/) uses these same findings and re
 
 These tools read the shared ZAP session, not an exclusive set of findings for one crawl. A `baseUrl` filter narrows the target but does not isolate a scan ID. Other crawls, authentication checks, and active scans against that target can contribute alerts. Recorded alert instances are not necessarily distinct confirmed vulnerabilities.
 
-There is no dedicated crawler results-list or Client Map export tool in the guided catalog. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
+There is no dedicated crawler results-list or Client Map export tool in the MCP tool catalog. Use separate ZAP sessions or instances when a comparison requires results attributable to one crawler.
 
 ## Typical Flow
 

@@ -42,7 +42,7 @@ editUrl: false
     </div>
     <div class="telemetry-chip">
       <span>Coverage</span>
-      <strong>Guided Scans and Evidence</strong>
+      <strong>Scans and Reports</strong>
     </div>
     <div class="telemetry-chip">
       <span>Search Index</span>
@@ -50,7 +50,9 @@ editUrl: false
     </div>
   </div>
 
-  <p>The v0.17.1 upgrade guide covers neutral findings responses, authoritative explicit target denies, permission-aware guidance and local client setup options. Verify the matching release, images and downloads before installing this source version; v0.17.0 was published without its Desktop downloads and its image-release workflow did not complete. Use a version with verified available images until the matching distribution is ready. Read the <a href="./releases/0.17.1/">release and upgrade guide</a> before changing an existing installation.</p>
+  <p><strong>Scanner 0.18.0.</strong> Crawls and active scans use the job queue. PostgreSQL deployments require migration V9. Check <a href="https://github.com/dtkmn/mcp-zap-server/releases">GitHub Releases</a> for the tag and Desktop downloads, and check the registry your installation pulls from. The default Compose setup uses Docker Hub. Read the <a href="./releases/0.18.0/">0.18.0 upgrade guide</a> before replacing an existing scanner.</p>
+
+  <p>Standalone Compose, Helm, and MCP ZAP Connect for Codex, Claude Code and Claude Desktop all select scanner v0.18.0 for fresh installs. Until the v0.18.0 tag and image are available, use the <a href="https://github.com/dtkmn/mcp-zap-server/blob/v0.17.1/README.md">published v0.17.1 installation guide</a>.</p>
 
   <p>Ask Codex to handle your local scanner setup. <a href="./getting-started/agent-guided-setup/#codex-local-installation">Install MCP ZAP Connect locally</a>, then ask it to check prerequisites, start the Docker stack, configure your private MCP connection and verify status. The skill can help install missing prerequisites with your approval, then recheck and continue setup. Scans are a separate request.</p>
 
@@ -59,15 +61,15 @@ editUrl: false
   <div class="mission-grid">
     <a class="mission-card" href="./getting-started/self-serve-first-run/">
       <h3>&gt; [01] SELF_SERVE_FIRST_RUN</h3>
-      <p>Choose agent-guided setup or Docker commands, connect your MCP client, and generate your first scan report.</p>
+      <p>Set up the scanner with your AI client or run the Docker commands yourself, then generate your first report.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-surfaces/">
-      <h3>&gt; [02] GUIDED_TOOLS</h3>
-      <p>Use the guided tool catalog and migrate older raw-tool workflows.</p>
+      <h3>&gt; [02] SCAN_TOOLS</h3>
+      <p>Find the tools to crawl a site, run an active scan and read the results.</p>
     </a>
     <a class="mission-card" href="./scanning/scan-execution-modes/">
       <h3>&gt; [03] SCAN_EXECUTION</h3>
-      <p>Understand guided queue admission, storage and scan lifecycle controls.</p>
+      <p>Learn when a queued scan starts and how to check its progress or stop it.</p>
     </a>
     <a class="mission-card" href="./getting-started/tool-scope-authorization/">
       <h3>&gt; [04] TOOL_SCOPE_AUTHZ</h3>
@@ -85,9 +87,9 @@ editUrl: false
       <h3>&gt; [07] EXTENSION_POLICY</h3>
       <p>See what must be true before the extension API becomes a public compatibility promise.</p>
     </a>
-    <a class="mission-card" href="./releases/0.17.1/">
-      <h3>&gt; [v0.17.1] RELEASE_AND_UPGRADE</h3>
-      <p>Review explicit target denies, findings semantics, client defaults and publication requirements before upgrading.</p>
+    <a class="mission-card" href="./releases/0.18.0/">
+      <h3>&gt; [v0.18.0] RELEASE_AND_UPGRADE</h3>
+      <p>Review the scan tools, storage migration, supported client versions and scan recovery limits.</p>
     </a>
     <a class="mission-card" href="./security-modes/#registered-api-keys-in-v0140">
       <h3>&gt; [v0.14.0] SECURITY_UPGRADE</h3>
@@ -105,8 +107,10 @@ editUrl: false
 
   <span class="section-label">tail -f /var/log/capabilities.txt</span>
 
+  <p>The capabilities below describe current source.</p>
+
   <ul class="capability-list">
-    <li><strong>Guided_Flows</strong>: Queue crawl and attack operations with in-memory or PostgreSQL storage, then track them through guided status and stop tools.</li>
+    <li><strong>Scan_Tracking</strong>: Queue a crawl or active scan, then use its Operation ID to check progress or stop it. Both in-memory and PostgreSQL storage support this workflow.</li>
     <li><strong>Findings_Evidence</strong>: Read target-scoped findings, export snapshots, compare baselines and retrieve reports.</li>
     <li><strong>Operational_Guardrails</strong>: Enforce scopes, rate limits, correlation IDs, queue observability, and scan-history evidence.</li>
   </ul>

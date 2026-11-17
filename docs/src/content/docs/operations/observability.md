@@ -42,7 +42,7 @@ MCP ZAP Server exposes a practical observability baseline:
 | `mcp.zap.queue.leadership.transitions` | Counter | Coordinator acquisition and loss |
 | `mcp.zap.queue.leadership.failures` | Counter | Coordinator acquire and heartbeat failures |
 
-For guided scan monitoring, use `mcp.zap.queue.jobs` by status and
+To monitor scans, use `mcp.zap.queue.jobs` by status and
 `mcp.zap.queue.claims` by claim state. The former `mcp.zap.operations.active`
 metric (Prometheus: `mcp_zap_operations_active`), including its `direct_scan`
 and `automation_plan` series, is no longer exported. Remove dashboard and alert

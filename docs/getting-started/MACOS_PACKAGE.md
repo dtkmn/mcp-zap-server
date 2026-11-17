@@ -5,8 +5,10 @@ Server, ZAP and a private Java runtime. Its launcher needs no Docker, system
 Java, Git, Gradle, Python or source compilation. Connect an existing MCP client;
 the package does not include a chat UI or model.
 
-Public Mac downloads are not yet available. This preview is unsigned.
-Follow macOS's normal security controls when opening a supplied preview.
+Public downloads of this native package are not yet available. This preview is
+unsigned. Follow macOS's normal security controls when opening a supplied preview.
+The separately released [Claude Desktop MCPB](https://danieltse.org/mcp-zap-server/getting-started/mcp-client-authentication/#claude-desktop)
+is a client adapter for a Docker-based scanner, not this native package.
 
 ## Install and run a preview supplied by a maintainer
 
@@ -90,7 +92,8 @@ alone is not reachable by ChatGPT's cloud service.
 
 ## Settings, reports and resources
 
-Private state is stored in `~/Library/Application Support/MCP ZAP Server/`:
+The launcher stores its private state in
+`~/Library/Application Support/MCP ZAP Server/`:
 
 | Location | Purpose |
 | --- | --- |
@@ -102,8 +105,8 @@ Private state is stored in `~/Library/Application Support/MCP ZAP Server/`:
 | `run/` | Launcher ownership, private service definitions and temporary configuration |
 | `tunnel/` | Optional private ChatGPT connection profile |
 
-To move all state, set `MCP_ZAP_DATA_DIR` to an absolute directory before each
-command. Do not point it at a shared or linked directory. Keep the same state
+To move launcher-managed state, set `MCP_ZAP_DATA_DIR` to an absolute directory
+before each command. Do not point it at a shared or linked directory. Keep the same state
 directory during ordinary upgrades. Credentials, settings and reports survive
 stop and replacement of the package. Completed report files are persistent;
 the default scan queue/history remain in memory and are not promised to survive
@@ -133,12 +136,16 @@ unavailable. Inspect `COMPONENTS.json` for the included component versions.
 A tool appearing in discovery does not establish that its engine feature is
 installed in this package.
 
-Known report limitation: root-URL filtering can omit findings from HTML reports;
-see [issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294).
+Packages with MCP ZAP Server versions before `v0.16.0` can omit root-origin
+findings from target-scoped HTML reports; see
+[issue #294](https://github.com/dtkmn/mcp-zap-server/issues/294). This was fixed in
+`v0.16.0`; check `server_version` in your package's `COMPONENTS.json`.
 Complete report retrieval does not establish finding-count parity.
 
 HAR, packet-capture and ModSecurity import/export are also unavailable. Use the
-Docker distribution for OpenAPI, automation and active-scanning workflows.
+Docker distribution for OpenAPI import and explicitly authorized active
+scanning. The current MCP tools do not expose Automation Framework plans;
+automation storage in the native package does not imply an MCP plan-running tool.
 
 Automatic ZAP/add-on downloads are disabled. Update through a new verified
 package rather than enabling additional add-ons independently.

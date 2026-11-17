@@ -12,10 +12,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
-/** Runs the same guided lifecycle contract against an isolated real PostgreSQL store. */
+/** Runs the same queued scan lifecycle checks against an isolated real PostgreSQL store. */
 @Tag("docker")
 @Testcontainers
-class PostgresGuidedQueuedScanIntegrationTest extends GuidedQueuedScanIntegrationTest {
+class PostgresQueuedScanIntegrationTest extends QueuedScanIntegrationTest {
     @Container
     static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine")
             .withReuse(false)

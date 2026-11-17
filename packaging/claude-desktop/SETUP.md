@@ -1,26 +1,27 @@
 # MCP ZAP Connect: Claude Desktop setup and first scan
 
-Use Claude Desktop Chat on a Mac with a Free account. This preview connects
+Use Claude Desktop Chat on a Mac, including on the Free plan. This preview connects
 Claude to a local Docker scanner and can guide its setup. You do not need
 Claude Code, Node.js, npm, Git, or a repository checkout.
 
 ## 1. Get the extension
 
-Open the [GitHub Releases page](https://github.com/dtkmn/mcp-zap-server/releases)
-and choose a published normal scanner release (`vX.Y.Z`) with the Claude Desktop
-downloads under **Assets**. The extension and this guide ship with the scanner
-release in the same repository; there is no separate Desktop release.
+For connector `0.18.0`, check [scanner releases](https://github.com/dtkmn/mcp-zap-server/releases)
+for `v0.18.0` and confirm its four matching downloads are present. If that
+release or its scanner image is unavailable, use the `0.1.0` connector and
+matching guide from the [v0.17.1 scanner release](https://github.com/dtkmn/mcp-zap-server/releases/tag/v0.17.1).
 
 Under **Assets**, download:
 
-- `mcp-zap-connect-claude-desktop-0.1.0.mcpb` — the extension to install.
-- `mcp-zap-connect-claude-desktop-0.1.0-setup.md` — this matching guide.
+- `mcp-zap-connect-claude-desktop-0.18.0.mcpb` — the extension to install.
+- `mcp-zap-connect-claude-desktop-0.18.0-setup.md` — this matching guide.
 
-Use the connector version listed in that release if it differs from `0.1.0`;
-it can differ from the scanner release version. Download the matching guide
-and `.mcpb` together. The adjacent `.sha256` files are checksums for these
-downloads. Choose the `.mcpb`, rather than GitHub's automatic **Source code**
-archives. If no release lists these assets, developers can use the
+From `v0.18.0` onward, the bundle and guide use the scanner release number.
+Download both from the same release. Download the adjacent `.sha256` files and check the bundle
+and guide against their matching checksums before installation. When choosing
+another scanner release, verify that all four matching files are present.
+Choose the `.mcpb`, rather than GitHub's automatic **Source code**
+archives. Developers can also use the
 [local build instructions](https://github.com/dtkmn/mcp-zap-server/blob/main/packaging/claude-desktop/README.md#build-and-check-the-bundle).
 
 This is a macOS preview for Claude Desktop Chat, including Free accounts.
@@ -30,7 +31,7 @@ listing or endorsement.
 ## 2. Install the required apps
 
 1. Install [Claude Desktop](https://claude.com/download) and sign in to your
-   Free account. Use **Chat** for this guide.
+   account. Use **Chat** for this guide.
 2. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/),
    choosing Apple Silicon or Intel to match your Mac. Open Docker Desktop and
    wait until its engine is running. Reuse an existing working installation.
@@ -41,8 +42,14 @@ the scanner.
 
 ## 3. Install MCP ZAP Connect
 
-1. In Claude Desktop, open **Settings → Extensions → Advanced settings →
-   Install Extension**.
+If your Team or Enterprise workspace enforces a desktop extension allowlist,
+Claude blocks manual `.mcpb` installs. Ask a workspace owner to add MCP ZAP
+Connect to your organization's extension directory. Install it there, then
+continue with step 3 below. [Anthropic's extension allowlist guide](https://support.claude.com/en/articles/12592343-enabling-and-using-the-desktop-extension-allowlist)
+
+1. In Claude Desktop, open **Settings → Desktop app** and select **Manage** beside
+   **Extensions** (or **Settings → Extensions** in older layouts). Under
+   **Advanced settings**, find **Extension Developer** and select **Install Extension**.
 2. Select the downloaded `.mcpb`, review the extension, and approve installation
    if you trust the release. This preview is unsigned and runs with your local
    user permissions; its tools use Docker and read the scanner's credential
@@ -64,7 +71,7 @@ installation. Keep the existing tool-approval settings.
 
 ## 4. Ask Claude to set up and verify the scanner
 
-Paste this message:
+Send this message in a new chat.
 
 ```text
 Help me set up MCP ZAP Connect.
@@ -77,12 +84,17 @@ recreating its containers. Preserve its credentials, reports, target
 restrictions, and all Codex and Cursor settings.
 
 After I approve setup, use scanner_setup with confirm=true as needed.
-Verify the connection with zap_passive_scan_status once, then stop.
+If setup returns SCANNER_STARTED, report success and stop. Setup already checked
+the scanner's passive status.
+If setup returns SCANNER_REUSED, call zap_passive_scan_status once, then stop.
 Do not crawl, scan, wait for passive analysis, or generate reports yet.
 ```
 
-Review Claude's proposed changes and approve setup when ready. A fresh setup
-uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
+1. When Claude asks to run **Scanner check prerequisites**, choose **Allow once**.
+2. Review the proposed changes. If you want to proceed, approve setup in chat.
+3. When Claude asks to run **Scanner setup**, choose **Allow once** again.
+
+A fresh setup uses `~/.mcp-zap-server`, downloads the standard published scanner images, and
 starts the scanner and bundled demo applications. Initial image downloads may
 take a while. A healthy existing scanner is reused without replacing its keys
 or client settings.
@@ -93,11 +105,13 @@ with a different key. Reuse the existing scanner when you want to keep those
 connections working without reconfiguration.
 
 The extension bundles a snapshot of the scanner setup files and defaults.
-Connector `0.1.0` currently defaults a new installation to scanner `v0.17.1`;
-verify that the scanner image is published before a fresh installation.
-Until `v0.17.1` is available, use a published scanner release and matching bundle.
-Downloading a bundle from a scanner release does not itself change its embedded default.
-An existing scanner keeps its selected version and settings.
+Connector `0.18.0` selects `dtkmn/mcp-zap-server:v0.18.0` for new installs.
+Verify the image is available for your platform on Docker Hub before setup.
+That scanner queues every new crawl and active scan. Connector `0.1.0` from
+`v0.17.1` continues to select its original scanner. Reusing an existing
+installation preserves its version, credentials and settings. Read the
+[0.18.0 upgrade guide](https://danieltse.org/mcp-zap-server/releases/0.18.0/)
+before changing that installation.
 
 If a prerequisite is missing, resolve it and ask Claude to check again. If it
 reports conflicting ports, credentials, ownership, or customized startup files,
@@ -116,7 +130,7 @@ local demo. Send a separate message:
 Check scanner_check_readiness first, then verify this connection with one
 zap_passive_scan_status call. If recovery is needed, explain it and wait for
 my approval before starting Docker or containers. Preserve all client settings.
-Run only a guided HTTP crawl against http://juice-shop:3000.
+Run only an HTTP crawl against http://juice-shop:3000.
 Follow the server's Next Actions and poll until the crawl is complete.
 Wait for passive analysis to finish and summarize findings for this target.
 Generate an HTML report scoped to this target and read the complete report

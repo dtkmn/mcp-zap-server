@@ -91,9 +91,15 @@ jobs:
             exit 1
           }
           source_commit="$(git rev-parse HEAD)"
+          scanner_version="$(sed -n "s/^version = '\([^']*\)'$/\1/p" build.gradle)"
+          test -n "$scanner_version"
+          # Releases before 0.18 used separate scanner and Desktop version numbers.
+          if [[ "$package_version" != "$scanner_version" && ! "$scanner_version" =~ ^0\.([0-9]|1[0-7])\. ]]; then
+            echo "Desktop package version $package_version must match scanner version $scanner_version" >&2
+            exit 1
+          fi
           if [ -n "$DRAFT_RELEASE_TAG" ]; then
-            scanner_version="$(sed -n "s/^version = '\([^']*\)'$/\1/p" build.gradle)"
-            test -n "$scanner_version" && test "$DRAFT_RELEASE_TAG" = "v${scanner_version}" || {
+            test "$DRAFT_RELEASE_TAG" = "v${scanner_version}" || {
               echo "Draft tag must match the checked-out scanner project version" >&2
               exit 1
             }

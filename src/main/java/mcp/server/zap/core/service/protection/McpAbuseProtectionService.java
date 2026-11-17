@@ -89,7 +89,7 @@ public class McpAbuseProtectionService {
 
         QueueSnapshot queueSnapshot = snapshotQueue();
 
-        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.GUIDED_SCAN_CAPABILITY)) {
+        if (toolScopeRegistry.hasCapability(normalizedToolName, ToolScopeRegistry.SCAN_ADMISSION_CAPABILITY)) {
             McpAbuseProtectionDecision queueDecision =
                     evaluateQueueAdmissionLimits(queueSnapshot, protectionContext);
             if (queueDecision != null) {

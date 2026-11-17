@@ -122,7 +122,7 @@ Enterprise may add private providers for:
 - tenant/workspace read boundaries
 - policy bundle evaluation overlays
 - commercial report or evidence packaging
-- guided auth adapters for difficult customer login flows
+- authentication adapters for custom login flows
 - operator governance and rollout controls
 
 Enterprise must not require a second core implementation. Normal MCP clients

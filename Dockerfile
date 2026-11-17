@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=$BUILDPLATFORM gradle:9.8.2-jdk25@sha256:ca424744a6a45a575f333edea680696d980999c461be38b1574a4c70d5455f24 AS builder
+FROM --platform=$BUILDPLATFORM gradle:9.9.1-jdk25@sha256:39d599d8df1777d73b00b5bf928254ecd121802d518577fe08d41a3cf86aa45f AS builder
 WORKDIR /usr/src/app
 COPY build.gradle settings.gradle gradle.properties ./
 COPY gradle ./gradle
@@ -24,11 +24,11 @@ RUN gradle bootJar -x test && \
 # update its digest. This stage also supplies the canonical distroless passwd
 # and group files to the healthcheck builder. Dependabot cannot rename this
 # repository when the next Debian generation lands; that migration is manual.
-FROM gcr.io/distroless/java25-debian13:nonroot@sha256:69514ce1edfe8759f5169870e8f9d4c9f2b831fb0b305a6809a269a25c515a2f AS runtime-base
+FROM gcr.io/distroless/java25-debian13:nonroot@sha256:1c4ced761d17961c900cba60c33c8c3c46edbdadaa9d5ef9806eb5a6824fd406 AS runtime-base
 
 # Build a shell-free, statically linked HTTP health probe for the target image
 # architecture. Only /out/http-healthcheck enters the runtime image.
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS healthcheck-builder
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS healthcheck-builder
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src/healthcheck

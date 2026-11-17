@@ -2,13 +2,13 @@
   "apiVersion": "mcp.zap.policy/v1",
   "kind": "PolicyBundle",
   "metadata": {
-    "name": "guided-readonly-triage",
-    "displayName": "Guided Readonly Triage",
-    "description": "Allow guided findings reads on review hosts while making mutation tools an explicit deny.",
+    "name": "readonly-triage",
+    "displayName": "Read-only Findings Triage",
+    "description": "Allow findings reads on review hosts while making mutation tools an explicit deny.",
     "owner": "security-platform",
     "labels": {
       "channel": "triage",
-      "surface": "guided"
+      "surface": "mcp"
     }
   },
   "spec": {
@@ -54,7 +54,7 @@
       },
       {
         "id": "deny-mutation-tools",
-        "description": "Make state-changing guided tools an explicit deny regardless of later bundle mistakes.",
+        "description": "Make state-changing tools an explicit deny regardless of later bundle mistakes.",
         "decision": "deny",
         "reason": "Readonly triage clients may not start scans, mutate auth/context state, or rewrite ZAP scan policies.",
         "match": {

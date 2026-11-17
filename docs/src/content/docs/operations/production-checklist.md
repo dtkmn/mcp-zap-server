@@ -64,7 +64,8 @@ For Kubernetes, follow the [private EKS deployment guidance](https://github.com/
 - [ ] Use Postgres-backed scan-job state when queued jobs are part of release or pilot evidence.
 - [ ] Set a sane queue claim lease with `ZAP_SCAN_QUEUE_CLAIM_LEASE_MS`.
 - [ ] If you expose streamable HTTP through multiple replicas, enable sticky ingress or equivalent client affinity.
-- [ ] Test failover by terminating a worker with a claimed running job and confirming another replica recovers polling after lease expiry.
+- [ ] Test worker loss with a running job that has a recorded launch receipt: after lease expiry, confirm it is held as `START_OUTCOME_UNKNOWN`, retains capacity, and is not automatically adopted by another replica.
+- [ ] Account for the [recovery limitations](../scan-queue-retry-policy/#restart-and-ownership): ZAP may continue the original scan, and current MCP tools cannot manually adopt it or clear its hold.
 - [ ] Validate that no duplicate scan starts occur during failover or restart.
 
 ## 7. Observability and Operations

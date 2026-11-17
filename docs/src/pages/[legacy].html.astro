@@ -49,14 +49,14 @@ const { canonical, target } = Astro.props;
 	<head>
 		<meta charset="utf-8" />
 		<title>Redirecting...</title>
-		<meta http-equiv="refresh" content={`0; url=${target}`} />
+		<noscript><meta http-equiv="refresh" content={`0; url=${target}`} /></noscript>
 		<meta name="robots" content="noindex" />
 		<link rel="canonical" href={canonical} />
 	</head>
 	<body>
 		<p>Redirecting to <a href={target}>{target}</a>...</p>
 		<script is:inline define:vars={{ target }}>
-			window.location.replace(target);
+			window.location.replace(target + window.location.hash);
 		</script>
 	</body>
 </html>

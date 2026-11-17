@@ -3,7 +3,9 @@
 
 import argparse
 import copy
+from contextlib import closing
 import hashlib
+from http.client import HTTPException, HTTPSConnection
 import io
 import json
 import os
@@ -27,6 +29,8 @@ CONTAINER_PROJECTS = {
     "mcp-zap-server:snyk-scan:/app": ("application-java", "maven"),
     "github.com/dtkmn/mcp-zap-server/tools/healthcheck": ("healthcheck-go", "gomodules"),
 }
+GATEWAY_MODULES = {"io.github.dtkmn:mcp-gateway-core", "io.github.dtkmn:mcp-gateway-spring-webflux"}
+MAX_GATEWAY_JAR_BYTES = 16 * 1024 * 1024
 
 
 def read_json(path):
@@ -106,7 +110,7 @@ def archive_inventory(path):
                            if name.startswith("BOOT-INF/lib/") and name.endswith(".jar"))
         if not libraries or len(libraries) != len(set(libraries)):
             raise ValueError("runtime archive has missing or duplicate nested library identities")
-        coordinates = {}
+        coordinates, library_sha256 = {}, {}
         bom_path = "META-INF/sbom/application.cdx.json"
         bom = json.loads(archive.read(bom_path)) if bom_path in archive.namelist() else {}
         if not isinstance(bom, dict) or not isinstance(bom.get("components", []), list):
@@ -116,7 +120,8 @@ def archive_inventory(path):
             raise ValueError("runtime archive contains malformed component metadata")
         for filename in libraries:
             candidates = set()
-            with zipfile.ZipFile(io.BytesIO(archive.read("BOOT-INF/lib/" + filename))) as nested:
+            contents = archive.read("BOOT-INF/lib/" + filename)
+            with zipfile.ZipFile(io.BytesIO(contents)) as nested:
                 for metadata in nested.namelist():
                     if metadata.startswith("META-INF/maven/") and metadata.endswith("/pom.properties"):
                         properties = dict(line.split("=", 1) for line in nested.read(metadata).decode().splitlines()
@@ -133,8 +138,10 @@ def archive_inventory(path):
             if candidates:
                 name, version = candidates.pop()
                 coordinates[filename] = {"name": name, "version": version}
+                if is_gateway_release_jar(filename, coordinates[filename]):
+                    library_sha256[filename] = hashlib.sha256(contents).hexdigest()
         return {"path": "/app/app.jar", "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                "libraries": libraries, "coordinates": coordinates}
+                "libraries": libraries, "coordinates": coordinates, "library_sha256": library_sha256}
 
 
 def jar_matches(filename, artifact, version):
@@ -142,7 +149,90 @@ def jar_matches(filename, artifact, version):
     return filename == basename + ".jar" or bool(re.fullmatch(re.escape(basename) + r"-[A-Za-z0-9_.-]+\.jar", filename))
 
 
-def validate_archive_coverage(inventory, packages):
+def is_gateway_release_jar(filename, coordinate):
+    if not coordinate or coordinate["name"] not in GATEWAY_MODULES:
+        return False
+    artifact = coordinate["name"].split(":")[1]
+    return filename == f"{artifact}-{coordinate['version']}.jar"
+
+
+def published_gateway_hashes(name, version):
+    """Hash the immutable release JAR directly from Maven Central, without following redirects."""
+    if (name not in GATEWAY_MODULES or not isinstance(version, str) or len(version) > 128 or
+            not re.fullmatch(r"[0-9]+(?:[._+-][A-Za-z0-9]+)*", version) or "snapshot" in version.lower()):
+        raise ValueError("expected an exact Gateway release coordinate for Maven Central")
+    artifact = name.split(":")[1]
+    path = f"/maven2/io/github/dtkmn/{artifact}/{version}/{artifact}-{version}.jar"
+    try:
+        with closing(HTTPSConnection("repo.maven.apache.org", timeout=15)) as connection:
+            connection.request("GET", path)
+            with connection.getresponse() as response:
+                if response.status != 200:
+                    raise ValueError(f"Maven Central returned HTTP {response.status} for {name}@{version}")
+                content = response.read(MAX_GATEWAY_JAR_BYTES + 1)
+                length = response.getheader("Content-Length")
+                if (not content or len(content) > MAX_GATEWAY_JAR_BYTES or
+                        (length is not None and length != str(len(content)))):
+                    raise ValueError(f"incomplete or oversized Maven Central JAR for {name}@{version}")
+    except (HTTPException, OSError) as error:
+        raise ValueError(f"could not read Maven Central JAR for {name}@{version}: {error}") from error
+    # Snyk's optional node digest uses SHA-1. Release equivalence uses SHA-256.
+    return hashlib.sha256(content).hexdigest(), hashlib.sha1(content, usedforsecurity=False).hexdigest()
+
+
+def main_source_packages(source_directory):
+    """Use the completed source job's main Gradle graph as version evidence."""
+    if source_directory is None:
+        raise ValueError("Gateway fingerprint requires the source scan diagnostics")
+    try:
+        coverage = read_json(source_directory / "coverage.json")
+        data = read_json(source_directory / "gradle-main.json")
+    except OSError as error:
+        raise ValueError("Gateway fingerprint requires the source scan diagnostics") from error
+    if isinstance(data, list) and len(data) == 1:
+        data = data[0]
+    if (coverage.get("complete") is not True or coverage.get("errors") != [] or
+            data.get("projectName") != "mcp-zap-server" or data.get("displayTargetFile") != "build.gradle"):
+        raise ValueError("Gateway fingerprint requires a completed main Gradle source scan")
+    packages = dependency_packages(data, "gradle")
+    checks = [check for check in coverage["checks"] if check.get("target") == "gradle-main"]
+    if len(checks) != 1 or checks[0].get("exit_code") not in (0, 1) or checks[0].get("dependencies") != len(packages):
+        raise ValueError("main Gradle graph does not agree with the completed source scan")
+    return packages
+
+
+def gateway_scanner_identity(filename, inventory, candidates, source, graph):
+    """Verify that the archive and both releases identify the same bytes at the scanner's exact location."""
+    coordinate = inventory["coordinates"][filename]
+    name, version = coordinate["name"], coordinate["version"]
+    native_versions = [value for candidate, value in candidates if candidate == name]
+    archive_sha256 = inventory.get("library_sha256", {}).get(filename, "")
+    if ([p.get("version") for p in source if p.get("name") == name] != [version] or
+            len(native_versions) != 1 or not re.fullmatch(r"[0-9a-f]{64}", archive_sha256)):
+        raise ValueError(f"Gateway fingerprint requires unique scan versions and an archive hash: {filename}")
+    native_version = native_versions[0]
+    native_identity = name + "@" + native_version
+    package_ids = {p["id"] for p in graph["pkgs"]
+                   if p["info"].get("name") == name and p["info"].get("version") == native_version}
+    location = "/app/app.jar/BOOT-INF/lib/" + filename
+    nodes = graph["graph"]["nodes"]
+    at_location = [node for node in nodes if node.get("info", {}).get("labels", {}).get("location") == location]
+    for_package = [node for node in nodes if node["pkgId"] in package_ids]
+    if len(at_location) != 1 or at_location != for_package:
+        raise ValueError(f"Gateway fingerprint requires a unique scanner location: {filename}")
+    source_sha256, _ = published_gateway_hashes(name, version)
+    if source_sha256 != archive_sha256:
+        raise ValueError(f"packaged Gateway JAR differs from Maven Central: {filename}")
+    native_sha256, scanner_sha1 = published_gateway_hashes(name, native_version)
+    if native_sha256 != archive_sha256:
+        raise ValueError(f"scanner-reported Gateway release has different bytes: {native_identity}")
+    labels = at_location[0]["info"]["labels"]
+    if "digest" in labels and labels["digest"] != scanner_sha1:
+        raise ValueError(f"Gateway scanner digest disagrees with the published JAR: {filename}")
+    return native_identity
+
+
+def validate_archive_coverage(inventory, packages, source_directory=None, maven_result=None):
     """Match actual nested library names to unique scanner package coordinates."""
     candidates = []
     for package in packages:
@@ -150,15 +240,27 @@ def validate_archive_coverage(inventory, packages):
         if not name or not version or version == "unknown":
             raise ValueError(f"unidentified application package: {name or '<unnamed>'}")
         candidates.append((name, version))
-    matched = {}
+    matched, fingerprinted = {}, []
     for filename in inventory["libraries"]:
         known = inventory.get("coordinates", {}).get(filename)
         identities = [name + "@" + version for name, version in candidates
                       if jar_matches(filename, name.rsplit(":", 1)[-1], version)
                       and (not known or known == {"name": name, "version": version})]
-        if len(identities) != 1:
+        if not identities and is_gateway_release_jar(filename, known):
+            fingerprinted.append(filename)
+        elif len(identities) == 1:
+            matched[filename] = identities[0]
+        else:
             raise ValueError(f"runtime library has no unique scanner mapping: {filename}")
-        matched[filename] = identities[0]
+    if fingerprinted:
+        source = main_source_packages(source_directory)
+        if maven_result is None:
+            raise ValueError("Gateway fingerprint requires the container application graph")
+        for filename in fingerprinted:
+            identity = gateway_scanner_identity(filename, inventory, candidates, source, maven_result["depGraph"])
+            if identity in matched.values():
+                raise ValueError(f"Gateway scanner package already mapped to another runtime JAR: {filename}")
+            matched[filename] = identity
     return matched
 
 
@@ -356,8 +458,16 @@ def container_reports(reports, image):
             raise ValueError("one or more expected JSON dependency layers are missing")
         if not inventory:
             raise ValueError("the tested image archive could not be inventoried")
-        packages = dependency_layers["mcp-zap-server:snyk-scan:/app"]
-        matched = validate_archive_coverage(inventory, packages)
+        project = "mcp-zap-server:snyk-scan:/app"
+        matched = validate_archive_coverage(inventory, dependency_layers[project], reports.output.parent / "source",
+                                           by_name[project])
+        fingerprints = {}
+        for filename, coordinate in inventory.get("coordinates", {}).items():
+            packaged = coordinate["name"] + "@" + coordinate["version"]
+            if coordinate["name"] in GATEWAY_MODULES and packaged != matched[filename]:
+                fingerprints[filename] = {"source": packaged, "container": matched[filename]}
+        if fingerprints:
+            reports.checks[-1]["gateway_fingerprints"] = fingerprints
         write_json(reports.output / "runtime-coverage.json", matched)
     except (AttributeError, KeyError, TypeError, ValueError) as error:
         reports.error(f"container: incomplete dependency coverage: {error}")

@@ -95,7 +95,8 @@ jobs:
 
   container:
     name: Container image
-    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    needs: open-source
+    if: ${{ !cancelled() && github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     env:
       IMAGE_REF: mcp-zap-server:snyk-scan
@@ -120,9 +121,19 @@ jobs:
           fi
 
       - name: Build image for container scan
+        id: image-build
         run: docker build --pull -t "${IMAGE_REF}" .
 
+      - name: Download source scan evidence from this workflow run
+        if: needs.open-source.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: snyk-source-diagnostics
+          path: build/snyk-reports/source
+
       - name: Run Snyk Container test and verify runtime coverage
+        # Still collect native findings when source evidence is unavailable.
+        if: ${{ !cancelled() && steps.image-build.outcome == 'success' }}
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |

@@ -1,6 +1,7 @@
 """Offline regression fixtures for Snyk reporting, coverage and failure handling."""
 
 import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -20,6 +21,23 @@ SPEC = importlib.util.spec_from_file_location("snyk_report", ROOT / "scripts/ci/
 SNYK = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SNYK)
 WORKFLOW = yaml.load((ROOT / ".github/workflows/snyk.yml").read_text(), Loader=yaml.BaseLoader)
+GATEWAY_MODULES = ("mcp-gateway-core", "mcp-gateway-spring-webflux")
+PACKAGED_VERSION = "4.2.1"
+SCANNER_VERSION = "4.2.0"
+
+
+def central_path(module, version):
+    return f"/maven2/io/github/dtkmn/{module}/{version}/{module}-{version}.jar"
+
+
+class CentralResponse(io.BytesIO):
+    def __init__(self, status, body):
+        super().__init__(body)
+        self.status = status
+        self.headers = {"Content-Length": str(len(body))}
+
+    def getheader(self, name):
+        return self.headers.get(name)
 
 
 def graph_result(manager, project="project", packages=None):
@@ -65,6 +83,18 @@ class SnykReportingTest(unittest.TestCase):
         self.environment = patch.dict(os.environ, {"SNYK_ORG": "fixture-org", "SNYK_TOKEN": "fixture-secret"})
         self.environment.start()
         self.addCleanup(self.environment.stop)
+        self.published_jars = {}
+        central = patch.object(SNYK, "HTTPSConnection")
+        self.central = central.start()
+        self.addCleanup(central.stop)
+        self.central.return_value.getresponse.side_effect = self.central_response
+
+    def central_response(self):
+        method, path = self.central.return_value.request.call_args.args
+        self.assertEqual(method, "GET")
+        if path in self.published_jars:
+            return CentralResponse(200, self.published_jars[path])
+        return CentralResponse(404, b"")
 
     def write_archive(self, filename="library-1.0.jar", metadata=None):
         nested = io.BytesIO()
@@ -243,6 +273,183 @@ class SnykReportingTest(unittest.TestCase):
         self.write_archive("other-library-1.0.jar")
         self.assertEqual(self.execute("container")[1], 1)
 
+    def gateway_inputs(self):
+        source_packages = [{"name": "io.github.dtkmn:" + module, "version": PACKAGED_VERSION}
+                           for module in GATEWAY_MODULES]
+        source = graph_result("gradle", "mcp-zap-server", source_packages)
+        source["displayTargetFile"] = "build.gradle"
+        directory = self.root / "source"
+        directory.mkdir(exist_ok=True)
+        (directory / "gradle-main.json").write_text(json.dumps(source))
+        (directory / "coverage.json").write_text(json.dumps({
+            "complete": True, "errors": [], "checks": [
+                {"target": "gradle-main", "dependencies": len(source_packages), "exit_code": 1}]}))
+
+        java = graph_result("maven", "mcp-zap-server:snyk-scan:/app",
+                            [package | {"version": SCANNER_VERSION} for package in source_packages] +
+                            [{"name": "example:library", "version": "1.0"}])
+        self.write_archive()
+        with zipfile.ZipFile(self.archive, "a") as archive:
+            components = []
+            for node, module in zip(java["depGraph"]["graph"]["nodes"][1:], GATEWAY_MODULES):
+                nested = io.BytesIO()
+                with zipfile.ZipFile(nested, "w") as jar:
+                    jar.writestr("fixture.class", module)
+                content = nested.getvalue()
+                for version in (PACKAGED_VERSION, SCANNER_VERSION):
+                    self.published_jars[central_path(module, version)] = content
+                path = f"BOOT-INF/lib/{module}-{PACKAGED_VERSION}.jar"
+                archive.writestr(path, content)
+                components.append({"group": "io.github.dtkmn", "name": module, "version": PACKAGED_VERSION})
+                node["info"] = {"labels": {
+                    "location": "/app/app.jar/" + path,
+                    "digest": hashlib.sha1(content, usedforsecurity=False).hexdigest()}}
+            archive.writestr("META-INF/sbom/application.cdx.json", json.dumps({"components": components}))
+        data = graph_result("deb", "docker-image|mcp-zap-server")
+        data["applications"] = [java, graph_result("gomodules", "github.com/dtkmn/mcp-zap-server/tools/healthcheck")]
+        self.overrides["container"] = {"json": data, "exit": 1}
+        return SNYK.archive_inventory(self.archive), java, directory
+
+    def test_gateway_fingerprints_record_both_versions_and_preserve_native_findings(self):
+        inventory, _, _ = self.gateway_inputs()
+        reports, result = self.execute("container")
+        self.assertEqual(result, 0, reports.errors)
+        for connection in self.central.call_args_list:
+            self.assertEqual(connection.args, ("repo.maven.apache.org",))
+            self.assertGreater(connection.kwargs["timeout"], 0)
+        self.assertCountEqual([call.args[1] for call in self.central.return_value.request.call_args_list],
+                              list(self.published_jars))
+        matches = json.loads((self.output / "runtime-coverage.json").read_text())
+        evidence = reports.checks[-1]["gateway_fingerprints"]
+        self.assertEqual(matches.pop("library-1.0.jar"), "example:library@1.0")
+        self.assertEqual(set(matches), set(inventory["coordinates"]))
+        self.assertEqual(set(evidence), set(matches))
+        for filename, package in inventory["coordinates"].items():
+            self.assertEqual(matches[filename], package["name"] + "@" + SCANNER_VERSION)
+            self.assertEqual(evidence[filename], {
+                "source": package["name"] + "@" + PACKAGED_VERSION, "container": matches[filename]})
+        native = json.loads((self.output / "container.sarif").read_text())["runs"]
+        self.assertTrue(any(run["results"] for run in native))
+        self.assertEqual([r["results"] for r in reports.runs], [r["results"] for r in native])
+
+    def test_exact_gateway_scanner_versions_use_the_standard_mapping_without_source_evidence(self):
+        inventory, java, directory = self.gateway_inputs()
+        (directory / "gradle-main.json").unlink()
+        for package in java["depGraph"]["pkgs"]:
+            if package["info"]["name"].startswith("io.github.dtkmn:"):
+                package["info"]["version"] = PACKAGED_VERSION
+        reports, result = self.execute("container")
+        self.assertEqual(result, 0, reports.errors)
+        self.central.assert_not_called()
+        self.assertNotIn("gateway_fingerprints", reports.checks[-1])
+        matches = json.loads((self.output / "runtime-coverage.json").read_text())
+        for filename, package in inventory["coordinates"].items():
+            self.assertEqual(matches[filename], package["name"] + "@" + PACKAGED_VERSION)
+
+    def test_changed_gateway_jar_fails_even_with_exact_source_and_archive_coordinates(self):
+        expected_inventory, _, _ = self.gateway_inputs()
+        artifact = "mcp-gateway-core"
+        filename = f"{artifact}-{PACKAGED_VERSION}.jar"
+        self.write_archive(filename, f"groupId=io.github.dtkmn\nartifactId={artifact}\nversion={PACKAGED_VERSION}\n")
+        with zipfile.ZipFile(self.archive) as archive:
+            digest = hashlib.sha256(archive.read("BOOT-INF/lib/" + filename)).hexdigest()
+        reports, result = self.execute("container")
+        self.assertEqual(result, 1)
+        inventory = json.loads((self.output / "image-inventory.json").read_text())
+        self.assertEqual(inventory["library_sha256"][filename], digest)
+        self.assertNotEqual(digest, expected_inventory["library_sha256"][filename])
+        self.assertTrue(any(filename in message for message in reports.errors))
+        self.assertTrue(any(run["results"] for run in reports.runs))
+
+    def test_both_published_gateway_versions_must_match_the_packaged_bytes(self):
+        for version in (PACKAGED_VERSION, SCANNER_VERSION):
+            with self.subTest(version=version):
+                self.gateway_inputs()
+                self.published_jars[central_path("mcp-gateway-core", version)] = b"different published bytes"
+                reports, status = self.execute("container")
+                self.assertEqual(status, 1)
+                self.assertTrue(any(run["results"] for run in reports.runs))
+
+    def test_maven_central_failure_preserves_container_findings(self):
+        self.gateway_inputs()
+        self.central.return_value.getresponse.side_effect = TimeoutError("fixture timeout")
+        reports, status = self.execute("container")
+        self.assertEqual(status, 1)
+        self.assertTrue(any("Maven Central" in error for error in reports.errors))
+        self.assertTrue(any(run["results"] for run in reports.runs))
+
+    def test_only_fixed_gateway_modules_and_release_versions_can_contact_maven_central(self):
+        module = "io.github.dtkmn:mcp-gateway-core"
+        for name, version in ((module, "../4.2.1"), (module, "4.2.1?other"), (module, "4.2.1-SNAPSHOT"),
+                              ("elsewhere:mcp-gateway-core", PACKAGED_VERSION),
+                              ("io.github.dtkmn:other", PACKAGED_VERSION)):
+            with self.subTest(name=name, version=version), self.assertRaises(ValueError):
+                SNYK.published_gateway_hashes(name, version)
+        self.central.assert_not_called()
+
+    def test_download_rejects_redirects_and_incomplete_or_oversized_responses(self):
+        redirect = CentralResponse(302, b"")
+        redirect.headers["Location"] = "https://untrusted.invalid/jar"
+        truncated = CentralResponse(200, b"short")
+        truncated.headers["Content-Length"] = "7"
+        for response in (redirect, truncated, CentralResponse(200, b"oversized")):
+            with self.subTest(response=response), patch.object(SNYK, "MAX_GATEWAY_JAR_BYTES", 8):
+                self.central.reset_mock()
+                self.central.return_value.getresponse.side_effect = [response]
+                with self.assertRaises(ValueError):
+                    SNYK.published_gateway_hashes("io.github.dtkmn:mcp-gateway-core", PACKAGED_VERSION)
+                self.assertEqual(self.central.call_count, 1)
+
+    def test_gateway_fingerprints_require_completed_source_evidence_for_each_exact_version(self):
+        for case in ("missing-file", "partial", "different-project", "wrong-version", "unreachable"):
+            with self.subTest(case=case):
+                inventory, _, directory = self.gateway_inputs()
+                graph_file = directory / "gradle-main.json"
+                source = json.loads(graph_file.read_text())
+                if case == "missing-file":
+                    graph_file.unlink()
+                elif case == "partial":
+                    path = directory / "coverage.json"
+                    path.write_text(json.dumps(json.loads(path.read_text()) | {"complete": False}))
+                else:
+                    if case == "different-project":
+                        source["projectName"] = "other-project"
+                    elif case == "wrong-version":
+                        source["depGraph"]["pkgs"][2]["info"]["version"] = SCANNER_VERSION
+                    elif case == "unreachable":
+                        source["depGraph"]["graph"]["nodes"][0]["deps"].pop()
+                    graph_file.write_text(json.dumps(source))
+                with patch.object(SNYK, "image_inventory", return_value=inventory):
+                    reports, result = self.execute("container")
+                self.assertEqual(result, 1)
+                self.assertTrue(any(run["results"] for run in reports.runs))
+
+    def test_gateway_fingerprint_cannot_cover_another_or_ambiguous_library(self):
+        for case in ("unpublished-version", "wrong-location", "duplicate-location", "shared-location",
+                     "conflicting-scanner-digest", "wrong-group", "unrelated-jar"):
+            with self.subTest(case=case):
+                inventory, java, _ = self.gateway_inputs()
+                nodes = java["depGraph"]["graph"]["nodes"]
+                if case == "unpublished-version":
+                    java["depGraph"]["pkgs"][1]["info"]["version"] = "4.1.9"
+                elif case == "wrong-location":
+                    nodes[1]["info"]["labels"]["location"] = nodes[2]["info"]["labels"]["location"]
+                elif case == "duplicate-location":
+                    nodes.append(nodes[1] | {"nodeId": "duplicate"})
+                    nodes[0]["deps"].append({"nodeId": "duplicate"})
+                elif case == "shared-location":
+                    nodes[3]["info"] = copy.deepcopy(nodes[1]["info"])
+                elif case == "conflicting-scanner-digest":
+                    nodes[1]["info"]["labels"]["digest"] = "0" * 40
+                elif case == "wrong-group":
+                    inventory["coordinates"][f"mcp-gateway-core-{PACKAGED_VERSION}.jar"]["name"] = "other:mcp-gateway-core"
+                elif case == "unrelated-jar":
+                    inventory["libraries"][0] = "library-1.1.jar"
+                with patch.object(SNYK, "image_inventory", return_value=inventory):
+                    reports, result = self.execute("container")
+                self.assertEqual(result, 1)
+                self.assertTrue(reports.errors)
+
     def test_metadata_conflicts_and_ambiguous_coordinates_fail(self):
         inventory = {"libraries": ["library-1.0.jar"], "coordinates": {"library-1.0.jar": {"name": "expected:library", "version": "1.0"}}}
         with self.assertRaises(ValueError):
@@ -399,6 +606,21 @@ class SnykReportingTest(unittest.TestCase):
                     self.assertIn("always()", step["if"])
                 if "Monitor" in step.get("name", ""):
                     self.assertEqual(step["if"], "github.event_name != 'pull_request'")
+
+    def test_container_uses_same_run_source_artifact_and_still_scans_after_download_failure(self):
+        job = WORKFLOW["jobs"]["container"]
+        self.assertIn("open-source", job["needs"])
+        self.assertIn("!cancelled()", job["if"])
+        steps = job["steps"]
+        artifact = next(step for step in steps if step.get("uses", "").startswith("actions/download-artifact@"))
+        self.assertEqual(artifact["with"], {"name": "snyk-source-diagnostics", "path": "build/snyk-reports/source"})
+        self.assertIn("needs.open-source.result == 'success'", artifact["if"])
+        build = next(step for step in steps if step.get("id") == "image-build")
+        scan = next(step for step in steps if "snyk_report.py container" in step.get("run", ""))
+        self.assertLess(steps.index(build), steps.index(artifact))
+        self.assertLess(steps.index(artifact), steps.index(scan))
+        self.assertIn("!cancelled()", scan["if"])
+        self.assertIn("steps.image-build.outcome == 'success'", scan["if"])
 
 
 if __name__ == "__main__":

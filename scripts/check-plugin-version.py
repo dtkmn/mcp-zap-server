@@ -13,7 +13,13 @@ import sys
 
 PLUGIN_NAME = "mcp-zap-connect"
 PLUGIN_ROOT = f"plugins/{PLUGIN_NAME}"
+DESKTOP_ROOT = "packaging/claude-desktop"
 MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json")
+# Inputs shipped by the Desktop build, plus the recipe that selects and packages them.
+DESKTOP_INPUTS = ("server", "manifest.json", ".mcpbignore", "package.json", "package-lock.json",
+                  "README.md", "SETUP.md", "scripts/build.mjs")
+PAYLOAD_PATHS = (PLUGIN_ROOT, *(f"{DESKTOP_ROOT}/{name}" for name in DESKTOP_INPUTS),
+                 "LICENSE", "docker-compose.yml", ".env.example", "bin/bootstrap-local.sh", "bin/self-serve-doctor.sh")
 GENERATED_DIRECTORIES = {".git", "node_modules", "__pycache__"}
 SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
@@ -91,7 +97,7 @@ def is_payload_path(name):
 
 def baseline_payload(repo, commit):
     payload = {}
-    for entry in git(repo, "ls-tree", "-rz", commit, "--", PLUGIN_ROOT).split(b"\0"):
+    for entry in git(repo, "ls-tree", "-rz", commit, "--", *PAYLOAD_PATHS).split(b"\0"):
         if not entry:
             continue
         metadata, raw_name = entry.split(b"\t", 1)
@@ -107,7 +113,7 @@ def baseline_payload(repo, commit):
 
 def working_payload(repo):
     payload = {}
-    names = git(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", PLUGIN_ROOT)
+    names = git(repo, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", *PAYLOAD_PATHS)
     for raw_name in set(names.split(b"\0")) - {b""}:
         name = os.fsdecode(raw_name)
         if not is_payload_path(name):
@@ -153,6 +159,20 @@ def project_version(source, label):
     return versions[0]
 
 
+def check_desktop_version(payload, expected):
+    for name in ("manifest.json", "package.json", "package-lock.json"):
+        path = f"{DESKTOP_ROOT}/{name}"
+        try:
+            data = json.loads(payload[path][1])
+            versions = [data["version"]]
+            if name == "package-lock.json":
+                versions.append(data["packages"][""]["version"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise VersionCheckError(f"Missing or invalid Desktop version metadata in {path}.") from error
+        if any(version != expected for version in versions):
+            raise VersionCheckError(f"Desktop version in {path} must match project version {expected}.")
+
+
 def check(repo, base_ref=None):
     repo = repo.resolve()
     baseline = base_ref or default_baseline(repo)
@@ -169,6 +189,7 @@ def check(repo, base_ref=None):
         raise VersionCheckError(
             f"Plugin version {current_version} must match project version {current_project}."
         )
+    check_desktop_version(current, current_project)
     release_tag = f"v{current_version}"
     guard_path = f"{PLUGIN_ROOT}/scripts/check-scanner-release.sh"
     guard = current.get(guard_path)
@@ -182,7 +203,7 @@ def check(repo, base_ref=None):
     if changed and not version_is_greater(current_version, previous_version):
         raise VersionCheckError(
             f"Plugin payload changed since {baseline}, but version {current_version} "
-            f"does not advance {previous_version}. Bump all three plugin manifests."
+            f"does not advance {previous_version}. Bump the shared project and client versions."
         )
     if changed and not version_is_greater(current_project, previous_project):
         raise VersionCheckError(
@@ -212,7 +233,7 @@ def main():
     except (VersionCheckError, OSError) as error:
         print(f"Plugin version check failed: {error}", file=sys.stderr)
         return 1
-    print(f"Plugin {PLUGIN_NAME} {version}: project and manifests agree; payload "
+    print(f"Plugin {PLUGIN_NAME} {version}: project and manifests agree (including Claude Desktop); payload "
           f"{'advanced' if changed else 'unchanged'} against {baseline}.")
     return 0
 

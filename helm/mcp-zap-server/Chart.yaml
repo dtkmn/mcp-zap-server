@@ -11,7 +11,7 @@ keywords:
   - security
   - vulnerability-scanning
 maintainers:
-  - name: Agentic Lab
-    url: https://github.com/dtkmn/mcp-zap-server
+  - name: dtkmn
+    url: https://github.com/dtkmn
 sources:
   - https://github.com/dtkmn/mcp-zap-server

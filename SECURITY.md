@@ -239,13 +239,9 @@ expire or the affected deployment behavior changes.
 - Implement file system permissions to protect report data
 - Consider encrypting stored reports at rest
 
-## 🛡️ Commercial & Private Coordination
-
-Commercial users who need **Non-Disclosure Agreement (NDA)** based coordination or private remediation timelines can contact **[Agentic Lab](mailto:agentic.lab.au@gmail.com)** for optional paid support.
-
-Public security reports for the OSS project remain welcome through the normal vulnerability reporting process below.
-
 ---
+
+<a id="&#xFE0F;-commercial--private-coordination"></a>
 
 ## Reporting a Vulnerability
 

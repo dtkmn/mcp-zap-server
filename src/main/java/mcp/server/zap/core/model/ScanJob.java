@@ -10,6 +10,7 @@ import java.util.UUID;
  */
 public class ScanJob {
     public static final String CLEANUP_OF_JOB_ID = "cleanupOfJobId";
+    public static final String TRACKING_LOST_MESSAGE = "Tracking lost. Final scan result unknown.";
 
     private final String id;
     private final ScanJobType type;
@@ -92,6 +93,17 @@ public class ScanJob {
 
     public boolean hasUnresolvedLaunch() {
         return status == ScanJobStatus.STARTING || status == ScanJobStatus.START_OUTCOME_UNKNOWN;
+    }
+
+    /** Hold the last confirmed receipt and progress; a missing scan does not prove termination. */
+    public void markTrackingLost() {
+        if (status != ScanJobStatus.RUNNING || zapScanId == null || zapScanId.isBlank()) {
+            throw new IllegalStateException("Only a running job with a saved scan ID can lose tracking");
+        }
+        status = ScanJobStatus.TRACKING_LOST;
+        lastError = TRACKING_LOST_MESSAGE;
+        cancelNextAttemptAt = null;
+        clearClaim();
     }
 
     /** An authoritative rejection proves that this particular native start was not accepted. */

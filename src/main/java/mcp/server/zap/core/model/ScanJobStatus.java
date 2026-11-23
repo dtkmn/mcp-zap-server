@@ -5,6 +5,7 @@ public enum ScanJobStatus {
     STARTING,
     START_OUTCOME_UNKNOWN,
     RUNNING,
+    TRACKING_LOST,
     SUCCEEDED,
     FAILED,
     CANCELLED;
@@ -14,5 +15,9 @@ public enum ScanJobStatus {
      */
     public boolean isTerminal() {
         return this == SUCCEEDED || this == FAILED || this == CANCELLED;
+    }
+
+    public boolean isRunningOrHeld() {
+        return this == RUNNING || this == STARTING || this == START_OUTCOME_UNKNOWN || this == TRACKING_LOST;
     }
 }

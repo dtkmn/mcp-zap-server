@@ -13,7 +13,6 @@ import mcp.gateway.core.protection.McpQuotaLimit;
 import mcp.gateway.core.rate.TokenBucketRateLimiter;
 import mcp.server.zap.core.configuration.AbuseProtectionProperties;
 import mcp.server.zap.core.model.ScanJob;
-import mcp.server.zap.core.model.ScanJobStatus;
 import mcp.server.zap.core.service.ScanJobQueueService;
 import mcp.server.zap.core.service.authz.ToolScopeRegistry;
 import org.springframework.beans.factory.ObjectProvider;
@@ -173,7 +172,7 @@ public class McpAbuseProtectionService {
                 continue;
             }
             nonTerminalJobs++;
-            if (job.getStatus() == ScanJobStatus.RUNNING || job.hasUnresolvedLaunch()) {
+            if (job.getStatus().isRunningOrHeld()) {
                 runningJobs++;
             }
         }

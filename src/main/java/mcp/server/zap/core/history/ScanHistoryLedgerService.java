@@ -190,7 +190,7 @@ public class ScanHistoryLedgerService {
                     .append(entry.id()).append(" [").append(entry.evidenceType()).append("]\n")
                     .append("   Recorded At: ").append(entry.recordedAt()).append('\n')
                     .append("   Operation: ").append(entry.operationKind()).append('\n')
-                    .append("   Status: ").append(entry.status()).append('\n')
+                    .append("   Status: ").append(historyStatusLabel(entry)).append('\n')
                     .append("   Target: ").append(targetLabel(entry.target())).append('\n');
             if (isUnconfirmedBrowserCrawl(entry)) {
                 output.append("   Crawl Outcome: unknown (ZAP reports stopped)\n");
@@ -221,7 +221,7 @@ public class ScanHistoryLedgerService {
                 .append("Recorded At: ").append(entry.recordedAt()).append('\n')
                 .append("Evidence Type: ").append(entry.evidenceType()).append('\n')
                 .append("Operation: ").append(entry.operationKind()).append('\n')
-                .append("Status: ").append(entry.status()).append('\n')
+                .append("Status: ").append(historyStatusLabel(entry)).append('\n')
                 .append("Engine: ").append(entry.engineId()).append('\n')
                 .append("Target: ").append(targetLabel(entry.target())).append('\n')
                 .append("Execution Mode: ").append(valueOrDefault(entry.executionMode(), "unknown")).append('\n')
@@ -447,9 +447,12 @@ public class ScanHistoryLedgerService {
         if (entries.stream().noneMatch(this::isReportArtifact)) {
             warnings.add("No report artifact entries were included; generate a report before attaching this to a release or pilot handoff.");
         }
-        long nonTerminalScanJobs = entries.stream().filter(this::isNonTerminalScanJob).count();
+        long nonTerminalScanJobs = entries.stream().filter(this::isNonTerminalScanJob).filter(entry -> !isTrackingLost(entry)).count();
         if (nonTerminalScanJobs > 0) {
             warnings.add(nonTerminalScanJobs + " queued scan job(s) are not terminal; wait for completion or use a tighter filter before final sign-off.");
+        }
+        if (entries.stream().anyMatch(this::isTrackingLost)) {
+            warnings.add(ScanJob.TRACKING_LOST_MESSAGE);
         }
         if (entries.size() >= limit) {
             warnings.add("Evidence entry count reached the export limit; increase limit if the reviewer needs the full evidence window.");
@@ -469,6 +472,23 @@ public class ScanHistoryLedgerService {
     private boolean isNonTerminalScanJob(ScanHistoryEntry entry) {
         return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
                 && !isTerminalStatus(entry.status());
+    }
+
+    private boolean isTrackingLost(ScanHistoryEntry entry) {
+        return TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())
+                && ScanJobStatus.TRACKING_LOST.name().equalsIgnoreCase(entry.status());
+    }
+
+    private String historyStatusLabel(ScanHistoryEntry entry) {
+        if (!isTrackingLost(entry)) return entry.status();
+        return entry.status() + " — " + trackingLostSummary(entry);
+    }
+
+    private String trackingLostSummary(ScanHistoryEntry entry) {
+        String progress = entry.metadata().get("lastKnownProgress");
+        return hasText(progress)
+                ? ScanJob.TRACKING_LOST_MESSAGE + " Last known progress: " + progress + "%."
+                : ScanJob.TRACKING_LOST_MESSAGE;
     }
 
     private boolean isTerminalScanJob(ScanHistoryEntry entry) {
@@ -600,9 +620,12 @@ public class ScanHistoryLedgerService {
             notes.add("Some targets only have direct scan launch evidence; terminal queued completion is not proven for: "
                     + String.join(", ", coverage.directOnlyScanTargetLabels()) + ".");
         }
-        long unfinishedJobs = entries.stream().filter(this::isNonTerminalScanJob).count();
+        long unfinishedJobs = entries.stream().filter(this::isNonTerminalScanJob).filter(entry -> !isTrackingLost(entry)).count();
         if (unfinishedJobs > 0) {
             notes.add(unfinishedJobs + " queued scan job(s) are not finished; wait for completion or document the caveat.");
+        }
+        if (entries.stream().anyMatch(this::isTrackingLost)) {
+            notes.add(ScanJob.TRACKING_LOST_MESSAGE);
         }
         long failedOrCancelledJobs = entries.stream().filter(this::isFailedOrCancelledScanJob).count();
         if (failedOrCancelledJobs > 0) {
@@ -734,23 +757,24 @@ public class ScanHistoryLedgerService {
             return;
         }
         if (TYPE_SCAN_JOB.equalsIgnoreCase(entry.evidenceType())) {
+            boolean trackingLost = isTrackingLost(entry);
             output.append("- Queued Scan: ")
                     .append(formatOperation(entry.operationKind()))
                     .append(" for ").append(target)
-                    .append(" - ").append(formatStatus(entry.status()));
+                    .append(" - ").append(trackingLost ? trackingLostSummary(entry) : formatStatus(entry.status()));
             String progress = entry.metadata().get("lastKnownProgress");
             if ("ajax_spider".equals(entry.operationKind())) {
                 output.append(", progress unavailable");
-            } else if (hasText(progress)) {
+            } else if (hasText(progress) && !trackingLost) {
                 output.append(", progress ").append(progress).append('%');
             }
             if (isUnconfirmedBrowserCrawl(entry)) {
                 output.append(", crawl outcome unknown (ZAP reports stopped)");
             }
             if ("true".equalsIgnoreCase(entry.metadata().get("authenticated"))) {
-                output.append(", authenticated");
+                output.append(trackingLost ? " Authenticated." : ", authenticated");
             }
-            output.append(", recorded ").append(entry.recordedAt()).append('\n');
+            output.append(trackingLost ? " Recorded at " : ", recorded ").append(entry.recordedAt()).append('\n');
             return;
         }
         if (isDirectScanRun(entry)) {
@@ -963,7 +987,7 @@ public class ScanHistoryLedgerService {
         metadata.put("maxAttempts", Integer.toString(job.getMaxAttempts()));
         if (job.getType() == ScanJobType.AJAX_SPIDER) {
             metadata.put("progress", "unavailable");
-        } else {
+        } else if (job.getStatus() != ScanJobStatus.TRACKING_LOST || job.getLastKnownProgress() > 0) {
             metadata.put("lastKnownProgress", Integer.toString(job.getLastKnownProgress()));
         }
         if ((job.getType() == ScanJobType.AJAX_SPIDER || job.getType() == ScanJobType.CLIENT_SPIDER)

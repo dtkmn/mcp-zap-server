@@ -656,11 +656,12 @@ public class PostgresScanJobStore implements ScanJobStore {
 
     private Set<String> loadJobsAwaitingCleanup(Connection connection) throws SQLException {
         String sql = "SELECT parameters_json::jsonb ->> ? AS source_job_id FROM " + tableName
-                + " WHERE status IN (?, ?)";
+                + " WHERE status IN (?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, ScanJob.CLEANUP_OF_JOB_ID);
             statement.setString(2, ScanJobStatus.QUEUED.name());
             statement.setString(3, ScanJobStatus.RUNNING.name());
+            statement.setString(4, ScanJobStatus.TRACKING_LOST.name());
             try (ResultSet resultSet = statement.executeQuery()) {
                 Set<String> sourceJobIds = new HashSet<>();
                 while (resultSet.next()) {
@@ -702,12 +703,13 @@ public class PostgresScanJobStore implements ScanJobStore {
     private int countCapacityInUse(Connection connection, boolean activeFamily, Instant now) throws Exception {
         String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE ("
                 + "job_type IN (" + familySqlPlaceholders(activeFamily) + ")"
-                + ") AND (status IN (?, ?, ?) OR (status = ? AND claim_owner_id IS NOT NULL AND claim_expires_at > ?))";
+                + ") AND (status IN (?, ?, ?, ?) OR (status = ? AND claim_owner_id IS NOT NULL AND claim_expires_at > ?))";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             int index = bindFamilyTypes(statement, 1, activeFamily);
             statement.setString(index++, ScanJobStatus.RUNNING.name());
             statement.setString(index++, ScanJobStatus.STARTING.name());
             statement.setString(index++, ScanJobStatus.START_OUTCOME_UNKNOWN.name());
+            statement.setString(index++, ScanJobStatus.TRACKING_LOST.name());
             statement.setString(index++, ScanJobStatus.QUEUED.name());
             statement.setTimestamp(index, Timestamp.from(now));
             try (ResultSet resultSet = statement.executeQuery()) {

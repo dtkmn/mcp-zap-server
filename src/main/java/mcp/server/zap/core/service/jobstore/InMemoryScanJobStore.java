@@ -320,8 +320,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
     private int countActiveCapacityInUse(Instant now) {
         return (int) jobs.values().stream()
                 .filter(job -> job.getType().isActiveFamily())
-                .filter(job -> job.getStatus() == ScanJobStatus.RUNNING
-                        || job.hasUnresolvedLaunch()
+                .filter(job -> job.getStatus().isRunningOrHeld()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)))
                 .count();
     }
@@ -329,8 +328,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
     private int countSpiderCapacityInUse(Instant now) {
         return (int) jobs.values().stream()
                 .filter(job -> job.getType().isSpiderFamily())
-                .filter(job -> job.getStatus() == ScanJobStatus.RUNNING
-                        || job.hasUnresolvedLaunch()
+                .filter(job -> job.getStatus().isRunningOrHeld()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)))
                 .count();
     }
@@ -339,8 +337,7 @@ public class InMemoryScanJobStore implements ScanJobStore {
         return jobs.values().stream()
                 .filter(job -> job.getType() == ScanJobType.AJAX_SPIDER)
                 .anyMatch(job -> job.isCancellationRequested()
-                        || job.getStatus() == ScanJobStatus.RUNNING
-                        || job.hasUnresolvedLaunch()
+                        || job.getStatus().isRunningOrHeld()
                         || (job.getStatus() == ScanJobStatus.QUEUED && job.hasLiveClaim(now)));
     }
 
